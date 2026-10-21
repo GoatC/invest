@@ -19,7 +19,7 @@ import { parseArgs } from 'node:util';
 
 import { describeError, Http, makeRedactor } from './lib/http.ts';
 import {
-  decodeEntities,
+  dayMonthYearToIso,
   decodeText,
   extractLinks,
   findUrls,
@@ -31,6 +31,7 @@ import {
   parseCsv,
   printableStrings,
   sniff,
+  spreadsheetMlSheets,
   toIsoDate,
   truncate,
   unzip,
@@ -431,7 +432,10 @@ const cbc: Probe = {
     const isTenYear = (label: string) => /十年|10\s*年|10-?year/i.test(label);
     const headerAt = rows.findIndex((row) => row.some(isTenYear));
     const header = rows[headerAt];
-    const column = header?.findIndex(isTenYear) ?? -1;
+    // The file also has "政府公債-10年期", which is only filled in months with an auction; the
+    // secondary-market column ("十年期政府公債次級市場利率") is the market yield F11 needs.
+    const secondary = header?.findIndex((label) => isTenYear(label) && label.includes('次級市場')) ?? -1;
+    const column = secondary >= 0 ? secondary : (header?.findIndex(isTenYear) ?? -1);
     if (!header || column < 0) {
       csv.fail('no 10-year column found');
       s.preview('First rows', headTail(rows.map((row) => row.join(',')), 5, 2), 'csv');
@@ -442,7 +446,7 @@ const cbc: Probe = {
       (best, row) => (!best || (row[0] ?? '').localeCompare(best[0] ?? '', undefined, { numeric: true }) > 0 ? row : best),
       undefined,
     );
-    s.series({ name: 'Taiwan 10-year government bond yield 台灣 10 年期公債殖利率', latestDate: newest?.[0], latestValue: newest?.[column], unit: '%' });
+    s.series({ name: `Taiwan 10-year government bond yield 台灣 10 年期公債殖利率 (${header[column]})`, latestDate: newest?.[0], latestValue: newest?.[column], unit: '%' });
     s.preview(`Header and last rows; 10-year column "${header[column]}"`, [header.join(','), ...data.slice(-3).map((row) => row.join(','))].join('\n'), 'csv');
   },
 };
@@ -468,15 +472,21 @@ const shiller: Probe = {
 
     const file = await s.get('ie_data.xls: monthly S&P 500 price, dividends, earnings, CPI, CAPE', link, { ext: 'xls' });
     if (!file.ok) return;
-    const labels = [...new Set(printableStrings(file.bytes).filter((text) => /[A-Za-z]{2}/.test(text)))];
-    const hasCape = labels.some((text) => /\bCAPE\b/.test(text));
+    // A legacy .xls is binary; its text runs are enough to confirm the expected columns are there.
+    const texts = printableStrings(file.bytes).map((text) => text.trim());
+    const expected = ['Date', 'CPI', 'Earnings', 'Dividend', 'CAPE', 'TR CAPE', 'Excess CAPE Yield'];
+    const found = expected.filter((label) => texts.some((text) => text.includes(label)));
+    const hasCape = found.includes('CAPE');
     s.series({
       name: 'S&P 500 CAPE workbook (ie_data.xls)',
       latestDate: file.call.lastModified ? `file modified ${file.call.lastModified}` : undefined,
       latestValue: hasCape ? 'CAPE column present; values are parsed with F3 in Phase 2' : 'CAPE label not found',
     });
-    const kind = sniff(file.bytes);
-    s.preview(`${kind === 'ole2' ? 'Legacy .xls (OLE2)' : `File type: ${kind}`}: text labels inside the workbook 檔內文字標籤`, truncate(labels.slice(0, 60).join(' | '), 1500));
+    const capeLabels = [...new Set(texts.filter((text) => /CAPE/.test(text) && text.length <= 80))].slice(0, 8);
+    s.preview(
+      `${sniff(file.bytes) === 'ole2' ? 'Legacy .xls (OLE2)' : 'Workbook'}: expected column labels found 找到的欄位標籤`,
+      [`found: ${found.join(', ') || 'none'}`, `missing: ${expected.filter((label) => !found.includes(label)).join(', ') || 'none'}`, ...capeLabels].join('\n'),
+    );
     if (!hasCape) file.fail('CAPE label not found in the workbook');
   },
 };
@@ -542,22 +552,20 @@ const damodaran: Probe = {
   documentedLimit: 'Static pages; implied ERP updated monthly (PRD F11); no published limit',
   auth: () => 'none 免金鑰',
   async run(s) {
-    const pages = ['https://pages.stern.nyu.edu/~adamodar/', 'https://pages.stern.nyu.edu/~adamodar/New_Home_Page/home.htm'];
-    let last: Fetched | undefined;
-    for (const pageUrl of pages) {
-      const page = await s.get(`Page with the current implied ERP (${pageUrl.endsWith('/') ? 'home' : 'New_Home_Page'})`, pageUrl);
-      last = page;
-      if (!page.ok) continue;
-      const text = htmlToText(page.text());
-      const match = /Implied ERP (?:on|for) ([A-Z][a-z]+\.? \d{1,2},? \d{4})\s*(?:=|:|is)\s*([\d.]+)\s*%/i.exec(text);
-      if (!match) continue;
-      s.series({ name: 'S&P 500 implied ERP (Damodaran) 隱含股票風險溢酬', latestDate: match[1], latestValue: `${match[2]}%` });
-      s.preview('Text around the ERP line', truncate(text.slice(Math.max(0, match.index - 120), match.index + 300), 500));
-      const files = extractLinks(page.text(), pageUrl).filter((url) => /implpr|histimpl|ERP/i.test(url));
-      if (files.length > 0) s.note(`ERP files linked 相關檔案: ${files.slice(0, 6).join(' , ')}`);
+    // The site root is a frameset around this page.
+    const pageUrl = 'https://pages.stern.nyu.edu/~adamodar/New_Home_Page/home.htm';
+    const page = await s.get('Home page with the current implied ERP (New_Home_Page/home.htm)', pageUrl);
+    if (!page.ok) return;
+    const text = htmlToText(page.text());
+    const match = /Implied ERP (?:on|for) ([A-Z][a-z]+\.? \d{1,2},? \d{4})\s*(?:=|:|is)\s*(\d+(?:\.\d+)?)\s*%/i.exec(text);
+    if (!match) {
+      page.fail('no "Implied ERP on <date> = x%" line found');
       return;
     }
-    if (last?.ok) last.fail('no "Implied ERP on <date> = x%" line found');
+    s.series({ name: 'S&P 500 implied ERP (Damodaran, trailing 12 m, adjusted payout) 隱含股票風險溢酬', latestDate: match[1], latestValue: `${match[2]}%` });
+    s.preview('Text around the ERP line', truncate(text.slice(Math.max(0, match.index - 60), match.index + 420), 520));
+    const files = extractLinks(page.text(), pageUrl).filter((url) => /implpr|histimpl|ERP/i.test(url));
+    if (files.length > 0) s.note(`ERP files linked 相關檔案: ${files.slice(0, 6).join(' , ')}`);
   },
 };
 
@@ -589,9 +597,10 @@ const twseGovernance: Probe = {
     if (edition) s.note(`Edition on the page 屆別: ${edition.trim()}`);
     const files = extractLinks(html, pageUrl).filter((url) => /\.(?:pdf|xlsx?|csv|ods)(?:\?|$)/i.test(safeDecodeUri(url)));
     s.note(`Downloadable files 可下載檔案: ${files.length > 0 ? files.slice(0, 8).join(' , ') : 'none in the HTML'}`);
+    // The tier lists usually sit in a linked PDF, so absence from the page text proves nothing.
     for (const ticker of tickersIn('TW').filter((t) => t.kind === 'stock')) {
       const listed = new RegExp(`(^|\\D)${ticker.id}(\\D|$)`).test(text);
-      s.cover(ticker.id, listed ? 'yes' : 'no', listed ? 'on the results page' : 'not in the page text; results may sit in a linked PDF');
+      s.cover(ticker.id, listed ? 'yes' : 'unchecked', listed ? 'on the results page' : 'tier lists are in the linked results PDF; read with N3 in Phase 2');
     }
     s.preview('Page text (start) 頁面文字', truncate(text, 800));
   },
@@ -656,50 +665,48 @@ const moenv: Probe = {
   },
 };
 
+/** BlackRock's document API, as the AGGU product page links it; used only if the page no longer shows the link. */
+const ISHARES_FUND_DOWNLOAD =
+  'https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document' +
+  '?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=ishares-uk&locale=en_GB&portfolioId=291772&component=fundDownloadV2&userType=individual';
+
 async function checkIShares(s: SourceRun): Promise<void> {
   const productUrl = 'https://www.ishares.com/uk/individual/en/products/291772/ishares-core-global-aggregate-bond-ucits-etf';
-  const page = await s.get('iShares AGGU product page (find the download links)', productUrl);
-  const links = page.ok ? extractLinks(page.text(), productUrl).filter((url) => url.includes('.ajax?')) : [];
-  const fromPage = links.find((url) => /fileType=csv/i.test(url) && /holding/i.test(url));
-  // Usual iShares UK holdings link, used only when the page does not show one.
-  const holdingsUrl = fromPage ?? `${productUrl}/1506575576011.ajax?fileType=csv&fileName=AGGU_holdings&dataType=fund`;
-  s.note(`iShares page: ${links.length} download links; holdings URL taken ${fromPage ? 'from the page' : 'from the usual iShares pattern'}`);
+  const page = await s.get('iShares AGGU product page (find the fund download link)', productUrl);
+  const fromPage = page.ok ? extractLinks(page.text(), productUrl).find((url) => url.includes('get-fund-document') && url.includes('fundDownload')) : undefined;
+  s.note(`Fund download link taken ${fromPage ? 'from the product page' : 'from the known BlackRock pattern'}`);
 
-  const holdings = await s.get('iShares AGGU holdings (CSV)', holdingsUrl, { ext: 'csv' });
-  if (holdings.ok) {
-    const lines = holdings.text().split(/\r?\n/);
-    const headerAt = lines.findIndex((line) => /^"?(?:Ticker|Issuer Ticker|Name)"?\s*,/i.test(line));
-    const count = headerAt >= 0 ? lines.slice(headerAt + 1).filter((line) => line.split(',').length > 3).length : 0;
-    const asOf = lines.slice(0, Math.max(headerAt, 0)).find((line) => /as of/i.test(line));
-    const asOfText = asOf ? `, ${asOf.replace(/"/g, '').replace(/,+/g, ' ').trim()}` : '';
-    s.cover('AGGU', count > 0 ? 'yes' : 'no', count > 0 ? `${count} holdings${asOfText}` : 'CSV without a holdings table');
-    s.preview('AGGU holdings CSV (start)', lines.slice(0, Math.max(headerAt, 0) + 4).join('\n'), 'csv');
-  } else {
-    s.cover('AGGU', 'failed', holdings.call.error);
-  }
-
-  const navUrl = links.find((url) => /fileType=xls/i.test(url));
-  if (!navUrl) {
-    s.note('No NAV-history download link on the AGGU page.');
+  // One SpreadsheetML workbook (about 25 MB) holds both the holdings and the daily NAV history.
+  const file = await s.get('iShares AGGU fund download: holdings and NAV history (SpreadsheetML)', fromPage ?? ISHARES_FUND_DOWNLOAD, { ext: 'xml' });
+  if (!file.ok) {
+    s.cover('AGGU', 'failed', file.call.error);
     return;
   }
-  const nav = await s.get('iShares AGGU NAV history (AGGU price fallback)', navUrl, { ext: 'xml' });
-  if (!nav.ok) return;
-  // The "xls" download is SpreadsheetML (XML): one <Row> of <Data> cells per day, newest first.
-  const rows = [...nav.text().matchAll(/<(?:ss:)?Row\b[\s\S]*?<\/(?:ss:)?Row>/g)].map((row) =>
-    [...row[0].matchAll(/<(?:ss:)?Data\b[^>]*>([^<]*)<\/(?:ss:)?Data>/g)].map((cell) => decodeEntities(cell[1] ?? '').trim()),
-  );
-  const headerAt = rows.findIndex((row) => row.some((c) => /^as of$/i.test(c)) && row.some((c) => /nav/i.test(c)));
-  const header = rows[headerAt];
-  const newest = rows[headerAt + 1];
-  if (!header || !newest) {
-    nav.fail('no "As Of" / NAV table in the file');
+  const sheets = spreadsheetMlSheets(file.text());
+  if (sheets.size === 0) {
+    file.fail('no worksheets in the download');
+    s.cover('AGGU', 'no', 'download has no worksheets');
     return;
   }
-  const dateColumn = header.findIndex((c) => /^as of$/i.test(c));
-  const navColumn = header.findIndex((c) => /nav/i.test(c));
-  s.series({ name: 'AGGU NAV per share (iShares) 每單位淨值', latestDate: newest[dateColumn], latestValue: newest[navColumn], unit: 'USD' });
-  s.preview('AGGU NAV history: header and newest rows', rows.slice(headerAt, headerAt + 4).map((row) => row.join(' | ')).join('\n'));
+  s.note(`Worksheets 工作表: ${[...sheets.keys()].join(', ')}`);
+
+  const holdingsRows = sheets.get('Holdings')?.length ?? 0;
+  const count = sheets.get('Portfolio Characteristics')?.find((row) => row[0] === 'Number of Holdings');
+  if (holdingsRows > 0) s.cover('AGGU', 'yes', `${count?.[1] ?? '?'} holdings ${count?.[2] ?? ''} (Holdings sheet, ${holdingsRows} rows)`.replace(/\s+\(/, ' ('));
+  else s.cover('AGGU', 'no', 'no Holdings sheet in the download');
+
+  const navs = (sheets.get('Historical NAVs') ?? [])
+    .map(([date = '', nav = '']) => ({ date: dayMonthYearToIso(date), nav }))
+    .filter((row): row is { date: string; nav: string } => row.date !== undefined && /^\d/.test(row.nav))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const newest = navs[0];
+  if (!newest) {
+    s.note('No Historical NAVs sheet in the download.');
+    return;
+  }
+  s.series({ name: 'AGGU NAV per share (iShares) 每單位淨值', latestDate: newest.date, latestValue: newest.nav, unit: 'USD' });
+  s.note(`Historical NAVs 歷史淨值: ${navs.length} daily values, ${navs.at(-1)?.date} to ${newest.date}`);
+  s.preview('Historical NAVs, newest first', navs.slice(0, 3).map((row) => `${row.date}  ${row.nav}`).join('\n'));
 }
 
 async function checkSsga(s: SourceRun): Promise<void> {
@@ -716,8 +723,9 @@ async function checkSsga(s: SourceRun): Promise<void> {
     return;
   }
   const peek = xlsxPeek(r.bytes);
-  s.cover('BIL', 'yes', `xlsx, sheets ${peek.sheets.join(', ') || '?'}`);
-  s.preview('BIL holdings workbook: first text cells', peek.strings.join(' | '));
+  const asOf = peek.strings.find((text) => /^as of\b/i.test(text));
+  s.cover('BIL', peek.firstSheetRows > 0 ? 'yes' : 'no', `xlsx sheet "${peek.sheets[0] ?? '?'}", ${peek.firstSheetRows} rows${asOf ? `, ${asOf}` : ''}`);
+  s.preview('BIL holdings workbook: first short text cells', peek.strings.join(' | '));
 }
 
 async function checkVanguard(s: SourceRun): Promise<void> {
@@ -788,6 +796,12 @@ const botGold: Probe = {
       return;
     }
     const html = page.text();
+    if (/<title>\s*Challenge Validation/i.test(html) || html.includes('cp_clge_done')) {
+      page.fail('bot challenge page instead of prices: the site asks for a browser to solve a challenge');
+      s.cover('GOLD', 'failed', 'Bank of Taiwan answered with a bot challenge that only a real browser can pass 臺銀回傳機器人驗證頁');
+      s.note('Physical gold needs another route before N5: a browser-based fetch, or the gold price in USD times TWD/USD.');
+      return;
+    }
     const table = htmlTableRows(html);
     const dated = table.filter((cells) => /^\d{4}\/\d{2}\/\d{2}$/.test(cells[0] ?? ''));
     const newest = dated.reduce<string[] | undefined>((best, row) => (!best || (row[0] ?? '') > (best[0] ?? '') ? row : best), undefined);

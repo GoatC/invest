@@ -68,11 +68,15 @@ export function decodeEntities(text: string): string {
   });
 }
 
-/** Visible text of an HTML page, one block element per line. */
+/**
+ * Visible text of an HTML page, one block element per line. Inline tags vanish without a gap,
+ * so "4.<span></span>20%" (as Damodaran's page writes it) reads "4.20%".
+ */
 export function htmlToText(html: string): string {
   const text = html
     .replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<br\s*\/?>|<\/(?:p|div|tr|li|h\d|table)>/gi, '\n')
+    .replace(/<\/?(?:a|abbr|b|em|font|i|small|span|strong|sub|sup|u)\b[^>]*>/gi, '')
     .replace(/<[^>]+>/g, ' ');
   return decodeEntities(text)
     .replace(/[ \t\f\v ]+/g, ' ')
@@ -156,16 +160,47 @@ export function unzip(bytes: Uint8Array, keep?: (name: string) => boolean): Reco
   return unzipSync(bytes, keep ? { filter: (file) => keep(file.name) } : undefined);
 }
 
-/** Sheet names and the first shared strings of an .xlsx workbook. */
-export function xlsxPeek(bytes: Uint8Array, maxStrings = 30): { sheets: string[]; strings: string[] } {
-  const files = unzip(bytes, (name) => name === 'xl/workbook.xml' || name === 'xl/sharedStrings.xml');
-  const workbook = files['xl/workbook.xml'];
-  const shared = files['xl/sharedStrings.xml'];
-  const sheets = workbook ? [...decodeText(workbook).matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((m) => decodeEntities(m[1] ?? '')) : [];
-  const strings = shared
-    ? [...decodeText(shared).matchAll(/<t\b[^>]*>([^<]*)<\/t>/g)].slice(0, maxStrings).map((m) => decodeEntities(m[1] ?? ''))
-    : [];
-  return { sheets, strings };
+const XLSX_PARTS = new Set(['xl/workbook.xml', 'xl/sharedStrings.xml', 'xl/worksheets/sheet1.xml']);
+
+/**
+ * Sheet names, the row count of the first sheet and its first short shared strings (long ones are
+ * usually disclaimers) of an .xlsx workbook.
+ */
+export function xlsxPeek(bytes: Uint8Array, maxStrings = 30): { sheets: string[]; firstSheetRows: number; strings: string[] } {
+  const files = unzip(bytes, (name) => XLSX_PARTS.has(name));
+  const read = (name: string) => {
+    const part = files[name];
+    return part ? decodeText(part) : '';
+  };
+  const sheets = [...read('xl/workbook.xml').matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((m) => decodeEntities(m[1] ?? ''));
+  const firstSheetRows = read('xl/worksheets/sheet1.xml').match(/<row\b/g)?.length ?? 0;
+  const strings = [...read('xl/sharedStrings.xml').matchAll(/<t\b[^>]*>([^<]*)<\/t>/g)]
+    .map((m) => decodeEntities(m[1] ?? '').trim())
+    .filter((text) => text !== '' && text.length <= 80)
+    .slice(0, maxStrings);
+  return { sheets, firstSheetRows, strings };
+}
+
+/** Worksheets of a SpreadsheetML 2003 workbook (the XML "xls" that iShares downloads), as rows of cell texts. */
+export function spreadsheetMlSheets(xml: string): Map<string, string[][]> {
+  const sheets = new Map<string, string[][]>();
+  for (const sheet of xml.matchAll(/<(?:ss:)?Worksheet\b[^>]*?\b(?:ss:)?Name="([^"]*)"[^>]*>([\s\S]*?)<\/(?:ss:)?Worksheet>/g)) {
+    const rows = [...(sheet[2] ?? '').matchAll(/<(?:ss:)?Row\b[\s\S]*?<\/(?:ss:)?Row>/g)].map((row) =>
+      [...row[0].matchAll(/<(?:ss:)?Data\b[^>]*>([\s\S]*?)<\/(?:ss:)?Data>/g)].map((cell) => decodeEntities((cell[1] ?? '').replace(/<[^>]+>/g, '')).trim()),
+    );
+    sheets.set(decodeEntities(sheet[1] ?? ''), rows);
+  }
+  return sheets;
+}
+
+const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+/** "19/Oct/2026" or "30/Sept/2026" (iShares style) → "2026-10-19"; undefined if it is not such a date. */
+export function dayMonthYearToIso(text: string): string | undefined {
+  const match = /^(\d{1,2})\/([A-Za-z]{3,5})\/(\d{4})$/.exec(text.trim());
+  const month = match ? MONTHS[(match[2] ?? '').slice(0, 3).toLowerCase()] : undefined;
+  if (!match || !month) return undefined;
+  return `${match[3]}-${String(month).padStart(2, '0')}-${(match[1] ?? '').padStart(2, '0')}`;
 }
 
 export function truncate(text: string, maxChars = 1200): string {
