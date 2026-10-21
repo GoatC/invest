@@ -9,6 +9,7 @@
   },
   "scripts": {
     "check:sources": "tsx scripts/check_sources.ts",
+    "check:supabase": "tsx scripts/check_supabase.ts",
     "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts tests/db/*.test.ts",
     "typecheck": "tsc -p scripts && tsc -p tests"
   },
