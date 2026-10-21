@@ -74,6 +74,6 @@ describe('cleanCell and columnNames', () => {
   });
 
   it('names blank and repeated headers so each column can be told apart', () => {
-    assert.deepEqual(columnNames(['Fee', '', 'Fee', 'Fee (2)', ' Fee ']), ['Fee', '(column 2)', 'Fee (2)', 'Fee (2) (2)', 'Fee (3)']);
+    assert.deepEqual(columnNames(['Fee', '', 'Fee', 'Fee (2)', ' Fee ']), ['Fee', '(column 2 第 2 欄)', 'Fee (2)', 'Fee (2) (2)', 'Fee (3)']);
   });
 });

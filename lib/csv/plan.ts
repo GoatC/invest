@@ -83,7 +83,10 @@ function total(cells: Record<string, string>, names: readonly string[], label: B
   return sum;
 }
 
-function readRow(cells: Record<string, string>, mapping: CsvMapping, options: ImportOptions, context: ImportContext): Omit<ImportRow, 'line'> {
+/** A row as read, with the fill it repeats when its date, ticker, side, quantity and price are readable. */
+type ReadRow = Omit<ImportRow, 'line'> & { fill: string | null };
+
+function readRow(cells: Record<string, string>, mapping: CsvMapping, options: ImportOptions, context: ImportContext): ReadRow {
   const problems: Bilingual[] = [];
   const warnings: Bilingual[] = [];
   const cell = (name: string | null) => (name === null ? '' : (cells[name] ?? ''));
@@ -108,7 +111,7 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
             en: `Not a buy or a sell (${LABELS.side.en}: “${sideText}”); dividends and transfers are not trades.`,
             zh: `不是買進或賣出（${LABELS.side.zh}：「${sideText}」）；股利與轉帳不屬於交易。`,
           };
-      return { status: 'invalid', trade: null, ticker, problems: [problem], warnings };
+      return { status: 'invalid', trade: null, ticker, problems: [problem], warnings, fill: null };
     }
   }
 
@@ -123,6 +126,8 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
   if (price === undefined) problems.push(cantRead(LABELS.price, priceText));
   const fee = total(cells, mapping.fee, LABELS.fee, problems);
   const tax = total(cells, mapping.tax, LABELS.tax, problems);
+  // A saved trade is recognised even when this row lacks something only a new trade needs, such as its FX rate.
+  const fill = tradeDate && known && side && signedQty !== undefined && price !== undefined ? fillKey({ tradeDate, ticker, side, qty: Math.abs(signedQty), price }) : null;
 
   const security = context.securities.get(ticker);
   const currency = (mapping.currency ? cell(mapping.currency) : (security?.currency ?? '')).trim().toUpperCase();
@@ -143,9 +148,9 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
 
   if (!known && ticker) {
     const unknown = { en: `Unknown ticker ${ticker}: add it as a security, then check again.`, zh: `找不到代號 ${ticker}：請先新增證券，再重新檢查。` };
-    return { status: problems.length > 0 ? 'invalid' : 'unknown', trade: null, ticker, problems: [unknown, ...problems], warnings };
+    return { status: problems.length > 0 ? 'invalid' : 'unknown', trade: null, ticker, problems: [unknown, ...problems], warnings, fill: null };
   }
-  if (problems.length > 0) return { status: 'invalid', trade: null, ticker, problems, warnings };
+  if (problems.length > 0) return { status: 'invalid', trade: null, ticker, problems, warnings, fill };
 
   // The same checks as the trade form: dates not in the future, amounts, currency codes.
   const parsed = parseTrade(
@@ -166,7 +171,14 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
     context.today,
   );
   if (!parsed.ok) {
-    return { status: 'invalid', trade: null, ticker, problems: Object.entries(parsed.errors).map(([field, message]) => fieldError(field as TradeField, message ?? MESSAGES.required)), warnings };
+    return {
+      status: 'invalid',
+      trade: null,
+      ticker,
+      problems: Object.entries(parsed.errors).map(([field, message]) => fieldError(field as TradeField, message ?? MESSAGES.required)),
+      warnings,
+      fill,
+    };
   }
 
   const latest = context.fx.get(parsed.value.currency);
@@ -177,7 +189,7 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
       zh: `匯率 ${parsed.value.fxRate} 與最近一筆 ${latest.value} 相差超過 ${percent(gap, 0)}，請確認。`,
     });
   }
-  return { status: 'new', trade: parsed.value, ticker, problems, warnings };
+  return { status: 'new', trade: parsed.value, ticker, problems, warnings, fill };
 }
 
 /** The same fill: date, ticker, side, quantity and price (fees may have been corrected since). */
@@ -189,21 +201,19 @@ function fillKey(trade: Pick<Trade, 'tradeDate' | 'ticker' | 'side' | 'qty' | 'p
 /**
  * Every row of the statement with what an import would do with it. A row that repeats a saved
  * trade is a duplicate, counted one for one: two identical saved fills cover two identical rows.
+ * A duplicate that could not be imported anyway (no FX rate, say) carries no trade to keep.
  */
 export function planImport(statement: Statement, mapping: CsvMapping, options: ImportOptions, context: ImportContext): ImportRow[] {
   const saved = new Map<string, number>();
   for (const trade of context.existing) saved.set(fillKey(trade), (saved.get(fillKey(trade)) ?? 0) + 1);
   return statement.rows.map(({ line, cells }) => {
-    const row: ImportRow = { line, ...readRow(cells, mapping, options, context) };
-    if (row.status === 'new' && row.trade) {
-      const key = fillKey(row.trade);
-      const count = saved.get(key) ?? 0;
-      if (count > 0) {
-        saved.set(key, count - 1);
-        return { ...row, status: 'duplicate' };
-      }
+    const { fill, ...row } = readRow(cells, mapping, options, context);
+    const count = fill === null ? 0 : (saved.get(fill) ?? 0);
+    if (fill !== null && count > 0) {
+      saved.set(fill, count - 1);
+      return { line, ...row, status: 'duplicate', problems: [] };
     }
-    return row;
+    return { line, ...row };
   });
 }
 

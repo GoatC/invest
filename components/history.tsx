@@ -58,7 +58,9 @@ export function History({ entries }: { entries: AuditEntry[] }) {
           <strong>
             <Bi {...ACTION[entry.action]} />
           </strong>{' '}
-          <span className="muted small">{TAIPEI_TIME.format(new Date(entry.changedAt))} (Taipei)</span>
+          <span className="muted small">
+            {TAIPEI_TIME.format(new Date(entry.changedAt))} <Bi en="Taipei time" zh="台北時間" />
+          </span>
           {entry.action === 'update' && (
             <ul>
               {entry.changes.map((change) => (

@@ -5,7 +5,7 @@ import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingsData, type HoldingsData } from '@/lib/data';
 import { money, percent, points, quantity, twd } from '@/lib/format';
-import { LABELS, POOL, PRODUCT, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
 import { capBreaches, type CapBreach } from '@/lib/models/rules';
@@ -370,18 +370,12 @@ function ListedHoldings({ data, portfolio }: { data: HoldingsData; portfolio: Po
           <tbody>
             {listed.map((holding) => {
               const position = positions.get(holding.key);
-              const assetClass = classes.get(holding.assetClassId);
               const gain = holding.valueTwd !== null && holding.costTwd !== null ? holding.valueTwd - holding.costTwd : null;
               return (
                 <tr key={holding.key}>
-                  <td>
+                  <td className="name">
                     <strong>{holding.ticker}</strong>
                     <div className="muted small">{holding.label}</div>
-                    {assetClass && (
-                      <div className="muted small">
-                        <Bi en={assetClass.nameEn} zh={assetClass.nameZh} /> · <Bi {...PRODUCT[holding.productType]} />
-                      </div>
-                    )}
                   </td>
                   <td>
                     <span className={holding.pool === 'windfall' ? 'badge warn' : 'badge'}>
@@ -482,8 +476,8 @@ function ManualAssets({ data, portfolio }: { data: HoldingsData; portfolio: Port
                         </>
                       )}
                     </td>
-                    <td>{asset.valuedOn ?? '—'}</td>
-                    <td>
+                    <td className="nowrap">{asset.valuedOn ?? '—'}</td>
+                    <td className="nowrap">
                       <Link href={`/assets/${asset.id}`}>
                         <Bi {...LABELS.edit} />
                       </Link>
@@ -544,24 +538,24 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
           <tbody>
             {shown.map((trade) => (
               <tr key={trade.id}>
-                <td>{trade.tradeDate}</td>
+                <td className="nowrap">{trade.tradeDate}</td>
                 <td>
                   <strong>{trade.ticker}</strong>
                 </td>
-                <td>
+                <td className="nowrap">
                   <Bi {...SIDE[trade.side]} />
                 </td>
                 <td className="num">{quantity(trade.qty)}</td>
                 <td className="num">{`${quantity(trade.price)} ${trade.currency}`}</td>
                 <td className="num">{`${quantity(trade.fee + trade.tax)} ${trade.currency}`}</td>
                 <td className="num">{trade.currency === 'TWD' ? '—' : trade.fxRate}</td>
-                <td>
+                <td className="nowrap">
                   <Bi {...POOL[trade.pool]} />
                 </td>
-                <td>
+                <td className="nowrap">
                   <Bi {...SOURCE[trade.source]} />
                 </td>
-                <td>
+                <td className="nowrap">
                   <Link href={`/holdings/${trade.id}`}>
                     <Bi {...LABELS.edit} />
                   </Link>

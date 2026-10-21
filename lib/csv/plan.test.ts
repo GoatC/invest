@@ -144,6 +144,22 @@ describe('planImport', () => {
   });
 });
 
+describe('planImport on a statement imported before', () => {
+  it('reports saved rows as already saved even without an FX rate, with nothing to keep', () => {
+    const saved = trade({ id: 9, tradeDate: '2026-10-07', ticker: 'VT', qty: 2, price: 150, fee: 1 });
+    const rows = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: null }, context({ existing: [saved] }));
+    assert.deepEqual(
+      rows.map((row) => [row.status, row.trade, row.problems.length]),
+      [
+        ['duplicate', null, 0],
+        ['invalid', null, 1],
+        ['invalid', null, 1],
+      ],
+    );
+    assert.deepEqual(tradesToImport(rows, new Set([4])), []);
+  });
+});
+
 describe('tradesToImport', () => {
   it('saves new rows and the duplicates kept, oldest first and buys before sells on a day', () => {
     // Newest first, as many statements list them, with a same-day sell above its buy.

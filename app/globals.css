@@ -105,6 +105,11 @@ h2 {
   gap: 1.25rem;
 }
 
+/* Grid items may shrink below their content; wide tables scroll inside .table-wrap instead. */
+.page > * {
+  min-width: 0;
+}
+
 .site-footer {
   max-width: 1120px;
   margin: 0 auto;
@@ -166,9 +171,16 @@ h2 {
   font-size: 0.85rem;
 }
 
-/* Bilingual labels: Chinese follows English on the same line */
+/* Bilingual text: Chinese follows English. Short labels keep their Chinese on one line; sentences
+   wrap like any text, so they never push a phone screen sideways. */
 
-.bi > [lang='zh-Hant'] {
+th .bi > [lang='zh-Hant'],
+.field > .bi > [lang='zh-Hant'],
+legend .bi > [lang='zh-Hant'],
+.button .bi > [lang='zh-Hant'],
+button .bi > [lang='zh-Hant'],
+.badge .bi > [lang='zh-Hant'],
+.site-nav .bi > [lang='zh-Hant'] {
   white-space: nowrap;
 }
 
@@ -176,6 +188,11 @@ h2 {
 
 .table-wrap {
   overflow-x: auto;
+}
+
+/* On a phone a table scrolls sideways inside its box rather than squeezing its columns. */
+.table-wrap > table {
+  min-width: 40rem;
 }
 
 table {
@@ -201,6 +218,19 @@ th {
 td.num,
 th.num {
   text-align: right;
+}
+
+/* Figures stay on one line; their headers may wrap between English and Chinese. */
+td.num {
+  white-space: nowrap;
+}
+
+td.name {
+  min-width: 11rem;
+}
+
+/* Short labels in a cell (Buy 買進, Regular 一般, Edit 修改) stay whole. */
+.nowrap {
   white-space: nowrap;
 }
 
@@ -223,6 +253,7 @@ tr:last-child td {
 
 .field {
   display: grid;
+  align-content: start;
   gap: 0.3rem;
   font-size: 0.9rem;
 }

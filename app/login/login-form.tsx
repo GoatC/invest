@@ -7,7 +7,7 @@ import { LABELS } from '@/lib/i18n';
 
 import { signIn, type SignInState } from './actions';
 
-const INITIAL: SignInState = { error: null };
+const INITIAL: SignInState = { error: null, email: '' };
 
 export function LoginForm() {
   const [state, action, pending] = useActionState(signIn, INITIAL);
@@ -15,7 +15,7 @@ export function LoginForm() {
     <form action={action} className="form narrow">
       <label className="field">
         <Bi {...LABELS.email} />
-        <input type="email" name="email" autoComplete="username" required />
+        <input type="email" name="email" autoComplete="username" defaultValue={state.email} required />
       </label>
       <label className="field">
         <Bi {...LABELS.password} />

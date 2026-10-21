@@ -529,7 +529,7 @@ function Preview({
                   <span className={STATUS[row.status].badge}>
                     <Bi {...STATUS[row.status].label} />
                   </span>
-                  {row.status === 'duplicate' && (
+                  {row.status === 'duplicate' && row.trade && (
                     <label className="choice small">
                       <input
                         type="checkbox"
@@ -545,9 +545,9 @@ function Preview({
                     </label>
                   )}
                 </td>
-                <td>{row.trade?.tradeDate ?? '—'}</td>
+                <td className="nowrap">{row.trade?.tradeDate ?? '—'}</td>
                 <td>{row.ticker || '—'}</td>
-                <td>{row.trade ? <Bi {...SIDE[row.trade.side]} /> : '—'}</td>
+                <td className="nowrap">{row.trade ? <Bi {...SIDE[row.trade.side]} /> : '—'}</td>
                 <td className="num">{row.trade ? quantity(row.trade.qty) : '—'}</td>
                 <td className="num">{row.trade ? `${quantity(row.trade.price)} ${row.trade.currency}` : '—'}</td>
                 <td className="num">{row.trade ? quantity(row.trade.fee + row.trade.tax) : '—'}</td>

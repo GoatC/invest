@@ -122,7 +122,7 @@ export function cleanCell(value: string | undefined): string {
 export function columnNames(header: readonly string[]): string[] {
   const used = new Set<string>();
   return header.map((cell, index) => {
-    const base = cleanCell(cell) || `(column ${index + 1})`;
+    const base = cleanCell(cell) || `(column ${index + 1} 第 ${index + 1} 欄)`;
     let name = base;
     for (let n = 2; used.has(name); n++) name = `${base} (${n})`;
     used.add(name);
