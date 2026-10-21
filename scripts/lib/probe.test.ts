@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { Http, makeRedactor } from './http.ts';
-import { deepRedact, extensionFor, Fetched, type Probe, SampleStore, SourceRun } from './probe.ts';
+import { deepRedact, extensionFor, Fetched, type Probe, readEnv, SampleStore, SourceRun } from './probe.ts';
 import type { CallRecord } from './types.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'source-check-'));
@@ -114,6 +114,13 @@ describe('SampleStore', () => {
     assert.equal(extensionFor('text/csv; charset=utf-8', new Uint8Array()), 'csv');
     assert.equal(extensionFor('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', new Uint8Array()), 'xlsx');
     assert.equal(extensionFor('application/octet-stream', Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0])), 'xls');
+  });
+});
+
+describe('readEnv', () => {
+  it('trims values, strips one pair of quotes and ignores empty or unknown names', () => {
+    const env = readEnv({ SEC_USER_AGENT: ' "LongViewInvest me@example.com" ', FINMIND_TOKEN: "'abc123'", FRED_API_KEY: '  ', OTHER: 'x' });
+    assert.deepEqual(env, { FINMIND_TOKEN: 'abc123', SEC_USER_AGENT: 'LongViewInvest me@example.com' });
   });
 });
 

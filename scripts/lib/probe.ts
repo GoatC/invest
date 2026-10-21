@@ -12,6 +12,19 @@ export type KeyName = (typeof KEY_NAMES)[number];
 export type Env = Partial<Record<KeyName, string>>;
 export type Json = Record<string, unknown>;
 
+/**
+ * Reads the known keys, trimming spaces and one pair of surrounding quotes, so a value typed as
+ * "LongViewInvest me@example.com" in a settings form works the same as one without quotes.
+ */
+export function readEnv(source: Record<string, string | undefined> = process.env): Env {
+  const env: Env = {};
+  for (const name of KEY_NAMES) {
+    const value = source[name]?.trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+    if (value) env[name] = value;
+  }
+  return env;
+}
+
 /** One data source: what it serves (PRD Section 6) and how to call it once. */
 export interface Probe {
   id: string;

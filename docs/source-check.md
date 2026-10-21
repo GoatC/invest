@@ -51,6 +51,18 @@ npm run check:sources
 - 只重跑某個來源（例如補上金鑰後）：`npm run check:sources -- --only=alphavantage`；其他來源保留上一次的結果。
 - 來源代號 Source ids: `twse, finmind, mops, sec, alphavantage, fmp, fred, cbc, shiller, french, damodaran, twse_cg, echo, moenv, issuers, bot_gold`
 
+## 在 Claude 雲端環境執行 Running in the Claude cloud environment
+
+- **金鑰放「環境變數」，不要放 Network secrets。** Network secrets 只會由代理伺服器在 HTTP header 加上金鑰，但 Alpha Vantage 與環境部只接受網址參數（`apikey=…`），header 帶不進去。在環境設定的 Environment variables 欄位一行填一個，例如 `SEC_USER_AGENT=LongViewInvest your-name@gmail.com`，不用加引號。
+- **新設定只對新 session 生效。**
+- **雲端主機要透過代理連線**，Node 需要 `NODE_USE_ENV_PROXY=1` 才會走代理：
+
+```bash
+NODE_USE_ENV_PROXY=1 npm run check:sources -- --only=alphavantage,finmind,sec,moenv
+```
+
+In the cloud environment, put keys under Environment variables (header-only Network secrets cannot carry the query-parameter keys that Alpha Vantage and MOENV need), start a new session, and run with `NODE_USE_ENV_PROXY=1`.
+
 ## 看報告 Reading the report
 
 - ✅ 有涵蓋 · ❌ 找不到 · — 不適用 · ⏭️ 未設金鑰而略過 · ⚠️ 呼叫失敗 · · 本次未檢查

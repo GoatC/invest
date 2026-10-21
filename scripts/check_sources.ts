@@ -37,7 +37,7 @@ import {
   unzip,
   xlsxPeek,
 } from './lib/payload.ts';
-import { type Env, type Fetched, type Json, KEY_NAMES, parseJson, type Probe, SampleStore, SourceRun, taipeiNow } from './lib/probe.ts';
+import { type Fetched, type Json, KEY_NAMES, parseJson, type Probe, readEnv, SampleStore, SourceRun, taipeiNow } from './lib/probe.ts';
 import { renderReport } from './lib/report.ts';
 import { symbolFor, tickerById, TICKERS } from './lib/tickers.ts';
 import type { Market, RunReport, SourceResult, TickerSpec } from './lib/types.ts';
@@ -840,15 +840,6 @@ const PROBES: readonly Probe[] = [twse, finmind, mops, sec, alphaVantage, fmp, f
 // Main
 // ---------------------------------------------------------------------------
 
-function readEnv(): Env {
-  const env: Env = {};
-  for (const name of KEY_NAMES) {
-    const value = process.env[name]?.trim();
-    if (value) env[name] = value;
-  }
-  return env;
-}
-
 function readPrevious(path: string): SourceResult[] {
   if (!existsSync(path)) return [];
   const previous = parseJson<Partial<RunReport>>(readFileSync(path, 'utf8'));
@@ -870,6 +861,9 @@ async function main(): Promise<void> {
 
   const envFile = existsSync('.env.local');
   if (envFile) process.loadEnvFile('.env.local');
+  if ((process.env['HTTPS_PROXY'] ?? process.env['https_proxy']) && !process.env['NODE_USE_ENV_PROXY']) {
+    console.warn('HTTPS_PROXY is set, but Node fetch ignores it unless NODE_USE_ENV_PROXY=1 (Node 22.21+). If every request fails, re-run with NODE_USE_ENV_PROXY=1.');
+  }
   const env = readEnv();
   const redact = makeRedactor(Object.values(env));
   const http = new Http({ userAgent: USER_AGENT, timeoutMs: 45_000, redact, minGapMs: 500 });
