@@ -20,6 +20,8 @@ export const LABELS = {
   addAsset: { en: 'Add non-listed asset', zh: '新增非上市資產' },
   editAsset: { en: 'Edit non-listed asset', zh: '修改非上市資產' },
   addSecurity: { en: 'Add security', zh: '新增證券' },
+  editSecurity: { en: 'Edit security', zh: '修改證券' },
+  securities: { en: 'Securities', zh: '證券' },
   signIn: { en: 'Sign in', zh: '登入' },
   signOut: { en: 'Sign out', zh: '登出' },
   email: { en: 'Email', zh: '電子郵件' },

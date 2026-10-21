@@ -272,6 +272,54 @@ export function diffRows(before: Record<string, unknown> | null, after: Record<s
   return changes;
 }
 
+interface AuditRow {
+  id: number;
+  table_name: string;
+  row_key: string;
+  action: AuditEntry['action'];
+  changed_at: string;
+  old_row: Record<string, unknown> | null;
+  new_row: Record<string, unknown> | null;
+}
+
+/** One line of the whole edit history, with the row it concerns. */
+export interface LogEntry extends AuditEntry {
+  table: string;
+  rowKey: string;
+  /** The row after the edit, or as it was when deleted. */
+  row: Record<string, unknown> | null;
+}
+
+/** Entries per page of the edit history. */
+export const LOG_PAGE = 50;
+
+/** Every logged edit and delete, newest first, one page at a time; `more` says whether older entries exist. */
+export async function loadAuditLog(supabase: SupabaseClient, page: number): Promise<{ entries: LogEntry[]; more: boolean }> {
+  const from = page * LOG_PAGE;
+  // One row past the page tells whether there is another page.
+  const found = await rows<AuditRow>(
+    'audit_log',
+    supabase
+      .from('audit_log')
+      .select('id, table_name, row_key, action, changed_at, old_row, new_row')
+      .order('changed_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + LOG_PAGE),
+  );
+  return {
+    entries: found.slice(0, LOG_PAGE).map((entry) => ({
+      id: entry.id,
+      action: entry.action,
+      changedAt: entry.changed_at,
+      changes: entry.action === 'update' ? diffRows(entry.old_row, entry.new_row) : [],
+      table: entry.table_name,
+      rowKey: entry.row_key,
+      row: entry.action === 'delete' ? entry.old_row : (entry.new_row ?? entry.old_row),
+    })),
+    more: found.length > LOG_PAGE,
+  };
+}
+
 export async function loadAuditHistory(supabase: SupabaseClient, table: string, rowKey: string): Promise<AuditEntry[]> {
   const entries = await rows<{ id: number; action: AuditEntry['action']; changed_at: string; old_row: Record<string, unknown> | null; new_row: Record<string, unknown> | null }>(
     'audit_log',

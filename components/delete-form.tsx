@@ -10,7 +10,7 @@ import { Bi } from './bi';
 const INITIAL_STATE: DeleteState = { message: null };
 
 /** A delete button that asks first; the server action may refuse with a reason. */
-export function DeleteForm({ id, action, confirm }: { id: number; action: (previous: DeleteState, formData: FormData) => Promise<DeleteState>; confirm: Bilingual }) {
+export function DeleteForm({ id, action, confirm }: { id: number | string; action: (previous: DeleteState, formData: FormData) => Promise<DeleteState>; confirm: Bilingual }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form

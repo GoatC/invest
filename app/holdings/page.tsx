@@ -2,13 +2,14 @@ import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
+import { RuleMath } from '@/components/rule-math';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingsData, type HoldingsData } from '@/lib/data';
 import { money, percent, points, quantity, twd } from '@/lib/format';
 import { LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
-import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
+import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
-import { capBreaches, type CapBreach } from '@/lib/models/rules';
+import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
 import type { Holding } from '@/lib/models/valuation';
 import { breachText } from '@/lib/rule-text';
 
@@ -75,6 +76,14 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       {saved && (
         <p className="banner ok" role="status">
           <Bi {...saved} />
+          {param(params, 'saved')?.endsWith('deleted') && (
+            <>
+              {' '}
+              <Link href="/history">
+                <Bi en="See the edit history" zh="查看修改紀錄" />
+              </Link>
+            </>
+          )}
         </p>
       )}
       {portfolio.shortfalls.length > 0 && (
@@ -147,14 +156,10 @@ function Stat({ label, value, note }: { label: Bilingual; value: string; note?: 
   );
 }
 
-function satelliteValue(holdings: readonly Holding[]): number {
-  return sum(holdings.filter((holding) => holding.sleeve === 'satellite').map((holding) => holding.valueTwd ?? 0));
-}
-
 function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio }) {
   const { pool } = portfolio;
   const windfallTwd = sum(portfolio.holdings.filter((holding) => holding.pool === 'windfall').map((holding) => holding.valueTwd ?? 0));
-  const satelliteShare = pool.totalTwd > 0 ? satelliteValue(pool.holdings) / pool.totalTwd : null;
+  const satelliteShare = pool.totalTwd > 0 ? satelliteValue(pool) / pool.totalTwd : null;
   const valued = portfolio.holdings.filter((holding) => holding.costTwd !== null && holding.valueTwd !== null);
   const costTwd = sum(valued.map((holding) => holding.costTwd ?? 0));
   const gainTwd = sum(valued.map((holding) => (holding.valueTwd ?? 0) - (holding.costTwd ?? 0)));
@@ -185,7 +190,7 @@ function rulesOk(data: HoldingsData, portfolio: Portfolio): Bilingual[] {
       ? { en: `R1: no single stock is above ${percent(singleStock.maxWeight, 0)} of the regular pool.`, zh: `R1：沒有任何單一個股超過一般投入資金池的 ${percent(singleStock.maxWeight, 0)}。` }
       : { en: 'R1 is turned off in the rules table.', zh: 'R1 已在規則表中停用。' },
   );
-  const share = portfolio.pool.totalTwd > 0 ? satelliteValue(portfolio.pool.holdings) / portfolio.pool.totalTwd : 0;
+  const share = portfolio.pool.totalTwd > 0 ? satelliteValue(portfolio.pool) / portfolio.pool.totalTwd : 0;
   lines.push(
     satellite
       ? {
@@ -227,6 +232,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
           </ul>
         </div>
       )}
+      <RuleMath caps={data.caps} pool={poolFigures(portfolio.pool)} />
       {unpriced.length > 0 && (
         <p className="banner info">
           <Bi
@@ -247,7 +253,10 @@ function ClassWeights({ portfolio }: { portfolio: Portfolio }) {
         <Bi en="Actual vs target weight" zh="實際與目標權重" />
       </h2>
       <p className="muted small">
-        <Bi en="Shares of the regular pool; windfall money is not counted." zh="以一般投入資金池計算，不含大額資金。" />
+        <Bi
+          en="Actual = class value ÷ regular pool (windfall money is not counted); drift = actual − target, in percentage points (pp)."
+          zh="實際權重 = 類別市值 ÷ 一般投入資金池（不含大額資金）；偏離 = 實際 − 目標，單位為百分點（pp）。"
+        />
       </p>
       <div className="table-wrap">
         <table>
@@ -498,9 +507,14 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
   const shown = showAll ? data.trades : data.trades.slice(0, RECENT_TRADES);
   return (
     <section className="card form">
-      <h2>
-        <Bi en="Trades" zh="交易紀錄" />
-      </h2>
+      <div className="row spread">
+        <h2>
+          <Bi en="Trades" zh="交易紀錄" />
+        </h2>
+        <Link href="/history">
+          <Bi en="Edit history, deleted entries included" zh="修改紀錄（含已刪除）" />
+        </Link>
+      </div>
       <div className="table-wrap">
         <table>
           <thead>
@@ -587,8 +601,8 @@ function Footnotes() {
       </p>
       <p>
         <Bi
-          en="Average cost includes buy fees and taxes. Market value and gains are in TWD at the latest FX rate; cost is in TWD at each buy's own rate."
-          zh="平均成本已含買進手續費與稅。市值與損益以最新匯率換算台幣；成本以每筆買進當時的匯率換算台幣。"
+          en="Average cost = remaining cost ÷ quantity, buy fees and taxes included; a sell takes cost out at the average. Unrealised gain = market value − cost, both in TWD: market value uses the latest price and FX rate, cost each buy's own rate, so the gain includes currency moves. Weight = market value ÷ regular pool; windfall holdings show —."
+          zh="平均成本 = 剩餘成本 ÷ 數量（含買進手續費與稅；賣出時按平均成本扣除）。未實現損益 = 市值 − 成本，皆以台幣計：市值用最新價格與匯率，成本用每筆買進當時的匯率，因此損益包含匯率變動。權重 = 市值 ÷ 一般投入資金池；大額資金持股顯示 —。"
         />
       </p>
     </section>

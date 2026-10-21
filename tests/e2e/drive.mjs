@@ -4,7 +4,8 @@ import { existsSync } from 'node:fs';
 
 import { chromium } from 'playwright-core';
 
-const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD } = process.env;
+// DOCS_SHOTS, when set, also saves the README screenshots there (npm run test:e2e with DOCS_SHOTS=$PWD/docs/images).
+const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS } = process.env;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 
 const browser = await chromium.launch(CHROMIUM && existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {});
@@ -22,6 +23,10 @@ let expectedNotFound = 0;
 async function snap(name, target = page, fullPage = true) {
   shot += 1;
   await target.screenshot({ path: `${SHOTS}/${String(shot).padStart(2, '0')}-${name}.png`, fullPage });
+}
+/** A README image: the visible screen, or one element, never the full page. */
+async function docShot(name, target) {
+  if (DOCS_SHOTS) await target.screenshot({ path: `${DOCS_SHOTS}/${name}.png` });
 }
 async function step(name, fn) {
   try {
@@ -70,6 +75,16 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
   check(text.includes('Not valued yet') && text.includes('Gold bar (demo)'), 'gold bar listed as not valued');
   check(text.includes('持倉') && text.includes('實際與目標權重'), 'Chinese labels');
   await snap('holdings');
+  await docShot('holdings', page);
+});
+
+await step('holdings: R1 and R2 are worked out on screen with the demo figures', async () => {
+  await page.getByText('How R1 and R2 are worked out').click();
+  const text = await body();
+  // 5% of NT$79,203.12; the satellite is 2330 (NT$7,215) plus AAPL (NT$7,646.40).
+  check(text.includes('One stock may hold up to NT$3,960'), 'R1 limit in NT$');
+  check(text.includes('NT$14,861 ÷ NT$79,203 = 18.8%'), 'R2 inputs');
+  check(text.includes('單一個股最多可持有 NT$3,960'), 'Chinese R1 line');
 });
 
 await step('trade form: picking VT fills USD and the latest rate; an existing breach is shown as such', async () => {
@@ -135,6 +150,15 @@ await step('deleting a trade asks first, then removes it', async () => {
   check((await body()).includes('找不到這個頁面或資料'), 'bilingual not-found page');
 });
 
+await step('the edit history keeps the change and the deleted trade', async () => {
+  await page.goto(`${BASE}/history`);
+  const text = await body();
+  check(/Deleted\s*刪除[\s\S]*buy 2 VT at 158 USD/.test(text), 'deleted trade listed with what it held');
+  check(text.includes('買進 VT 2 單位，價格 158 USD'), 'Chinese description');
+  check(/Quantity\s*數量: 1 → 2/.test(text), 'the earlier quantity change');
+  await snap('history');
+});
+
 await step('gold: grams × price per gram gives the value, and it joins the pool', async () => {
   await page.goto(`${BASE}/holdings`);
   await page.getByRole('link', { name: 'Enter a value' }).click();
@@ -172,6 +196,28 @@ await step('adding a security leads to a new trade in it', async () => {
   check((await page.inputValue('input[name=fxRate]')) === '32.4', 'rate carried over');
 });
 
+await step('securities: an edit is logged; one in use cannot be deleted, an unused one can', async () => {
+  await page.goto(`${BASE}/securities`);
+  check((await body()).includes('Microsoft Corp.'), 'MSFT listed');
+  await page.goto(`${BASE}/securities/MSFT`);
+  check(await page.locator('input[name=ticker]').getAttribute('readonly') !== null, 'ticker fixed');
+  await page.selectOption('select[name=productType]', 'equity_etf');
+  await page.getByText('re-files every trade in this security').waitFor();
+  await page.selectOption('select[name=productType]', 'stock');
+  await page.fill('input[name=name]', 'Microsoft Corporation');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/securities?saved=updated');
+  await page.goto(`${BASE}/securities/MSFT`);
+  check(/Name\s*名稱: Microsoft Corp\. → Microsoft Corporation/.test(await body()), 'name change in its history');
+  await snap('security-edit');
+  await page.getByRole('button', { name: /Delete/ }).click();
+  await page.waitForURL('**/securities?saved=deleted');
+  await page.goto(`${BASE}/securities/VT`);
+  await page.getByRole('button', { name: /Delete/ }).click();
+  await page.getByText('still in use').waitFor();
+  check((await body()).includes('仍在使用中'), 'Chinese refusal');
+});
+
 await step('CSV import: Big5 statement, title lines, guessed columns, every row explained', async () => {
   await page.goto(`${BASE}/import`);
   await page.getByLabel('Broker name').fill('國泰複委託（示範）');
@@ -183,6 +229,7 @@ await step('CSV import: Big5 statement, title lines, guessed columns, every row 
   const text = await body();
   check(text.includes('不是買進或賣出') && text.includes('不是交易列'), 'dividend and totals rows explained');
   await snap('import-preview');
+  await docShot('import-preview', page.locator('[aria-live="polite"]').last());
 });
 
 await step('CSV import: an unknown ticker is added in a new tab, then "Check again"', async () => {
@@ -218,7 +265,7 @@ await step('CSV import again: the broker mapping is remembered and nothing is im
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/securities/new', '/import']) {
+  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/securities', '/securities/new', '/history', '/import']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);

@@ -402,3 +402,39 @@ button:disabled {
 .estimate {
   color: var(--muted);
 }
+
+/* "How is this worked out" notes */
+
+details > summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+details ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.2rem;
+}
+
+/* The edit history */
+
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.log > li {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.6rem;
+}
+
+.log > li:last-child {
+  border-bottom: none;
+}
+
+.log ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.2rem;
+}

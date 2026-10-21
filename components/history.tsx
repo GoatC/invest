@@ -1,9 +1,9 @@
-import type { AuditEntry } from '@/lib/data';
+import type { AuditEntry, FieldChange } from '@/lib/data';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-const ACTION: Record<AuditEntry['action'], Bilingual> = {
+export const ACTION: Record<AuditEntry['action'], Bilingual> = {
   insert: { en: 'Added', zh: '新增' },
   update: { en: 'Changed', zh: '修改' },
   delete: { en: 'Deleted', zh: '刪除' },
@@ -34,13 +34,36 @@ const COLUMN: Record<string, Bilingual> = {
   market: LABELS.market,
   sleeve: LABELS.sleeve,
   domicile: LABELS.domicile,
+  listing_country: { en: 'Listing country', zh: '上市國家' },
 };
 
 function shown(value: unknown): string {
-  return value === null || value === undefined || value === '' ? '—' : String(value);
+  if (value === null || value === undefined || value === '') return '—';
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
 const TAIPEI_TIME = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', dateStyle: 'short', timeStyle: 'short', hour12: false });
+
+export function TaipeiTime({ at }: { at: string }) {
+  return (
+    <span className="muted small">
+      {TAIPEI_TIME.format(new Date(at))} <Bi en="Taipei time" zh="台北時間" />
+    </span>
+  );
+}
+
+/** What an edit changed, field by field. */
+export function ChangeList({ changes }: { changes: FieldChange[] }) {
+  return (
+    <ul>
+      {changes.map((change) => (
+        <li key={change.column}>
+          <Bi {...(COLUMN[change.column] ?? { en: change.column, zh: change.column })} />: {shown(change.before)} → {shown(change.after)}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** The audit log of one entry, newest first. */
 export function History({ entries }: { entries: AuditEntry[] }) {
@@ -58,18 +81,8 @@ export function History({ entries }: { entries: AuditEntry[] }) {
           <strong>
             <Bi {...ACTION[entry.action]} />
           </strong>{' '}
-          <span className="muted small">
-            {TAIPEI_TIME.format(new Date(entry.changedAt))} <Bi en="Taipei time" zh="台北時間" />
-          </span>
-          {entry.action === 'update' && (
-            <ul>
-              {entry.changes.map((change) => (
-                <li key={change.column}>
-                  <Bi {...(COLUMN[change.column] ?? { en: change.column, zh: change.column })} />: {shown(change.before)} → {shown(change.after)}
-                </li>
-              ))}
-            </ul>
-          )}
+          <TaipeiTime at={entry.changedAt} />
+          {entry.action === 'update' && <ChangeList changes={entry.changes} />}
         </li>
       ))}
     </ul>

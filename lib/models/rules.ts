@@ -91,10 +91,15 @@ export function singleStockBreaches(pool: PoolView, cap: NonNullable<Caps['singl
     .filter((breach) => breach.weight - breach.limit > TOLERANCE);
 }
 
+/** The satellite sleeve's value in the regular pool, in TWD. */
+export function satelliteValue(pool: PoolView): number {
+  return pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+}
+
 /** R2: when the satellite sleeve rises above trigger_weight of the regular pool, trim it back to target_weight. */
 export function satelliteBreach(pool: PoolView, cap: NonNullable<Caps['satellite']>): CapBreach | undefined {
   if (pool.totalTwd <= 0) return undefined;
-  const valueTwd = pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  const valueTwd = satelliteValue(pool);
   const weight = valueTwd / pool.totalTwd;
   if (weight - cap.triggerWeight <= TOLERANCE) return undefined;
   return { rule: 'R2', subject: 'satellite', valueTwd, weight, limit: cap.triggerWeight, trimTwd: valueTwd - cap.targetWeight * pool.totalTwd };

@@ -1,5 +1,5 @@
 import { buildPositions, type Position, type Shortfall } from './positions';
-import { capBreaches, classWeights, regularPool, type CapBreach, type Caps, type ClassWeight, type PoolView } from './rules';
+import { capBreaches, classWeights, regularPool, satelliteValue, type CapBreach, type Caps, type ClassWeight, type PoolView } from './rules';
 import type { AssetClass, FxQuote, ManualAsset, PriceQuote, Security, Trade } from './types';
 import { latestFx, latestPrices, valueHoldings, type Holding } from './valuation';
 
@@ -35,11 +35,23 @@ export function buildPortfolio(data: PortfolioData): Portfolio {
   return { positions, shortfalls, holdings, pool, classes: classWeights(pool, data.assetClasses) };
 }
 
+/** The two figures R1 and R2 are measured against. */
+export interface PoolFigures {
+  totalTwd: number;
+  satelliteTwd: number;
+}
+
+export function poolFigures(pool: PoolView): PoolFigures {
+  return { totalTwd: pool.totalTwd, satelliteTwd: satelliteValue(pool) };
+}
+
 export interface TradePreview {
   /** Breaches the change would leave in place, with "new" marking the ones it causes. */
   breaches: Array<CapBreach & { isNew: boolean }>;
   /** Sells the change would leave larger than the holding, beyond any that were already there. */
   shortfalls: Shortfall[];
+  /** The regular pool after the change. */
+  after: PoolFigures;
 }
 
 function shortfallKey(shortfall: Shortfall): string {
@@ -63,6 +75,7 @@ function compare(data: PortfolioData, trades: Trade[], caps: Caps): TradePreview
   return {
     breaches: capBreaches(next.holdings, caps).map((breach) => ({ ...breach, isNew: !existing.has(breachKey(breach)) })),
     shortfalls: addedShortfalls(current.shortfalls, next.shortfalls),
+    after: poolFigures(next.pool),
   };
 }
 

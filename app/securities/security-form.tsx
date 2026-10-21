@@ -10,7 +10,7 @@ import { bi, LABELS, MARKET, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n'
 import type { AssetClass, Market, ProductType, Security } from '@/lib/models/types';
 import { parseSecurity, PRODUCT_TYPES, type SecurityField } from '@/lib/validation';
 
-import { addSecurity, type SecurityFormState } from './actions';
+import { addSecurity, updateSecurity, type SecurityFormState } from './actions';
 
 /** The form's fields as typed, before parsing. */
 export type SecurityValues = Record<SecurityField, string>;
@@ -37,22 +37,29 @@ export function SecurityForm({
   securities,
   next,
   initial,
+  editing = false,
 }: {
   assetClasses: AssetClass[];
   securities: Security[];
   next?: string;
   initial: SecurityValues;
+  /** Editing a saved security: its ticker stays and nothing is filled in automatically. */
+  editing?: boolean;
 }) {
   const [values, setValues] = useState(initial);
   const [edited, setEdited] = useState<ReadonlySet<SecurityField>>(new Set());
-  const [state, formAction, pending] = useActionState(addSecurity, INITIAL_STATE);
+  const [state, formAction, pending] = useActionState(editing ? updateSecurity : addSecurity, INITIAL_STATE);
   const classMap = useMemo(() => new Map(assetClasses.map((assetClass) => [assetClass.id, assetClass])), [assetClasses]);
-  const tickers = useMemo(() => new Set(securities.map((security) => security.ticker)), [securities]);
+  const tickers = useMemo(
+    () => new Set(securities.map((security) => security.ticker).filter((ticker) => !editing || ticker !== initial.ticker)),
+    [securities, editing, initial.ticker],
+  );
 
   function change(field: SecurityField, value: string) {
     setEdited((previous) => new Set(previous).add(field));
     setValues((previous) => {
       const updated = { ...previous, [field]: value };
+      if (editing) return updated;
       // Fields not typed by hand follow the market and product type.
       if (field === 'market' && isMarket(value)) {
         if (!edited.has('currency')) updated.currency = MARKET_DEFAULTS[value].currency;
@@ -67,6 +74,7 @@ export function SecurityForm({
 
   const parsed = parseSecurity(values, tickers, classMap);
   const chosenClass = classMap.get(values.assetClassId);
+  const refiled = editing && (values.productType !== initial.productType || values.assetClassId !== initial.assetClassId);
 
   function error(field: SecurityField): Bilingual | null {
     const server = edited.has(field) ? undefined : state.errors[field];
@@ -78,8 +86,27 @@ export function SecurityForm({
     <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
       {next && <input type="hidden" name="next" value={next} />}
       <div className="form-grid">
-        <Field label={LABELS.ticker} error={error('ticker')} hint={<Bi en="As your broker shows it, e.g. VT, 0050" zh="與券商顯示相同，例如 VT、0050" />}>
-          <input name="ticker" maxLength={12} autoCapitalize="characters" autoComplete="off" required value={values.ticker} onChange={(e) => change('ticker', e.target.value.toUpperCase())} />
+        <Field
+          label={LABELS.ticker}
+          error={error('ticker')}
+          hint={
+            editing ? (
+              <Bi en="Fixed: every trade refers to it" zh="代號不可修改：每筆交易都以它為準" />
+            ) : (
+              <Bi en="As your broker shows it, e.g. VT, 0050" zh="與券商顯示相同，例如 VT、0050" />
+            )
+          }
+        >
+          <input
+            name="ticker"
+            maxLength={12}
+            autoCapitalize="characters"
+            autoComplete="off"
+            required
+            readOnly={editing}
+            value={values.ticker}
+            onChange={(e) => change('ticker', e.target.value.toUpperCase())}
+          />
         </Field>
         <Field label={LABELS.name} error={error('name')}>
           <input name="name" maxLength={120} required value={values.name} onChange={(e) => change('name', e.target.value)} />
@@ -127,6 +154,14 @@ export function SecurityForm({
           <input name="domicile" maxLength={2} autoCapitalize="characters" required value={values.domicile} onChange={(e) => change('domicile', e.target.value.toUpperCase())} />
         </Field>
       </div>
+      {refiled && (
+        <p className="banner info">
+          <Bi
+            en="This re-files every trade in this security: R1 checks only individual stocks, and the asset class decides the sleeve (R2) and the weights."
+            zh="這會改變這檔證券所有交易的歸類：R1 只檢查個股，資產類別決定所屬部位（R2）與權重。"
+          />
+        </p>
+      )}
       {state.message && (
         <p className="banner danger" role="alert">
           <Bi {...state.message} />
@@ -136,7 +171,7 @@ export function SecurityForm({
         <button type="submit" className="button primary" disabled={pending}>
           <Bi {...(pending ? LABELS.saving : LABELS.save)} />
         </button>
-        <Link href={next && next.startsWith('/holdings/') ? next : '/holdings'} className="button">
+        <Link href={editing ? '/securities' : next && next.startsWith('/holdings/') ? next : '/holdings'} className="button">
           <Bi {...LABELS.cancel} />
         </Link>
       </div>

@@ -5,6 +5,7 @@ import { useActionState, useMemo, useState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { RuleMath } from '@/components/rule-math';
 import type { HoldingsData } from '@/lib/data';
 import { percent } from '@/lib/format';
 import { shortfallMessage } from '@/lib/forms';
@@ -227,6 +228,7 @@ function TradeEffect({ preview, caps, pool }: { preview: ReturnType<typeof previ
           </ul>
         </div>
       )}
+      <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this trade', zh: '這筆交易後 R1 與 R2 的計算方式' }} />
       {preview.breaches.length === 0 && (caps.singleStock || caps.satellite) && (
         <p className="banner ok">
           {pool === 'windfall' ? (

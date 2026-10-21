@@ -6,6 +6,7 @@ import { useActionState, useMemo, useState, useTransition } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { RuleMath } from '@/components/rule-math';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { guessMapping, missingColumns, reconcile, type CsvMapping, type SavedMapping } from '@/lib/csv/mapping';
 import { planImport, readStatement, tradesToImport, type ImportRow, type RowStatus } from '@/lib/csv/plan';
@@ -473,6 +474,7 @@ function Preview({
           />
         </p>
       )}
+      {preview && <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this import', zh: '匯入後 R1 與 R2 的計算方式' }} />}
       {created.length > 0 && (
         <div className="banner warn">
           <Bi en="You can import, but afterwards a rule is broken:" zh="可以匯入，但匯入後會違反規則：" />
