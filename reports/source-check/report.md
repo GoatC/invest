@@ -2,7 +2,7 @@
 
 PRD Phase 1, step 1: each PRD Section 6 source called once, with its limits, a sample payload and ticker coverage. 第一階段第 1 步：每個資料來源呼叫一次，記錄流量限制、樣本與標的覆蓋。
 
-- Generated 產生時間: 2026-10-21 11:52:02 (Asia/Taipei)
+- Generated 產生時間: 2026-10-21 12:06:27 (Asia/Taipei)
 - Runner 執行環境: local run 本機執行 · Node v22.22.0
 - Requests 請求: 29 of 35 succeeded 成功
 - Keys present 已設定的金鑰 (values never written 不寫出內容): `ALPHAVANTAGE_API_KEY` ✅ · `FINMIND_TOKEN` ✅ · `FRED_API_KEY` ❌ · `FMP_API_KEY` ❌ · `MOENV_API_KEY` ✅ · `SEC_USER_AGENT` ✅
@@ -42,7 +42,7 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 | **009816** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | · | — |
 | **00922** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | ⚠️ | — |
 | **BNDW** | Core · Global bonds 全球債券 22% | US | — | ✅ | ⚠️ | — | ✅ | — |
-| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ❌ | ⏭️ | ✅ | — |
+| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ⚠️ | ⏭️ | ✅ | — |
 | **GLDM** | Core · Real assets 實體資產 10% | US | — | ✅ | ⚠️ | — | — | — |
 | **Physical gold 實體黃金** | Core · Real assets 實體資產 10% | unlisted | — | — | — | — | — | ⚠️ |
 | **BIL** | Core · Strategic cash 戰略現金 8% | US | — | ✅ | ⚠️ | — | ✅ | — |
@@ -70,7 +70,7 @@ The satellite sleeves name no tickers yet (US 2–3 names, Taiwan 1–2 names, t
 - **009816**: TWSE ✅ close 15.93 · FinMind ✅ twse · ETF · Issuer file · no verified machine-readable issuer file yet 尚無已確認的官方檔案
 - **00922**: TWSE ✅ close 39.56 · FinMind ✅ twse · ETF
 - **BNDW**: FinMind ✅ Vanguard Total World Bond ETF · Issuer file ✅ 500 holdings on the first page
-- **AGGU (LSE)**: Alpha Vantage ❌ Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. · Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
+- **AGGU (LSE)**: Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
 - **GLDM**: FinMind ✅ SPDR Gold MiniShares Trust · Issuer file — holds physical gold; nothing to look through
 - **BIL**: FinMind ✅ State Street SPDR Bloomberg 1-3 Month T-Bill ETF · Issuer file ✅ xlsx sheet "holdings", 120 rows, As of 19-Oct-2026
 - **0050**: TWSE ✅ close 107.25 · FinMind ✅ twse · ETF
@@ -80,7 +80,7 @@ The satellite sleeves name no tickers yet (US 2–3 names, Taiwan 1–2 names, t
 
 ## AGGU price source AGGU 價格來源
 
-- ❌ Alpha Vantage, AGGU.LON (PRD primary price source): Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.
+- ⚠️ Alpha Vantage, AGGU.LON (PRD primary price source): Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.
 - ⏭️ Financial Modeling Prep, AGGU.L
 - ❌ FinMind US list (backup source)
 - ✅ iShares NAV history (issuer file): latest 2026-10-19, 5.76
@@ -411,14 +411,14 @@ Sample 樣本: Ten most recent filings 最近十筆申報
 - Used by 使用功能: All
 - Auth 驗證: ALPHAVANTAGE_API_KEY
 - Documented limit 官方限制: 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute
-- Checked 檢查時間: 2026-10-21 11:38:43
+- Checked 檢查時間: 2026-10-21 12:06:21
 
 | # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Active US listings (LISTING_STATUS, CSV) | 200 Alpha Vantage: JSON instead of CSV | 375 ms | 2 B | — |
-| 2 | Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 64 ms | 258 B | — |
-| 3 | Symbol search "AGGU" (SYMBOL_SEARCH) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 60 ms | 258 B | — |
-| 4 | TIME_SERIES_WEEKLY for AGGU.LON | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 59 ms | 258 B | — |
+| 1 | Active US listings (LISTING_STATUS, CSV) | 200 Alpha Vantage: JSON instead of CSV | 438 ms | 2 B | — |
+| 2 | Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 69 ms | 258 B | — |
+| 3 | Symbol search "AGGU" (SYMBOL_SEARCH) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 81 ms | 258 B | — |
+| 4 | TIME_SERIES_WEEKLY for AGGU.LON | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 55 ms | 258 B | — |
 
 Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
