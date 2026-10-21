@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-21 11:46:27",
+  "generatedAt": "2026-10-21 11:52:02",
   "node": "v22.22.0",
   "runner": "local run 本機執行",
   "keys": {
@@ -782,7 +782,7 @@
       "coverageKinds": [
         "stock"
       ],
-      "checkedAt": "2026-10-21 10:59:12",
+      "checkedAt": "2026-10-21 11:51:54",
       "status": "ok",
       "calls": [
         {
@@ -790,10 +790,10 @@
           "url": "https://cgc.twse.com.tw/evaluationCorp/listCh",
           "status": 200,
           "ok": true,
-          "ms": 990,
-          "bytes": 800,
+          "ms": 7458,
+          "bytes": 60950,
           "rateLimitHeaders": {},
-          "contentType": "text/html; charset=UTF-8",
+          "contentType": "text/html;charset=UTF-8",
           "sampleFile": "samples/twse_cg/01-latest-evaluation-results-page.html"
         }
       ],
@@ -809,11 +809,12 @@
         {
           "label": "Page text (start) 頁面文字",
           "lang": "text",
-          "text": "因為安全性考量，您所執行的頁面無法呈現。\nFOR SECURITY REASONS, THIS PAGE CAN NOT BE ACCESSED.\n您可以回上一頁繼續其他動作，或撥打以下電話通報問題：(02)8101-5840, (02)8101-5834。\nYOU COULD GO BACK TO PREVIOUS PAGE OR CALL US FOR FURTHER HELP：(02)8101-5840, (02)8101-5834。\n錯誤代碼：7641438222693731109"
+          "text": "TWSE 公司治理中心 \r\nEnglish \r\n關於我們\r\n公司治理中心簡介\n公司治理藍圖簡介\r\n我國公司治理發展歷程\n強化我國公司治理藍圖(2013-2017)\n新版公司治理藍圖(2018~2020)\n公司治理3.0-永續發展藍圖(2021-2023)\n相關網站\n聯絡我們\n最新消息\r\n新聞稿\n電子報\n國內外時事\n盡職治理守則\r\n盡職治理守則簡介\n簽署名單\n各國盡職治理守則\n盡職治理報告範例\n證交所發布盡職治理\n相關資訊\n服務提供者專區\n各公會盡職治理專區\n企業永續發展\r\n上市櫃公司永續發展行動方案\n(2023年)\n上市櫃公司永續發展路徑圖\n企業永續發展簡介\nESG相關法規\n上市櫃公司永續報告書\n企業ESG資訊揭露\n企業永續相關指數\r\n臺灣永續指數\n臺灣企業社會責任中小型指數\n臺灣公司治理100指數\n臺灣高薪100指數\n臺灣就業99指數\nESG指數化商品\n永續發展債券\n臺灣永續投資調查\r\n執行成果\n-->\r\n公司投資人關係整合平台\n產學合作實習計畫\r\n計畫緣由\n計畫時程\n辦理成果\n參考資料\r\n準則\n揭露指引及範例-IFRS永續揭露準則\n揭露指引及範例-永續報告書\n揭露指引及範例-TCFD\n歷年ESG年鑑\n其他參考資料\n法規及問答\r\n法規架構\n主管機關訂定\n證交所及櫃買中\n心訂定\n其他行業別之公\n司治理實務守則\n股東會年報最佳實務參考範例\n問答集\n評鑑資訊\r\nESG評鑑簡介\nESG評鑑\n公司治理評鑑\n資訊揭露評鑑簡介\n-->\r\n資訊揭露評鑑\n-->\r\n宣導活動及出版品\r\n宣導活動\n公司治理報告\n年報及永續報告書審閱報告\n國際公司治理發展簡訊\n影音宣導短片\n其他參考資料\n資料庫\r\n獨立董事人才資料庫\n執法統計資料庫\r\n金管會裁罰案件專區\n金管會證期局裁罰案件\n專區\n重大工安、災難、環境汙染及各主管機關裁罰案件專區\n會計師懲戒專區\n上市公司違規及交易面\n異常資訊\n上櫃公司違規及交\n… (1841 more characters)"
         }
       ],
       "notes": [
-        "Downloadable files 可下載檔案: none in the HTML"
+        "Edition on the page 屆別: 第 12 屆(114年)公司治理評鑑",
+        "Downloadable files 可下載檔案: https://cgc.twse.com.tw/static/20260430/8a828e179dd8817f019ddd4b86530000_114%E5%B9%B4(%E7%AC%AC%E5%8D%81%E4%BA%8C%E5%B1%86)%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E8%A9%95%E9%91%91%E7%B5%90%E6%9E%9C%E6%9A%A8%E8%A9%95%E9%91%91%E7%A8%8B%E5%BA%8F%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20241219/8a828e1793ce5bea0193dd8add0b0006_114%E5%B9%B4%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E4%BF%AE%E6%AD%A3%E7%B8%BD%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20250103/8a828e179401a35301942b8c6c91000c_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E4%BD%9C%E6%A5%AD%E6%89%8B%E5%86%8A.pdf , https://cgc.twse.com.tw/static/20250113/8a828e179448c93b01945f5871fc0017_114%E5%B9%B4%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99.xlsx , https://cgc.twse.com.tw/static/20250306/8a828e179544c53e0195692c990f0022_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99%E4%BF%AE%E6%AD%A3%E5%B0%8D%E7%85%A7%E8%A1%A8.pdf , https://cgc.twse.com.tw/static/20241219/8a828e1793ce5bea0193dd90b2c0000c_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99%E9%A1%8C%E5%9E%8B%E8%AA%BF%E6%95%B4%E5%B0%8D%E7%85%A7%E8%A1%A8.pdf , https://cgc.twse.com.tw/static/20260107/8a828e179b9664ed019b984a3a020000_%E5%AE%A3%E5%B0%8E%E8%AA%B2%E7%A8%8B%E7%B0%A1%E5%A0%B11-%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E4%BB%8B%E7%B4%B9%E6%9A%A8%E8%A9%95%E5%88%86%E6%8C%87%E5%8D%97%E8%88%87%E7%AF%84%E4%BE%8B%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20250305/8a828e179544c53e0195657d1f890020_2.%20%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E7%9B%B8%E9%97%9C%E8%A6%8F%E7%AB%A0_%E5%90%88%E4%BD%B5V5.pdf"
       ],
       "skipped": []
     },

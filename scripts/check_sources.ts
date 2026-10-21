@@ -598,6 +598,13 @@ const twseGovernance: Probe = {
     if (!page.ok) return;
     const html = page.text();
     const text = htmlToText(html);
+    // The site's firewall answers HTTP 200 with a short refusal page instead of the results.
+    if (/FOR SECURITY REASONS, THIS PAGE CAN ?NOT BE ACCESSED|因為安全性考量/i.test(text)) {
+      page.fail('security block page instead of the results: the site firewall refused this request 網站防火牆擋下這次請求');
+      s.note('If this persists, governance tiers need another route before N3 (Phase 2): re-run later or from your own connection, or download the yearly results file by hand.');
+      s.preview('Block page text 阻擋頁文字', truncate(text, 800));
+      return;
+    }
     const edition = /第\s*\d+\s*屆[^\n]{0,40}/.exec(text)?.[0];
     if (edition) s.note(`Edition on the page 屆別: ${edition.trim()}`);
     const files = extractLinks(html, pageUrl).filter((url) => /\.(?:pdf|xlsx?|csv|ods)(?:\?|$)/i.test(safeDecodeUri(url)));

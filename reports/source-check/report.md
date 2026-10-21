@@ -2,7 +2,7 @@
 
 PRD Phase 1, step 1: each PRD Section 6 source called once, with its limits, a sample payload and ticker coverage. 第一階段第 1 步：每個資料來源呼叫一次，記錄流量限制、樣本與標的覆蓋。
 
-- Generated 產生時間: 2026-10-21 11:46:27 (Asia/Taipei)
+- Generated 產生時間: 2026-10-21 11:52:02 (Asia/Taipei)
 - Runner 執行環境: local run 本機執行 · Node v22.22.0
 - Requests 請求: 29 of 35 succeeded 成功
 - Keys present 已設定的金鑰 (values never written 不寫出內容): `ALPHAVANTAGE_API_KEY` ✅ · `FINMIND_TOKEN` ✅ · `FRED_API_KEY` ❌ · `FMP_API_KEY` ❌ · `MOENV_API_KEY` ✅ · `SEC_USER_AGENT` ✅
@@ -618,11 +618,11 @@ Implied ERP on October 1, 2026 = 4.20% (Trailing 12 month, with adjusted payout)
 - Used by 使用功能: N3
 - Auth 驗證: none 免金鑰
 - Documented limit 官方限制: Published once a year; no published limit 每年公布一次
-- Checked 檢查時間: 2026-10-21 10:59:12
+- Checked 檢查時間: 2026-10-21 11:51:54
 
 | # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Latest evaluation results page | 200 | 990 ms | 800 B | — |
+| 1 | Latest evaluation results page | 200 | 7458 ms | 61.0 kB | — |
 
 Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
@@ -630,16 +630,103 @@ Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
 Notes 備註:
 
-- Downloadable files 可下載檔案: none in the HTML
+- Edition on the page 屆別: 第 12 屆(114年)公司治理評鑑
+- Downloadable files 可下載檔案: https://cgc.twse.com.tw/static/20260430/8a828e179dd8817f019ddd4b86530000_114%E5%B9%B4(%E7%AC%AC%E5%8D%81%E4%BA%8C%E5%B1%86)%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E8%A9%95%E9%91%91%E7%B5%90%E6%9E%9C%E6%9A%A8%E8%A9%95%E9%91%91%E7%A8%8B%E5%BA%8F%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20241219/8a828e1793ce5bea0193dd8add0b0006_114%E5%B9%B4%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E4%BF%AE%E6%AD%A3%E7%B8%BD%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20250103/8a828e179401a35301942b8c6c91000c_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E7%B3%BB%E7%B5%B1%E4%BD%9C%E6%A5%AD%E6%89%8B%E5%86%8A.pdf , https://cgc.twse.com.tw/static/20250113/8a828e179448c93b01945f5871fc0017_114%E5%B9%B4%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99.xlsx , https://cgc.twse.com.tw/static/20250306/8a828e179544c53e0195692c990f0022_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99%E4%BF%AE%E6%AD%A3%E5%B0%8D%E7%85%A7%E8%A1%A8.pdf , https://cgc.twse.com.tw/static/20241219/8a828e1793ce5bea0193dd90b2c0000c_114%E5%B9%B4%E5%BA%A6%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E6%8C%87%E6%A8%99%E9%A1%8C%E5%9E%8B%E8%AA%BF%E6%95%B4%E5%B0%8D%E7%85%A7%E8%A1%A8.pdf , https://cgc.twse.com.tw/static/20260107/8a828e179b9664ed019b984a3a020000_%E5%AE%A3%E5%B0%8E%E8%AA%B2%E7%A8%8B%E7%B0%A1%E5%A0%B11-%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E8%A9%95%E9%91%91%E4%BB%8B%E7%B4%B9%E6%9A%A8%E8%A9%95%E5%88%86%E6%8C%87%E5%8D%97%E8%88%87%E7%AF%84%E4%BE%8B%E8%AA%AA%E6%98%8E.pdf , https://cgc.twse.com.tw/static/20250305/8a828e179544c53e0195657d1f890020_2.%20%E5%85%AC%E5%8F%B8%E6%B2%BB%E7%90%86%E7%9B%B8%E9%97%9C%E8%A6%8F%E7%AB%A0_%E5%90%88%E4%BD%B5V5.pdf
 
 Sample 樣本: Page text (start) 頁面文字
 
 ```text
-因為安全性考量，您所執行的頁面無法呈現。
-FOR SECURITY REASONS, THIS PAGE CAN NOT BE ACCESSED.
-您可以回上一頁繼續其他動作，或撥打以下電話通報問題：(02)8101-5840, (02)8101-5834。
-YOU COULD GO BACK TO PREVIOUS PAGE OR CALL US FOR FURTHER HELP：(02)8101-5840, (02)8101-5834。
-錯誤代碼：7641438222693731109
+TWSE 公司治理中心 
+English 
+關於我們
+公司治理中心簡介
+公司治理藍圖簡介
+我國公司治理發展歷程
+強化我國公司治理藍圖(2013-2017)
+新版公司治理藍圖(2018~2020)
+公司治理3.0-永續發展藍圖(2021-2023)
+相關網站
+聯絡我們
+最新消息
+新聞稿
+電子報
+國內外時事
+盡職治理守則
+盡職治理守則簡介
+簽署名單
+各國盡職治理守則
+盡職治理報告範例
+證交所發布盡職治理
+相關資訊
+服務提供者專區
+各公會盡職治理專區
+企業永續發展
+上市櫃公司永續發展行動方案
+(2023年)
+上市櫃公司永續發展路徑圖
+企業永續發展簡介
+ESG相關法規
+上市櫃公司永續報告書
+企業ESG資訊揭露
+企業永續相關指數
+臺灣永續指數
+臺灣企業社會責任中小型指數
+臺灣公司治理100指數
+臺灣高薪100指數
+臺灣就業99指數
+ESG指數化商品
+永續發展債券
+臺灣永續投資調查
+執行成果
+-->
+公司投資人關係整合平台
+產學合作實習計畫
+計畫緣由
+計畫時程
+辦理成果
+參考資料
+準則
+揭露指引及範例-IFRS永續揭露準則
+揭露指引及範例-永續報告書
+揭露指引及範例-TCFD
+歷年ESG年鑑
+其他參考資料
+法規及問答
+法規架構
+主管機關訂定
+證交所及櫃買中
+心訂定
+其他行業別之公
+司治理實務守則
+股東會年報最佳實務參考範例
+問答集
+評鑑資訊
+ESG評鑑簡介
+ESG評鑑
+公司治理評鑑
+資訊揭露評鑑簡介
+-->
+資訊揭露評鑑
+-->
+宣導活動及出版品
+宣導活動
+公司治理報告
+年報及永續報告書審閱報告
+國際公司治理發展簡訊
+影音宣導短片
+其他參考資料
+資料庫
+獨立董事人才資料庫
+執法統計資料庫
+金管會裁罰案件專區
+金管會證期局裁罰案件
+專區
+重大工安、災難、環境汙染及各主管機關裁罰案件專區
+會計師懲戒專區
+上市公司違規及交易面
+異常資訊
+上櫃公司違規及交
+… (1841 more characters)
 ```
 
 ### 13. EPA ECHO: ✅ ok
