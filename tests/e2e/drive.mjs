@@ -362,6 +362,61 @@ await step('CSV import again: the broker mapping is remembered and nothing is im
   await page.getByRole('button', { name: /Import 1 trade 匯入/ }).waitFor();
 });
 
+await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split and per-holding split', async () => {
+  await page.goto(`${BASE}/performance`);
+  await page.getByRole('heading', { name: /Performance/ }).waitFor();
+  // ECharts draws both charts as SVG once the page is in the browser.
+  await page.locator('.chart svg').nth(1).waitFor();
+  const text = await body();
+  // The seed's first trade is the VT buy of 2026-05-07; its demo closes run from that day.
+  check(text.includes('From the close of 2026-05-07 (the first purchase)'), 'measured from the first demo purchase');
+  // A tile reads: the label in English and Chinese on one line, then the figure.
+  const tile = (label) => new RegExp(`${label}[^\\n]*\\n\\s*[+−]?\\d+\\.\\d%`).test(text);
+  check(tile('Time-weighted return \\(TWR\\)'), 'TWR tile');
+  check(tile('SAA benchmark') && text.includes('Portfolio minus benchmark'), 'benchmark tile with the difference');
+  check(tile('Money-weighted return \\(XIRR\\)'), 'XIRR tile');
+  check(text.includes('Since the start') && text.includes('Returns by period'), 'period table');
+  const splits = await page.locator('section', { hasText: 'FX split per foreign holding' }).innerText();
+  for (const ticker of ['VT', 'BNDW', 'GLDM', 'BIL']) check(splits.includes(ticker), `FX split lists ${ticker}`);
+  // AAPL was sold by the CSV import; 2330 and 00692 trade in TWD.
+  check(!/\b(AAPL|2330|00692)\b/.test(splits), 'sold-out and TWD holdings are not split');
+  check(text.includes('時間加權報酬') && text.includes('資金加權報酬') && text.includes('匯率拆解'), 'Chinese labels');
+  await snap('performance');
+  // The README image: the headline figures and the whole cumulative chart.
+  await page.setViewportSize({ width: 1280, height: 1360 });
+  await docShot('performance', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Hovering the line shows every series at that date; the table views hold the same values.
+  const chart = page.locator('.chart').first();
+  const box = await chart.boundingBox();
+  check(box !== null, 'chart has a size');
+  // hover scrolls the chart into view before moving the pointer over it.
+  await chart.hover({ position: { x: Math.round(box.width * 0.6), y: Math.round(box.height * 0.5) } });
+  const tip = page.locator('.chart-tip').first();
+  await tip.waitFor();
+  const tipText = await tip.innerText();
+  check(tipText.includes('Portfolio (TWR)') && tipText.includes('SAA benchmark'), `tooltip lists both lines, got ${tipText}`);
+  await snap('performance-tooltip', page, false);
+  for (const summary of await page.getByText('Show as a table').all()) await summary.click();
+  const tables = await body();
+  check(tables.includes('2026-05') && tables.includes('2026-09'), 'monthly table from May to September');
+  await snap('performance-tables');
+});
+
+await step('performance: the windfall pool alone, year to date, and dark mode', async () => {
+  // The e2e added a windfall cash balance today: a value, but no return until the next close.
+  await page.goto(`${BASE}/performance?scope=windfall`);
+  check((await body()).includes('The windfall pool’s holdings were added today'), 'windfall pool new today');
+  await page.goto(`${BASE}/performance?range=ytd&scope=regular`);
+  await page.locator('.chart svg').nth(1).waitFor();
+  check((await page.locator('.segmented a[aria-current=true]').allInnerTexts()).join(' ').includes('Year to date'), 'year to date selected');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${BASE}/performance`);
+  await page.locator('.chart svg').nth(1).waitFor();
+  await snap('performance-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -376,7 +431,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/performance', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -384,7 +439,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     if (overflow > 0) wide.push(`${path} by ${overflow}px`);
-    if (path === '/holdings' || path === '/import') await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
+    if (path === '/holdings' || path === '/performance' || path === '/import') await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -413,10 +469,11 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     for (const ticker of ['VT', '0050', 'AGGU', '2330', 'AAPL']) check(!new RegExp(`\\b${ticker}\\b`).test(stdout), `${ticker} kept out of the log`);
   });
 
-  await step('data status after the job: its runs, the feeds per security, and gold priced per gram', async () => {
+  await step('data status after the job: its runs, the feeds per security, gold priced per gram, the NAV snapshots', async () => {
     await page.goto(`${BASE}/data`);
     const text = await body();
     check(text.includes('Last run') && text.includes('Recent runs'), 'runs listed');
+    check(/Saved the daily NAV snapshot for each day from 2026-05-07 to \d{4}-\d{2}-\d{2}/.test(text), 'NAV snapshots saved from the first trade');
     check(!text.includes('has not run yet'), 'the job has run');
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);

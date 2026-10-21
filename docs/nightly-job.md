@@ -1,17 +1,18 @@
 # 每夜價格排程 Nightly price job
 
-第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
+第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。第 5 步起，排程也會存下每一天的淨值快照。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
 
-Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase. Each run is recorded in `job_runs` and shown on the app's Data status page.
+Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot. Each run is recorded in `job_runs` and shown on the app's Data status page.
 
 ## 它怎麼運作 How it works
 
 - **時間**：每晚台北時間約 22:23（GitHub 有時會晚幾分鐘才開始）。這時台股已收盤、臺銀已公布當天匯率，前一個美股交易日的收盤價與 AGGU 的淨值也都已公布。
 - **在哪裡跑**：GitHub Actions，也就是 GitHub 提供的雲端電腦，公開 repo 免費。排程設定在 `.github/workflows/nightly.yml`，程式在 `scripts/nightly.ts`。
 - **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
+- **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
 - **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在持倉頁顯示警示。推播通知要等第 10 步。
 
-It runs at about 22:23 Taipei time, reloads the last three years of closes each night (dividend adjustments change past adjusted closes), keeps the last good prices when a night fails, and flags two misses in a row.
+It runs at about 22:23 Taipei time, reloads the last three years of closes each night (dividend adjustments change past adjusted closes), then recomputes every day's NAV snapshot since the first trade, keeps the last good prices when a night fails, and flags two misses in a row.
 
 ### 資料來源 Sources
 
@@ -84,7 +85,7 @@ npm run check:supabase
 
 在 Mac 上執行 `npm run dev`，登入後：
 
-- 上方選單 **資料狀態**：應該寫著「每夜價格排程最後一次於台北時間 … 執行，資料全部載入」，每檔證券都有收盤日與來源。
+- 上方選單 **資料狀態**：應該寫著「每夜價格排程最後一次於台北時間 … 執行，資料全部載入」，每檔證券都有收盤日與來源；有交易之後，「最近一次執行」下方會寫「已存入 … 至 … 每一天的淨值快照」。
 - **持倉**：市值下方顯示收盤日；實體黃金改以每夜金價計算，不再標 ＊。
 - **新增交易**：選了美股代號後，匯率會自動帶入交易日當天的匯率，下方會寫出是哪一天的匯率。你自己輸入的匯率不會被覆蓋。
 

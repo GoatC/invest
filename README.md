@@ -37,8 +37,9 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 2. Database schema, row-level security, demo data 資料庫結構、權限、示範資料 | ✅ |
 | 3. Holdings entry and broker CSV import 持倉登錄與券商 CSV 匯入 | ✅ |
 | 4. Nightly prices and FX 每夜價格與匯率 | ✅ [setup 設定](docs/nightly-job.md) |
-| 5. NAV snapshots and F18 performance 淨值快照與真實績效 | next 下一步 |
-| 6–11. Allocation donuts, VaR, compounding calculator, rules engine and proposals, Web Push and the weekly dashboard, fee and tax drag 配置圓餅圖、風險值、複利計算機、規則引擎與提案、推播與每週儀表板、費用與稅務 | planned 規劃中 |
+| 5. NAV snapshots and F18 performance 淨值快照與真實績效 | ✅ |
+| 6. Targets and allocation donuts 目標權重與配置圓餅圖 | next 下一步 |
+| 7–11. VaR, compounding calculator, rules engine and proposals, Web Push and the weekly dashboard, fee and tax drag 風險值、複利計算機、規則引擎與提案、推播與每週儀表板、費用與稅務 | planned 規劃中 |
 
 Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), the windfall planner, Monte Carlo, the efficient frontier, stress tests and Brinson attribution. 第二、三階段加入證券分析、大額資金分批、蒙地卡羅、效率前緣、壓力測試與 Brinson 歸因。
 
@@ -47,10 +48,13 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 - **Holdings 持倉總覽**: regular and windfall pools, R1 / R2 status with the trim each needs, actual vs target weight per asset class, and every position at weighted-average cost with its TWD value and unrealised gain. The R1 / R2 figures expand to show their formulas and inputs, and the other figures are defined under their tables. 一般與大額資金池、R1／R2 狀態與所需減碼金額、各資產類別的實際與目標權重、每檔持股的平均成本、台幣市值與未實現損益；R1／R2 的數字可展開查看公式與輸入值，其他數字的定義寫在表格下方。
 - **Trade entry 交易登錄**: currency filled in from the security and the FX rate from the trade date's Bank of Taiwan rate, a live R1 / R2 preview that warns without blocking, and a refusal when a sell exceeds the holding. 依證券自動帶入幣別、依交易日帶入臺灣銀行匯率，即時預覽 R1／R2（只提醒不阻擋），賣出超過持有數量時拒絕儲存。
 - **Broker CSV import 券商 CSV 匯入**: UTF-8 or Big5 files, title lines above the header, ROC (民國) dates, column mapping remembered per broker, each row's trade-date FX rate when the file has none, cash dividends saved as cash flows, and entries already saved are skipped. 支援 UTF-8 與 Big5、標題列在上方的檔案、民國日期；欄位對應依券商記住，檔案沒有匯率時帶入各列交易日的匯率，現金股利存為現金流，已存在的資料自動略過。
-- **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate, for true performance in step 5. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄，供第 5 步計算真實績效。
+- **Performance 績效**: the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), and each month's and each foreign holding's TWD return split into local-currency, currency and cross terms, for both pools or each alone, with a table under every chart. 時間加權報酬與 SAA 基準的比較、資金加權報酬（XIRR），以及每月與每檔外幣持股的台幣報酬拆解為當地幣別、匯率與交叉項；可看兩個資金池合計或分開看，每張圖下方都有表格。
+- **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate; dividends count in the money-weighted return. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄；股利計入資金加權報酬。
 - **Non-listed assets 非上市資產**: physical gold in grams, valued nightly at the gold price in TWD, and savings and money-market balances in TWD. 實體黃金以克數記錄、每夜以台幣金價估值；活存與貨幣基金以台幣餘額記錄。
-- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (dividend-adjusted), Bank of Taiwan exchange rates and the gold price, with one fallback feed each; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息還原）、臺灣銀行匯率與金價，每種資料都有備援來源；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
+- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (dividend-adjusted), Bank of Taiwan exchange rates and the gold price, with one fallback feed each, then saves every day's NAV snapshot; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息還原）、臺灣銀行匯率與金價，每種資料都有備援來源，再存入每一天的淨值快照；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
 - **Securities and edit history 證券與修改紀錄**: every entry can be edited or deleted, and the database logs each change, deleted entries included. 每筆資料都能修改或刪除，資料庫會記錄每次變更，包含已刪除的資料。
+
+![Performance with demo data: TWR against the SAA benchmark, XIRR and the gain](docs/images/performance.png)
 
 ![CSV import preview: every row explained, unknown tickers can be added on the spot](docs/images/import-preview.png)
 
@@ -58,7 +62,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 ## How it is built 技術架構
 
-- **Next.js** (App Router, server actions) as an installable PWA on **Vercel**, with **Supabase** (Postgres, Auth, Data API). Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
+- **Next.js** (App Router, server actions) as an installable PWA on **Vercel**, with **Supabase** (Postgres, Auth, Data API) and **Apache ECharts** for charts. Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase，圖表使用 Apache ECharts；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
 - **Single owner, enforced by the database**: row-level security on every table lets only the one owner account in; strangers holding the public key are refused, which `npm run check:supabase` verifies from outside. 由資料庫保證只有一位擁有者：每張表都開啟 row-level security；持有公開金鑰的陌生人一律被拒，可用 `npm run check:supabase` 從外部驗證。
 - **Money in trade currency plus the day's FX rate, reported in TWD.** 金額以交易幣別加當日匯率儲存，以台幣呈現。
 - **Free data only**, checked source by source in step 1. 只使用免費資料，第 1 步已逐一檢查。
@@ -85,7 +89,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 | Path 路徑 | Contents 內容 |
 | --- | --- |
 | `app/` | Pages and server actions 頁面與伺服器動作 |
-| `lib/models/` | Positions, valuation, trade-date FX, data health and the R1 / R2 rules, as pure functions 持倉、估值、交易日匯率、資料狀態與 R1／R2 規則（純函式） |
+| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules and performance (TWR, XIRR, FX split, NAV snapshots), as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則與績效（TWR、XIRR、匯率拆解、淨值快照），皆為純函式 |
 | `lib/csv/` | Statement reading, column mapping and the import plan 對帳單讀取、欄位對應與匯入計畫 |
 | `supabase/migrations/` | Schema, row-level security, reference data and change logs 資料庫結構、權限、參考資料與變更紀錄 |
 | `supabase/seed.sql` | Demo data for local use only 僅供本機使用的示範資料 |

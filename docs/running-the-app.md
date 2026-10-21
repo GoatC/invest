@@ -47,7 +47,7 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - 儲存前會即時檢查 R1（單一個股超過一般資金池 5%）與 R2（衛星部位超過 25%）：違反時只提醒，不會阻擋。
   - 賣出數量超過當時持有數量會被拒絕，通常代表漏記了一筆買進。
 - **黃金與現金**：按「新增非上市資產」。實體黃金以克數輸入；每夜排程啟用後，持倉頁會以每夜金價自動計算市值，表單裡的估值只在還沒有金價時使用。高利活存與貨幣基金以台幣餘額輸入。
-- **現金流**：按「新增現金流」，記錄資金的進出，第 5 步計算真實績效（XIRR、TWR）會用到。金額一律填正數，方向由類型決定：
+- **現金流**：按「新增現金流」，記錄資金的進出。股利會計入績效頁的資金加權報酬（XIRR）；投入資金與提領只做紀錄，因為績效從資金買進持股（或登錄為存款等非上市資產）那天才開始計算。金額一律填正數，方向由類型決定：
   - **投入資金**：你投入的錢，例如每月定期定額扣款 NT$10,000。扣款買到的股數，另外照常記成交易。
   - **大額資金入帳**：大額資金進來的那一天，一律計入大額資金池。
   - **股利**：持股發放的現金股利，填扣除預扣稅後實際收到的金額；選代號後，幣別與當天匯率會自動帶入。
@@ -61,8 +61,16 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   5. 檔案裡有還沒新增的代號時，點「新增 XXX」（在新分頁開啟）新增後，回來按「重新檢查」。
   6. 按「匯入」。欄位對應會依券商名稱記住，下次選同一家券商就會自動套用。
 - **修改與刪除**：持倉頁的交易紀錄、非上市資產、現金流都有「修改」連結；每次修改都留下紀錄，顯示在該筆資料頁面的最下方。
+- **績效**：上方選單「績效」。上方可選資金池（兩個合計、一般、大額資金）與期間（開始至今、今年以來、近 1 年、近 3 年）。
+  - **時間加權報酬（TWR）**：持股本身的表現，不受你何時投入資金影響，拿來和 SAA 基準（依目標權重組成的代表 ETF 組合）比較。
+  - **資金加權報酬（XIRR）**：把你每筆買進、賣出與股利的時點都算進去，反映你自己的投入時點。
+  - **損益**：期間內市值的變化，扣掉這段期間投入與取回的資金。
+  - 一年以上的期間以年化表示；未滿一年則是期間報酬，避免把幾週的漲跌放大成年化數字。
+  - **每月報酬**長條圖與**外幣持股匯率拆解**表，把台幣報酬拆成「當地幣別報酬＋匯率報酬＋交叉項」，看得出報酬有多少來自美元升貶。
+  - 每張圖下方按「以表格顯示」可看到所有數值；最下方「計算方式」說明每個數字怎麼算。
+  - 每夜排程還沒有收盤價的日子，以交易價格或手動估值計算，頁面會註明。
 
-Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; step 5's performance figures need them. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
 
 ## 補充 Notes
 

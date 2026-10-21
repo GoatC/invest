@@ -6,12 +6,14 @@ security headers, sign-in, the holdings view and its
 R1 / R2 figures, adding, editing and deleting a trade, a refused oversized sell, gold and cash
 balances, cash flows (a USD dividend, the windfall arriving, an edit and a delete), adding a
 security, a Big5 broker-statement import (including a dividend row, an unknown ticker and a
-second import of the same file), trade-date FX rates, the data status page, a phone-width check
-of every page, and sign-out. With a `FINMIND_TOKEN` in the environment it then runs the real
-nightly job (`scripts/nightly.ts`, live feeds) against the stand-in twice, the second time as on
-GitHub Actions, and checks what the app shows; `E2E_NIGHTLY=0` skips that part.
+second import of the same file), trade-date FX rates, the performance page (TWR against the SAA
+benchmark, XIRR, the monthly and per-holding FX split, a chart tooltip, the windfall pool alone,
+dark mode), the data status page, a phone-width check of every page, and sign-out. With a
+`FINMIND_TOKEN` in the environment it then runs the real nightly job (`scripts/nightly.ts`, live
+feeds) against the stand-in twice, the second time as on GitHub Actions, and checks what the app
+shows, the NAV snapshots included; `E2E_NIGHTLY=0` skips that part.
 
-`npm run test:e2e` 會建置 App，連到載入資料庫遷移與示範資料的本機 Supabase 替身，並以 Chromium 實際操作一遍：App 安裝設定檔、圖示與安全標頭、登入、持倉總覽與 R1／R2 數字、新增／修改／刪除交易、拒絕超賣、黃金與現金餘額、現金流（美元股利、大額資金入帳、修改與刪除）、新增證券、Big5 券商對帳單匯入（含股利列、未知代號與重複匯入）、交易日匯率、資料狀態頁，以及手機寬度檢查與登出。環境變數有 `FINMIND_TOKEN` 時，接著以真實資料對替身執行兩次每夜排程（第二次模擬 GitHub Actions），並檢查 App 顯示的結果；設 `E2E_NIGHTLY=0` 可略過。
+`npm run test:e2e` 會建置 App，連到載入資料庫遷移與示範資料的本機 Supabase 替身，並以 Chromium 實際操作一遍：App 安裝設定檔、圖示與安全標頭、登入、持倉總覽與 R1／R2 數字、新增／修改／刪除交易、拒絕超賣、黃金與現金餘額、現金流（美元股利、大額資金入帳、修改與刪除）、新增證券、Big5 券商對帳單匯入（含股利列、未知代號與重複匯入）、交易日匯率、績效頁（時間加權報酬與 SAA 基準、XIRR、每月與各持股的匯率拆解、圖表提示框、只看大額資金池、深色模式）、資料狀態頁，以及手機寬度檢查與登出。環境變數有 `FINMIND_TOKEN` 時，接著以真實資料對替身執行兩次每夜排程（第二次模擬 GitHub Actions），並檢查 App 顯示的結果（含淨值快照）；設 `E2E_NIGHTLY=0` 可略過。
 
 ## What the stand-in is 替身的組成
 

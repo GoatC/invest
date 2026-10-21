@@ -9,6 +9,8 @@ import { daysBetween } from './fx';
 
 /** The job name the nightly price job records (JOB in scripts/lib/nightly/job.ts). */
 export const NIGHTLY_JOB = 'nightly_prices';
+/** How the job labels the error when the NAV snapshots could not be saved. */
+export const SNAPSHOT_ERROR = 'NAV snapshots';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -27,6 +29,8 @@ export interface RunDetail {
   warnings: string[];
   /** Data that could not be loaded at all. */
   errors: string[];
+  /** The daily NAV snapshots the run saved (F18); null when it saved none. */
+  snapshots: { days: number; from: string; to: string } | null;
 }
 
 export interface JobRun {
@@ -58,12 +62,14 @@ function lines(value: unknown): string[] {
 export function parseRunDetail(value: unknown): RunDetail {
   const detail = record(value);
   const window = record(detail['window']);
+  const { days, from, to } = record(detail['snapshots']);
   return {
     window: typeof window['start'] === 'string' && typeof window['end'] === 'string' ? { start: window['start'], end: window['end'] } : null,
     prices: loadedMap(detail['prices']),
     rates: loadedMap(detail['rates']),
     warnings: lines(detail['warnings']),
     errors: lines(detail['errors']),
+    snapshots: typeof days === 'number' && typeof from === 'string' && typeof to === 'string' ? { days, from, to } : null,
   };
 }
 

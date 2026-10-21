@@ -1,6 +1,8 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { loadPerformanceInput } from '../../../lib/data.ts';
+import type { Snapshot } from '../../../lib/models/performance.ts';
 import type { DailyPrice, DailyRate } from '../feeds/types.ts';
 import type { JobRun, Security, Store } from './job.ts';
 
@@ -57,6 +59,21 @@ export function supabaseStore(client: SupabaseClient): Store {
           .from('fx_rates')
           .upsert(batch.map((row) => ({ pair: row.pair, rate_date: row.date, rate: row.rate, source: row.source })), { onConflict: 'pair,rate_date' });
         check('fx_rates', error);
+      }
+    },
+    performanceInput: (end) => loadPerformanceInput(client, end),
+    async saveSnapshots(rows: readonly Snapshot[]) {
+      const first = rows[0]?.date;
+      // Days before the first one were left by trades since deleted; with nothing held, none stay.
+      const stale = client.from('nav_snapshots').delete();
+      const { error: staleError } = await (first ? stale.lt('snapshot_date', first) : stale.gte('snapshot_date', '1900-01-01'));
+      check('nav_snapshots', staleError);
+      // var_95_1w is left as it is: an upsert writes only the columns it sends.
+      for (const batch of batches(rows)) {
+        const { error } = await client
+          .from('nav_snapshots')
+          .upsert(batch.map((row) => ({ snapshot_date: row.date, total_twd: row.totalTwd, weights_by_class: row.weightsByClass })), { onConflict: 'snapshot_date' });
+        check('nav_snapshots', error);
       }
     },
     async recordRun(run: JobRun) {

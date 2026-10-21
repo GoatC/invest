@@ -1,6 +1,7 @@
 # The nightly price and FX job (PRD Phase 1, step 4): daily closes, Bank of Taiwan rates and the
-# gold price into Supabase. Setup and troubleshooting: docs/nightly-job.md.
-# 每夜價格與匯率排程：把每日收盤價、臺灣銀行匯率與金價寫入 Supabase。設定方式見 docs/nightly-job.md。
+# gold price into Supabase, then each day's NAV snapshot (step 5). Setup and troubleshooting:
+# docs/nightly-job.md.
+# 每夜價格與匯率排程：把每日收盤價、臺灣銀行匯率與金價寫入 Supabase，再存入每一天的淨值快照。設定方式見 docs/nightly-job.md。
 name: Nightly prices 每夜價格
 
 on:
