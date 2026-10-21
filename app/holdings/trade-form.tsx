@@ -7,10 +7,13 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { RuleMath } from '@/components/rule-math';
 import type { HoldingsData } from '@/lib/data';
+import { isIsoDate } from '@/lib/dates';
 import { percent } from '@/lib/format';
 import { shortfallMessage } from '@/lib/forms';
 import { bi, LABELS, MARKET, POOL, SIDE, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { previewTrade } from '@/lib/models/portfolio';
+import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { breachText } from '@/lib/rule-text';
 import { parseTrade, type TradeField } from '@/lib/validation';
@@ -31,32 +34,34 @@ function addSecurityHref(ticker: string, id: number | undefined): string {
   return text ? `/securities/new?${text}` : '/securities/new';
 }
 
-export function TradeForm({ data, today, id, initial }: { data: HoldingsData; today: string; id?: number; initial: TradeValues }) {
+export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsData; rates: FxQuote[]; today: string; id?: number; initial: TradeValues }) {
   const [values, setValues] = useState(initial);
   // Fields changed since the last submit: their server errors are stale, their live errors are fresh.
   const [edited, setEdited] = useState<ReadonlySet<TradeField>>(new Set());
+  // A rate typed by hand, or saved with the trade being edited, is never replaced by a suggestion.
+  const [ownRate, setOwnRate] = useState(id !== undefined);
   const [state, formAction, pending] = useActionState(saveTrade, INITIAL_STATE);
 
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
+  const history = useMemo(() => rateHistory(rates), [rates]);
   const security = securities.get(values.ticker.trim().toUpperCase());
   const currency = values.currency.trim().toUpperCase();
 
   function change(field: TradeField, value: string) {
     setEdited((previous) => new Set(previous).add(field));
-    setValues((previous) => {
-      const next = { ...previous, [field]: value };
-      if (field === 'ticker') {
-        // Picking a ticker fills in its currency and, for a foreign one, the newest known FX rate.
-        const match = securities.get(value.trim().toUpperCase());
-        if (match && match.currency !== previous.currency.trim().toUpperCase()) {
-          next.currency = match.currency;
-          next.fxRate = match.currency === 'TWD' ? '1' : String(fx.get(match.currency)?.value ?? '');
-        }
-      }
-      if (field === 'currency' && value.trim().toUpperCase() === 'TWD') next.fxRate = '1';
-      return next;
-    });
+    const next = { ...values, [field]: value };
+    // Picking a ticker fills in its currency.
+    const match = field === 'ticker' ? securities.get(value.trim().toUpperCase()) : undefined;
+    if (match) next.currency = match.currency;
+    const nextCurrency = next.currency.trim().toUpperCase();
+    const currencyChanged = nextCurrency !== currency;
+    // A new currency needs a new rate; a new date, the rate of that date unless one was typed.
+    if (currencyChanged || (field === 'tradeDate' && !ownRate)) {
+      next.fxRate = String(suggestedRate(nextCurrency, next.tradeDate, history, data.fxMaxAgeDays, fx) ?? '');
+    }
+    setValues(next);
+    setOwnRate(field === 'fxRate' || (ownRate && !currencyChanged));
   }
 
   const parsed = parseTrade(values, securities, today);
@@ -68,11 +73,15 @@ export function TradeForm({ data, today, id, initial }: { data: HoldingsData; to
     return server ?? live ?? null;
   }
 
-  // A rate far from the latest known one is probably a typo, e.g. 3.24 for 32.4 (config fx_rate_check).
-  const latestRate = currency && currency !== 'TWD' ? fx.get(currency) : undefined;
+  // The trade date's rate, else the newest known one; a typed rate far from it is probably a typo,
+  // e.g. 3.24 for 32.4 (config fx_rate_check).
+  const foreign = currency !== '' && currency !== 'TWD';
+  const latestRate = foreign ? fx.get(currency) : undefined;
+  const datedRate = foreign && data.fxMaxAgeDays !== null && isIsoDate(values.tradeDate) ? rateOn(history, currency, values.tradeDate, data.fxMaxAgeDays) : undefined;
+  const reference = datedRate ? { value: datedRate.rate, date: datedRate.date } : latestRate;
   const enteredRate = Number(values.fxRate);
   const maxGap = data.fxMaxGap;
-  const rateLooksOdd = maxGap !== null && latestRate !== undefined && enteredRate > 0 && Math.abs(enteredRate - latestRate.value) / latestRate.value > maxGap;
+  const rateLooksOdd = maxGap !== null && reference !== undefined && enteredRate > 0 && Math.abs(enteredRate - reference.value) / reference.value > maxGap;
 
   return (
     <form
@@ -137,10 +146,15 @@ export function TradeForm({ data, today, id, initial }: { data: HoldingsData; to
           hint={
             currency === 'TWD' ? (
               <Bi en="TWD needs no conversion" zh="台幣不需換算" />
+            ) : datedRate ? (
+              <Bi
+                en={`Rate of ${datedRate.date}: ${datedRate.rate}. Your broker's own rate is better if the statement shows one`}
+                zh={`${datedRate.date} 的匯率為 ${datedRate.rate}；對帳單若有券商成交匯率，請以券商為準`}
+              />
             ) : latestRate ? (
               <Bi
-                en={`Latest known ${latestRate.value} (${latestRate.date}${latestRate.estimated ? ', from a trade' : ''}); use your broker's rate`}
-                zh={`最近一筆為 ${latestRate.value}（${latestRate.date}${latestRate.estimated ? '，取自交易紀錄' : ''}），請以券商成交匯率為準`}
+                en={`No rate loaded for this date; latest known ${latestRate.value} (${latestRate.date}${latestRate.estimated ? ', from a trade' : ''}). Use your broker's rate`}
+                zh={`尚無這一天的匯率；最近一筆為 ${latestRate.value}（${latestRate.date}${latestRate.estimated ? '，取自交易紀錄' : ''}），請填券商成交匯率`}
               />
             ) : (
               <Bi en="Use the rate on your broker statement" zh="請填券商對帳單上的成交匯率" />
@@ -166,8 +180,8 @@ export function TradeForm({ data, today, id, initial }: { data: HoldingsData; to
       {rateLooksOdd && (
         <p className="banner warn">
           <Bi
-            en={`This FX rate is more than ${percent(maxGap, 0)} away from the latest known ${latestRate?.value}; check for a typo.`}
-            zh={`這個匯率與最近一筆 ${latestRate?.value} 相差超過 ${percent(maxGap, 0)}，請確認是否輸入錯誤。`}
+            en={`This FX rate is more than ${percent(maxGap, 0)} away from ${reference?.value} (${reference?.date}); check for a typo.`}
+            zh={`這個匯率與 ${reference?.value}（${reference?.date}）相差超過 ${percent(maxGap, 0)}，請確認是否輸入錯誤。`}
           />
         </p>
       )}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { rateHistory } from '../models/fx';
 import { SECURITIES, trade } from '../models/test-helpers';
 import type { Security } from '../models/types';
 import { guessMapping, type CsvMapping } from './mapping';
@@ -19,9 +20,17 @@ function context(overrides: Partial<ImportContext> = {}): ImportContext {
     today: '2026-10-21',
     fx: new Map([['USD', { value: 32.4, date: '2026-10-20', estimated: false }]]),
     fxMaxGap: 0.2,
+    rates: rateHistory([]),
+    fxMaxAgeDays: 10,
     ...overrides,
   };
 }
+
+/** Bank of Taiwan rates around the demo statements' dates (2026-10-07 and 2026-10-08). */
+const RATES = rateHistory([
+  { pair: 'USD/TWD', date: '2026-10-06', rate: 32.25 },
+  { pair: 'USD/TWD', date: '2026-10-07', rate: 32.28 },
+]);
 
 const OPTIONS: ImportOptions = { pool: 'regular', fixedFxRate: 32.3 };
 
@@ -102,16 +111,43 @@ describe('planImport', () => {
     );
   });
 
-  it('asks for an FX rate when a foreign trade has none', () => {
+  it('asks for an FX rate when a foreign trade has none and no rate is loaded for its date', () => {
     const [row] = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: null });
     assert.equal(row?.status, 'invalid');
-    assert.match(row?.problems[0]?.en ?? '', /none for this USD trade/);
+    assert.match(row?.problems[0]?.en ?? '', /none for this USD trade, and no rate loaded for its date/);
   });
 
-  it('warns, without stopping, when a rate is far from the latest known one', () => {
+  it("fills a missing rate with the trade date's rate, or the newest one before it", () => {
+    const rows = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: null }, context({ rates: RATES }));
+    assert.deepEqual(
+      rows.slice(0, 2).map((row) => [row.status, row.trade?.fxRate, row.fxRateDate]),
+      [
+        ['new', 32.28, '2026-10-07'],
+        ['new', 32.28, '2026-10-07'],
+      ],
+    );
+    // A rate older than config fx_rate_check max_age_days allows is no default.
+    const strict = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: null }, context({ rates: RATES, fxMaxAgeDays: 0 }));
+    assert.deepEqual(
+      strict.slice(0, 2).map((row) => row.status),
+      ['new', 'invalid'],
+    );
+  });
+
+  it('prefers a rate from the file, then the one typed for the file, over the loaded rate', () => {
+    const [typed] = plan(TW_STATEMENT, 3, {}, OPTIONS, context({ rates: RATES }));
+    assert.deepEqual([typed?.trade?.fxRate, typed?.fxRateDate], [32.3, undefined]);
+    const withColumn = TW_STATEMENT.replace('其他費用,幣別', '其他費用,幣別,匯率').replace('0.00,USD', '0.00,USD,32.31');
+    const [fromFile] = plan(withColumn, 3, {}, OPTIONS, context({ rates: RATES }));
+    assert.equal(fromFile?.trade?.fxRate, 32.31);
+  });
+
+  it("warns, without stopping, when a rate is far from the trade date's rate, else the latest known one", () => {
     const [row] = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: 3.24 });
     assert.equal(row?.status, 'new');
-    assert.match(row?.warnings[0]?.en ?? '', /more than 20% away from the latest known 32.4/);
+    assert.match(row?.warnings[0]?.en ?? '', /more than 20% away from 32.4 \(2026-10-20\)/);
+    const [dated] = plan(TW_STATEMENT, 3, {}, { pool: 'regular', fixedFxRate: 3.24 }, context({ rates: RATES }));
+    assert.match(dated?.warnings[0]?.en ?? '', /more than 20% away from 32.28 \(2026-10-07\)/);
   });
 
   it('marks unknown tickers so they can be added as securities', () => {

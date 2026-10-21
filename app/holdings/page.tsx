@@ -1,12 +1,15 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { RuleMath } from '@/components/rule-math';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingsData, type HoldingsData } from '@/lib/data';
+import { DataError, loadHoldingsData, loadJobRuns, orDataError, type HoldingsData } from '@/lib/data';
+import { taipeiToday } from '@/lib/dates';
 import { money, percent, points, quantity, twd } from '@/lib/format';
 import { LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { dataHealth } from '@/lib/models/data-health';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
@@ -61,8 +64,10 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const { supabase } = await requireSession();
   const params = await searchParams;
   let data: HoldingsData;
+  // The job status only adds a note, so a failed read of it does not hide the holdings.
+  let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
   try {
-    data = await loadHoldingsData(supabase);
+    [data, jobs] = await Promise.all([loadHoldingsData(supabase), orDataError(loadJobRuns(supabase))]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -85,6 +90,16 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
             </>
           )}
         </p>
+      )}
+      {jobs instanceof DataError ? (
+        <p className="banner info" role="status">
+          <Bi
+            en={`Could not read the nightly job status (${jobs.table}: ${jobs.detail}); if the app was just updated, run npx supabase db push.`}
+            zh={`無法讀取每夜排程狀態（${jobs.table}：${jobs.detail}）；如果剛更新過程式，請執行 npx supabase db push。`}
+          />
+        </p>
+      ) : (
+        <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, taipeiToday())} threshold={jobs.threshold} quiet />
       )}
       {portfolio.shortfalls.length > 0 && (
         <div className="banner danger" role="alert">
@@ -397,6 +412,7 @@ function ListedHoldings({ data, portfolio }: { data: HoldingsData; portfolio: Po
                   <td className="num">
                     {twd(holding.valueTwd)}
                     <Estimated holding={holding} />
+                    {holding.priceDate && <div className="muted small">{holding.priceDate}</div>}
                   </td>
                   <td className="num">
                     {twd(gain)}
@@ -485,7 +501,7 @@ function ManualAssets({ data, portfolio }: { data: HoldingsData; portfolio: Port
                         </>
                       )}
                     </td>
-                    <td className="nowrap">{asset.valuedOn ?? '—'}</td>
+                    <td className="nowrap">{holding?.priceDate ?? '—'}</td>
                     <td className="nowrap">
                       <Link href={`/assets/${asset.id}`}>
                         <Bi {...LABELS.edit} />
@@ -595,8 +611,14 @@ function Footnotes() {
     <section className="muted small form">
       <p>
         <Bi
-          en="* Estimated: until the nightly price job (Phase 1, step 4) loads a closing price or FX rate, the newest trade price or rate is used. Gold uses the last value you entered."
-          zh="＊估計值：每夜價格排程（第一階段第 4 步）載入收盤價或匯率之前，暫以最近一筆交易的價格或匯率計算；黃金以你最後輸入的估值計算。"
+          en="Market value = quantity × the newest close × the newest FX rate, both loaded every night (the date under a value is its close's); see Data status. * Estimated: a security or currency the nightly job has not loaded yet uses its newest trade price or rate, and gold the last value you entered."
+          zh="市值 = 數量 × 最新收盤價 × 最新匯率，兩者每夜載入（數值下方的日期為收盤日），詳見資料狀態。＊估計值：每夜排程尚未載入的證券或幣別，暫以最近一筆交易的價格或匯率計算；黃金則以你最後輸入的估值計算。"
+        />
+      </p>
+      <p>
+        <Bi
+          en="Gold = grams × the international gold price in TWD per troy ounce (the US dollar price × the Bank of Taiwan USD rate) ÷ 31.1035 grams per ounce; the bank's own buy-back price is usually a little lower."
+          zh="黃金 = 克數 × 每盎司台幣金價（美元國際金價 × 臺灣銀行美元匯率）÷ 每盎司 31.1035 克；銀行實際回收價通常略低。"
         />
       </p>
       <p>

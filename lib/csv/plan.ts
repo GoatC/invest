@@ -5,6 +5,7 @@
  */
 import { percent } from '../format';
 import { LABELS, type Bilingual } from '../i18n';
+import { rateOn, type RateHistory } from '../models/fx';
 import type { Pool, Security, Side, Trade } from '../models/types';
 import type { Quote } from '../models/valuation';
 import { MESSAGES, parseTrade, type TradeField, type TradeInput } from '../validation';
@@ -42,6 +43,8 @@ export interface ImportRow {
   problems: Bilingual[];
   /** Things to check that do not stop the import. */
   warnings: Bilingual[];
+  /** The date of the loaded rate a foreign trade took, when neither the file nor the person gave one. */
+  fxRateDate?: string;
 }
 
 export interface ImportOptions {
@@ -58,6 +61,9 @@ export interface ImportContext {
   /** The newest known rate per currency and the config fx_rate_check margin, for the typo check. */
   fx: ReadonlyMap<string, Quote>;
   fxMaxGap: number | null;
+  /** The rates the nightly job loaded, for each trade date's rate, and how old one may be (config fx_rate_check). */
+  rates: RateHistory;
+  fxMaxAgeDays: number | null;
 }
 
 function cantRead(label: Bilingual, value: string): Bilingual {
@@ -131,17 +137,24 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
 
   const security = context.securities.get(ticker);
   const currency = (mapping.currency ? cell(mapping.currency) : (security?.currency ?? '')).trim().toUpperCase();
+  // The rate on the trade date, as loaded by the nightly job: the default, and the typo check's yardstick.
+  const dated = tradeDate && currency && context.fxMaxAgeDays !== null ? rateOn(context.rates, currency, tradeDate, context.fxMaxAgeDays) : undefined;
   let fxRate: number | undefined;
+  let fxRateDate: string | undefined;
   if (currency === 'TWD') fxRate = 1;
   else {
     const rateText = cell(mapping.fxRate);
     const fromColumn = mapping.fxRate && !isBlank(rateText) ? parseAmount(rateText) : undefined;
     if (mapping.fxRate && !isBlank(rateText) && fromColumn === undefined) problems.push(cantRead(LABELS.fxRate, rateText));
     fxRate = fromColumn ?? options.fixedFxRate ?? undefined;
+    if (fxRate === undefined && dated) {
+      fxRate = dated.rate;
+      fxRateDate = dated.date;
+    }
     if (fxRate === undefined && problems.length === 0 && currency) {
       problems.push({
-        en: `${LABELS.fxRate.en}: none for this ${currency} trade; map a rate column or enter one rate for the file.`,
-        zh: `${LABELS.fxRate.zh}：這筆 ${currency} 交易沒有匯率；請對應匯率欄位，或為整份檔案輸入一個匯率。`,
+        en: `${LABELS.fxRate.en}: none for this ${currency} trade, and no rate loaded for its date; map a rate column or enter one rate for the file.`,
+        zh: `${LABELS.fxRate.zh}：這筆 ${currency} 交易沒有匯率，也還沒有交易日當天的匯率；請對應匯率欄位，或為整份檔案輸入一個匯率。`,
       });
     }
   }
@@ -181,15 +194,15 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
     };
   }
 
-  const latest = context.fx.get(parsed.value.currency);
+  const reference = dated ? { value: dated.rate, date: dated.date } : context.fx.get(parsed.value.currency);
   const gap = context.fxMaxGap;
-  if (gap !== null && parsed.value.currency !== 'TWD' && latest && Math.abs(parsed.value.fxRate - latest.value) / latest.value > gap) {
+  if (gap !== null && parsed.value.currency !== 'TWD' && reference && Math.abs(parsed.value.fxRate - reference.value) / reference.value > gap) {
     warnings.push({
-      en: `FX rate ${parsed.value.fxRate} is more than ${percent(gap, 0)} away from the latest known ${latest.value}; check it.`,
-      zh: `匯率 ${parsed.value.fxRate} 與最近一筆 ${latest.value} 相差超過 ${percent(gap, 0)}，請確認。`,
+      en: `FX rate ${parsed.value.fxRate} is more than ${percent(gap, 0)} away from ${reference.value} (${reference.date}); check it.`,
+      zh: `匯率 ${parsed.value.fxRate} 與 ${reference.value}（${reference.date}）相差超過 ${percent(gap, 0)}，請確認。`,
     });
   }
-  return { status: 'new', trade: parsed.value, ticker, problems, warnings, fill };
+  return { status: 'new', trade: parsed.value, ticker, problems, warnings, fill, ...(fxRateDate ? { fxRateDate } : {}) };
 }
 
 /** The same fill: date, ticker, side, quantity and price (fees may have been corrected since). */

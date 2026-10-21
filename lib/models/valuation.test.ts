@@ -79,11 +79,35 @@ describe('valueHoldings', () => {
       ],
     });
     assert.deepEqual(
-      holdings.map((h) => [h.label, h.valueTwd, h.estimated]),
+      holdings.map((h) => [h.label, h.valueTwd, h.estimated, h.priceDate]),
       [
-        ['Savings', 20000, false],
-        ['Gold bar', null, true],
+        ['Savings', 20000, false, '2026-10-20'],
+        ['Gold bar', null, true, null],
       ],
     );
+  });
+
+  it('values gold in grams at the loaded gold price, ahead of the value entered by hand', () => {
+    const gold = { id: 2, name: 'Gold bar', assetClassId: 'real_assets', productType: 'gold' as const, unit: 'grams' as const, quantity: 5, lastValueTwd: 20000, valuedOn: '2026-09-01', pool: 'regular' as const };
+    const fx = latestFx([{ pair: 'XAU/TWD', date: '2026-10-21', rate: 133785.8992 }], []);
+    const [atPrice] = valueHoldings({ positions: [], securities, assetClasses, prices: new Map(), fx, manualAssets: [gold] });
+    // 5 g × 133,785.8992 TWD per troy ounce ÷ 31.1034768 g per ounce.
+    assert.equal(Math.round(atPrice?.valueTwd ?? 0), 21507);
+    assert.deepEqual([atPrice?.estimated, atPrice?.priceDate], [false, '2026-10-21']);
+    const [byHand] = valueHoldings({ positions: [], securities, assetClasses, prices: new Map(), fx: new Map(), manualAssets: [gold] });
+    assert.deepEqual([byHand?.valueTwd, byHand?.estimated, byHand?.priceDate], [20000, true, '2026-09-01']);
+  });
+
+  it('dates a listed holding by its close', () => {
+    const { positions } = buildPositions([trade({ qty: 2, price: 150, fxRate: 32 })]);
+    const [vt] = valueHoldings({
+      positions,
+      securities,
+      assetClasses,
+      prices: new Map([['VT', { value: 157.8, date: '2026-10-20', estimated: false }]]),
+      fx: new Map([['USD', { value: 32.4, date: '2026-10-21', estimated: false }]]),
+      manualAssets: [],
+    });
+    assert.equal(vt?.priceDate, '2026-10-20');
   });
 });

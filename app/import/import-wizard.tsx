@@ -16,8 +16,9 @@ import type { HoldingsData } from '@/lib/data';
 import { quantity } from '@/lib/format';
 import { shortfallMessage } from '@/lib/forms';
 import { bi, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';
+import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
-import type { Pool } from '@/lib/models/types';
+import type { FxQuote, Pool } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { breachText } from '@/lib/rule-text';
 import { parseNumber } from '@/lib/validation';
@@ -76,7 +77,7 @@ function prepare(bytes: Uint8Array, saved: CsvMapping | undefined): { mapping: C
   return second.lost.length < first.lost.length ? second : first;
 }
 
-export function ImportWizard({ data, mappings, today }: { data: HoldingsData; mappings: SavedMapping[]; today: string }) {
+export function ImportWizard({ data, rates, mappings, today }: { data: HoldingsData; rates: FxQuote[]; mappings: SavedMapping[]; today: string }) {
   const router = useRouter();
   const [checking, startChecking] = useTransition();
   const [broker, setBroker] = useState(mappings[0]?.broker ?? OTHER_BROKER);
@@ -140,13 +141,19 @@ export function ImportWizard({ data, mappings, today }: { data: HoldingsData; ma
   );
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
+  const history = useMemo(() => rateHistory(rates), [rates]);
 
   const rate = parseNumber(fixedFx);
   const fixedFxRate = rate !== undefined && rate > 0 ? rate : null;
   const missing = mapping ? missingColumns(mapping) : [];
   const rows: ImportRow[] =
     statement && mapping && missing.length === 0
-      ? planImport(statement, mapping, { pool, fixedFxRate }, { securities, existing: data.trades, today, fx, fxMaxGap: data.fxMaxGap })
+      ? planImport(
+          statement,
+          mapping,
+          { pool, fixedFxRate },
+          { securities, existing: data.trades, today, fx, fxMaxGap: data.fxMaxGap, rates: history, fxMaxAgeDays: data.fxMaxAgeDays },
+        )
       : [];
   const toImport = tradesToImport(rows, keep);
   const preview = toImport.length > 0 ? previewImport(data, toImport, data.caps) : null;
@@ -187,7 +194,19 @@ export function ImportWizard({ data, mappings, today }: { data: HoldingsData; ma
         <>
           <ColumnsStep mapping={mapping} headers={statement.headers} firstRow={statement.rows[0]?.cells ?? {}} lost={lost} update={update} changeLayout={changeLayout} />
           <div className="form-grid">
-            <Field label={{ en: 'FX rate for rows without one', zh: '沒有匯率的列使用的匯率' }} hint={<Bi en="TWD per 1 unit; TWD trades need none" zh="每 1 單位兌台幣；台幣交易不需要" />}>
+            <Field
+              label={{ en: 'FX rate for rows without one', zh: '沒有匯率的列使用的匯率' }}
+              hint={
+                data.fxMaxAgeDays === null ? (
+                  <Bi en="TWD per 1 unit; TWD trades need none" zh="每 1 單位兌台幣；台幣交易不需要" />
+                ) : (
+                  <Bi
+                    en="TWD per 1 unit. Leave blank to use each trade date's rate loaded by the nightly job (its date shows under the rate); TWD trades need none"
+                    zh="每 1 單位兌台幣。空白則使用每夜排程載入的交易日匯率（匯率下方顯示其日期）；台幣交易不需要"
+                  />
+                )
+              }
+            >
               <input inputMode="decimal" value={fixedFx} onChange={(e) => setFixedFx(e.target.value)} />
             </Field>
             <Field label={{ en: 'Pool for these trades', zh: '這些交易的資金池' }}>
@@ -553,7 +572,10 @@ function Preview({
                 <td className="num">{row.trade ? quantity(row.trade.qty) : '—'}</td>
                 <td className="num">{row.trade ? `${quantity(row.trade.price)} ${row.trade.currency}` : '—'}</td>
                 <td className="num">{row.trade ? quantity(row.trade.fee + row.trade.tax) : '—'}</td>
-                <td className="num">{row.trade ? (row.trade.currency === 'TWD' ? '—' : row.trade.fxRate) : '—'}</td>
+                <td className="num">
+                  {row.trade ? (row.trade.currency === 'TWD' ? '—' : row.trade.fxRate) : '—'}
+                  {row.fxRateDate && <div className="muted small">{row.fxRateDate}</div>}
+                </td>
                 <td className="small">
                   {[...row.problems, ...row.warnings].map((note) => (
                     <div key={note.en}>

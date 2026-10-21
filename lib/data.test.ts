@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { diffRows, fxMaxGap, toTransaction } from './data';
+import { diffRows, fxMaxAgeDays, fxMaxGap, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -47,6 +47,19 @@ describe('fxMaxGap', () => {
   it('turns the check off when the setting is missing or malformed', () => {
     for (const value of [undefined, null, 0.2, {}, { max_gap: '0.2' }, { max_gap: 0 }, { max_gap: -1 }]) {
       assert.equal(fxMaxGap(value), null);
+    }
+  });
+});
+
+describe('fxMaxAgeDays', () => {
+  it('reads how old a filled-in rate may be from the fx_rate_check setting', () => {
+    assert.equal(fxMaxAgeDays({ max_gap: 0.2, max_age_days: 10 }), 10);
+    assert.equal(fxMaxAgeDays({ max_age_days: 0 }), 0);
+  });
+
+  it('fills in no rate when the setting is missing or malformed', () => {
+    for (const value of [undefined, { max_gap: 0.2 }, { max_age_days: '10' }, { max_age_days: 2.5 }, { max_age_days: -1 }]) {
+      assert.equal(fxMaxAgeDays(value), null);
     }
   });
 });

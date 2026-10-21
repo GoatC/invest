@@ -6,10 +6,11 @@ import { requireSession } from '@/lib/auth';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { mappingKey, missingColumns, parseMapping } from '@/lib/csv/mapping';
 import { planImport, readStatement, tradesToImport } from '@/lib/csv/plan';
-import { DataError, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
+import { DataError, loadFxHistory, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { formFields, saveFailed, shortfallMessage } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
+import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import { latestFx } from '@/lib/models/valuation';
 import { parseNumber } from '@/lib/validation';
@@ -56,14 +57,17 @@ export async function importTrades(_previous: ImportState, formData: FormData): 
   const rate = parseNumber(fields['fixedFxRate']);
   const options = { pool: fields['pool'] === 'windfall' ? ('windfall' as const) : ('regular' as const), fixedFxRate: rate !== undefined && rate > 0 ? rate : null };
 
-  const data = await orDataError(loadHoldingsData(supabase));
-  if (data instanceof DataError) return { message: saveFailed(data.detail) };
+  const loaded = await orDataError(Promise.all([loadHoldingsData(supabase), loadFxHistory(supabase)]));
+  if (loaded instanceof DataError) return { message: saveFailed(loaded.detail) };
+  const [data, rates] = loaded;
   const rows = planImport(readStatement(csv, mapping.delimiter, mapping.headerRow), mapping, options, {
     securities: new Map(data.securities.map((security) => [security.ticker, security])),
     existing: data.trades,
     today: taipeiToday(),
     fx: latestFx(data.fx, data.trades),
     fxMaxGap: data.fxMaxGap,
+    rates: rateHistory(rates),
+    fxMaxAgeDays: data.fxMaxAgeDays,
   });
   const trades = tradesToImport(rows, new Set(lines(fields['keep'])));
   if (trades.length === 0) return { message: MESSAGES.nothing };

@@ -1,11 +1,15 @@
 // Drives the app in Chromium against the local Supabase stand-in (run.sh), step by step, with a
-// screenshot of each screen. The expected figures come from supabase/seed.sql (demo data).
+// screenshot of each screen. The expected figures come from supabase/seed.sql (demo data). With a
+// FINMIND_TOKEN in the environment, the last steps also run the real nightly job against the
+// stand-in and check what it loaded (E2E_NIGHTLY=0 skips them).
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { promisify } from 'node:util';
 
 import { chromium } from 'playwright-core';
 
 // DOCS_SHOTS, when set, also saves the README screenshots there (npm run test:e2e with DOCS_SHOTS=$PWD/docs/images).
-const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS } = process.env;
+const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS, GATEWAY_PORT, SECRET_KEY, FINMIND_TOKEN, E2E_NIGHTLY, REPO } = process.env;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 
 const browser = await chromium.launch(CHROMIUM && existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {});
@@ -73,9 +77,9 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
   check(text.includes('R1: 2330 is 9.1%') && text.includes('NT$3,255'), 'R1 2330 with trim');
   check(text.includes('18.8%'), 'satellite share 18.8%');
   check(text.includes('Not valued yet') && text.includes('Gold bar (demo)'), 'gold bar listed as not valued');
+  check(text.includes('The nightly price job has not run yet'), 'no nightly run yet');
   check(text.includes('持倉') && text.includes('實際與目標權重'), 'Chinese labels');
   await snap('holdings');
-  await docShot('holdings', page);
 });
 
 await step('holdings: R1 and R2 are worked out on screen with the demo figures', async () => {
@@ -87,11 +91,13 @@ await step('holdings: R1 and R2 are worked out on screen with the demo figures',
   check(text.includes('單一個股最多可持有 NT$3,960'), 'Chinese R1 line');
 });
 
-await step('trade form: picking VT fills USD and the latest rate; an existing breach is shown as such', async () => {
+await step("trade form: picking VT fills USD and the trade date's rate; an existing breach is shown as such", async () => {
   await page.goto(`${BASE}/holdings/new`);
+  await page.fill('input[name=tradeDate]', '2026-10-20');
   await page.fill('input[name=ticker]', 'VT');
   check((await page.inputValue('input[name=currency]')) === 'USD', 'currency USD');
   check((await page.inputValue('input[name=fxRate]')) === '32.4', `fx 32.4, got ${await page.inputValue('input[name=fxRate]')}`);
+  check((await body()).includes('Rate of 2026-10-20: 32.4'), "the hint names the rate's date");
   await page.fill('input[name=qty]', '1');
   await page.fill('input[name=price]', '158');
   await page.fill('input[name=fee]', '1');
@@ -102,11 +108,28 @@ await step('trade form: picking VT fills USD and the latest rate; an existing br
   await page.getByText('Trade added.').waitFor();
 });
 
+await step('trade form: a new date brings its own rate, the newest within 10 days, until a rate is typed', async () => {
+  await page.goto(`${BASE}/holdings/new`);
+  await page.fill('input[name=tradeDate]', '2026-10-20');
+  await page.fill('input[name=ticker]', 'VT');
+  const rate = () => page.inputValue('input[name=fxRate]');
+  // The seed has rates for 2026-10-08 and 2026-10-20 only.
+  await page.fill('input[name=tradeDate]', '2026-10-10');
+  check((await rate()) === '32.3', `rate of 2026-10-08 for 2026-10-10, got ${await rate()}`);
+  await page.fill('input[name=tradeDate]', '2026-09-01');
+  check((await rate()) === '', `no rate within 10 days of 2026-09-01, got ${await rate()}`);
+  check((await body()).includes('No rate loaded for this date'), 'the hint says so');
+  await page.fill('input[name=fxRate]', '32.55');
+  await page.fill('input[name=tradeDate]', '2026-10-20');
+  check((await rate()) === '32.55', 'a typed rate stays');
+});
+
 await step('a typo in the FX rate warns', async () => {
   await page.goto(`${BASE}/holdings/new`);
+  await page.fill('input[name=tradeDate]', '2026-10-20');
   await page.fill('input[name=ticker]', 'VT');
   await page.fill('input[name=fxRate]', '3.24');
-  await page.getByText('more than 20% away from the latest known 32.4').waitFor();
+  await page.getByText('more than 20% away from 32.4 (2026-10-20)').waitFor();
 });
 
 await step('a sell larger than the holding is refused, live and on the server', async () => {
@@ -224,10 +247,11 @@ await step('CSV import: Big5 statement, title lines, guessed columns, every row 
   await page.setInputFiles('input[type=file]', CSV);
   await page.getByText('Read as Big5').waitFor();
   check((await page.locator('input[type=number]').inputValue()) === '3', 'header row 3');
-  await page.getByLabel('FX rate for rows without one').fill('32.3');
+  // No rate column and none typed: each row takes the rate of its trade date, here the newest within 10 days.
   await page.getByText('2 new · 0 already saved · 1 with an unknown ticker · 2 skipped').waitFor();
   const text = await body();
   check(text.includes('不是買進或賣出') && text.includes('不是交易列'), 'dividend and totals rows explained');
+  check((await page.getByText('2026-10-08', { exact: true }).count()) === 2, "both trades show their rate's date");
   await snap('import-preview');
   await docShot('import-preview', page.locator('[aria-live="polite"]').last());
 });
@@ -253,19 +277,28 @@ await step('CSV import again: the broker mapping is remembered and nothing is im
   await page.goto(`${BASE}/import`);
   check((await page.locator('select').first().inputValue()) === '國泰複委託（示範）', 'saved broker selected');
   await page.setInputFiles('input[type=file]', CSV);
-  // Without an FX rate the saved rows are still recognised; keeping one needs the rate.
   await page.getByText('0 new · 3 already saved').waitFor();
   check(await page.getByRole('button', { name: /Import 0 trades/ }).isDisabled(), 'import disabled');
-  check((await page.getByLabel('Import anyway').count()) === 0, 'nothing to keep without a rate');
-  await page.getByLabel('FX rate for rows without one').fill('32.3');
+  // A saved row can still be imported again on purpose, at its trade date's rate.
   await page.getByLabel('Import anyway').first().check();
   await page.getByRole('button', { name: /Import 1 trade 匯入/ }).waitFor();
+});
+
+await step('data status: demo prices listed with their dates, the job not run yet', async () => {
+  await page.goto(`${BASE}/data`);
+  await page.getByRole('heading', { name: /Data status/ }).waitFor();
+  const text = await body();
+  check(text.includes('The nightly price job has not run yet'), 'not run yet');
+  check(/VT[\s\S]*2026-10-20[\s\S]*157\.8 USD[\s\S]*Demo data/.test(text), 'VT demo close with its date');
+  check(/AGGU[\s\S]*Not loaded yet/.test(text), 'AGGU not loaded yet');
+  check(text.includes('資料狀態') && text.includes('匯率與金價'), 'Chinese labels');
+  await snap('data-status-before');
 });
 
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/securities', '/securities/new', '/history', '/import']) {
+  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -278,6 +311,57 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
 });
+
+// The real nightly job, against the stand-in, with live feeds: what GitHub Actions runs each night.
+const nightly = (extra = {}) =>
+  promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/nightly.ts'], {
+    cwd: REPO,
+    timeout: 15 * 60_000,
+    env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, NODE_USE_ENV_PROXY: '1', ...extra },
+  });
+if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
+  await step('nightly job: loads live prices, rates and gold through the secret key, and records the run', async () => {
+    const { stdout } = await nightly();
+    console.log(stdout.trim());
+    check(/^Nightly prices: (ok|partial)/m.test(stdout), 'run ok or partial');
+    check(/VT\s+finmind\s+\d+ rows/.test(stdout) && /0050\s+finmind\s+\d+ rows/.test(stdout), 'VT and 0050 from FinMind');
+    check(/USD\/TWD\s+finmind/.test(stdout) && /XAU\/TWD\s+finmind/.test(stdout), 'Bank of Taiwan USD rate and gold in TWD');
+  });
+
+  await step('nightly job on GitHub Actions: the public log names no ticker, and a second run only updates', async () => {
+    const { stdout } = await nightly({ GITHUB_ACTIONS: 'true' });
+    console.log(stdout.trim());
+    check(/^::(notice|warning)::Nightly prices: (ok|partial)\. Loaded \d+ securities/m.test(stdout), 'one annotated summary line');
+    for (const ticker of ['VT', '0050', 'AGGU', '2330', 'AAPL']) check(!new RegExp(`\\b${ticker}\\b`).test(stdout), `${ticker} kept out of the log`);
+  });
+
+  await step('data status after the job: its runs, the feeds per security, and gold priced per gram', async () => {
+    await page.goto(`${BASE}/data`);
+    const text = await body();
+    check(text.includes('Last run') && text.includes('Recent runs'), 'runs listed');
+    check(!text.includes('has not run yet'), 'the job has run');
+    const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
+    check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
+    check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
+    await snap('data-status-after');
+    await docShot('data-status', page);
+  });
+
+  await step('holdings after the job: gold valued at the gold price, closes dated', async () => {
+    await page.goto(`${BASE}/holdings`);
+    const row = page.locator('tr', { hasText: 'Gold bar (demo)' });
+    const cells = await row.locator('td').allInnerTexts();
+    // 5 g at about NT$4,000+ a gram, no longer the NT$15,000 typed by hand, and not marked estimated.
+    const value = Number((cells[3] ?? '').replace(/[^\d]/g, ''));
+    check(value > 15000 && !(cells[3] ?? '').includes('*'), `gold at the gold price, got ${cells[3]}`);
+    check(/^\d{4}-\d{2}-\d{2}$/.test((cells[4] ?? '').trim()), `gold dated by its price, got ${cells[4]}`);
+    await snap('holdings-after-job');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await docShot('holdings', page);
+  });
+} else {
+  results.push('skip  nightly job steps: no FINMIND_TOKEN, or E2E_NIGHTLY=0');
+}
 
 await step('signing out ends the session', async () => {
   await page.getByRole('button', { name: /Sign out/ }).click();

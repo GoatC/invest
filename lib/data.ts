@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
+import { failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
+import { GOLD } from './models/fx';
 import type { PortfolioData } from './models/portfolio';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import type { AssetClass, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
@@ -187,10 +189,23 @@ export async function loadAssetClasses(supabase: SupabaseClient): Promise<AssetC
   return assetClasses.map((row) => ({ id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order }));
 }
 
-/** The share an FX rate may stray from the newest known one before a warning (config fx_rate_check); null turns the check off. */
+function setting(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+}
+
+/** The share an FX rate may stray from the trade date's rate before a warning (config fx_rate_check); null turns the check off. */
 export function fxMaxGap(value: unknown): number | null {
-  const gap = typeof value === 'object' && value !== null ? (value as Record<string, unknown>)['max_gap'] : undefined;
+  const gap = setting(value, 'max_gap');
   return typeof gap === 'number' && gap > 0 ? gap : null;
+}
+
+/**
+ * How many days before a trade the rate filled in for it may be (config fx_rate_check); null
+ * leaves FX rates to be typed, with the newest known rate as the only suggestion.
+ */
+export function fxMaxAgeDays(value: unknown): number | null {
+  const days = setting(value, 'max_age_days');
+  return typeof days === 'number' && Number.isInteger(days) && days >= 0 ? days : null;
 }
 
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */
@@ -199,6 +214,7 @@ export interface HoldingsData extends PortfolioData {
   securities: SecurityRecord[];
   caps: Caps;
   fxMaxGap: number | null;
+  fxMaxAgeDays: number | null;
 }
 
 export async function loadHoldingsData(supabase: SupabaseClient): Promise<HoldingsData> {
@@ -223,6 +239,87 @@ export async function loadHoldingsData(supabase: SupabaseClient): Promise<Holdin
     manualAssets: manualAssets.map(toManualAsset),
     caps: capsFromRules(rules),
     fxMaxGap: fxMaxGap(settings[0]?.value),
+    fxMaxAgeDays: fxMaxAgeDays(settings[0]?.value),
+  };
+}
+
+/** Every daily TWD rate the nightly job has loaded, gold aside, for the trade date's rate (lib/models/fx). */
+export async function loadFxHistory(supabase: SupabaseClient): Promise<FxQuote[]> {
+  const found = await allRows<{ pair: string; rate_date: string; rate: number }>('fx_rates', (from, to) =>
+    supabase.from('fx_rates').select('pair, rate_date, rate').like('pair', '%/TWD').neq('pair', `${GOLD}/TWD`).order('rate_date').order('pair').range(from, to),
+  );
+  return found.map((row) => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) }));
+}
+
+/** The newest gold price in TWD per troy ounce (XAU/TWD), if the nightly job has loaded one. */
+export async function loadGoldPrice(supabase: SupabaseClient): Promise<FxQuote | undefined> {
+  const [row] = await rows<{ pair: string; rate_date: string; rate: number }>(
+    'latest_fx_rates',
+    supabase.from('latest_fx_rates').select('pair, rate_date, rate').eq('pair', `${GOLD}/TWD`),
+  );
+  return row ? { pair: row.pair, date: row.rate_date, rate: Number(row.rate) } : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Nightly job status (Phase 1, step 4)
+// ---------------------------------------------------------------------------
+
+/** Runs read for the status: enough to count misses in a row against any sensible threshold. */
+const RUNS_READ = 14;
+
+interface JobRunRow {
+  id: number;
+  started_at: string;
+  finished_at: string;
+  status: RunStatus;
+  detail: unknown;
+}
+
+/** The newest nightly runs, newest first, and the DATA_FAILURE rule's threshold. */
+export async function loadJobRuns(supabase: SupabaseClient): Promise<{ runs: JobRun[]; threshold: number | null }> {
+  const [found, rules] = await Promise.all([
+    rows<JobRunRow>(
+      'job_runs',
+      supabase.from('job_runs').select('id, started_at, finished_at, status, detail').eq('job', NIGHTLY_JOB).order('finished_at', { ascending: false }).limit(RUNS_READ),
+    ),
+    rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').eq('id', 'DATA_FAILURE')),
+  ]);
+  return {
+    runs: found.map((row) => ({ id: row.id, startedAt: row.started_at, finishedAt: row.finished_at, status: row.status, detail: parseRunDetail(row.detail) })),
+    threshold: failureThreshold(rules[0]),
+  };
+}
+
+/** A newest close or rate and the feed it came from. */
+export interface LatestQuote {
+  key: string;
+  date: string;
+  value: number;
+  source: string;
+}
+
+/** What the data status page shows: the runs, and the newest close of every security and rate of every pair. */
+export interface DataStatus {
+  runs: JobRun[];
+  threshold: number | null;
+  securities: SecurityRecord[];
+  prices: LatestQuote[];
+  rates: LatestQuote[];
+}
+
+export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStatus> {
+  const [{ runs, threshold }, securities, prices, rates] = await Promise.all([
+    loadJobRuns(supabase),
+    loadSecurities(supabase),
+    rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
+    rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
+  ]);
+  return {
+    runs,
+    threshold,
+    securities,
+    prices: prices.map((row) => ({ key: row.ticker, date: row.price_date, value: Number(row.close), source: row.source })),
+    rates: rates.map((row) => ({ key: row.pair, date: row.rate_date, value: Number(row.rate), source: row.source })),
   };
 }
 
