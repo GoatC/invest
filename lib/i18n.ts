@@ -63,6 +63,7 @@ export const LABELS = {
   drift: { en: 'Drift', zh: '偏離' },
   history: { en: 'Edit history', zh: '修改紀錄' },
   dataStatus: { en: 'Data status', zh: '資料狀態' },
+  performance: { en: 'Performance', zh: '績效' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },
@@ -129,6 +130,16 @@ export const FEED: Record<string, Bilingual> = {
 export function feedLabel(source: string): Bilingual {
   return FEED[source] ?? { en: source, zh: source };
 }
+
+/** The series of the performance charts and tables (F18). */
+export const RETURN_SERIES = {
+  portfolio: { en: 'Portfolio (TWR)', zh: '組合（時間加權）' },
+  benchmark: { en: 'SAA benchmark', zh: 'SAA 基準' },
+  local: { en: 'Local currency', zh: '當地幣別' },
+  currency: { en: 'Currency', zh: '匯率' },
+  cross: { en: 'Cross term', zh: '交叉項' },
+  total: { en: 'TWD return', zh: '台幣報酬' },
+} as const satisfies Record<string, Bilingual>;
 
 export const RUN_STATUS = {
   ok: { en: 'OK', zh: '正常' },

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get } from '../feeds/types.ts';
 import { goldInTwd, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
 
@@ -66,7 +67,8 @@ class MemoryStore implements Store {
   fills: DailyPrice[] = [];
   rates: DailyRate[] = [];
   runs: JobRun[] = [];
-  constructor(private readonly options: { failRead?: boolean; earliestAggu?: string } = {}) {}
+  snapshots: Snapshot[] = [];
+  constructor(private readonly options: { failRead?: boolean; earliestAggu?: string; failSnapshots?: boolean } = {}) {}
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
     return SECURITIES;
@@ -85,6 +87,23 @@ class MemoryStore implements Store {
   }
   async saveRates(rows: readonly DailyRate[]) {
     this.rates.push(...rows);
+  }
+  /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
+  async performanceInput(end: string): Promise<PerformanceInput> {
+    if (this.options.failSnapshots) throw new Error('transactions: permission denied');
+    return {
+      end,
+      trades: [{ tradeDate: '2026-10-20', ticker: '0050', side: 'buy', qty: 10, price: 100, currency: 'TWD', fee: 0, tax: 0, fxRate: 1, pool: 'regular' }],
+      cashFlows: [],
+      manualAssets: [],
+      securities: [{ ticker: '0050', name: '元大台灣50', market: 'TW', productType: 'equity_etf', assetClassId: 'tw_market_cap', sleeve: 'core', currency: 'TWD' }],
+      benchmark: [],
+      prices: this.prices.map((p) => ({ ticker: p.ticker, date: p.date, close: p.close, adjClose: p.adjClose })),
+      rates: this.rates.map((r) => ({ pair: r.pair, date: r.date, rate: r.rate })),
+    };
+  }
+  async saveSnapshots(rows: readonly Snapshot[]) {
+    this.snapshots.push(...rows);
   }
   async recordRun(run: JobRun) {
     this.runs.push(run);
@@ -145,6 +164,26 @@ describe('runNightly', () => {
     );
     assert.deepEqual(run.detail.prices['AGGU'], { source: 'ishares_nav', rows: 2, latest: '2026-10-20' });
     assert.deepEqual(store.runs, [run]);
+  });
+
+  it("saves each day's NAV snapshot at the closes it just loaded", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    // On the 20th 0050 still stood at its 21 July close; the 21st has that day's.
+    assert.deepEqual(store.snapshots, [
+      { date: '2026-10-20', totalTwd: 986, weightsByClass: { tw_market_cap: 1 } },
+      { date: '2026-10-21', totalTwd: 1081.5, weightsByClass: { tw_market_cap: 1 } },
+    ]);
+    assert.deepEqual(run.detail.snapshots, { days: 2, from: '2026-10-20', to: '2026-10-21' });
+  });
+
+  it('keeps the prices and reports a partial run when the snapshots fail', async () => {
+    const store = new MemoryStore({ failSnapshots: true });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['NAV snapshots: transactions: permission denied']);
+    assert.equal(run.detail.snapshots, undefined);
+    assert.ok(store.prices.length > 0);
   });
 
   it('skips the 25 MB fund download once the saved history covers the window', async () => {

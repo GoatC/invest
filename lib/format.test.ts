@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { money, percent, points, quantity, taipeiDateTime, twd } from './format';
+import { money, percent, points, quantity, signedPercent, taipeiDateTime, twd } from './format';
 
 describe('format', () => {
   it('writes TWD rounded to the dollar, with a dash for unknown values', () => {
@@ -18,6 +18,14 @@ describe('format', () => {
     assert.equal(points(0.032), '+3.2 pp');
     assert.equal(points(-0.0049), '−0.5 pp');
     assert.equal(points(0.00001), '0.0 pp');
+  });
+
+  it('writes returns with their sign, and none on a return that rounds to zero', () => {
+    assert.equal(signedPercent(0.055), '+5.5%');
+    assert.equal(signedPercent(-0.02), '−2.0%');
+    assert.equal(signedPercent(-0.00001), '0.0%');
+    assert.equal(signedPercent(0.12345, 2), '+12.35%');
+    assert.equal(signedPercent(null), '—');
   });
 
   it('writes a timestamp in Taipei time, a day ahead of UTC late in the evening', () => {

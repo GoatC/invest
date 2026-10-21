@@ -1,9 +1,12 @@
 /**
  * The nightly price and FX job (PRD Phase 1, step 4). It loads daily closes for every security,
  * Bank of Taiwan exchange rates and the gold price into Supabase, with one fallback per feed
- * (PRD Section 9, "free data breaks"), and records the outcome in job_runs. Everything outside
- * this file is injected, so the whole run can be tested without a network or a database.
+ * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5), and
+ * records the outcome in job_runs. Everything outside this file is injected, so the whole run can
+ * be tested without a network or a database.
  */
+import { SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredRates, fredUrl } from '../feeds/fred.ts';
@@ -32,6 +35,10 @@ export interface Store {
   /** fillOnly: add missing days without overwriting saved ones (for feeds without dividend adjustment). */
   savePrices(rows: readonly DailyPrice[], options?: { fillOnly?: boolean }): Promise<void>;
   saveRates(rows: readonly DailyRate[]): Promise<void>;
+  /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
+  performanceInput(end: string): Promise<PerformanceInput>;
+  /** Saves one NAV snapshot per day and drops any from before the first (left by trades since deleted). */
+  saveSnapshots(rows: readonly Snapshot[]): Promise<void>;
   recordRun(run: JobRun): Promise<void>;
 }
 
@@ -45,6 +52,8 @@ export interface RunDetail {
   warnings: string[];
   /** Data that could not be loaded at all. */
   errors: string[];
+  /** The NAV snapshots saved, once anything was bought or recorded. */
+  snapshots?: { days: number; from: string; to: string };
 }
 
 export interface JobRun {
@@ -239,6 +248,17 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
+  }
+
+  // Every day's NAV from the first trade on, recomputed each night so that an edited trade or a
+  // close that arrived late corrects the past. A failure here leaves the prices saved.
+  try {
+    const rows = snapshots(buildSeries(await store.performanceInput(today)));
+    await store.saveSnapshots(rows);
+    const [first, last] = [rows[0], rows[rows.length - 1]];
+    if (first && last) detail.snapshots = { days: rows.length, from: first.date, to: last.date };
+  } catch (err) {
+    detail.errors.push(`${SNAPSHOT_ERROR}: ${message(err)}`);
   }
   const saved = prices.length + fills.length + rates.length;
   return finish(saved === 0 ? 'failed' : detail.errors.length > 0 ? 'partial' : 'ok');

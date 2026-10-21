@@ -4,6 +4,7 @@ import { Bi } from '@/components/bi';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { RuleMath } from '@/components/rule-math';
+import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, orDataError, type CashFlowRecord, type HoldingsData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
@@ -163,22 +164,6 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} />
       {!empty && <Footnotes />}
     </>
-  );
-}
-
-function Stat({ label, value, note }: { label: Bilingual; value: string; note?: Bilingual }) {
-  return (
-    <div className="stat">
-      <span className="muted small">
-        <Bi {...label} />
-      </span>
-      <span className="value">{value}</span>
-      {note && (
-        <span className="muted small">
-          <Bi {...note} />
-        </span>
-      )}
-    </div>
   );
 }
 

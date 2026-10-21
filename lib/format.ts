@@ -30,6 +30,14 @@ export function percent(value: number | null | undefined, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/** A return with its sign: 0.055 → "+5.5%", −0.02 → "−2.0%"; one that rounds to zero has none. */
+export function signedPercent(value: number | null | undefined, digits = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return DASH;
+  const text = Math.abs(value * 100).toFixed(digits);
+  if (Number(text) === 0) return `${text}%`;
+  return `${value > 0 ? '+' : '−'}${text}%`;
+}
+
 /** A difference of fractions in percentage points: 0.032 → "+3.2 pp". */
 export function points(value: number, digits = 1): string {
   const scaled = value * 100;

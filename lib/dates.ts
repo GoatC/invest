@@ -11,3 +11,10 @@ export function isIsoDate(value: string): boolean {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
+
+/** The ISO date `days` days after `date` (before it, for a negative count). */
+export function addDays(date: string, days: number): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + days);
+  return day.toISOString().slice(0, 10);
+}

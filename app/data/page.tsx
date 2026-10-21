@@ -7,7 +7,7 @@ import { DataError, loadDataStatus, type DataStatus, type LatestQuote } from '@/
 import { taipeiToday } from '@/lib/dates';
 import { quantity, twd } from '@/lib/format';
 import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
-import { dataHealth, type JobRun } from '@/lib/models/data-health';
+import { dataHealth, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
 import { GOLD } from '@/lib/models/fx';
 import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
 
@@ -41,8 +41,8 @@ export default async function DataStatusPage() {
         </h1>
         <p className="muted">
           <Bi
-            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates and the gold price. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
-            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率與金價。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
+            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates and the gold price, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
+            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率與金價，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
           />
         </p>
         <DataHealthBanner health={health} threshold={status.threshold} />
@@ -57,6 +57,9 @@ export default async function DataStatusPage() {
 
 function LatestRun({ run }: { run: JobRun }) {
   const { detail } = run;
+  const isSnapshotError = (line: string) => line.startsWith(`${SNAPSHOT_ERROR}:`);
+  const notLoaded = detail.errors.filter((line) => !isSnapshotError(line));
+  const snapshotErrors = detail.errors.filter(isSnapshotError);
   return (
     <section className="card form">
       <div className="row spread">
@@ -74,11 +77,32 @@ function LatestRun({ run }: { run: JobRun }) {
           </span>
         )}
       </p>
-      {detail.errors.length > 0 && (
+      {detail.snapshots && (
+        <p className="muted small">
+          <Bi
+            en={`Saved the daily NAV snapshot for each day from ${detail.snapshots.from} to ${detail.snapshots.to} (${detail.snapshots.days} days).`}
+            zh={`已存入 ${detail.snapshots.from} 至 ${detail.snapshots.to} 每一天的淨值快照（共 ${detail.snapshots.days} 天）。`}
+          />
+        </p>
+      )}
+      {notLoaded.length > 0 && (
         <div className="banner warn">
           <Bi en="Not loaded; these keep their previous price:" zh="未能載入，以下項目沿用先前的價格：" />
           <ul>
-            {detail.errors.map((line) => (
+            {notLoaded.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {snapshotErrors.length > 0 && (
+        <div className="banner warn">
+          <Bi
+            en="The NAV snapshots were not saved; the performance page works from the trades, so it is still up to date:"
+            zh="淨值快照未能存入；績效頁直接由交易計算，仍是最新的："
+          />
+          <ul>
+            {snapshotErrors.map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>

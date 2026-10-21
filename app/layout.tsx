@@ -48,6 +48,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/holdings">
                 <Bi {...LABELS.holdings} />
               </Link>
+              <Link href="/performance">
+                <Bi {...LABELS.performance} />
+              </Link>
               <Link href="/holdings/new">
                 <Bi {...LABELS.addTrade} />
               </Link>
