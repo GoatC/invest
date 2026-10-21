@@ -1,0 +1,1072 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-21 10:59:28",
+  "node": "v22.22.0",
+  "runner": "local run 本機執行",
+  "keys": {
+    "ALPHAVANTAGE_API_KEY": false,
+    "FINMIND_TOKEN": false,
+    "FRED_API_KEY": false,
+    "FMP_API_KEY": false,
+    "MOENV_API_KEY": false,
+    "SEC_USER_AGENT": false
+  },
+  "sources": [
+    {
+      "id": "twse",
+      "name": "TWSE OpenAPI 證交所開放 API",
+      "short": "TWSE",
+      "row": "Taiwan prices 台股價格",
+      "usedBy": "F12, N1, N3, F18",
+      "auth": "none 免金鑰",
+      "documentedLimit": "No published limit; no key 未公布限制，免金鑰",
+      "coverageMarkets": [
+        "TW"
+      ],
+      "checkedAt": "2026-10-21 10:52:19",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Daily quotes for every listed security (STOCK_DAY_ALL)",
+          "url": "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+          "status": 200,
+          "ok": true,
+          "ms": 1710,
+          "bytes": 320141,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "lastModified": "Tue, 20 Oct 2026 21:20:45 GMT",
+          "sampleFile": "samples/twse/01-daily-quotes-for-every-listed-security-stock-day-all.json"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "2330": {
+          "mark": "yes",
+          "detail": "close 2405.00"
+        },
+        "00692": {
+          "mark": "yes",
+          "detail": "close 92.45"
+        },
+        "009816": {
+          "mark": "yes",
+          "detail": "close 15.93"
+        },
+        "00922": {
+          "mark": "yes",
+          "detail": "close 39.56"
+        },
+        "0050": {
+          "mark": "yes",
+          "detail": "close 107.25"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "Rows for our Taiwan tickers 本專案的台股標的",
+          "lang": "json",
+          "text": "[\n  {\n    \"Date\": \"1151020\",\n    \"Code\": \"0050\",\n    \"Name\": \"元大台灣50\",\n    \"TradeVolume\": \"123086544\",\n    \"TradeValue\": \"13246672426\",\n    \"OpeningPrice\": \"107.65\",\n    \"HighestPrice\": \"108.30\",\n    \"LowestPrice\": \"107.05\",\n    \"ClosingPrice\": \"107.25\",\n    \"Change\": \"-0.9000\",\n    \"Transaction\": \"274227\"\n  },\n  {\n    \"Date\": \"1151020\",\n    \"Code\": \"00692\",\n    \"Name\": \"富邦公司治理\",\n    \"TradeVolume\": \"511826\",\n    \"TradeValue\": \"47566010\",\n    \"OpeningPrice\": \"93.10\",\n    \"HighestPrice\": \"93.60\",\n    \"LowestPrice\": \"92.40\",\n    \"ClosingPrice\": \"92.45\",\n    \"Change\": \"-0.9500\",\n    \"Transaction\": \"2009\"\n  },\n  {\n    \"Date\": \"1151020\",\n    \"Code\": \"00922\",\n    \"Name\": \"國泰台灣領袖50\",\n    \"TradeVolume\": \"12754702\",\n    \"TradeValue\": \"507113370\",\n    \"OpeningPrice\": \"39.90\",\n    \"HighestPrice\": \"40.12\",\n    \"LowestPrice\": \"39.50\",\n    \"ClosingPrice\": \"39.56\",\n    \"Change\": \"-0.5000\",\n    \"Transaction\": \"14499\"\n  },\n  {\n    \"Date\": \"1151020\",\n    \"Code\": \"009816\",\n    \"Name\": \"凱基台灣TOP50\",\n    \"TradeVolume\": \"190979092\",\n    \"TradeValue\": \"3053321008\",\n    \"OpeningPrice\": \"16.00\",\n    \"HighestPrice\": \"16.09\",\n    \"LowestPrice\": \"15.91\",\n    \"ClosingPrice\": \"15.93\",\n    \"Change\": \"-0.1400\",\n    \"Transaction\": \"81491\"\n  },\n  {\n    \"Date\": \"1151020\",\n    \"Code\": \"2330\",\n    \"Name\": \"台積電\",\n    \"TradeVolume\": \"22402430\",\n    \"TradeValue\": \"53857463127\",\n    \"OpeningPrice\": \"2400.00\",\n    \"HighestPrice\": \"2415.00\",\n    \"LowestPrice\": \"2395.00\",\n    \"ClosingPrice\": \"2405.00\",\n    \"Change\": \"-15\n… (41 more characters)"
+        }
+      ],
+      "notes": [
+        "Trading date in the payload 資料日期: 2026-10-20 (raw \"1151020\")",
+        "1383 securities in one reply; fields: Date, Code, Name, TradeVolume, TradeValue, OpeningPrice, HighestPrice, LowestPrice, ClosingPrice, Change, Transaction",
+        "One trading day per reply, no history: N4 needs 3 years of weekly returns, so history comes from FinMind or builds up nightly."
+      ],
+      "skipped": []
+    },
+    {
+      "id": "finmind",
+      "name": "FinMind",
+      "short": "FinMind",
+      "row": "Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援",
+      "usedBy": "F12, N1, N3, F18; backup for US prices",
+      "auth": "none: anonymous quota 未用金鑰",
+      "documentedLimit": "600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up",
+      "coverageMarkets": [
+        "TW",
+        "US",
+        "UK"
+      ],
+      "checkedAt": "2026-10-21 10:52:21",
+      "status": "partial",
+      "calls": [
+        {
+          "label": "Taiwan securities list (TaiwanStockInfo)",
+          "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo",
+          "status": 200,
+          "ok": true,
+          "ms": 1223,
+          "bytes": 600164,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/finmind/01-taiwan-securities-list-taiwanstockinfo.json"
+        },
+        {
+          "label": "Taiwan daily prices for 00922 (TaiwanStockPrice)",
+          "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=00922&start_date=2026-10-07",
+          "status": 200,
+          "ok": true,
+          "ms": 216,
+          "bytes": 1680,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/finmind/02-taiwan-daily-prices-for-00922-taiwanstockprice.json"
+        },
+        {
+          "label": "Taiwan income statements for 2330 (TaiwanStockFinancialStatements)",
+          "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockFinancialStatements&data_id=2330&start_date=2025-09-16",
+          "status": 200,
+          "ok": true,
+          "ms": 211,
+          "bytes": 11107,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/finmind/03-taiwan-income-statements-for-2330-taiwanstockfinancialstatem.json"
+        },
+        {
+          "label": "US securities list (USStockInfo)",
+          "url": "https://api.finmindtrade.com/api/v4/data?dataset=USStockInfo",
+          "status": 200,
+          "ok": true,
+          "ms": 1862,
+          "bytes": 3703487,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/finmind/04-us-securities-list-usstockinfo.json"
+        },
+        {
+          "label": "US daily prices for VT (USStockPrice)",
+          "url": "https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice&data_id=VT&start_date=2026-10-07",
+          "status": 200,
+          "ok": true,
+          "ms": 218,
+          "bytes": 1333,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/finmind/05-us-daily-prices-for-vt-usstockprice.json"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "2330": {
+          "mark": "yes",
+          "detail": "twse · 電子工業"
+        },
+        "00692": {
+          "mark": "yes",
+          "detail": "twse · ETF"
+        },
+        "009816": {
+          "mark": "yes",
+          "detail": "twse · ETF"
+        },
+        "00922": {
+          "mark": "yes",
+          "detail": "twse · ETF"
+        },
+        "0050": {
+          "mark": "yes",
+          "detail": "twse · ETF"
+        },
+        "VOO": {
+          "mark": "yes",
+          "detail": "Vanguard S&P 500 ETF"
+        },
+        "VT": {
+          "mark": "yes",
+          "detail": "Vanguard Total World Stock Index ETF"
+        },
+        "BNDW": {
+          "mark": "yes",
+          "detail": "Vanguard Total World Bond ETF"
+        },
+        "AGGU": {
+          "mark": "no"
+        },
+        "GLDM": {
+          "mark": "yes",
+          "detail": "SPDR Gold MiniShares Trust"
+        },
+        "BIL": {
+          "mark": "yes",
+          "detail": "State Street SPDR Bloomberg 1-3 Month T-Bill ETF"
+        },
+        "ACWI": {
+          "mark": "yes",
+          "detail": "iShares MSCI ACWI ETF"
+        },
+        "AAPL": {
+          "mark": "yes",
+          "detail": "Apple Inc. Common Stock"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "TaiwanStockPrice 00922 since 2026-10-07: 9 rows, latest 2026-10-20",
+          "lang": "json",
+          "text": "[\n  {\n    \"date\": \"2026-10-19\",\n    \"stock_id\": \"00922\",\n    \"Trading_Volume\": 26613273,\n    \"Trading_money\": 1056567591,\n    \"open\": 39.95,\n    \"max\": 40.08,\n    \"min\": 39.51,\n    \"close\": 40.06,\n    \"spread\": 0,\n    \"Trading_turnover\": 20691\n  },\n  {\n    \"date\": \"2026-10-20\",\n    \"stock_id\": \"00922\",\n    \"Trading_Volume\": 12754702,\n    \"Trading_money\": 507113370,\n    \"open\": 39.9,\n    \"max\": 40.12,\n    \"min\": 39.5,\n    \"close\": 39.56,\n    \"spread\": -0.5,\n    \"Trading_turnover\": 14499\n  }\n]"
+        },
+        {
+          "label": "TaiwanStockFinancialStatements 2330: 68 rows for quarters 2025-09-30, 2025-12-31, 2026-03-31, 2026-06-30",
+          "lang": "json",
+          "text": "[\n  {\n    \"date\": \"2025-09-30\",\n    \"stock_id\": \"2330\",\n    \"type\": \"EPS\",\n    \"value\": 17.44,\n    \"origin_name\": \"基本每股盈餘\"\n  },\n  {\n    \"date\": \"2025-09-30\",\n    \"stock_id\": \"2330\",\n    \"type\": \"OTHNOE\",\n    \"value\": -93566000,\n    \"origin_name\": \"其他收益及費損淨額\"\n  },\n  {\n    \"date\": \"2025-09-30\",\n    \"stock_id\": \"2330\",\n    \"type\": \"OtherComprehensiveIncome\",\n    \"value\": 95201936000,\n    \"origin_name\": \"其他綜合損益（淨額）\"\n  }\n]"
+        },
+        {
+          "label": "USStockPrice VT since 2026-10-07: 10 rows, latest 2026-10-20",
+          "lang": "json",
+          "text": "[\n  {\n    \"date\": \"2026-10-19\",\n    \"stock_id\": \"VT\",\n    \"Adj_Close\": 157.11,\n    \"Close\": 157.11,\n    \"High\": 157.98,\n    \"Low\": 157.07,\n    \"Open\": 157.5,\n    \"Volume\": 2102400\n  },\n  {\n    \"date\": \"2026-10-20\",\n    \"stock_id\": \"VT\",\n    \"Adj_Close\": 157.8,\n    \"Close\": 157.8,\n    \"High\": 158.4,\n    \"Low\": 156.76,\n    \"Open\": 156.85,\n    \"Volume\": 2360278\n  }\n]"
+        }
+      ],
+      "notes": [
+        "TaiwanStockInfo: 4345 rows",
+        "USStockInfo: 19869 rows"
+      ],
+      "skipped": [
+        "Quota check (user_info) needs FINMIND_TOKEN 需要 FINMIND_TOKEN"
+      ]
+    },
+    {
+      "id": "mops",
+      "name": "MOPS 公開資訊觀測站",
+      "short": "MOPS",
+      "row": "Taiwan filings and material information 台股財報與重大訊息",
+      "usedBy": "F12, N3",
+      "auth": "none 免金鑰",
+      "documentedLimit": "No published limit; no key 未公布限制，免金鑰",
+      "coverageMarkets": [
+        "TW"
+      ],
+      "coverageKinds": [
+        "stock"
+      ],
+      "checkedAt": "2026-10-21 10:52:26",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "MOPS website (reachability)",
+          "url": "https://mops.twse.com.tw/mops/",
+          "status": 200,
+          "ok": true,
+          "ms": 2460,
+          "bytes": 942,
+          "rateLimitHeaders": {},
+          "contentType": "text/html;charset=UTF-8",
+          "lastModified": "Wed, 30 Sep 2026 04:00:52 GMT",
+          "sampleFile": "samples/mops/01-mops-website-reachability.html"
+        },
+        {
+          "label": "Listed-company profiles from MOPS, via TWSE OpenAPI (t187ap03_L)",
+          "url": "https://openapi.twse.com.tw/v1/opendata/t187ap03_L",
+          "status": 200,
+          "ok": true,
+          "ms": 1331,
+          "bytes": 1329949,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "lastModified": "Tue, 20 Oct 2026 21:24:36 GMT",
+          "sampleFile": "samples/mops/02-listed-company-profiles-from-mops-via-twse-openapi-t187ap03-.json"
+        },
+        {
+          "label": "Material information in the latest batch, via TWSE OpenAPI (t187ap04_L)",
+          "url": "https://openapi.twse.com.tw/v1/opendata/t187ap04_L",
+          "status": 200,
+          "ok": true,
+          "ms": 123,
+          "bytes": 198825,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "lastModified": "Tue, 20 Oct 2026 21:24:31 GMT",
+          "sampleFile": "samples/mops/03-material-information-in-the-latest-batch-via-twse-openapi-t1.json"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "2330": {
+          "mark": "yes",
+          "detail": "company profile 公司基本資料"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "t187ap04_L: 112 announcements",
+          "lang": "json",
+          "text": "[\n  {\n    \"出表日期\": \"1151021\",\n    \"發言日期\": \"1151020\",\n    \"發言時間\": \"70004\",\n    \"公司代號\": \"2072\",\n    \"公司名稱\": \"世紀風電\",\n    \"主旨 \": \"公告本公司名稱由「世紀離岸風電設備股份有限公司」更名\\r\\n為「世紀能源設備股份有限公司」，公告期間：115年8月26日至\\r\\n115年11月25日。\",\n    \"符合條款\": \"第51款\",\n    \"事實發生日\": \"1150824\",\n    \"說明\": \"1.事實發生日：民國115年08月24日\\r\\n2.公司名稱：世紀能源設備股份有限公司(原名：世紀離岸風電設備股份有限公司)\\r\\n3.與公司關係(請輸入本公司或子公司)：本公司\\r\\n4.相互持股比例：不適用\\r\\n5.發生緣由：\\r\\n(1)公司名稱變更核准日期/事實發生日：民國115年08月24日\\r\\n(2)公司名稱變更核准文號：經授商字第11530130420號\\r\\n(3)更名案股東會決議通過日期：民國115年08月12日\\r\\n(4)變更前公司名稱：世紀離岸風電設備股份有限公司\\r\\n(5)變更後公司名稱：世紀能源設備股份有限公司\\r\\n(6)變更前公司簡稱：世紀風電\\r\\n(7)變更後公司簡稱：世紀能源\\r\\n6.因應措施：無\\r\\n7.其他應敘明事項：(1)本公司於115/08/26收到經濟部變更登記核准函。\\r\\n(2)依據臺灣證券交易所股份有限公司營業細則第45條規定，\\r\\n於更名後須連續公告三個月。\\r\\n(3)本公司股票代號未變動，普通股仍為「2072」。\\r\\n(4)本公司英文名更名為「Century Energy Co., Ltd.」\"\n  },\n  {\n    \"出表日期\": \"1151021\",\n    \"發言日期\": \"1151020\",\n    \"發言時間\": \"70004\",\n    \"公司代號\": \"6949\",\n    \"公司名稱\": \"沛爾生醫*-創\",\n    \"主旨 \": \"公告本公司股票面額由「新台幣10元」變更為「新台幣0.5元」，\\r\\n公告期間：115年08月06日至115年11月05日。\",\n    \"符合條款\": \"第51款\",\n    \"事實發生日\": \"1150713\",\n    \"說明\": \"1.事實發生日：民國115年07月13日\\r\\n2.公司名稱：沛爾生技醫藥股份有限公司\\r\\n3.與公司關係(請輸入本公司或子公司)：本公司\\r\\n4.相互持股比例：不適用\\r\\n5.發生緣由：\\r\\n(1)公司面額變更核准日期/事實發生日：民國115年07月13日\\r\\n(2)公司面額變更核准文號：經授商字第經授商字第11530095510號號函\\r\\n(3)董事會決議通過換股計畫書日期：民國115年08月06日\\r\\n(4)變更前面額：新台幣10.00\\r\\n(5)變更後面額：新台幣0.50\\r\\n(6)新股票上市買賣日及舊股票終止上市買賣日：民國115年09月07日\\r\\n(7)換發股票時程重大訊息公告日期：民國115年08月06日重大訊息公告\\r\\n6.因應措施：無。\\r\\n7.其他應敘明事項：一、本公司係辦理變更股票面額，每股面額由新台幣10元變更為新台幣0.5元，業經臺灣\\r\\n證券交易所函核准在案。\\r\\n二、配合面額變更，新股票上市買賣日(115年09月07日)之參考價按比例調整為舊股票\\r\\n最後交易日(115年8月26日)收盤價之20分之1，請投資人注意。\\r\\\n… (74 more characters)"
+        }
+      ],
+      "notes": [
+        "MOPS website answered; page title: 公開資訊觀測站",
+        "t187ap03_L: 1097 companies; code field \"公司代號\""
+      ],
+      "skipped": []
+    },
+    {
+      "id": "sec",
+      "name": "SEC EDGAR",
+      "short": "SEC",
+      "row": "US filings 美股財報與 8-K",
+      "usedBy": "F12, N3",
+      "auth": "SEC_USER_AGENT not set 未設定",
+      "documentedLimit": "At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式",
+      "coverageMarkets": [
+        "US"
+      ],
+      "coverageKinds": [
+        "stock"
+      ],
+      "checkedAt": "2026-10-21 10:52:30",
+      "status": "skipped",
+      "calls": [],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [],
+      "previews": [],
+      "notes": [],
+      "skipped": [
+        "SEC asks every client to declare a contact: set SEC_USER_AGENT in .env.local, e.g. \"LongViewInvest your-email@example.com\". SEC 要求註明聯絡 email。"
+      ]
+    },
+    {
+      "id": "alphavantage",
+      "name": "Alpha Vantage",
+      "short": "Alpha Vantage",
+      "row": "US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源）",
+      "usedBy": "All",
+      "auth": "public demo key: sample symbols only 公開 demo 金鑰，只限範例代號",
+      "documentedLimit": "25 requests/day on a free key (PRD §6); also commonly cited as 5/minute",
+      "coverageMarkets": [
+        "US",
+        "UK"
+      ],
+      "checkedAt": "2026-10-21 10:52:30",
+      "status": "partial",
+      "calls": [
+        {
+          "label": "Active US listings (LISTING_STATUS, CSV)",
+          "url": "https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=***",
+          "status": 200,
+          "ok": true,
+          "ms": 606,
+          "bytes": 1070503,
+          "rateLimitHeaders": {},
+          "contentType": "application/x-download",
+          "sampleFile": "samples/alphavantage/01-active-us-listings-listing-status-csv.csv"
+        },
+        {
+          "label": "Weekly adjusted prices for IBM (TIME_SERIES_WEEKLY_ADJUSTED)",
+          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=IBM&apikey=***",
+          "status": 200,
+          "ok": true,
+          "ms": 218,
+          "bytes": 420194,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/alphavantage/02-weekly-adjusted-prices-for-ibm-time-series-weekly-adjusted.json"
+        }
+      ],
+      "observedLimits": [
+        "2 requests with the public demo key; none of your own quota used 使用公開 demo 金鑰，未消耗你的額度"
+      ],
+      "coverage": {
+        "VOO": {
+          "mark": "yes",
+          "detail": "NYSE ETF"
+        },
+        "VT": {
+          "mark": "yes",
+          "detail": "NYSE ETF"
+        },
+        "BNDW": {
+          "mark": "yes",
+          "detail": "NASDAQ ETF"
+        },
+        "GLDM": {
+          "mark": "yes",
+          "detail": "NYSE ETF"
+        },
+        "BIL": {
+          "mark": "yes",
+          "detail": "NYSE ETF"
+        },
+        "ACWI": {
+          "mark": "yes",
+          "detail": "NASDAQ ETF"
+        },
+        "AAPL": {
+          "mark": "yes",
+          "detail": "NASDAQ Stock"
+        },
+        "AGGU": {
+          "mark": "skipped"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "TIME_SERIES_WEEKLY_ADJUSTED IBM: 1407 weeks, latest 2026-10-20",
+          "lang": "json",
+          "text": "{\n  \"Meta Data\": {\n    \"1. Information\": \"Weekly Adjusted Prices and Volumes\",\n    \"2. Symbol\": \"IBM\",\n    \"3. Last Refreshed\": \"2026-10-20\",\n    \"4. Time Zone\": \"US/Eastern\"\n  },\n  \"Weekly Adjusted Time Series\": {\n    \"2026-10-20\": {\n      \"1. open\": \"230.6800\",\n      \"2. high\": \"242.5250\",\n      \"3. low\": \"229.2965\",\n      \"4. close\": \"241.9200\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-16\": {\n      \"1. open\": \"228.3100\",\n      \"2. high\": \"236.9800\",\n      \"3. low\": \"224.7700\",\n      \"4. close\": \"232.1400\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-09\": {\n      \"1. open\": \"222.3000\",\n      \"2. high\": \"228.7600\",\n      \"3. low\": \"217.7950\",\n      \"4. close\": \"227.1300\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-02\": {\n      \"1. open\": \"222.5000\",\n      \"2. high\": \"234.2700\",\n      \"3. low\": \"218.6000\",\n      \"4. close\": \"222.6400\",\n      \"…\": \"3 more keys\"\n    },\n    \"…\": \"1403 more keys\"\n  }\n}"
+        }
+      ],
+      "notes": [
+        "LISTING_STATUS: 14509 active US listings; columns symbol, name, exchange, assetType, ipoDate, delistingDate, status"
+      ],
+      "skipped": [
+        "AGGU.LON needs ALPHAVANTAGE_API_KEY: the demo key serves only sample symbols such as IBM 需要 ALPHAVANTAGE_API_KEY"
+      ]
+    },
+    {
+      "id": "fmp",
+      "name": "Financial Modeling Prep (FMP)",
+      "short": "FMP",
+      "row": "Optional price source from the §6 free-tier note; tested only for AGGU 選用來源，只測 AGGU",
+      "usedBy": "AGGU candidate",
+      "auth": "FMP_API_KEY not set 未設定",
+      "documentedLimit": "250 requests/day on the free plan (PRD §6)",
+      "coverageMarkets": [
+        "UK"
+      ],
+      "checkedAt": "2026-10-21 10:52:33",
+      "status": "skipped",
+      "calls": [],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [],
+      "previews": [],
+      "notes": [],
+      "skipped": [
+        "FMP_API_KEY not set: optional, only needed if Alpha Vantage cannot price AGGU 選用金鑰"
+      ]
+    },
+    {
+      "id": "fred",
+      "name": "FRED (St. Louis Fed)",
+      "short": "FRED",
+      "row": "US rates, TWD/USD 美國利率與匯率",
+      "usedBy": "F11, F18, N2",
+      "auth": "none: keyless fredgraph.csv 免金鑰 CSV",
+      "documentedLimit": "API: 120 requests/minute per key (commonly cited); keyless CSV download: no published limit",
+      "checkedAt": "2026-10-21 10:52:33",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "DGS10 recent observations (keyless CSV)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-09-06",
+          "status": 200,
+          "ok": true,
+          "ms": 413,
+          "bytes": 499,
+          "rateLimitHeaders": {},
+          "contentType": "application/csv",
+          "lastModified": "Tue, 20 Oct 2026 20:16:39 GMT",
+          "sampleFile": "samples/fred/01-dgs10-recent-observations-keyless-csv.csv"
+        },
+        {
+          "label": "DEXTAUS recent observations (keyless CSV)",
+          "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTAUS&cosd=2026-09-06",
+          "status": 200,
+          "ok": true,
+          "ms": 624,
+          "bytes": 569,
+          "rateLimitHeaders": {},
+          "contentType": "application/csv",
+          "lastModified": "Mon, 19 Oct 2026 20:17:00 GMT",
+          "sampleFile": "samples/fred/02-dextaus-recent-observations-keyless-csv.csv"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [
+        {
+          "name": "US 10-year Treasury yield 美國 10 年期公債殖利率 (DGS10)",
+          "latestDate": "2026-10-19",
+          "latestValue": "5.15",
+          "unit": "%"
+        },
+        {
+          "name": "TWD per USD 新台幣兌美元 (DEXTAUS)",
+          "latestDate": "2026-10-16",
+          "latestValue": "32.4000",
+          "unit": "TWD per USD"
+        }
+      ],
+      "previews": [
+        {
+          "label": "DGS10, keyless CSV",
+          "lang": "csv",
+          "text": "observation_date,DGS10\n2026-09-08,4.80\n2026-09-09,4.83\n… (25 more lines) …\n2026-10-15,5.10\n2026-10-16,5.09\n2026-10-19,5.15"
+        },
+        {
+          "label": "DEXTAUS, keyless CSV",
+          "lang": "csv",
+          "text": "observation_date,DEXTAUS\n2026-09-08,31.5100\n2026-09-09,31.4600\n… (24 more lines) …\n2026-10-14,32.1600\n2026-10-15,32.4000\n2026-10-16,32.4000"
+        }
+      ],
+      "notes": [
+        "DEXTAUS converts every USD-priced holding to TWD: VOO, VT, BNDW, GLDM, BIL, and AGGU, whose LSE line trades in USD."
+      ],
+      "skipped": []
+    },
+    {
+      "id": "cbc",
+      "name": "Central Bank of the ROC 中央銀行 (data.gov.tw dataset 10840)",
+      "short": "CBC",
+      "row": "Taiwan 10-year government bond yield 台灣 10 年期公債殖利率",
+      "usedBy": "F11",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Open-data file updated monthly; no published limit 每月更新的開放資料，未公布限制",
+      "checkedAt": "2026-10-21 10:59:07",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Dataset 10840 資本市場利率: metadata (data.gov.tw API)",
+          "url": "https://data.gov.tw/api/v2/rest/dataset/10840",
+          "status": 200,
+          "ok": true,
+          "ms": 822,
+          "bytes": 8634,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/cbc/01-dataset-10840-metadata-data-gov-tw-api.json"
+        },
+        {
+          "label": "Capital-market rates, monthly (CSV)",
+          "url": "https://www.cbc.gov.tw/public/data/OpenData/經研處/EG43M01.csv",
+          "status": 200,
+          "ok": true,
+          "ms": 1804,
+          "bytes": 56636,
+          "rateLimitHeaders": {},
+          "contentType": "application/octet-stream",
+          "lastModified": "Tue, 29 Sep 2026 08:22:11 GMT",
+          "sampleFile": "samples/cbc/02-capital-market-rates-monthly-csv.csv"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [
+        {
+          "name": "Taiwan 10-year government bond yield 台灣 10 年期公債殖利率 (十年期政府公債次級市場利率(%))",
+          "latestDate": "2026M08",
+          "latestValue": "1.95500",
+          "unit": "%"
+        }
+      ],
+      "previews": [
+        {
+          "label": "Header and last rows; 10-year column \"十年期政府公債次級市場利率(%)\"",
+          "lang": "csv",
+          "text": "月,政府公債-3年期(%),政府公債-5年期(%),政府公債-7年期(%),政府公債-10年期(%),政府公債-15年期(%),公司債-1年期(%),公司債-2年期(%),公司債-3年期(%),公司債-4年期(%),公司債-5年期(%),公司債-6年期(%),公司債-7年期(%),公司債-10年期(%),金融債券-2年期(%),金融債券-3年期(%),金融債券-5年期(%),央行單券-CDs-1年期(%),央行單券-CDs-2年期(%),央行單券-SB-1年期(%),十年期政府公債次級市場利率(%)\n2026M06,-,-,-,1.790,-,-,-,2.068,-,2.020,3.200,1.866,2.742,-,1.760,1.891,1.523,1.638,-,1.77460\n2026M07,-,-,-,-,-,-,-,2.250,-,2.042,-,2.050,2.092,-,-,1.980,1.604,1.615,-,1.90030\n2026M08,-,-,-,1.969,-,-,-,2.292,-,2.228,-,2.050,3.357,-,-,2.200,1.626,1.663,-,1.95500"
+        }
+      ],
+      "notes": [
+        "CSV links in the metadata: https://www.cbc.gov.tw/public/data/OpenData/經研處/EG43M01.csv , https://www.cbc.gov.tw/public/data/OpenData/經研處/EG43Y01.csv"
+      ],
+      "skipped": []
+    },
+    {
+      "id": "shiller",
+      "name": "Robert Shiller online data (shillerdata.com)",
+      "short": "Shiller",
+      "row": "US CAPE 週期調整本益比",
+      "usedBy": "F3",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Static spreadsheet; no published limit. Its link rotates, so it is read from the page each time 下載連結會變，每次從網頁讀取",
+      "checkedAt": "2026-10-21 10:59:10",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Data page (find the current ie_data.xls link)",
+          "url": "https://shillerdata.com/",
+          "status": 200,
+          "ok": true,
+          "ms": 408,
+          "bytes": 121558,
+          "rateLimitHeaders": {},
+          "contentType": "text/html;charset=utf-8",
+          "sampleFile": "samples/shiller/01-data-page-find-the-current-ie-data-xls-link.html"
+        },
+        {
+          "label": "ie_data.xls: monthly S&P 500 price, dividends, earnings, CPI, CAPE",
+          "url": "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/1449043e-a1ed-4e2e-8e9c-7b9a2a064493/ie_data.xls?ver=1791297298731",
+          "status": 200,
+          "ok": true,
+          "ms": 949,
+          "bytes": 1675264,
+          "rateLimitHeaders": {},
+          "contentType": "application/vnd.ms-excel",
+          "lastModified": "Tue, 06 Oct 2026 14:33:57 GMT",
+          "sampleFile": "samples/shiller/02-ie-data-xls-monthly-s-p-500-price-dividends-earnings-cpi-cap.xls"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [
+        {
+          "name": "S&P 500 CAPE workbook (ie_data.xls)",
+          "latestDate": "file modified Tue, 06 Oct 2026 14:33:57 GMT",
+          "latestValue": "CAPE column present; values are parsed with F3 in Phase 2"
+        }
+      ],
+      "previews": [
+        {
+          "label": "Legacy .xls (OLE2): expected column labels found 找到的欄位標籤",
+          "lang": "text",
+          "text": "found: Date, CPI, Earnings, Dividend, CAPE, TR CAPE, Excess CAPE Yield\nmissing: none\nPE (CAPE) Plot\nExcess CAPE Yield (ECY)\nCAPEg\nTR CAPE\nLANDSCAPE_CC270\nCAPE<"
+        }
+      ],
+      "notes": [
+        "Current download link 目前下載連結: https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/1449043e-a1ed-4e2e-8e9c-7b9a2a064493/ie_data.xls?ver=1791297298731"
+      ],
+      "skipped": []
+    },
+    {
+      "id": "french",
+      "name": "Kenneth French Data Library",
+      "short": "French",
+      "row": "Factor returns 因子報酬",
+      "usedBy": "N1",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Static zip files; no published limit 靜態檔案，未公布限制",
+      "checkedAt": "2026-10-21 10:52:39",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Fama/French 5 factors (2x3), monthly, CSV in a zip",
+          "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip",
+          "status": 200,
+          "ok": true,
+          "ms": 464,
+          "bytes": 11964,
+          "rateLimitHeaders": {},
+          "contentType": "application/x-zip-compressed",
+          "lastModified": "Fri, 25 Sep 2026 21:55:02 GMT",
+          "sampleFile": "samples/french/01-fama-french-5-factors-2x3-monthly-csv-in-a-zip.zip"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [
+        {
+          "name": "Fama–French 5 factors, monthly 五因子（月）",
+          "latestDate": "2026-08",
+          "latestValue": "Mkt-RF 2.56, SMB -0.53, HML -3.54, RMW -4.08, CMA -2.01, RF 0.29",
+          "unit": "% per month"
+        }
+      ],
+      "previews": [
+        {
+          "label": "F-F_Research_Data_5_Factors_2x3.csv: 758 monthly rows",
+          "lang": "csv",
+          "text": ",Mkt-RF,SMB,HML,RMW,CMA,RF\n196307,   -0.39,   -0.48,   -0.84,    0.64,   -1.15,    0.27\n196308,    5.08,   -0.80,    1.72,    0.40,   -0.38,    0.25\n…\n202607,   -0.61,   -0.09,    2.11,   11.07,    2.26,    0.33\n202608,    2.56,   -0.53,   -3.54,   -4.08,   -2.01,    0.29"
+        }
+      ],
+      "notes": [],
+      "skipped": []
+    },
+    {
+      "id": "damodaran",
+      "name": "Damodaran Online",
+      "short": "Damodaran",
+      "row": "Equity risk premium 股票風險溢酬",
+      "usedBy": "F11",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Static pages; implied ERP updated monthly (PRD F11); no published limit",
+      "checkedAt": "2026-10-21 10:59:11",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Home page with the current implied ERP (New_Home_Page/home.htm)",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/home.htm",
+          "status": 200,
+          "ok": true,
+          "ms": 472,
+          "bytes": 17069,
+          "rateLimitHeaders": {},
+          "contentType": "text/html; charset=UTF-8",
+          "sampleFile": "samples/damodaran/01-home-page-with-the-current-implied-erp-new-home-page-home-ht.html"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [
+        {
+          "name": "S&P 500 implied ERP (Damodaran, trailing 12 m, adjusted payout) 隱含股票風險溢酬",
+          "latestDate": "October 1, 2026",
+          "latestValue": "4.20%"
+        }
+      ],
+      "previews": [
+        {
+          "label": "Text around the ERP line",
+          "lang": "text",
+          "text": "o the site.\nEquity Risk Premiums (Data, Updates and Papers)\nImplied ERP on October 1, 2026 = 4.20% (Trailing 12 month, with adjusted payout); 3.70% (Trailing 12 month cash yield); 5.67% (Average CF yield last 10 years); 3.61% (Net cash yield); 3.30% (Normalized Earnings & Payout) (with the US treasury rate of 5.29% used as the riskfree rate in US dollars; increase each of the premiums by the default spread (0.22%)for the US, if you are netting that out of the treasury to get "
+        }
+      ],
+      "notes": [
+        "ERP files linked 相關檔案: https://pages.stern.nyu.edu/~adamodar/pc/implprem/ERPbymonth.xlsx , https://pages.stern.nyu.edu/~adamodar/pc/datasets/histimpl.xls , https://pages.stern.nyu.edu/~adamodar/pc/implprem/ERPOct26.xlsx"
+      ],
+      "skipped": []
+    },
+    {
+      "id": "twse_cg",
+      "name": "TWSE corporate governance evaluation 公司治理評鑑",
+      "short": "TWSE CG",
+      "row": "Governance rating 公司治理評鑑",
+      "usedBy": "N3",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Published once a year; no published limit 每年公布一次",
+      "coverageMarkets": [
+        "TW"
+      ],
+      "coverageKinds": [
+        "stock"
+      ],
+      "checkedAt": "2026-10-21 10:59:12",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Latest evaluation results page",
+          "url": "https://cgc.twse.com.tw/evaluationCorp/listCh",
+          "status": 200,
+          "ok": true,
+          "ms": 990,
+          "bytes": 800,
+          "rateLimitHeaders": {},
+          "contentType": "text/html; charset=UTF-8",
+          "sampleFile": "samples/twse_cg/01-latest-evaluation-results-page.html"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "2330": {
+          "mark": "unchecked",
+          "detail": "tier lists are in the linked results PDF; read with N3 in Phase 2"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "Page text (start) 頁面文字",
+          "lang": "text",
+          "text": "因為安全性考量，您所執行的頁面無法呈現。\nFOR SECURITY REASONS, THIS PAGE CAN NOT BE ACCESSED.\n您可以回上一頁繼續其他動作，或撥打以下電話通報問題：(02)8101-5840, (02)8101-5834。\nYOU COULD GO BACK TO PREVIOUS PAGE OR CALL US FOR FURTHER HELP：(02)8101-5840, (02)8101-5834。\n錯誤代碼：7641438222693731109"
+        }
+      ],
+      "notes": [
+        "Downloadable files 可下載檔案: none in the HTML"
+      ],
+      "skipped": []
+    },
+    {
+      "id": "echo",
+      "name": "EPA ECHO",
+      "short": "EPA ECHO",
+      "row": "US environmental penalties 美國環境裁罰",
+      "usedBy": "N3",
+      "auth": "none 免金鑰",
+      "documentedLimit": "No published limit; EPA may throttle heavy use 未公布限制",
+      "coverageMarkets": [
+        "US"
+      ],
+      "coverageKinds": [
+        "stock"
+      ],
+      "checkedAt": "2026-10-21 10:52:44",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Facility search by name \"APPLE\" (get_facilities)",
+          "url": "https://echodata.epa.gov/echo/echo_rest_services.get_facilities?output=JSON&p_fn=APPLE",
+          "status": 200,
+          "ok": true,
+          "ms": 1231,
+          "bytes": 359,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/echo/01-facility-search-by-name-apple-get-facilities.json"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "AAPL": {
+          "mark": "yes",
+          "detail": "matched by facility name, not ticker: N3 needs a company-to-facility map"
+        }
+      },
+      "series": [],
+      "previews": [
+        {
+          "label": "get_facilities reply",
+          "lang": "json",
+          "text": "{\n  \"Message\": \"Success\",\n  \"Version\": \"ALL DATA v2017-06-16 0923\",\n  \"QueryRows\": \"3932\",\n  \"IndianCountryRows\": \"912\",\n  \"SVRows\": \"15\",\n  \"CVRows\": \"77\",\n  \"V3Rows\": \"194\",\n  \"FEARows\": \"49\",\n  \"InfFEARows\": \"157\",\n  \"INSPRows\": \"141\",\n  \"…\": \"7 more keys\"\n}"
+        }
+      ],
+      "notes": [
+        "Facilities matching \"APPLE\": 3932; rows are paged with get_qid (QueryID 483)"
+      ],
+      "skipped": []
+    },
+    {
+      "id": "moenv",
+      "name": "Ministry of Environment open data 環境部 (ems_p_46)",
+      "short": "MOENV",
+      "row": "Taiwan environmental penalties 台灣環境裁罰",
+      "usedBy": "N3",
+      "auth": "MOENV_API_KEY not set 未設定",
+      "documentedLimit": "Free member API key required; no limit stated in the docs found 需免費會員金鑰",
+      "coverageMarkets": [
+        "TW"
+      ],
+      "coverageKinds": [
+        "stock"
+      ],
+      "checkedAt": "2026-10-21 10:52:45",
+      "status": "skipped",
+      "calls": [],
+      "observedLimits": [],
+      "coverage": {},
+      "series": [],
+      "previews": [],
+      "notes": [],
+      "skipped": [
+        "MOENV_API_KEY not set: register free at https://data.moenv.gov.tw/ 請到環境部資料開放平臺免費註冊"
+      ]
+    },
+    {
+      "id": "issuers",
+      "name": "ETF issuer holdings files ETF 發行商持股檔",
+      "short": "Issuer file",
+      "row": "ETF holdings ETF 成分股",
+      "usedBy": "F14",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Public website downloads; no published limits 官網公開下載，未公布限制",
+      "coverageMarkets": [
+        "US",
+        "UK",
+        "TW"
+      ],
+      "coverageKinds": [
+        "etf"
+      ],
+      "checkedAt": "2026-10-21 10:59:13",
+      "status": "partial",
+      "calls": [
+        {
+          "label": "iShares AGGU product page (find the fund download link)",
+          "url": "https://www.ishares.com/uk/individual/en/products/291772/ishares-core-global-aggregate-bond-ucits-etf",
+          "status": 200,
+          "ok": true,
+          "ms": 311,
+          "bytes": 3098653,
+          "rateLimitHeaders": {},
+          "contentType": "text/html; charset=utf-8",
+          "lastModified": "Wed, 21 Oct 2026 00:35:36 GMT",
+          "sampleFile": "samples/issuers/01-ishares-aggu-product-page-find-the-fund-download-link.html"
+        },
+        {
+          "label": "iShares AGGU fund download: holdings and NAV history (SpreadsheetML)",
+          "url": "https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=ishares-uk&locale=en_GB&portfolioId=291772&component=fundDownloadV2&userType=individual",
+          "status": 200,
+          "ok": true,
+          "ms": 10106,
+          "bytes": 25511617,
+          "rateLimitHeaders": {},
+          "contentType": "application/vnd.ms-excel",
+          "sampleFile": "samples/issuers/02-ishares-aggu-fund-download-holdings-and-nav-history-spreadsh.xml"
+        },
+        {
+          "label": "SSGA BIL daily holdings (xlsx)",
+          "url": "https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-bil.xlsx",
+          "status": 200,
+          "ok": true,
+          "ms": 724,
+          "bytes": 18463,
+          "rateLimitHeaders": {},
+          "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "lastModified": "Tue, 20 Oct 2026 10:05:22 GMT",
+          "finalUrl": "https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-bil.xlsx",
+          "sampleFile": "samples/issuers/03-ssga-bil-daily-holdings-xlsx.xlsx"
+        },
+        {
+          "label": "Vanguard VT holdings (JSON, first page)",
+          "url": "https://investor.vanguard.com/vmf/api/VT/portfolio-holding/stock.json",
+          "status": 200,
+          "ok": true,
+          "ms": 670,
+          "bytes": 171714,
+          "rateLimitHeaders": {},
+          "contentType": "application/json; charset=utf-8",
+          "sampleFile": "samples/issuers/04-vanguard-vt-holdings-json-first-page.json"
+        },
+        {
+          "label": "Vanguard VOO holdings (JSON, first page)",
+          "url": "https://investor.vanguard.com/vmf/api/VOO/portfolio-holding/stock.json",
+          "status": 200,
+          "ok": true,
+          "ms": 207,
+          "bytes": 174446,
+          "rateLimitHeaders": {},
+          "contentType": "application/json; charset=utf-8",
+          "sampleFile": "samples/issuers/05-vanguard-voo-holdings-json-first-page.json"
+        },
+        {
+          "label": "Vanguard BNDW holdings (JSON, first page)",
+          "url": "https://investor.vanguard.com/vmf/api/BNDW/portfolio-holding/bond.json",
+          "status": 200,
+          "ok": true,
+          "ms": 230,
+          "bytes": 209004,
+          "rateLimitHeaders": {},
+          "contentType": "application/json; charset=utf-8",
+          "sampleFile": "samples/issuers/06-vanguard-bndw-holdings-json-first-page.json"
+        },
+        {
+          "label": "Cathay 00922 PCF page 申購買回清單 (HTML)",
+          "url": "https://www.cathaysite.com.tw/ETF/purchase?code=DO",
+          "status": 403,
+          "ok": false,
+          "ms": 521,
+          "bytes": 400,
+          "rateLimitHeaders": {},
+          "contentType": "text/html",
+          "error": "HTTP 403 Forbidden",
+          "sampleFile": "samples/issuers/07-cathay-00922-pcf-page-html.html"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "2330": {
+          "mark": "na"
+        },
+        "AGGU": {
+          "mark": "yes",
+          "detail": "19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)"
+        },
+        "BIL": {
+          "mark": "yes",
+          "detail": "xlsx sheet \"holdings\", 120 rows, As of 19-Oct-2026"
+        },
+        "VT": {
+          "mark": "yes",
+          "detail": "500 holdings on the first page"
+        },
+        "VOO": {
+          "mark": "yes",
+          "detail": "500 holdings on the first page"
+        },
+        "BNDW": {
+          "mark": "yes",
+          "detail": "500 holdings on the first page"
+        },
+        "GLDM": {
+          "mark": "na",
+          "detail": "holds physical gold; nothing to look through"
+        },
+        "00922": {
+          "mark": "failed",
+          "detail": "HTTP 403 Forbidden"
+        },
+        "00692": {
+          "mark": "unchecked",
+          "detail": "no verified machine-readable issuer file yet 尚無已確認的官方檔案"
+        },
+        "009816": {
+          "mark": "unchecked",
+          "detail": "no verified machine-readable issuer file yet 尚無已確認的官方檔案"
+        },
+        "0050": {
+          "mark": "na"
+        },
+        "ACWI": {
+          "mark": "na"
+        },
+        "AAPL": {
+          "mark": "na"
+        }
+      },
+      "series": [
+        {
+          "name": "AGGU NAV per share (iShares) 每單位淨值",
+          "latestDate": "2026-10-19",
+          "latestValue": "5.76",
+          "unit": "USD"
+        }
+      ],
+      "previews": [
+        {
+          "label": "Historical NAVs, newest first",
+          "lang": "text",
+          "text": "2026-10-19  5.76\n2026-10-16  5.77\n2026-10-15  5.77"
+        },
+        {
+          "label": "BIL holdings workbook: first short text cells",
+          "lang": "text",
+          "text": "Fund Name: | Ticker Symbol: | Holdings: | DoubleLine® is a registered trademark of DoubleLine Capital LP. | here | for more information. | Disclosure | Distributor: | Not FDIC Insured * No Bank Guarantee * May Lose Value | State Street® SPDR® Bloomberg 1-3 Month T-Bill ETF | BIL | As of 19-Oct-2026 | Name | Identifier | SEDOL | Weight | Coupon | Par Value | Market Value | Local Currency | Maturity | TREASURY BILL 11/26 0.00000 | US912797UM78 | BNZJKH9 | USD | 11/05/2026 | US912797SU23 | BVPJDQ5 | 11/27/2026 | TREASURY BILL 12/26 0.00000"
+        },
+        {
+          "label": "VT holdings JSON",
+          "lang": "json",
+          "text": "{\n  \"size\": 10170,\n  \"asOfDate\": \"2026-09-30T00:00:00-04:00\",\n  \"self\": {\n    \"type\": \"application/xml,application/json\",\n    \"href\": \"http://api.vanguard.com/rs/ire/01/ind/fund/VT/portfolio-holding/stock?start=1&count=500\",\n    \"ref\": \"self\"\n  },\n  \"next\": {\n    \"type\": \"application/xml,application/json\",\n    \"href\": \"http://api.vanguard.com/rs/ire/01/ind/fund/VT/portfolio-holding/stock?start=501&count=500\",\n    \"ref\": \"next\"\n  },\n  \"fund\": {\n    \"entity\": [\n      {\n        \"type\": \"portfolioHolding\",\n        \"asOfDate\": \"2026-09-30T00:00:00-04:00\",\n        \"longName\": \"NVIDIA Corp.\",\n        \"shortName\": \"NVIDIA CORP\",\n        \"sharesHeld\": \"20230881\",\n        \"marketValue\": 4620328602.78,\n        \"ticker\": \"NVDA\",\n        \"isin\": \"US67066G1040\",\n        \"…\": \"7 more keys\"\n      },\n      {\n        \"type\": \"portfolioHolding\",\n        \"asOfDate\": \"2026-09-30T00:00:00-04:00\",\n        \"longName\": \"Apple Inc.\",\n        \"shortName\": \"APPLE INC\",\n        \"sharesHeld\": \"12538449\",\n        \"marketValue\": 4175554285.98,\n        \"ticker\": \"AAPL\",\n        \"isin\": \"US0378331005\",\n        \"…\": \"7 more keys\"\n      },\n      \"… 498 more items\"\n    ]\n  }\n}"
+        }
+      ],
+      "notes": [
+        "Fund download link taken from the product page",
+        "Worksheets 工作表: Fund Header, Performance Returns, Historical NAVs, Growth of Hypothetical 10,000, Key Facts, Portfolio Characteristics, Exposure Breakdowns, Holdings, Others",
+        "Historical NAVs 歷史淨值: 2259 daily values, 2017-11-21 to 2026-10-19",
+        "BNDW is a fund of two Vanguard bond ETFs (BND, BNDX), so its look-through may need their holdings too."
+      ],
+      "skipped": []
+    },
+    {
+      "id": "bot_gold",
+      "name": "Bank of Taiwan gold price 臺灣銀行黃金牌價",
+      "short": "BoT gold",
+      "row": "Gold price in TWD 台幣金價",
+      "usedBy": "N5, N4, N6",
+      "auth": "none 免金鑰",
+      "documentedLimit": "Public web page; no published limit 公開網頁，未公布限制",
+      "coverageMarkets": [
+        "unlisted"
+      ],
+      "checkedAt": "2026-10-21 10:59:28",
+      "status": "failed",
+      "calls": [
+        {
+          "label": "Gold passbook prices, last 12 months, NT$ per gram (HTML)",
+          "url": "https://rate.bot.com.tw/gold/chart/ltm/TWD?Lang=zh-TW",
+          "status": 200,
+          "ok": false,
+          "ms": 415,
+          "bytes": 1889,
+          "rateLimitHeaders": {},
+          "contentType": "text/html",
+          "sampleFile": "samples/bot_gold/01-gold-passbook-prices-last-12-months-nt-per-gram-html.html",
+          "error": "bot challenge page instead of prices: the site asks for a browser to solve a challenge"
+        }
+      ],
+      "observedLimits": [],
+      "coverage": {
+        "MMF": {
+          "mark": "na"
+        },
+        "SAVINGS": {
+          "mark": "na"
+        },
+        "GOLD": {
+          "mark": "failed",
+          "detail": "Bank of Taiwan answered with a bot challenge that only a real browser can pass 臺銀回傳機器人驗證頁"
+        }
+      },
+      "series": [],
+      "previews": [],
+      "notes": [
+        "Physical gold needs another route before N5: a browser-based fetch, or the gold price in USD times TWD/USD."
+      ],
+      "skipped": []
+    }
+  ]
+}
