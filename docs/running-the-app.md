@@ -47,16 +47,22 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - 儲存前會即時檢查 R1（單一個股超過一般資金池 5%）與 R2（衛星部位超過 25%）：違反時只提醒，不會阻擋。
   - 賣出數量超過當時持有數量會被拒絕，通常代表漏記了一筆買進。
 - **黃金與現金**：按「新增非上市資產」。實體黃金以克數輸入；每夜排程啟用後，持倉頁會以每夜金價自動計算市值，表單裡的估值只在還沒有金價時使用。高利活存與貨幣基金以台幣餘額輸入。
+- **現金流**：按「新增現金流」，記錄資金的進出，第 5 步計算真實績效（XIRR、TWR）會用到。金額一律填正數，方向由類型決定：
+  - **投入資金**：你投入的錢，例如每月定期定額扣款 NT$10,000。扣款買到的股數，另外照常記成交易。
+  - **大額資金入帳**：大額資金進來的那一天，一律計入大額資金池。
+  - **股利**：持股發放的現金股利，填扣除預扣稅後實際收到的金額；選代號後，幣別與當天匯率會自動帶入。
+  - **提領**：從投資組合拿出去的錢。
+  - 已記錄的現金流列在持倉頁最下方，可以修改或刪除，每次修改都留下紀錄。
 - **匯入 CSV**：
   1. 從券商網站下載成交明細，存成 CSV。
   2. 在「匯入 CSV」頁填券商名稱、選擇檔案。Big5 編碼、檔案上方的標題列都會自動判斷。
-  3. 檢查欄位對應與每一列的預覽：股利、合計列會略過並說明原因；已經存在的交易會標示「已存在」，不會重複匯入。
+  3. 檢查欄位對應與每一列的預覽：買進、賣出存成交易；**現金股利存成「股利」現金流**（金額取自「股利金額」欄位，通常是成交金額或 Amount 欄）；合計列等其他列會略過並說明原因。已經存在的交易與股利會標示「已存在」，不會重複匯入。
   4. 外幣交易如果檔案裡沒有匯率欄：「沒有匯率的列使用的匯率」留空，會帶入每一列交易日的匯率（匯率下方顯示是哪一天的）；也可以填一個匯率套用到整份檔案。
   5. 檔案裡有還沒新增的代號時，點「新增 XXX」（在新分頁開啟）新增後，回來按「重新檢查」。
   6. 按「匯入」。欄位對應會依券商名稱記住，下次選同一家券商就會自動套用。
-- **修改與刪除**：持倉頁最下方的交易紀錄、非上市資產都有「修改」連結；每次修改都留下紀錄，顯示在該筆資料頁面的最下方。
+- **修改與刪除**：持倉頁的交易紀錄、非上市資產、現金流都有「修改」連結；每次修改都留下紀錄，顯示在該筆資料頁面的最下方。
 
-Add trades by hand or import a broker CSV (the column mapping is remembered per broker, and trades already saved are skipped). R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; step 5's performance figures need them. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
 
 ## 補充 Notes
 

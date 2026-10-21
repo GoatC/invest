@@ -102,8 +102,23 @@ export const DEFAULT_SIDE_WORDS: SideWords = {
   sell: ['sell', 's', 'sold', '賣', '賣出'],
 };
 
+/** What statements write for a cash dividend in the same column; editable per broker. */
+export const DEFAULT_DIVIDEND_WORDS: readonly string[] = ['dividend', 'div', '股利', '股息', '配息', '現金股利'];
+
 function normalise(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function equalsAny(value: string, list: readonly string[]): boolean {
+  return list.some((word) => normalise(word) === value);
+}
+
+/** A word of two or more letters, or one Chinese character, found inside the cell. */
+function containsAny(value: string, list: readonly string[]): boolean {
+  return list.some((word) => {
+    const needle = normalise(word);
+    return (needle.length >= 2 || /[^\x00-\x7f]/.test(needle)) && value.includes(needle);
+  });
 }
 
 /**
@@ -113,12 +128,8 @@ function normalise(text: string): string {
 export function parseSide(raw: string, words: SideWords): Side | undefined {
   const value = normalise(raw);
   if (!value) return undefined;
-  const equals = (list: readonly string[]) => list.some((word) => normalise(word) === value);
-  const contains = (list: readonly string[]) =>
-    list.some((word) => {
-      const needle = normalise(word);
-      return (needle.length >= 2 || /[^\x00-\x7f]/.test(needle)) && value.includes(needle);
-    });
+  const equals = (list: readonly string[]) => equalsAny(value, list);
+  const contains = (list: readonly string[]) => containsAny(value, list);
   const buyEquals = equals(words.buy);
   const sellEquals = equals(words.sell);
   if (buyEquals !== sellEquals) return buyEquals ? 'buy' : 'sell';
@@ -126,6 +137,12 @@ export function parseSide(raw: string, words: SideWords): Side | undefined {
   const sellContains = contains(words.sell);
   if (buyContains !== sellContains) return buyContains ? 'buy' : 'sell';
   return undefined;
+}
+
+/** A buy / sell cell that names a cash dividend instead, by the same matching as parseSide. */
+export function isDividend(raw: string, words: readonly string[]): boolean {
+  const value = normalise(raw);
+  return value !== '' && (equalsAny(value, words) || containsAny(value, words));
 }
 
 /** "buy, 買進" → ["buy", "買進"]: the comma list a person types for the side words. */

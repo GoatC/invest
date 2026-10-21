@@ -12,6 +12,15 @@ describe('describeRow', () => {
     });
   });
 
+  it('names a cash flow by its date, type, security and amount, in both languages', () => {
+    const row = { id: 3, flow_date: '2026-09-15', type: 'dividend', amount: 0.62, currency: 'USD', ticker: 'VT' };
+    assert.deepEqual(describeRow('cash_flows', row, '3'), { en: '2026-09-15 dividend VT 0.62 USD', zh: '2026-09-15 股利 VT 0.62 USD' });
+    assert.deepEqual(describeRow('cash_flows', { flow_date: '2026-10-06', type: 'contribution', amount: 10000, currency: 'TWD', ticker: null }, '1'), {
+      en: '2026-10-06 contribution 10000 TWD',
+      zh: '2026-10-06 投入資金 10000 TWD',
+    });
+  });
+
   it('names other entries by what a person would recognise', () => {
     assert.deepEqual(describeRow('securities', { ticker: 'NVDA', name: 'NVIDIA Corp.' }, 'NVDA'), { en: 'NVDA NVIDIA Corp.', zh: 'NVDA NVIDIA Corp.' });
     assert.deepEqual(describeRow('manual_assets', { name: 'Gold bar' }, '3'), { en: 'Gold bar', zh: 'Gold bar' });

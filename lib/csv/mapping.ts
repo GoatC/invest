@@ -4,7 +4,7 @@
  * broker maps itself. Columns are kept by header name, which survives a reordered export.
  */
 import { DELIMITERS, type Delimiter, type EncodingChoice } from './read';
-import { DATE_FORMATS, DEFAULT_SIDE_WORDS, guessDateFormat, type DateFormat } from './values';
+import { DATE_FORMATS, DEFAULT_DIVIDEND_WORDS, DEFAULT_SIDE_WORDS, guessDateFormat, type DateFormat } from './values';
 
 export interface CsvMapping {
   encoding: EncodingChoice;
@@ -29,6 +29,10 @@ export interface CsvMapping {
   /** null: one rate entered for the whole import (TWD trades need none). */
   fxRate: string | null;
   note: string | null;
+  /** The cash amount of a row, read for dividends only; null: dividends are skipped. */
+  amount: string | null;
+  /** Words in the buy / sell column that mark a cash dividend. */
+  dividendWords: string[];
 }
 
 /** The fields that must come from a column; side may come from the quantity's sign instead. */
@@ -48,7 +52,7 @@ export function missingColumns(mapping: CsvMapping): RequiredColumn[] {
 // A first guess from the header names
 // ---------------------------------------------------------------------------
 
-type SingleField = 'tradeDate' | 'ticker' | 'side' | 'qty' | 'price' | 'currency' | 'fxRate' | 'note';
+type SingleField = 'tradeDate' | 'ticker' | 'side' | 'qty' | 'price' | 'currency' | 'fxRate' | 'note' | 'amount';
 
 /**
  * Header names brokers use, most specific first. A header matches when it equals a word or one of
@@ -64,6 +68,7 @@ const HEADER_WORDS: Record<SingleField | 'fee' | 'tax', { words: string[]; exact
   currency: { words: ['currency', '交易幣別', '幣別', '幣種'], exactOnly: ['ccy'] },
   fxRate: { words: ['fx rate', 'exchange rate', '成交匯率', '交割匯率', '匯率'], exactOnly: ['fx', 'rate'], avoid: ['fee', 'tax', '手續費', '稅'] },
   note: { words: ['note', 'memo', 'remark', 'order no', 'order number', 'reference', '備註', '委託書號', '委託單號', '成交序號'] },
+  amount: { words: ['net amount', 'amount', '淨收付金額', '應收付金額', '收付金額', '成交金額', '淨額', '金額'], avoid: ['fee', 'tax', 'commission', '手續費', '稅', '費用'] },
   fee: { words: ['commission', 'fee', '手續費', '佣金', '其他費用'], avoid: ['rate', '率', '折讓'] },
   tax: { words: ['tax', '交易稅', '證交稅', '稅額', '稅'], avoid: ['after', 'amount', '後', '金額', 'rate', '率'] },
 };
@@ -109,7 +114,7 @@ function guessMany(headers: readonly string[], field: 'fee' | 'tax', used: Set<s
  */
 export function guessMapping(headers: readonly string[], rows: ReadonlyArray<Record<string, string>>, file: Pick<CsvMapping, 'encoding' | 'delimiter' | 'headerRow'>): CsvMapping {
   const used = new Set<string>();
-  const single = Object.fromEntries((['tradeDate', 'ticker', 'side', 'qty', 'price', 'currency', 'fxRate', 'note'] as const).map((field) => [field, guessOne(headers, field, used)])) as Record<
+  const single = Object.fromEntries((['tradeDate', 'ticker', 'side', 'qty', 'price', 'currency', 'fxRate', 'note', 'amount'] as const).map((field) => [field, guessOne(headers, field, used)])) as Record<
     SingleField,
     string | null
   >;
@@ -123,6 +128,7 @@ export function guessMapping(headers: readonly string[], rows: ReadonlyArray<Rec
     sideFromSign: false,
     buyWords: [...DEFAULT_SIDE_WORDS.buy],
     sellWords: [...DEFAULT_SIDE_WORDS.sell],
+    dividendWords: [...DEFAULT_DIVIDEND_WORDS],
     fee,
     tax,
   };
@@ -164,6 +170,8 @@ export function reconcile(base: CsvMapping, headers: readonly string[], guessed:
     tax: keepAll(base.tax, guessed.tax),
     fxRate: keep(base.fxRate, guessed.fxRate, false),
     note: keep(base.note, guessed.note, false),
+    // Guessed again when none is set, so a mapping saved before dividends were imported picks one up.
+    amount: keep(base.amount, guessed.amount, true),
   };
   return { mapping, lost };
 }
@@ -213,6 +221,9 @@ export function parseMapping(value: unknown): CsvMapping | undefined {
     tax: columns(raw['tax']),
     fxRate: column(raw['fxRate']),
     note: column(raw['note']),
+    // Mappings saved before dividends were imported have neither field.
+    amount: 'amount' in raw ? column(raw['amount']) : null,
+    dividendWords: 'dividendWords' in raw ? words(raw['dividendWords']) : [...DEFAULT_DIVIDEND_WORDS],
   };
   return Object.values(mapping).some((field) => field === undefined) ? undefined : (mapping as CsvMapping);
 }

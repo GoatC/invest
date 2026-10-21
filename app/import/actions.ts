@@ -5,8 +5,8 @@ import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/auth';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { mappingKey, missingColumns, parseMapping } from '@/lib/csv/mapping';
-import { planImport, readStatement, tradesToImport } from '@/lib/csv/plan';
-import { DataError, loadFxHistory, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
+import { flowsToImport, planImport, readStatement, tradesToImport } from '@/lib/csv/plan';
+import { cashFlowColumns, DataError, loadCashFlows, loadFxHistory, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { formFields, saveFailed, shortfallMessage } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
@@ -22,9 +22,13 @@ export interface ImportState {
 const MESSAGES = {
   broker: { en: 'Name the broker, so its column mapping can be saved.', zh: '請填寫券商名稱，以便儲存欄位對應。' },
   mapping: { en: 'The column mapping is incomplete; check it and try again.', zh: '欄位對應不完整，請檢查後再試一次。' },
-  nothing: { en: 'Nothing to import: every row is already saved or cannot be read.', zh: '沒有可匯入的交易：每一列都已存在或無法辨識。' },
+  nothing: { en: 'Nothing to import: every row is already saved or cannot be read.', zh: '沒有可匯入的資料：每一列都已存在或無法辨識。' },
   tooLarge: { en: 'This file is too large; export a shorter period.', zh: '檔案太大，請匯出較短的期間。' },
-} as const satisfies Record<string, Bilingual>;
+  dividendsFailed: (detail: string): Bilingual => ({
+    en: `The trades were imported, but not the dividends: ${detail}. Import the file again to add them; saved rows are skipped.`,
+    zh: `交易已匯入，但股利沒有：${detail}。請再匯入一次同一個檔案，已存在的資料會自動略過。`,
+  }),
+} as const;
 
 function json(text: string | undefined): unknown {
   try {
@@ -57,20 +61,23 @@ export async function importTrades(_previous: ImportState, formData: FormData): 
   const rate = parseNumber(fields['fixedFxRate']);
   const options = { pool: fields['pool'] === 'windfall' ? ('windfall' as const) : ('regular' as const), fixedFxRate: rate !== undefined && rate > 0 ? rate : null };
 
-  const loaded = await orDataError(Promise.all([loadHoldingsData(supabase), loadFxHistory(supabase)]));
+  const loaded = await orDataError(Promise.all([loadHoldingsData(supabase), loadFxHistory(supabase), loadCashFlows(supabase)]));
   if (loaded instanceof DataError) return { message: saveFailed(loaded.detail) };
-  const [data, rates] = loaded;
+  const [data, rates, flows] = loaded;
   const rows = planImport(readStatement(csv, mapping.delimiter, mapping.headerRow), mapping, options, {
     securities: new Map(data.securities.map((security) => [security.ticker, security])),
     existing: data.trades,
+    existingFlows: flows,
     today: taipeiToday(),
     fx: latestFx(data.fx, data.trades),
     fxMaxGap: data.fxMaxGap,
     rates: rateHistory(rates),
     fxMaxAgeDays: data.fxMaxAgeDays,
   });
-  const trades = tradesToImport(rows, new Set(lines(fields['keep'])));
-  if (trades.length === 0) return { message: MESSAGES.nothing };
+  const keep = new Set(lines(fields['keep']));
+  const trades = tradesToImport(rows, keep);
+  const dividends = flowsToImport(rows, keep);
+  if (trades.length === 0 && dividends.length === 0) return { message: MESSAGES.nothing };
   const [shortfall] = previewImport(data, trades, data.caps).shortfalls;
   if (shortfall) return { message: shortfallMessage(shortfall) };
 
@@ -81,7 +88,14 @@ export async function importTrades(_previous: ImportState, formData: FormData): 
     desc_zh: `${broker} 的 CSV 欄位對應，由匯入功能儲存。`,
   });
   if (saved.error) return { message: saveFailed(saved.error.message) };
-  const { error } = await supabase.from('transactions').insert(trades.map((trade) => ({ ...transactionColumns(trade), source: 'csv' })));
-  if (error) return { message: saveFailed(error.message) };
-  redirect(`/holdings?saved=imported&added=${trades.length}&skipped=${rows.length - trades.length}`);
+  if (trades.length > 0) {
+    const { error } = await supabase.from('transactions').insert(trades.map((trade) => ({ ...transactionColumns(trade), source: 'csv' })));
+    if (error) return { message: saveFailed(error.message) };
+  }
+  if (dividends.length > 0) {
+    const { error } = await supabase.from('cash_flows').insert(dividends.map(cashFlowColumns));
+    // The trades are in; importing the file again adds the dividends and skips what is saved.
+    if (error) return { message: trades.length > 0 ? MESSAGES.dividendsFailed(error.message) : saveFailed(error.message) };
+  }
+  redirect(`/holdings?saved=imported&added=${trades.length}&dividends=${dividends.length}&skipped=${rows.length - trades.length - dividends.length}`);
 }

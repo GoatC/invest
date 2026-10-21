@@ -23,8 +23,8 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
       </h1>
       <p className="muted small">
         <Bi
-          en="Every change to and deletion of trades, non-listed assets, securities and settings, newest first. Deleted entries stay here with what they held."
-          zh="交易、非上市資產、證券與設定的每一次修改與刪除，最新的在前。已刪除的資料會連同內容保留在這裡。"
+          en="Every change to and deletion of trades, cash flows, non-listed assets, securities and settings, newest first. Deleted entries stay here with what they held."
+          zh="交易、現金流、非上市資產、證券與設定的每一次修改與刪除，最新的在前。已刪除的資料會連同內容保留在這裡。"
         />
       </p>
       {entries.length === 0 ? (

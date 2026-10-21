@@ -5,10 +5,11 @@ import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { RuleMath } from '@/components/rule-math';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingsData, loadJobRuns, orDataError, type HoldingsData } from '@/lib/data';
+import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, orDataError, type CashFlowRecord, type HoldingsData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, points, quantity, twd } from '@/lib/format';
-import { LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { FLOW_TYPE, LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { flowTotals } from '@/lib/models/cash-flows';
 import { dataHealth } from '@/lib/models/data-health';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
@@ -31,6 +32,9 @@ const SAVED: Record<string, Bilingual> = {
   'asset-added': { en: 'Non-listed asset added.', zh: '已新增非上市資產。' },
   'asset-updated': { en: 'Non-listed asset updated.', zh: '已更新非上市資產。' },
   'asset-deleted': { en: 'Non-listed asset deleted; the edit history keeps a copy.', zh: '已刪除非上市資產，修改紀錄中保留一份副本。' },
+  'flow-added': { en: 'Cash flow added.', zh: '已新增現金流。' },
+  'flow-updated': { en: 'Cash flow updated.', zh: '已更新現金流。' },
+  'flow-deleted': { en: 'Cash flow deleted; the edit history keeps a copy.', zh: '已刪除現金流，修改紀錄中保留一份副本。' },
 };
 
 function savedMessage(params: Params): Bilingual | undefined {
@@ -38,15 +42,17 @@ function savedMessage(params: Params): Bilingual | undefined {
   if (saved !== 'imported') return saved ? SAVED[saved] : undefined;
   const count = (key: string) => Math.max(0, Number.parseInt(param(params, key) ?? '', 10) || 0);
   const added = count('added');
+  const dividends = count('dividends');
   const skipped = count('skipped');
   return {
-    en: `Imported ${added} trade${added === 1 ? '' : 's'}${skipped > 0 ? `; ${skipped} row${skipped === 1 ? '' : 's'} of the file skipped` : ''}.`,
-    zh: `已匯入 ${added} 筆交易${skipped > 0 ? `，略過檔案中的 ${skipped} 列` : ''}。`,
+    en: `Imported ${added} trade${added === 1 ? '' : 's'}${dividends > 0 ? ` and ${dividends} dividend${dividends === 1 ? '' : 's'}` : ''}${skipped > 0 ? `; ${skipped} row${skipped === 1 ? '' : 's'} of the file skipped` : ''}.`,
+    zh: `已匯入 ${added} 筆交易${dividends > 0 ? `與 ${dividends} 筆股利` : ''}${skipped > 0 ? `，略過檔案中的 ${skipped} 列` : ''}。`,
   };
 }
 
-/** How many trades the list shows before "Show all". */
+/** How many trades and cash flows the lists show before "Show all". */
 const RECENT_TRADES = 50;
+const RECENT_FLOWS = 24;
 
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
@@ -64,10 +70,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const { supabase } = await requireSession();
   const params = await searchParams;
   let data: HoldingsData;
+  let flows: CashFlowRecord[];
   // The job status only adds a note, so a failed read of it does not hide the holdings.
   let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
   try {
-    [data, jobs] = await Promise.all([loadHoldingsData(supabase), orDataError(loadJobRuns(supabase))]);
+    [data, flows, jobs] = await Promise.all([loadHoldingsData(supabase), loadCashFlows(supabase), orDataError(loadJobRuns(supabase))]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -128,6 +135,9 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
             <Link href="/assets/new" className="button">
               <Bi {...LABELS.addAsset} />
             </Link>
+            <Link href="/cash-flows/new" className="button">
+              <Bi {...LABELS.addCashFlow} />
+            </Link>
           </div>
         </div>
         {empty ? (
@@ -150,6 +160,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       )}
       <ManualAssets data={data} portfolio={portfolio} />
       {data.trades.length > 0 && <Trades data={data} showAll={param(params, 'trades') === 'all'} />}
+      <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} />
       {!empty && <Footnotes />}
     </>
   );
@@ -522,7 +533,7 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
   // Loaded newest first.
   const shown = showAll ? data.trades : data.trades.slice(0, RECENT_TRADES);
   return (
-    <section className="card form">
+    <section className="card form" id="trades">
       <div className="row spread">
         <h2>
           <Bi en="Trades" zh="交易紀錄" />
@@ -601,6 +612,104 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
             <Bi en={`Show all ${data.trades.length} trades`} zh={`顯示全部 ${data.trades.length} 筆交易`} />
           </Link>
         </p>
+      )}
+    </section>
+  );
+}
+
+function CashFlows({ flows, showAll }: { flows: CashFlowRecord[]; showAll: boolean }) {
+  // Loaded newest first.
+  const shown = showAll ? flows : flows.slice(0, RECENT_FLOWS);
+  const totals = flowTotals(flows);
+  return (
+    <section className="card form" id="cash-flows">
+      <div className="row spread">
+        <h2>
+          <Bi {...LABELS.cashFlows} />
+        </h2>
+        <Link href="/cash-flows/new" className="button">
+          <Bi {...LABELS.addCashFlow} />
+        </Link>
+      </div>
+      {flows.length === 0 ? (
+        <p className="muted">
+          <Bi
+            en="Money in and out: monthly contributions, the windfall arriving, dividends and withdrawals. True performance (Phase 1, step 5) is worked out from them."
+            zh="資金進出：每月投入、大額資金入帳、股利與提領。真實績效（第一階段第 5 步）會用它們計算。"
+          />
+        </p>
+      ) : (
+        <>
+          <p className="muted small">
+            <Bi
+              en={`All recorded, in TWD at each day's rate: contributions ${twd(totals.contribution)}, windfall ${twd(totals.windfall)}, dividends ${twd(totals.dividend)}, withdrawals ${twd(totals.withdrawal)}.`}
+              zh={`全部紀錄，以各筆當日匯率換算台幣：投入資金 ${twd(totals.contribution)}、大額資金入帳 ${twd(totals.windfall)}、股利 ${twd(totals.dividend)}、提領 ${twd(totals.withdrawal)}。`}
+            />
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    <Bi {...LABELS.flowDate} />
+                  </th>
+                  <th>
+                    <Bi {...LABELS.flowType} />
+                  </th>
+                  <th>
+                    <Bi {...LABELS.ticker} />
+                  </th>
+                  <th className="num">
+                    <Bi {...LABELS.amount} />
+                  </th>
+                  <th className="num">
+                    <Bi en="FX rate" zh="匯率" />
+                  </th>
+                  <th className="num">
+                    <Bi {...LABELS.amountTwd} />
+                  </th>
+                  <th>
+                    <Bi {...LABELS.pool} />
+                  </th>
+                  <th>
+                    <Bi {...LABELS.note} />
+                  </th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((flow) => (
+                  <tr key={flow.id}>
+                    <td className="nowrap">{flow.flowDate}</td>
+                    <td className="nowrap">
+                      <Bi {...FLOW_TYPE[flow.type]} />
+                    </td>
+                    <td>{flow.ticker ? <strong>{flow.ticker}</strong> : '—'}</td>
+                    <td className="num">{`${quantity(flow.amount)} ${flow.currency}`}</td>
+                    <td className="num">{flow.currency === 'TWD' ? '—' : flow.fxRate}</td>
+                    <td className="num">{twd(flow.amountTwd)}</td>
+                    <td className="nowrap">
+                      <Bi {...POOL[flow.pool]} />
+                    </td>
+                    <td className="small">{flow.note ?? ''}</td>
+                    <td className="nowrap">
+                      <Link href={`/cash-flows/${flow.id}`}>
+                        <Bi {...LABELS.edit} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!showAll && flows.length > RECENT_FLOWS && (
+            <p>
+              <Link href="/holdings?flows=all#cash-flows">
+                <Bi en={`Show all ${flows.length} cash flows`} zh={`顯示全部 ${flows.length} 筆現金流`} />
+              </Link>
+            </p>
+          )}
+        </>
       )}
     </section>
   );

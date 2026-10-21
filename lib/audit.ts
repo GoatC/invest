@@ -1,6 +1,6 @@
 /** Describing audit-log rows (N5: every entry can be edited or deleted, with an audit log). */
 import { quantity } from './format';
-import { SIDE, type Bilingual } from './i18n';
+import { FLOW_TYPE, SIDE, type Bilingual } from './i18n';
 
 /** The tables whose edits and deletes the database logs, by what they hold. */
 export const TABLE_LABELS: Record<string, Bilingual> = {
@@ -39,8 +39,15 @@ export function describeRow(table: string, row: Record<string, unknown> | null, 
       return same(`${text(row['ticker'])} ${text(row['name'])}`.trim());
     case 'asset_classes':
       return { en: text(row['name_en']) || rowKey, zh: text(row['name_zh']) || rowKey };
-    case 'cash_flows':
-      return same(`${text(row['flow_date'])} ${text(row['type'])} ${text(row['amount'])} ${text(row['currency'])}`.trim());
+    case 'cash_flows': {
+      const type = FLOW_TYPE[text(row['type']) as keyof typeof FLOW_TYPE] ?? same(text(row['type']));
+      const amount = `${text(row['amount'])} ${text(row['currency'])}`;
+      const ticker = row['ticker'] ? ` ${text(row['ticker'])}` : '';
+      return {
+        en: `${text(row['flow_date'])} ${type.en.toLowerCase()}${ticker} ${amount}`,
+        zh: `${text(row['flow_date'])} ${type.zh}${ticker} ${amount}`,
+      };
+    }
     case 'manual_assets':
       return same(text(row['name']) || rowKey);
     case 'config':

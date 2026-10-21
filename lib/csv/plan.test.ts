@@ -5,7 +5,7 @@ import { rateHistory } from '../models/fx';
 import { SECURITIES, trade } from '../models/test-helpers';
 import type { Security } from '../models/types';
 import { guessMapping, type CsvMapping } from './mapping';
-import { planImport, readStatement, tradesToImport, type ImportContext, type ImportOptions } from './plan';
+import { flowsToImport, planImport, readStatement, tradesToImport, type ImportContext, type ImportOptions } from './plan';
 import { ROC_STATEMENT, TW_STATEMENT, US_STATEMENT } from './test-fixtures';
 
 const ALL_SECURITIES: Security[] = [
@@ -22,6 +22,7 @@ function context(overrides: Partial<ImportContext> = {}): ImportContext {
     fxMaxGap: 0.2,
     rates: rateHistory([]),
     fxMaxAgeDays: 10,
+    existingFlows: [],
     ...overrides,
   };
 }
@@ -79,17 +80,36 @@ describe('planImport', () => {
     });
   });
 
-  it('reads a US statement: negative quantities become positive sells, a dividend is not a trade', () => {
+  it('reads a US statement: negative quantities become positive sells, a dividend becomes a cash flow', () => {
     const rows = plan(US_STATEMENT, 1);
     assert.deepEqual(
       rows.map((row) => [row.status, row.trade?.side, row.trade?.qty, row.trade?.fee]),
       [
         ['new', 'buy', 2, 1],
         ['new', 'sell', 1, 1.02],
-        ['invalid', undefined, undefined, undefined],
+        ['new', undefined, undefined, undefined],
       ],
     );
-    assert.match(rows[2]?.problems[0]?.en ?? '', /Not a buy or a sell/);
+    assert.deepEqual(rows[2]?.flow, { flowDate: '2026-10-09', type: 'dividend', amount: 1.24, currency: 'USD', fxRate: 32.3, pool: 'regular', ticker: 'VT', note: null });
+  });
+
+  it("imports a dividend at its date's rate, and skips one already saved", () => {
+    const rates = rateHistory([{ pair: 'USD/TWD', date: '2026-10-08', rate: 32.28 }]);
+    const [, , dividend] = plan(US_STATEMENT, 1, {}, { pool: 'regular', fixedFxRate: null }, context({ rates }));
+    assert.deepEqual([dividend?.status, dividend?.flow?.fxRate, dividend?.fxRateDate], ['new', 32.28, '2026-10-08']);
+    const saved = { flowDate: '2026-10-09', type: 'dividend' as const, amount: 1.24, currency: 'USD', fxRate: 32.3, pool: 'regular' as const, ticker: 'VT', note: null };
+    const again = plan(US_STATEMENT, 1, {}, OPTIONS, context({ existingFlows: [saved] }));
+    assert.equal(again[2]?.status, 'duplicate');
+    assert.deepEqual(flowsToImport(again, new Set()), []);
+    assert.deepEqual(flowsToImport(again, new Set([4])).map((flow) => [flow.flowDate, flow.ticker, flow.amount]), [['2026-10-09', 'VT', 1.24]]);
+  });
+
+  it('asks for the amount column before importing a dividend, and still skips other non-trades', () => {
+    const rows = plan(US_STATEMENT, 1, { amount: null });
+    assert.equal(rows[2]?.status, 'invalid');
+    assert.match(rows[2]?.problems[0]?.en ?? '', /choose the amount column/);
+    const transfer = US_STATEMENT.replace('"Dividend"', '"Journal"');
+    assert.match(plan(transfer, 1)[2]?.problems[0]?.en ?? '', /Not a buy, a sell or a dividend/);
   });
 
   it('reads ROC dates and Taiwan codes kept as ="00692"; TWD trades need no FX rate', () => {
