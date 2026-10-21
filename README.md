@@ -46,7 +46,8 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 - **Holdings 持倉總覽**: regular and windfall pools, R1 / R2 status with the trim each needs, actual vs target weight per asset class, and every position at weighted-average cost with its TWD value and unrealised gain. The R1 / R2 figures expand to show their formulas and inputs, and the other figures are defined under their tables. 一般與大額資金池、R1／R2 狀態與所需減碼金額、各資產類別的實際與目標權重、每檔持股的平均成本、台幣市值與未實現損益；R1／R2 的數字可展開查看公式與輸入值，其他數字的定義寫在表格下方。
 - **Trade entry 交易登錄**: currency filled in from the security and the FX rate from the trade date's Bank of Taiwan rate, a live R1 / R2 preview that warns without blocking, and a refusal when a sell exceeds the holding. 依證券自動帶入幣別、依交易日帶入臺灣銀行匯率，即時預覽 R1／R2（只提醒不阻擋），賣出超過持有數量時拒絕儲存。
-- **Broker CSV import 券商 CSV 匯入**: UTF-8 or Big5 files, title lines above the header, ROC (民國) dates, column mapping remembered per broker, each row's trade-date FX rate when the file has none, and trades already saved are skipped. 支援 UTF-8 與 Big5、標題列在上方的檔案、民國日期；欄位對應依券商記住，檔案沒有匯率時帶入各列交易日的匯率，已存在的交易自動略過。
+- **Broker CSV import 券商 CSV 匯入**: UTF-8 or Big5 files, title lines above the header, ROC (民國) dates, column mapping remembered per broker, each row's trade-date FX rate when the file has none, cash dividends saved as cash flows, and entries already saved are skipped. 支援 UTF-8 與 Big5、標題列在上方的檔案、民國日期；欄位對應依券商記住，檔案沒有匯率時帶入各列交易日的匯率，現金股利存為現金流，已存在的資料自動略過。
+- **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate, for true performance in step 5. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄，供第 5 步計算真實績效。
 - **Non-listed assets 非上市資產**: physical gold in grams, valued nightly at the gold price in TWD, and savings and money-market balances in TWD. 實體黃金以克數記錄、每夜以台幣金價估值；活存與貨幣基金以台幣餘額記錄。
 - **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (dividend-adjusted), Bank of Taiwan exchange rates and the gold price, with one fallback feed each; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息還原）、臺灣銀行匯率與金價，每種資料都有備援來源；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
 - **Securities and edit history 證券與修改紀錄**: every entry can be edited or deleted, and the database logs each change, deleted entries included. 每筆資料都能修改或刪除，資料庫會記錄每次變更，包含已刪除的資料。
@@ -57,7 +58,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 ## How it is built 技術架構
 
-- **Next.js** (App Router, server actions) with **Supabase** (Postgres, Auth, Data API). Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
+- **Next.js** (App Router, server actions) as an installable PWA on **Vercel**, with **Supabase** (Postgres, Auth, Data API). Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
 - **Single owner, enforced by the database**: row-level security on every table lets only the one owner account in; strangers holding the public key are refused, which `npm run check:supabase` verifies from outside. 由資料庫保證只有一位擁有者：每張表都開啟 row-level security；持有公開金鑰的陌生人一律被拒，可用 `npm run check:supabase` 從外部驗證。
 - **Money in trade currency plus the day's FX rate, reported in TWD.** 金額以交易幣別加當日匯率儲存，以台幣呈現。
 - **Free data only**, checked source by source in step 1. 只使用免費資料，第 1 步已逐一檢查。
@@ -68,7 +69,8 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 1. [Set up Supabase](docs/supabase-setup.md) once: create the project, apply the schema, create the owner account. 先[設定 Supabase](docs/supabase-setup.md)：建立專案、套用資料庫結構、建立擁有者帳號。
 2. [Run the app](docs/running-the-app.md): `npm install`, then `npm run dev`. 再[執行 App](docs/running-the-app.md)。
-3. [Turn on the nightly job](docs/nightly-job.md): four GitHub secrets, then one run by hand. 最後[啟用每夜排程](docs/nightly-job.md)：設定 4 個 GitHub secrets，再手動執行一次。
+3. [Turn on the nightly job](docs/nightly-job.md): four GitHub secrets, then one run by hand. 再[啟用每夜排程](docs/nightly-job.md)：設定 4 個 GitHub secrets，再手動執行一次。
+4. [Deploy to Vercel](docs/deploy-vercel.md) and add it to the phone's home screen. 最後[部署到 Vercel](docs/deploy-vercel.md)，並加到手機主畫面。
 
 ## Tests 測試
 

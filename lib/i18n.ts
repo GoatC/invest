@@ -63,6 +63,14 @@ export const LABELS = {
   drift: { en: 'Drift', zh: '偏離' },
   history: { en: 'Edit history', zh: '修改紀錄' },
   dataStatus: { en: 'Data status', zh: '資料狀態' },
+  cashFlows: { en: 'Cash flows', zh: '現金流' },
+  addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
+  editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },
+  flowDate: { en: 'Date', zh: '日期' },
+  flowType: { en: 'Type', zh: '類型' },
+  amount: { en: 'Amount', zh: '金額' },
+  flowCurrency: { en: 'Currency', zh: '幣別' },
+  amountTwd: { en: 'Amount (TWD)', zh: '金額（台幣）' },
 } as const satisfies Record<string, Bilingual>;
 
 export const SIDE = {
@@ -98,6 +106,14 @@ export const PRODUCT = {
 export const SOURCE = {
   manual: { en: 'Manual', zh: '手動' },
   csv: { en: 'CSV import', zh: 'CSV 匯入' },
+} as const satisfies Record<string, Bilingual>;
+
+/** Money in and out of the portfolio (cash_flows.type); the amount is always positive. */
+export const FLOW_TYPE = {
+  contribution: { en: 'Contribution', zh: '投入資金' },
+  windfall: { en: 'Windfall arrives', zh: '大額資金入帳' },
+  dividend: { en: 'Dividend', zh: '股利' },
+  withdrawal: { en: 'Withdrawal', zh: '提領' },
 } as const satisfies Record<string, Bilingual>;
 
 /** The feeds the nightly job loads from (prices.source, fx_rates.source). */

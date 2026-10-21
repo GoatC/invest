@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import { MESSAGES, parseManualAsset, parseNumber, parseSecurity, parseTrade } from './validation';
+import { MESSAGES, parseCashFlow, parseManualAsset, parseNumber, parseSecurity, parseTrade } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));
@@ -99,5 +99,43 @@ describe('dates', () => {
   it('gives the date in Taipei, eight hours ahead of UTC', () => {
     assert.equal(taipeiToday(new Date('2026-10-20T16:30:00Z')), '2026-10-21');
     assert.equal(taipeiToday(new Date('2026-10-20T15:30:00Z')), '2026-10-20');
+  });
+});
+
+describe('parseCashFlow', () => {
+  const contribution = { flowDate: '2026-10-06', type: 'contribution', amount: '10,000', currency: '', fxRate: '', pool: 'regular', ticker: 'VT', note: '' };
+
+  it('reads a monthly contribution in TWD, dropping a ticker only dividends carry', () => {
+    assert.deepEqual(parseCashFlow(contribution, securities, TODAY), {
+      ok: true,
+      value: { flowDate: '2026-10-06', type: 'contribution', amount: 10000, currency: 'TWD', fxRate: 1, pool: 'regular', ticker: null, note: null },
+    });
+  });
+
+  it("takes a dividend's currency from its security and needs its FX rate", () => {
+    const dividend = { ...contribution, type: 'dividend', amount: '0.62', ticker: 'vt', fxRate: '32.2' };
+    assert.deepEqual(parseCashFlow(dividend, securities, TODAY), {
+      ok: true,
+      value: { flowDate: '2026-10-06', type: 'dividend', amount: 0.62, currency: 'USD', fxRate: 32.2, pool: 'regular', ticker: 'VT', note: null },
+    });
+    const parsed = parseCashFlow({ ...dividend, fxRate: '' }, securities, TODAY);
+    assert.deepEqual(parsed.ok ? {} : parsed.errors, { fxRate: MESSAGES.positive });
+  });
+
+  it('asks which security paid a dividend, and refuses an unknown one', () => {
+    const missing = parseCashFlow({ ...contribution, type: 'dividend', ticker: '' }, securities, TODAY);
+    assert.deepEqual(missing.ok ? {} : missing.errors, { ticker: MESSAGES.dividendTicker });
+    const unknown = parseCashFlow({ ...contribution, type: 'dividend', ticker: 'NOPE' }, securities, TODAY);
+    assert.deepEqual(unknown.ok ? {} : unknown.errors, { ticker: MESSAGES.unknownTicker });
+  });
+
+  it('puts the windfall arriving in the windfall pool, whatever was picked', () => {
+    const parsed = parseCashFlow({ ...contribution, type: 'windfall', amount: '5500000', pool: 'regular' }, securities, TODAY);
+    assert.equal(parsed.ok && parsed.value.pool, 'windfall');
+  });
+
+  it('reports every problem at once', () => {
+    const parsed = parseCashFlow({ flowDate: '2026-10-22', type: 'gift', amount: '0', currency: 'usd1', fxRate: '', pool: 'other' }, securities, TODAY);
+    assert.deepEqual(Object.keys(parsed.ok ? {} : parsed.errors).sort(), ['amount', 'currency', 'flowDate', 'fxRate', 'pool', 'type']);
   });
 });

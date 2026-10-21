@@ -36,6 +36,10 @@ const COLUMN: Record<string, Bilingual> = {
   sleeve: LABELS.sleeve,
   domicile: LABELS.domicile,
   listing_country: { en: 'Listing country', zh: '上市國家' },
+  flow_date: LABELS.flowDate,
+  type: LABELS.flowType,
+  amount: LABELS.amount,
+  amount_twd: LABELS.amountTwd,
 };
 
 function shown(value: unknown): string {

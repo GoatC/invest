@@ -66,3 +66,23 @@ export interface FxQuote {
   date: string;
   rate: number;
 }
+
+export type FlowType = 'contribution' | 'windfall' | 'dividend' | 'withdrawal';
+
+/**
+ * Money in or out (F18, F2): a contribution or the windfall arriving, a dividend paid out by a
+ * holding, or a withdrawal. The amount is positive in its currency; the type gives the direction.
+ */
+export interface CashFlow {
+  id?: number;
+  flowDate: string;
+  type: FlowType;
+  amount: number;
+  currency: string;
+  /** TWD per 1 unit of the currency. */
+  fxRate: number;
+  pool: Pool;
+  /** The security that paid a dividend; null for the other types. */
+  ticker: string | null;
+  note: string | null;
+}

@@ -4,7 +4,7 @@
  */
 import { isIsoDate } from './dates';
 import type { Bilingual } from './i18n';
-import type { AssetClass, Market, Pool, ProductType, Security, Side } from './models/types';
+import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
 export type RawForm = Record<string, string | undefined>;
 export type FieldErrors<K extends string> = Partial<Record<K, Bilingual>>;
@@ -23,6 +23,7 @@ export const MESSAGES = {
   country: { en: 'Use a two-letter country code such as US or IE.', zh: '請輸入兩個字母的國家代碼，例如 US 或 IE。' },
   choice: { en: 'Pick one of the options.', zh: '請從選項中選擇。' },
   tooLong: { en: 'Too long.', zh: '太長了。' },
+  dividendTicker: { en: 'Name the security that paid the dividend.', zh: '請填寫發放股利的證券代號。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -215,4 +216,58 @@ export function parseManualAsset(raw: RawForm, assetClasses: ReadonlyMap<string,
       pool: pool as Pool,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cash flows: contributions, the windfall arriving, dividends and withdrawals
+// ---------------------------------------------------------------------------
+
+export type CashFlowInput = Omit<CashFlow, 'id'>;
+export type CashFlowField = keyof CashFlowInput;
+
+export const FLOW_TYPES = ['contribution', 'windfall', 'dividend', 'withdrawal'] as const satisfies readonly FlowType[];
+
+/**
+ * A dividend names its security and defaults to its currency; the other types carry no ticker and
+ * default to TWD. The windfall arriving always lands in the windfall pool (the database insists).
+ */
+export function parseCashFlow(raw: RawForm, securities: ReadonlyMap<string, Security>, today: string): Parsed<CashFlowInput, CashFlowField> {
+  const errors: FieldErrors<CashFlowField> = {};
+  const flowDate = text(raw['flowDate']);
+  if (!isIsoDate(flowDate)) errors.flowDate = MESSAGES.date;
+  else if (flowDate > today) errors.flowDate = MESSAGES.future;
+
+  const type = oneOf(raw['type'], FLOW_TYPES);
+  if (!type) errors.type = MESSAGES.choice;
+  const amount = parseNumber(raw['amount']);
+  if (amount === undefined || amount <= 0) errors.amount = MESSAGES.positive;
+
+  const isDividend = type === 'dividend';
+  const ticker = isDividend ? text(raw['ticker']).toUpperCase() : '';
+  const security = securities.get(ticker);
+  if (isDividend && !ticker) errors.ticker = MESSAGES.dividendTicker;
+  else if (isDividend && !security) errors.ticker = MESSAGES.unknownTicker;
+
+  const currency = text(raw['currency']).toUpperCase() || security?.currency || (isDividend ? '' : 'TWD');
+  if (!/^[A-Z]{3}$/.test(currency) && (!isDividend || security)) errors.currency = MESSAGES.currency;
+  // TWD needs no conversion; the database also insists on 1. Without a currency yet (a dividend
+  // missing its security), the ticker error already says what to fix.
+  const fxRate = currency === 'TWD' ? 1 : parseNumber(raw['fxRate']);
+  if (currency && (fxRate === undefined || fxRate <= 0)) errors.fxRate = MESSAGES.positive;
+
+  const pool = type === 'windfall' ? 'windfall' : oneOf(raw['pool'] || 'regular', ['regular', 'windfall'] as const);
+  if (!pool) errors.pool = MESSAGES.choice;
+  const note = text(raw['note']);
+  if (note.length > 500) errors.note = MESSAGES.tooLong;
+
+  return finish(errors, () => ({
+    flowDate,
+    type: type as FlowType,
+    amount: amount as number,
+    currency,
+    fxRate: fxRate as number,
+    pool: pool as Pool,
+    ticker: isDividend ? ticker : null,
+    note: note || null,
+  }));
 }

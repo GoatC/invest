@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { DEFAULT_SIDE_WORDS, guessDateFormat, isBlank, parseAmount, parseDate, parseSide, resolveTicker, wordList } from './values';
+import { DEFAULT_DIVIDEND_WORDS, DEFAULT_SIDE_WORDS, guessDateFormat, isBlank, isDividend, parseAmount, parseDate, parseSide, resolveTicker, wordList } from './values';
 
 describe('parseAmount', () => {
   it('reads grouped numbers with currency signs and codes', () => {
@@ -72,6 +72,16 @@ describe('guessDateFormat', () => {
   it('ignores cells that are not dates, and gives up when none are', () => {
     assert.deepEqual(guessDateFormat(['2026/10/07', '合計']), { format: 'ymd', ambiguous: false });
     assert.equal(guessDateFormat(['合計', '']), undefined);
+  });
+});
+
+describe('isDividend', () => {
+  it('recognises cash dividends in English and Chinese, inside longer cells too', () => {
+    for (const cell of ['Dividend', 'QUALIFIED DIVIDEND', '股利', '現金股利', '配息']) assert.ok(isDividend(cell, DEFAULT_DIVIDEND_WORDS), cell);
+  });
+
+  it('leaves trades, interest and blank cells alone', () => {
+    for (const cell of ['買進', 'Sell', '利息', 'Interest', '']) assert.ok(!isDividend(cell, DEFAULT_DIVIDEND_WORDS), cell);
   });
 });
 

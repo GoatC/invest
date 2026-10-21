@@ -23,6 +23,8 @@ describe('guessMapping', () => {
     );
     assert.equal(mapping.dateFormat, 'ymd');
     assert.deepEqual(missingColumns(mapping), []);
+    // The amount column is read for dividend rows only.
+    assert.equal(mapping.amount, '成交金額');
   });
 
   it('maps a US statement without taking "Transaction ID" for the side', () => {
@@ -32,6 +34,7 @@ describe('guessMapping', () => {
       ['Trade Date', 'Symbol', 'Action', 'Quantity', 'Price', null, ['Commission', 'Fees'], []],
     );
     assert.equal(mapping.dateFormat, 'mdy');
+    assert.equal(mapping.amount, 'Amount');
   });
 
   it('maps a statement with ROC dates and a tax column', () => {
@@ -52,6 +55,16 @@ describe('parseMapping', () => {
 
   it('accepts a mapping that went through JSON', () => {
     assert.deepEqual(parseMapping(JSON.parse(JSON.stringify(mapping))), mapping);
+  });
+
+  it('reads a mapping saved before dividends were imported, with no amount column yet', () => {
+    const { amount: _amount, dividendWords: _words, ...older } = mapping;
+    const parsed = parseMapping(JSON.parse(JSON.stringify(older)));
+    assert.equal(parsed?.amount, null);
+    assert.ok(parsed?.dividendWords.includes('股利'));
+    // Applied to a file, the amount column is guessed again.
+    const statement = readStatement(TW_STATEMENT, ',', 3);
+    assert.equal(parsed && reconcile(parsed, statement.headers, mapping).mapping.amount, '成交金額');
   });
 
   it('refuses anything incomplete or out of range', () => {

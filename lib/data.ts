@@ -5,7 +5,7 @@ import { failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunSta
 import { GOLD } from './models/fx';
 import type { PortfolioData } from './models/portfolio';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
-import type { AssetClass, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
+import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 
 /** A query failed; the table name tells which part of the database to look at. */
 export class DataError extends Error {
@@ -160,6 +160,56 @@ export function toManualAsset(row: ManualAssetRow): ManualAsset {
     lastValueTwd: row.last_value_twd === null ? null : Number(row.last_value_twd),
     valuedOn: row.valued_on,
     pool: row.pool,
+  };
+}
+
+export interface CashFlowRecord extends CashFlow {
+  id: number;
+  /** amount × fx_rate, as the database computes it. */
+  amountTwd: number;
+}
+
+interface CashFlowRow {
+  id: number;
+  flow_date: string;
+  type: FlowType;
+  amount: number;
+  currency: string;
+  fx_rate: number;
+  amount_twd: number;
+  pool: Pool;
+  ticker: string | null;
+  note: string | null;
+}
+
+export const CASH_FLOW_COLUMNS = 'id, flow_date, type, amount, currency, fx_rate, amount_twd, pool, ticker, note';
+
+export function toCashFlow(row: CashFlowRow): CashFlowRecord {
+  return {
+    id: row.id,
+    flowDate: row.flow_date,
+    type: row.type,
+    amount: Number(row.amount),
+    currency: row.currency,
+    fxRate: Number(row.fx_rate),
+    amountTwd: Number(row.amount_twd),
+    pool: row.pool,
+    ticker: row.ticker,
+    note: row.note,
+  };
+}
+
+/** The columns a saved cash flow writes; amount_twd is computed by the database. */
+export function cashFlowColumns(flow: Omit<CashFlow, 'id'>) {
+  return {
+    flow_date: flow.flowDate,
+    type: flow.type,
+    amount: flow.amount,
+    currency: flow.currency,
+    fx_rate: flow.fxRate,
+    pool: flow.pool,
+    ticker: flow.ticker,
+    note: flow.note,
   };
 }
 
@@ -331,6 +381,20 @@ export async function loadCsvMappings(supabase: SupabaseClient): Promise<SavedMa
     .map((row) => parseSavedMapping(row.value))
     .filter((saved) => saved !== undefined)
     .sort((a, b) => a.broker.localeCompare(b.broker));
+}
+
+/** Every cash flow, newest first. */
+export async function loadCashFlows(supabase: SupabaseClient): Promise<CashFlowRecord[]> {
+  const found = await allRows<CashFlowRow>('cash_flows', (from, to) =>
+    supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).order('flow_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
+  );
+  return found.map(toCashFlow);
+}
+
+/** One cash flow, or undefined when the id does not exist. */
+export async function loadCashFlow(supabase: SupabaseClient, id: number): Promise<CashFlowRecord | undefined> {
+  const [row] = await rows<CashFlowRow>('cash_flows', supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).eq('id', id));
+  return row ? toCashFlow(row) : undefined;
 }
 
 /** One non-listed asset, or undefined when the id does not exist. */

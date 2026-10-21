@@ -5,10 +5,10 @@ import { useActionState, useMemo, useState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
 import { RuleMath } from '@/components/rule-math';
 import type { HoldingsData } from '@/lib/data';
 import { isIsoDate } from '@/lib/dates';
-import { percent } from '@/lib/format';
 import { shortfallMessage } from '@/lib/forms';
 import { bi, LABELS, MARKET, POOL, SIDE, SLEEVE, type Bilingual } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
@@ -73,15 +73,11 @@ export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsD
     return server ?? live ?? null;
   }
 
-  // The trade date's rate, else the newest known one; a typed rate far from it is probably a typo,
-  // e.g. 3.24 for 32.4 (config fx_rate_check).
+  // The trade date's rate, else the newest known one, is what a typed rate is checked against.
   const foreign = currency !== '' && currency !== 'TWD';
   const latestRate = foreign ? fx.get(currency) : undefined;
   const datedRate = foreign && data.fxMaxAgeDays !== null && isIsoDate(values.tradeDate) ? rateOn(history, currency, values.tradeDate, data.fxMaxAgeDays) : undefined;
-  const reference = datedRate ? { value: datedRate.rate, date: datedRate.date } : latestRate;
-  const enteredRate = Number(values.fxRate);
-  const maxGap = data.fxMaxGap;
-  const rateLooksOdd = maxGap !== null && reference !== undefined && enteredRate > 0 && Math.abs(enteredRate - reference.value) / reference.value > maxGap;
+  const dated = datedRate ? { value: datedRate.rate, date: datedRate.date } : undefined;
 
   return (
     <form
@@ -143,23 +139,7 @@ export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsD
         <Field
           label={LABELS.fxRate}
           error={error('fxRate')}
-          hint={
-            currency === 'TWD' ? (
-              <Bi en="TWD needs no conversion" zh="台幣不需換算" />
-            ) : datedRate ? (
-              <Bi
-                en={`Rate of ${datedRate.date}: ${datedRate.rate}. Your broker's own rate is better if the statement shows one`}
-                zh={`${datedRate.date} 的匯率為 ${datedRate.rate}；對帳單若有券商成交匯率，請以券商為準`}
-              />
-            ) : latestRate ? (
-              <Bi
-                en={`No rate loaded for this date; latest known ${latestRate.value} (${latestRate.date}${latestRate.estimated ? ', from a trade' : ''}). Use your broker's rate`}
-                zh={`尚無這一天的匯率；最近一筆為 ${latestRate.value}（${latestRate.date}${latestRate.estimated ? '，取自交易紀錄' : ''}），請填券商成交匯率`}
-              />
-            ) : (
-              <Bi en="Use the rate on your broker statement" zh="請填券商對帳單上的成交匯率" />
-            )
-          }
+          hint={<FxRateHint currency={currency} dated={dated} latest={latestRate} />}
         >
           <input name="fxRate" inputMode="decimal" value={values.fxRate} readOnly={currency === 'TWD'} required onChange={(e) => change('fxRate', e.target.value)} />
         </Field>
@@ -177,14 +157,7 @@ export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsD
         </Field>
       </div>
 
-      {rateLooksOdd && (
-        <p className="banner warn">
-          <Bi
-            en={`This FX rate is more than ${percent(maxGap, 0)} away from ${reference?.value} (${reference?.date}); check for a typo.`}
-            zh={`這個匯率與 ${reference?.value}（${reference?.date}）相差超過 ${percent(maxGap, 0)}，請確認是否輸入錯誤。`}
-          />
-        </p>
-      )}
+      <FxTypoWarning entered={Number(values.fxRate)} reference={dated ?? latestRate} maxGap={data.fxMaxGap} />
       <TradeEffect preview={preview} caps={data.caps} pool={values.pool} />
       {state.message && (
         <p className="banner danger" role="alert">

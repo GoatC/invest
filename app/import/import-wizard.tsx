@@ -9,13 +9,13 @@ import { Field } from '@/components/field';
 import { RuleMath } from '@/components/rule-math';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { guessMapping, missingColumns, reconcile, type CsvMapping, type SavedMapping } from '@/lib/csv/mapping';
-import { planImport, readStatement, tradesToImport, type ImportRow, type RowStatus } from '@/lib/csv/plan';
+import { flowsToImport, planImport, readStatement, tradesToImport, type ImportRow, type RowStatus } from '@/lib/csv/plan';
 import { decodeCsv, detectDelimiter, guessHeaderRow, parseCsv, type Delimiter, type EncodingChoice } from '@/lib/csv/read';
 import { guessDateFormat, wordList, type DateFormat } from '@/lib/csv/values';
-import type { HoldingsData } from '@/lib/data';
+import type { CashFlowRecord, HoldingsData } from '@/lib/data';
 import { quantity } from '@/lib/format';
 import { shortfallMessage } from '@/lib/forms';
-import { bi, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';
+import { bi, FLOW_TYPE, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';
 import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import type { FxQuote, Pool } from '@/lib/models/types';
@@ -36,7 +36,7 @@ const PREVIEW_ROWS = 300;
 const TOO_LARGE: Bilingual = { en: 'This file is too large; export a shorter period.', zh: '檔案太大，請匯出較短的期間。' };
 
 const STATUS: Record<RowStatus, { label: Bilingual; badge: string }> = {
-  new: { label: { en: 'New', zh: '新交易' }, badge: 'badge' },
+  new: { label: { en: 'New', zh: '新增' }, badge: 'badge' },
   duplicate: { label: { en: 'Already saved', zh: '已存在' }, badge: 'badge' },
   unknown: { label: { en: 'Unknown ticker', zh: '未知代號' }, badge: 'badge warn' },
   invalid: { label: { en: 'Skipped', zh: '略過' }, badge: 'badge warn' },
@@ -77,7 +77,7 @@ function prepare(bytes: Uint8Array, saved: CsvMapping | undefined): { mapping: C
   return second.lost.length < first.lost.length ? second : first;
 }
 
-export function ImportWizard({ data, rates, mappings, today }: { data: HoldingsData; rates: FxQuote[]; mappings: SavedMapping[]; today: string }) {
+export function ImportWizard({ data, rates, flows, mappings, today }: { data: HoldingsData; rates: FxQuote[]; flows: CashFlowRecord[]; mappings: SavedMapping[]; today: string }) {
   const router = useRouter();
   const [checking, startChecking] = useTransition();
   const [broker, setBroker] = useState(mappings[0]?.broker ?? OTHER_BROKER);
@@ -152,14 +152,15 @@ export function ImportWizard({ data, rates, mappings, today }: { data: HoldingsD
           statement,
           mapping,
           { pool, fixedFxRate },
-          { securities, existing: data.trades, today, fx, fxMaxGap: data.fxMaxGap, rates: history, fxMaxAgeDays: data.fxMaxAgeDays },
+          { securities, existing: data.trades, existingFlows: flows, today, fx, fxMaxGap: data.fxMaxGap, rates: history, fxMaxAgeDays: data.fxMaxAgeDays },
         )
       : [];
   const toImport = tradesToImport(rows, keep);
+  const dividends = flowsToImport(rows, keep);
   const preview = toImport.length > 0 ? previewImport(data, toImport, data.caps) : null;
   const tooLarge = useMemo(() => (decoded ? new TextEncoder().encode(decoded.text).length > MAX_STATEMENT_BYTES : false), [decoded]);
   const blocked = Boolean(preview && preview.shortfalls.length > 0);
-  const canImport = !pending && name !== '' && missing.length === 0 && toImport.length > 0 && !blocked && !tooLarge;
+  const canImport = !pending && name !== '' && missing.length === 0 && toImport.length + dividends.length > 0 && !blocked && !tooLarge;
 
   return (
     <div className="form">
@@ -266,7 +267,7 @@ export function ImportWizard({ data, rates, mappings, today }: { data: HoldingsD
                 {pending ? (
                   <Bi en="Importing…" zh="匯入中…" />
                 ) : (
-                  <Bi en={`Import ${toImport.length} trade${toImport.length === 1 ? '' : 's'}`} zh={`匯入 ${toImport.length} 筆交易`} />
+                  <Bi {...importLabel(toImport.length, dividends.length)} />
                 )}
               </button>
               <Link href="/holdings" className="button">
@@ -278,6 +279,17 @@ export function ImportWizard({ data, rates, mappings, today }: { data: HoldingsD
       )}
     </div>
   );
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+/** The import button: trades, and dividends when there are any. */
+function importLabel(trades: number, dividends: number): Bilingual {
+  return dividends === 0
+    ? { en: `Import ${plural(trades, 'trade')}`, zh: `匯入 ${trades} 筆交易` }
+    : { en: `Import ${plural(trades, 'trade')} and ${plural(dividends, 'dividend')}`, zh: `匯入 ${trades} 筆交易與 ${dividends} 筆股利` };
 }
 
 function ColumnSelect({ value, headers, onChange, none }: { value: string | null; headers: readonly string[]; onChange: (value: string | null) => void; none: Bilingual }) {
@@ -431,6 +443,17 @@ function ColumnsStep({
         <Field label={LABELS.note} hint={sample(mapping.note)}>
           <ColumnSelect value={mapping.note} headers={headers} none={{ en: 'None', zh: '不使用' }} onChange={(note) => update({ note })} />
         </Field>
+        <Field
+          label={{ en: 'Dividend amount', zh: '股利金額' }}
+          hint={mapping.amount ? <Bi en="Read for dividend rows only: the cash received" zh="只用於股利列：實際收到的金額" /> : undefined}
+        >
+          <ColumnSelect value={mapping.amount} headers={headers} none={{ en: 'None: dividends are skipped', zh: '不使用：略過股利' }} onChange={(amount) => update({ amount })} />
+        </Field>
+        {!mapping.sideFromSign && (
+          <Field label={{ en: 'Words for a dividend', zh: '代表股利的字' }} hint={<Bi en="In the buy / sell column; separated by commas" zh="出現在買賣欄位；以逗號分隔" />}>
+            <input key={mapping.dividendWords.join('\u0000')} defaultValue={mapping.dividendWords.join(', ')} onBlur={(e) => update({ dividendWords: wordList(e.target.value) })} />
+          </Field>
+        )}
       </div>
       <ColumnChecks legend={{ en: 'Fee columns (added together)', zh: '手續費欄位（加總）' }} chosen={mapping.fee} headers={headers} onChange={(fee) => update({ fee })} />
       <ColumnChecks legend={{ en: 'Tax columns (added together)', zh: '稅額欄位（加總）' }} chosen={mapping.tax} headers={headers} onChange={(tax) => update({ tax })} />
@@ -456,6 +479,8 @@ function Preview({
   checkAgain: () => void;
 }) {
   const count = (status: RowStatus) => rows.filter((row) => row.status === status).length;
+  const newTrades = rows.filter((row) => row.status === 'new' && row.trade).length;
+  const newDividends = rows.filter((row) => row.status === 'new' && row.flow).length;
   const unknown = [...new Set(rows.filter((row) => row.status === 'unknown').map((row) => row.ticker))];
   const created = preview?.breaches.filter((breach) => breach.isNew) ?? [];
   const [shortfall] = preview?.shortfalls ?? [];
@@ -464,8 +489,8 @@ function Preview({
     <div className="form" aria-live="polite">
       <p>
         <Bi
-          en={`${count('new')} new · ${count('duplicate')} already saved · ${count('unknown')} with an unknown ticker · ${count('invalid')} skipped`}
-          zh={`新交易 ${count('new')} 筆 · 已存在 ${count('duplicate')} 筆 · 未知代號 ${count('unknown')} 筆 · 略過 ${count('invalid')} 列`}
+          en={`${plural(newTrades, 'new trade')} · ${plural(newDividends, 'new dividend')} · ${count('duplicate')} already saved · ${count('unknown')} with an unknown ticker · ${count('invalid')} skipped`}
+          zh={`新交易 ${newTrades} 筆 · 新股利 ${newDividends} 筆 · 已存在 ${count('duplicate')} 筆 · 未知代號 ${count('unknown')} 筆 · 略過 ${count('invalid')} 列`}
         />
       </p>
       {unknown.length > 0 && (
@@ -529,7 +554,7 @@ function Preview({
                 <Bi {...LABELS.qty} />
               </th>
               <th className="num">
-                <Bi {...LABELS.price} />
+                <Bi en="Price or amount" zh="價格／金額" />
               </th>
               <th className="num">
                 <Bi en="Fee + tax" zh="手續費＋稅" />
@@ -550,7 +575,7 @@ function Preview({
                   <span className={STATUS[row.status].badge}>
                     <Bi {...STATUS[row.status].label} />
                   </span>
-                  {row.status === 'duplicate' && row.trade && (
+                  {row.status === 'duplicate' && (row.trade || row.flow) && (
                     <label className="choice small">
                       <input
                         type="checkbox"
@@ -566,14 +591,15 @@ function Preview({
                     </label>
                   )}
                 </td>
-                <td className="nowrap">{row.trade?.tradeDate ?? '—'}</td>
+                <td className="nowrap">{row.trade?.tradeDate ?? row.flow?.flowDate ?? '—'}</td>
                 <td>{row.ticker || '—'}</td>
-                <td className="nowrap">{row.trade ? <Bi {...SIDE[row.trade.side]} /> : '—'}</td>
+                <td className="nowrap">{row.trade ? <Bi {...SIDE[row.trade.side]} /> : row.flow ? <Bi {...FLOW_TYPE.dividend} /> : '—'}</td>
                 <td className="num">{row.trade ? quantity(row.trade.qty) : '—'}</td>
-                <td className="num">{row.trade ? `${quantity(row.trade.price)} ${row.trade.currency}` : '—'}</td>
+                {/* A dividend shows its amount where a trade shows its price. */}
+                <td className="num">{row.trade ? `${quantity(row.trade.price)} ${row.trade.currency}` : row.flow ? `${quantity(row.flow.amount)} ${row.flow.currency}` : '—'}</td>
                 <td className="num">{row.trade ? quantity(row.trade.fee + row.trade.tax) : '—'}</td>
                 <td className="num">
-                  {row.trade ? (row.trade.currency === 'TWD' ? '—' : row.trade.fxRate) : '—'}
+                  {row.trade ? (row.trade.currency === 'TWD' ? '—' : row.trade.fxRate) : row.flow ? (row.flow.currency === 'TWD' ? '—' : row.flow.fxRate) : '—'}
                   {row.fxRateDate && <div className="muted small">{row.fxRateDate}</div>}
                 </td>
                 <td className="small">

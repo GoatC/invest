@@ -46,6 +46,26 @@ function check(condition, message) {
 }
 const body = (target = page) => target.locator('body').innerText();
 
+await step('installable: manifest, icons and robots.txt load without a session; pages send the security headers', async () => {
+  const manifest = await page.request.get(`${BASE}/manifest.webmanifest`, { maxRedirects: 0 });
+  check(manifest.status() === 200, `manifest HTTP ${manifest.status()}`);
+  const json = await manifest.json();
+  check(json.display === 'standalone' && json.start_url === '/holdings', 'standalone, opens on holdings');
+  for (const icon of [...json.icons.map((i) => i.src), '/apple-icon.png']) {
+    const res = await page.request.get(`${BASE}${icon}`, { maxRedirects: 0 });
+    check(res.status() === 200 && res.headers()['content-type'] === 'image/png', `${icon} HTTP ${res.status()}`);
+  }
+  const robots = await page.request.get(`${BASE}/robots.txt`, { maxRedirects: 0 });
+  check(robots.status() === 200 && (await robots.text()).includes('Disallow: /'), 'robots.txt disallows everything');
+  const login = await page.request.get(`${BASE}/login`);
+  const headers = login.headers();
+  check(headers['x-frame-options'] === 'DENY' && headers['x-content-type-options'] === 'nosniff', 'framing and sniffing refused');
+  const html = await login.text();
+  check(/<link rel="manifest" href="\/manifest.webmanifest"/.test(html), 'manifest linked');
+  check(html.includes('name="mobile-web-app-capable"') || html.includes('name="apple-mobile-web-app-capable"'), 'home-screen app meta');
+  check(html.includes('rel="apple-touch-icon"') && /name="robots" content="noindex, nofollow"/.test(html), 'apple icon and noindex');
+});
+
 await step('an unsigned visit goes to sign-in', async () => {
   await page.goto(`${BASE}/holdings`);
   await page.waitForURL('**/login');
@@ -150,7 +170,7 @@ let editedId;
 await step('editing a trade records the change in its history', async () => {
   await page.goto(`${BASE}/holdings`);
   // The newest trade is listed first: the VT buy added above.
-  await page.locator('table').last().locator('tbody tr').first().getByRole('link').click();
+  await page.locator('#trades tbody tr').first().getByRole('link').click();
   await page.waitForURL(/\/holdings\/\d+$/);
   editedId = page.url().split('/').pop();
   await page.fill('input[name=qty]', '2');
@@ -207,6 +227,60 @@ await step('a cash balance can be added in the windfall pool, outside R1 and R2'
   check(text.includes('Windfall pool') && text.includes('NT$50,000'), 'windfall NT$50,000');
 });
 
+await step("cash flows: the seed's contributions and dividend are listed, with totals in TWD", async () => {
+  await page.goto(`${BASE}/holdings`);
+  const section = page.locator('#cash-flows');
+  const text = await section.innerText();
+  // Six NT$10,000 contributions and 0.62 USD of VT dividends at 32.20.
+  check(text.includes('contributions NT$60,000') && text.includes('dividends NT$20'), 'totals per type');
+  check(text.includes('投入資金') && text.includes('股利'), 'Chinese type labels');
+});
+
+let flowId;
+await step("cash flows: a USD dividend takes its security's currency and the date's rate; an edit is logged", async () => {
+  await page.goto(`${BASE}/cash-flows/new`);
+  await page.selectOption('select[name=type]', 'dividend');
+  await page.fill('input[name=flowDate]', '2026-10-20');
+  await page.fill('input[name=ticker]', 'VT');
+  check((await page.inputValue('input[name=currency]')) === 'USD', 'currency from VT');
+  check((await page.inputValue('input[name=fxRate]')) === '32.4', `rate of 2026-10-20, got ${await page.inputValue('input[name=fxRate]')}`);
+  check((await page.inputValue('select[name=pool]')) === 'regular', 'the pool that holds VT');
+  await page.fill('input[name=amount]', '0.55');
+  await page.getByText('In USD = NT$18').waitFor();
+  await snap('cash-flow-form');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=flow-added**');
+  await page.getByText('Cash flow added.').waitFor();
+  const row = page.locator('#cash-flows tbody tr').first();
+  check((await row.innerText()).includes('0.55 USD'), 'the dividend listed first, as the newest');
+  await row.getByRole('link').click();
+  await page.waitForURL(/\/cash-flows\/\d+$/);
+  flowId = page.url().split('/').pop();
+  await page.fill('input[name=amount]', '0.6');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=flow-updated**');
+  await page.goto(`${BASE}/cash-flows/${flowId}`);
+  check(/Amount\s*金額: 0\.55 → 0\.6/.test(await body()), 'history shows 0.55 → 0.6');
+});
+
+await step('cash flows: the windfall arriving always lands in the windfall pool, and an entry can be deleted', async () => {
+  await page.goto(`${BASE}/cash-flows/new`);
+  await page.selectOption('select[name=type]', 'windfall');
+  check(await page.locator('select[name=pool]').isDisabled(), 'pool fixed');
+  check((await page.inputValue('select[name=pool]')) === 'windfall', 'windfall pool');
+  await page.fill('input[name=amount]', '1000000');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=flow-added**');
+  const row = page.locator('#cash-flows tbody tr', { hasText: 'Windfall arrives' });
+  check((await row.innerText()).includes('NT$1,000,000'), 'listed in TWD');
+  await row.getByRole('link').click();
+  await page.waitForURL(/\/cash-flows\/\d+$/);
+  await page.getByRole('button', { name: /Delete/ }).click();
+  await page.waitForURL('**/holdings?saved=flow-deleted**');
+  await page.getByText('Cash flow deleted').waitFor();
+  check((await page.locator('#cash-flows tbody tr', { hasText: 'Windfall arrives' }).count()) === 0, 'gone from the list');
+});
+
 await step('adding a security leads to a new trade in it', async () => {
   await page.goto(`${BASE}/securities/new?ticker=msft`);
   check((await page.inputValue('input[name=ticker]')) === 'MSFT', 'ticker prefilled upper-case');
@@ -248,10 +322,13 @@ await step('CSV import: Big5 statement, title lines, guessed columns, every row 
   await page.getByText('Read as Big5').waitFor();
   check((await page.locator('input[type=number]').inputValue()) === '3', 'header row 3');
   // No rate column and none typed: each row takes the rate of its trade date, here the newest within 10 days.
-  await page.getByText('2 new · 0 already saved · 1 with an unknown ticker · 2 skipped').waitFor();
+  // The 股利 row becomes a dividend cash flow; the totals row is skipped.
+  await page.getByText('2 new trades · 1 new dividend · 0 already saved · 1 with an unknown ticker · 1 skipped').waitFor();
   const text = await body();
-  check(text.includes('不是買進或賣出') && text.includes('不是交易列'), 'dividend and totals rows explained');
-  check((await page.getByText('2026-10-08', { exact: true }).count()) === 2, "both trades show their rate's date");
+  check(text.includes('不是交易列'), 'totals row explained');
+  const dividend = await page.locator('tr', { hasText: 'Dividend' }).first().innerText();
+  check(dividend.includes('1.24 USD') && dividend.includes('32.3'), `dividend row with its amount and rate, got ${dividend}`);
+  check((await page.getByText('2026-10-08', { exact: true }).count()) === 3, "both trades and the dividend show their rate's date");
   await snap('import-preview');
   await docShot('import-preview', page.locator('[aria-live="polite"]').last());
 });
@@ -265,11 +342,12 @@ await step('CSV import: an unknown ticker is added in a new tab, then "Check aga
   await snap('security-added-tab', tab, false);
   await tab.close();
   await page.getByRole('button', { name: /Check again/ }).click();
-  await page.getByText('3 new · 0 already saved · 0 with an unknown ticker · 2 skipped').waitFor();
-  await page.getByRole('button', { name: /Import 3 trades/ }).click();
+  await page.getByText('3 new trades · 1 new dividend · 0 already saved · 0 with an unknown ticker · 1 skipped').waitFor();
+  await page.getByRole('button', { name: /Import 3 trades and 1 dividend/ }).click();
   await page.waitForURL('**/holdings?saved=imported**');
-  await page.getByText('Imported 3 trades; 2 rows of the file skipped.').waitFor();
+  await page.getByText('Imported 3 trades and 1 dividend; 1 row of the file skipped.').waitFor();
   check((await body()).includes('CSV import'), 'imported trades marked as CSV');
+  check((await page.locator('#cash-flows tr', { hasText: '2026-10-18' }).innerText()).includes('1.24 USD'), 'the dividend is a cash flow');
   await snap('after-import');
 });
 
@@ -277,7 +355,7 @@ await step('CSV import again: the broker mapping is remembered and nothing is im
   await page.goto(`${BASE}/import`);
   check((await page.locator('select').first().inputValue()) === '國泰複委託（示範）', 'saved broker selected');
   await page.setInputFiles('input[type=file]', CSV);
-  await page.getByText('0 new · 3 already saved').waitFor();
+  await page.getByText('0 new trades · 0 new dividends · 4 already saved').waitFor();
   check(await page.getByRole('button', { name: /Import 0 trades/ }).isDisabled(), 'import disabled');
   // A saved row can still be imported again on purpose, at its trade date's rate.
   await page.getByLabel('Import anyway').first().check();
@@ -298,7 +376,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
