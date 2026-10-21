@@ -1,7 +1,7 @@
 /**
  * Phase 1, step 2: checks the hosted Supabase project from the outside, the way a stranger with
- * the public publishable key sees it. Every table must refuse to answer, and the private schema
- * must not be reachable at all.
+ * the public publishable key sees it. Every table and view must refuse to answer, and the private
+ * schema must not be reachable at all.
  *
  *   npm run check:supabase
  *
@@ -11,7 +11,7 @@
 import { existsSync } from 'node:fs';
 
 import { describeError } from './lib/http.ts';
-import { publicTables } from './lib/migrations.ts';
+import { publicTables, publicViews } from './lib/migrations.ts';
 import { classifySchemaReply, classifyTableReply, keyProblem, type Verdict } from './lib/supabase_check.ts';
 
 const ICON: Record<string, string> = { refused: '✅', hidden: '✅', readable: '❌', exposed: '❌', missing: '⚠️', unexpected: '⚠️' };
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   if (problem) throw new Error(problem);
 
   const headers = { apikey: key };
-  const tables = publicTables();
+  const tables = [...publicTables(), ...publicViews()];
   console.log(`Supabase check: ${url}, as a stranger with the publishable key 以外人身分檢查\n`);
 
   const results: Array<{ name: string } & Verdict<string>> = [];

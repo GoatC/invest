@@ -484,6 +484,15 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 - [x] Free price source for LSE-listed AGGU (Phase 1, step 1): Alpha Vantage AGGU.LON, weekly adjusted prices in USD on the free key; iShares daily NAV as fallback (confirmed by the source check, 2026-10-21) 確認倫敦掛牌 AGGU 的免費價格來源：Alpha Vantage 免費金鑰可取得 AGGU.LON 美元週線，iShares 每日淨值為備援（2026-10-21 資料來源檢查已確認）
 - [x] Public GitHub repo for the portfolio, with personal data excluded (decided): bilingual README; holdings, API keys and windfall figures stay out of the repo, demo data only 公開 GitHub 作為作品集（已決定）：中英雙語 README；持股、API 金鑰與大額資金數字不進 repo，只放示範資料
 
+Raised by the spec review after Phase 1, step 3 (2026-10-21) 第一階段第 3 步後檢視規格時提出:
+
+- [ ] Cash flows (monthly contributions, dividends, the windfall's arrival, withdrawals) have no entry page, and the CSV import skips dividend rows; F18 (step 5) and F2's actual-vs-projected path (step 8) need them. Proposed: a cash-flow form on N5 and dividend rows in the CSV import, before step 5 現金流（每月投入、股利、大額資金入帳、提領）尚無登錄頁面，CSV 匯入也會略過股利列；F18（第 5 步）與 F2 的實際與預測對照（第 8 步）都需要。建議在第 5 步之前，於 N5 加入現金流表單並讓 CSV 匯入讀取股利列
+- [ ] Gold price in TWD: the Bank of Taiwan page blocks scripts (source check, 2026-10-21), so physical gold is valued by hand for now. Proposed for step 4: the USD gold price × TWD/USD, keeping the hand-entered value as fallback 台幣金價：臺灣銀行頁面會擋程式（2026-10-21 資料來源檢查），目前實體黃金以手動估值。建議第 4 步改以美元金價 × 台幣匯率換算，手動估值作為備援
+- [ ] Daily FX source: FRED's TWD/USD (DEXTAUS) is published weekly, days late. Step 4 picks a daily source, and trade entry and the CSV import then default to the trade date's rate instead of the newest one 每日匯率來源：FRED 的台幣匯率（DEXTAUS）每週公布、延遲數天。第 4 步需選定每日來源，之後交易登錄與 CSV 匯入改為預設帶入交易日的匯率，而非最新匯率
+- [ ] Foreign-currency cash left in the 複委託 account after a USD-settled sale has no place in the data model (manual_assets holds grams or TWD only): settle in TWD, or add foreign-currency balances 複委託以外幣交割時，賣出後留在帳戶的外幣現金在資料結構中沒有位置（manual_assets 只有克與台幣）：改以台幣交割，或新增外幣餘額
+- [ ] Deploying to Vercel and installing the PWA are not a build step, yet Web Push (step 10) needs both. Proposed: deploy once step 4 is done 部署到 Vercel 與安裝 PWA 不在建置順序中，但第 10 步的推播兩者都需要。建議第 4 步完成後部署
+- [ ] DCA debit day (config `dca.day_of_month`), needed by the monthly-contribution rule (step 9) and the weekly view (step 10) 定期定額扣款日（config 的 `dca.day_of_month`），每月投入規則（第 9 步）與週檢視（第 10 步）需要
+
 ## 10. Glossary 雙語術語表
 
 - **SAA (Strategic Asset Allocation)** – long-term target weights across asset classes, held through market cycles; Chinese translation: 策略性資產配置：長期維持的各資產類別目標權重，不隨市場短期波動而改變。

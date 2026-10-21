@@ -11,3 +11,10 @@ reports/source-check/samples/
 # OS and editor files
 .DS_Store
 *.log
+
+# Next.js build output and generated files
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.vercel

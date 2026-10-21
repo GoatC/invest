@@ -11,9 +11,17 @@ export function migrationFiles(dir = MIGRATIONS_DIR): string[] {
     .map((name) => join(dir, name));
 }
 
+function created(kind: 'table' | 'view', dir: string): string[] {
+  const pattern = new RegExp(`^create ${kind} public\\.(\\w+)`, 'gm');
+  return migrationFiles(dir).flatMap((file) => [...readFileSync(file, 'utf8').matchAll(pattern)].map((match) => match[1] ?? ''));
+}
+
 /** Tables the migrations create in the public schema, read from the SQL itself. */
 export function publicTables(dir = MIGRATIONS_DIR): string[] {
-  return migrationFiles(dir).flatMap((file) =>
-    [...readFileSync(file, 'utf8').matchAll(/^create table public\.(\w+)/gm)].map((match) => match[1] ?? ''),
-  );
+  return created('table', dir);
+}
+
+/** Views the migrations create in the public schema; the Data API serves them like tables. */
+export function publicViews(dir = MIGRATIONS_DIR): string[] {
+  return created('view', dir);
 }

@@ -259,6 +259,10 @@ describe('reference data from the PRD', () => {
     for (const row of rows) assert.equal(row.enabled, !['F3', 'F12', 'N3'].includes(row.feature), row.id);
   });
 
+  it('keeps the trade-entry FX typo check in config, as a share of the newest rate', async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'fx_rate_check'`), { max_gap: 0.2 });
+  });
+
   it('lists every Investment Principles core vehicle as a security', async () => {
     const { rows } = await db.query<{ ticker: string }>('select ticker from public.securities');
     const tickers = new Set(rows.map((row) => row.ticker));
@@ -277,6 +281,28 @@ describe('reference data from the PRD', () => {
       tw_stocks: '0050',
       tactical_themes: 'VT',
     });
+  });
+});
+
+describe('latest quote views', () => {
+  it('give the newest close per ticker and the newest rate per pair', async () => {
+    // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.prices (ticker, price_date, close, source) values ('VT', '2026-10-19', 150, 'demo'), ('VT', '2026-10-21', 160, 'demo')`);
+      assert.equal(await scalar(tx, `select close from public.latest_prices where ticker = 'VT'`), '160');
+      assert.equal(await scalar(tx, `select count(*) from public.latest_prices where ticker = 'VT'`), 1);
+      assert.equal(await scalar(tx, `select rate from public.latest_fx_rates where pair = 'USD/TWD'`), '32.40');
+    });
+  });
+
+  it('follow the row-level security of their tables: nothing for a stranger, refused for anon', async () => {
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.latest_prices'), 0);
+      assert.equal(await scalar(tx, 'select count(*) from public.latest_fx_rates'), 0);
+    });
+    for (const view of ['latest_prices', 'latest_fx_rates']) {
+      assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query(`select 1 from public.${view}`))), DENIED, view);
+    }
   });
 });
 

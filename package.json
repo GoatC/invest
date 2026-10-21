@@ -8,17 +8,31 @@
     "node": ">=20.12"
   },
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "check:sources": "tsx scripts/check_sources.ts",
     "check:supabase": "tsx scripts/check_supabase.ts",
-    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts tests/db/*.test.ts",
-    "typecheck": "tsc -p scripts && tsc -p tests"
+    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts tests/db/*.test.ts lib/*.test.ts lib/*/*.test.ts",
+    "typecheck": "tsc -p scripts && tsc -p tests && tsc --noEmit -p .",
+    "test:e2e": "bash tests/e2e/run.sh"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "fflate": "^0.8.3",
+    "playwright-core": "1.56.1",
     "supabase": "^2.120.0",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
