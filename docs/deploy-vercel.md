@@ -34,9 +34,10 @@ The site is public but the data is not: only your account can sign in, and row-l
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` |
 
    不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。
-6. 按 **Deploy**，等 1–2 分鐘，出現恭喜畫面就完成了。
+6. 如果接著出現 **Optional Integrations**（例如 Supabase 旁邊有 **Add** 按鈕）：**不要按 Add**，直接按 **Deploy**。你已經有自己的 Supabase 專案；這個整合會另外建立或連接一個資料庫，並把 secret key 等金鑰自動放進 Vercel。
+7. 按 **Deploy**，等 1–2 分鐘，出現恭喜畫面就完成了。
 
-Import `GoatC/invest`, name the project `long-view-invest`, add the two `NEXT_PUBLIC_` values from `.env.local`, and deploy.
+Import `GoatC/invest`, name the project `long-view-invest`, add the two `NEXT_PUBLIC_` values from `.env.local`, skip the optional Supabase integration, and deploy.
 
 ## 3. 把網址告訴 Supabase Tell Supabase the address
 
