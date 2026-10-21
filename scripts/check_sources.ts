@@ -250,6 +250,11 @@ function alphaVantageRefusal(reply: AlphaVantageReply | undefined): string | und
   return reply?.['Error Message'] ?? reply?.Information ?? reply?.Note;
 }
 
+/** A used-up quota (whose message also mentions "premium plans") says nothing about which symbols are served. */
+function isQuotaRefusal(error: string | undefined): boolean {
+  return /rate limit|requests per day|call frequency|sparingly/i.test(error ?? '');
+}
+
 function alphaVantageSeries(r: Fetched): { latest: string; weeks: number; reply: AlphaVantageReply } | undefined {
   const reply = r.json<AlphaVantageReply>();
   if (!reply) return undefined;
@@ -320,7 +325,7 @@ const alphaVantage: Probe = {
       const aggu = await query(`${weeklyFunction} for AGGU.LON`, { function: weeklyFunction, symbol: symbolFor(tickerById('AGGU'), 'alphaVantage') });
       const agguSeries = alphaVantageSeries(aggu);
       if (agguSeries) s.cover('AGGU', 'yes', `AGGU.LON ${agguSeries.weeks} weeks, latest ${agguSeries.latest}`);
-      else s.cover('AGGU', aggu.call.status === null ? 'failed' : 'no', aggu.call.error);
+      else s.cover('AGGU', aggu.call.status === null || isQuotaRefusal(aggu.call.error) ? 'failed' : 'no', aggu.call.error);
     }
     s.observe(
       env.ALPHAVANTAGE_API_KEY
@@ -648,20 +653,31 @@ const moenv: Probe = {
       return;
     }
     const params = new URLSearchParams({ api_key: env.MOENV_API_KEY, format: 'JSON', limit: '5', offset: '0' });
-    const r = await s.get('Five latest penalty records (ems_p_46)', `https://data.moenv.gov.tw/api/v2/ems_p_46?${params}`);
-    const reply = r.json<{ records?: Json[]; fields?: Array<{ id?: string; info?: { label?: string } }>; total?: unknown }>();
-    if (!reply?.records) {
+    const r = await s.get('First five penalty records (ems_p_46)', `https://data.moenv.gov.tw/api/v2/ems_p_46?${params}`);
+    // The v2 API now answers a bare array of records; older replies wrapped them as { fields, records, total }.
+    const reply = r.json<Json[] | { records?: Json[]; fields?: Array<{ id?: string; info?: { label?: string } }>; total?: unknown }>();
+    const wrapped = Array.isArray(reply) ? undefined : reply;
+    const records = Array.isArray(reply) ? reply : reply?.records;
+    if (!Array.isArray(records)) {
       if (r.ok) r.fail('no records in reply');
       return;
     }
-    const fieldNames = reply.fields?.map((field) => [field.id, field.info?.label].filter(Boolean).join(' ')) ?? Object.keys(reply.records[0] ?? {});
-    s.note(`Total records 總筆數: ${String(reply.total ?? '?')}; fields: ${fieldNames.join(', ')}`);
+    const fieldNames = wrapped?.fields?.map((field) => [field.id, field.info?.label].filter(Boolean).join(' ')) ?? Object.keys(records[0] ?? {});
+    s.note(`${records.length} records in this reply${wrapped?.total === undefined ? '' : `, ${String(wrapped.total)} in total 總筆數`}; fields: ${fieldNames.join(', ')}`);
+    // Records arrive in no particular order, so the date range shows how fresh the data is.
+    const dates = records.map((record) => String(record['penalty_date'] ?? '')).filter(Boolean).sort();
+    if (dates.length > 0) s.note(`Penalty dates in these records 裁處日期: ${dates[0]} to ${dates.at(-1)}`);
+    const hasBusinessId = fieldNames.some((name) => /統一編號|統編|ban|uniform/i.test(name));
     s.note(
-      fieldNames.some((name) => /統一編號|統編|ban|uniform/i.test(name))
+      hasBusinessId
         ? 'Records carry a business ID 統一編號, so they can be matched to listed companies.'
         : 'No business-ID 統一編號 field: matching to listed companies needs the company name 需以公司名稱比對.',
     );
-    s.preview('Latest records 最新紀錄', jsonPreview(reply.records), 'json');
+    const matchBy = hasBusinessId ? 'business ID 統一編號' : 'company name 公司名稱';
+    for (const ticker of tickersIn('TW').filter((t) => t.kind === 'stock')) {
+      s.cover(ticker.id, 'unchecked', `records carry no ticker; N3 matches them by ${matchBy} in Phase 2`);
+    }
+    s.preview('First records in the reply 回傳的前幾筆', jsonPreview(records), 'json');
   },
 };
 

@@ -2,10 +2,10 @@
 
 PRD Phase 1, step 1: each PRD Section 6 source called once, with its limits, a sample payload and ticker coverage. 第一階段第 1 步：每個資料來源呼叫一次，記錄流量限制、樣本與標的覆蓋。
 
-- Generated 產生時間: 2026-10-21 10:59:28 (Asia/Taipei)
+- Generated 產生時間: 2026-10-21 11:46:27 (Asia/Taipei)
 - Runner 執行環境: local run 本機執行 · Node v22.22.0
-- Requests 請求: 27 of 29 succeeded 成功
-- Keys present 已設定的金鑰 (values never written 不寫出內容): `ALPHAVANTAGE_API_KEY` ❌ · `FINMIND_TOKEN` ❌ · `FRED_API_KEY` ❌ · `FMP_API_KEY` ❌ · `MOENV_API_KEY` ❌ · `SEC_USER_AGENT` ❌
+- Requests 請求: 29 of 35 succeeded 成功
+- Keys present 已設定的金鑰 (values never written 不寫出內容): `ALPHAVANTAGE_API_KEY` ✅ · `FINMIND_TOKEN` ✅ · `FRED_API_KEY` ❌ · `FMP_API_KEY` ❌ · `MOENV_API_KEY` ✅ · `SEC_USER_AGENT` ✅
 
 Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not applicable 不適用 · ⏭️ skipped, key not set 略過（未設金鑰） · ⚠️ call failed, coverage unknown 呼叫失敗 · · not checked this run 本次未檢查
 
@@ -14,10 +14,10 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 | # | Source 來源 | Section 6 data 資料 | Status 狀態 | Requests 請求數 | Documented limit 官方限制 | Observed this run 本次實測 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | TWSE OpenAPI 證交所開放 API | Taiwan prices 台股價格 | ✅ ok | 1 | No published limit; no key 未公布限制，免金鑰 | no rate-limit headers 無流量標頭 |
-| 2 | FinMind | Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援 | 🟡 partial 部分 | 5 | 600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up | no rate-limit headers 無流量標頭 |
+| 2 | FinMind | Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援 | ✅ ok | 6 | 600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up | user_info: 0 of 600 requests used 已用／上限 |
 | 3 | MOPS 公開資訊觀測站 | Taiwan filings and material information 台股財報與重大訊息 | ✅ ok | 3 | No published limit; no key 未公布限制，免金鑰 | no rate-limit headers 無流量標頭 |
-| 4 | SEC EDGAR | US filings 美股財報與 8-K | ⏭️ skipped 略過 | 0 | At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式 | — |
-| 5 | Alpha Vantage | US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源） | 🟡 partial 部分 | 2 | 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute | 2 requests with the public demo key; none of your own quota used 使用公開 demo 金鑰，未消耗你的額度 |
+| 4 | SEC EDGAR | US filings 美股財報與 8-K | ✅ ok | 2 | At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式 | no rate-limit headers 無流量標頭 |
+| 5 | Alpha Vantage | US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源） | ❌ failed 失敗 | 4 | 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute | Requests used this run 本次用量: 4 of the 25/day free quota; error: Alpha Vantage: JSON instead of CSV; error: Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. |
 | 6 | Financial Modeling Prep (FMP) | Optional price source from the §6 free-tier note; tested only for AGGU 選用來源，只測 AGGU | ⏭️ skipped 略過 | 0 | 250 requests/day on the free plan (PRD §6) | — |
 | 7 | FRED (St. Louis Fed) | US rates, TWD/USD 美國利率與匯率 | ✅ ok | 2 | API: 120 requests/minute per key (commonly cited); keyless CSV download: no published limit | no rate-limit headers 無流量標頭 |
 | 8 | Central Bank of the ROC 中央銀行 (data.gov.tw dataset 10840) | Taiwan 10-year government bond yield 台灣 10 年期公債殖利率 | ✅ ok | 2 | Open-data file updated monthly; no published limit 每月更新的開放資料，未公布限制 | no rate-limit headers 無流量標頭 |
@@ -26,7 +26,7 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 | 11 | Damodaran Online | Equity risk premium 股票風險溢酬 | ✅ ok | 1 | Static pages; implied ERP updated monthly (PRD F11); no published limit | no rate-limit headers 無流量標頭 |
 | 12 | TWSE corporate governance evaluation 公司治理評鑑 | Governance rating 公司治理評鑑 | ✅ ok | 1 | Published once a year; no published limit 每年公布一次 | no rate-limit headers 無流量標頭 |
 | 13 | EPA ECHO | US environmental penalties 美國環境裁罰 | ✅ ok | 1 | No published limit; EPA may throttle heavy use 未公布限制 | no rate-limit headers 無流量標頭 |
-| 14 | Ministry of Environment open data 環境部 (ems_p_46) | Taiwan environmental penalties 台灣環境裁罰 | ⏭️ skipped 略過 | 0 | Free member API key required; no limit stated in the docs found 需免費會員金鑰 | — |
+| 14 | Ministry of Environment open data 環境部 (ems_p_46) | Taiwan environmental penalties 台灣環境裁罰 | ✅ ok | 1 | Free member API key required; no limit stated in the docs found 需免費會員金鑰 | no rate-limit headers 無流量標頭 |
 | 15 | ETF issuer holdings files ETF 發行商持股檔 | ETF holdings ETF 成分股 | 🟡 partial 部分 | 7 | Public website downloads; no published limits 官網公開下載，未公布限制 | error: HTTP 403 Forbidden |
 | 16 | Bank of Taiwan gold price 臺灣銀行黃金牌價 | Gold price in TWD 台幣金價 | ❌ failed 失敗 | 1 | Public web page; no published limit 公開網頁，未公布限制 | error: bot challenge page instead of prices: the site asks for a browser to solve a challenge |
 
@@ -36,16 +36,16 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 
 | Ticker 標的 | Role 角色 | Market 市場 | TWSE | FinMind | Alpha Vantage | FMP | Issuer file | BoT gold |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **VOO** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ✅ | — | ✅ | — |
-| **VT** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ✅ | — | ✅ | — |
+| **VOO** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ⚠️ | — | ✅ | — |
+| **VT** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ⚠️ | — | ✅ | — |
 | **00692** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | · | — |
 | **009816** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | · | — |
 | **00922** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | ⚠️ | — |
-| **BNDW** | Core · Global bonds 全球債券 22% | US | — | ✅ | ✅ | — | ✅ | — |
-| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ⏭️ | ⏭️ | ✅ | — |
-| **GLDM** | Core · Real assets 實體資產 10% | US | — | ✅ | ✅ | — | — | — |
+| **BNDW** | Core · Global bonds 全球債券 22% | US | — | ✅ | ⚠️ | — | ✅ | — |
+| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ❌ | ⏭️ | ✅ | — |
+| **GLDM** | Core · Real assets 實體資產 10% | US | — | ✅ | ⚠️ | — | — | — |
 | **Physical gold 實體黃金** | Core · Real assets 實體資產 10% | unlisted | — | — | — | — | — | ⚠️ |
-| **BIL** | Core · Strategic cash 戰略現金 8% | US | — | ✅ | ✅ | — | ✅ | — |
+| **BIL** | Core · Strategic cash 戰略現金 8% | US | — | ✅ | ⚠️ | — | ✅ | — |
 | **MMF 貨幣基金** | Core · Strategic cash 戰略現金 8% | unlisted | — | — | — | — | — | — |
 | **High-yield savings 高利活存** | Core · Strategic cash 戰略現金 8% | unlisted | — | — | — | — | — | — |
 
@@ -56,31 +56,31 @@ MMF and high-yield savings are entered as balances on the N5 page and need no ma
 | Ticker 標的 | Role 角色 | Market 市場 | TWSE | FinMind | MOPS | SEC | Alpha Vantage | TWSE CG | EPA ECHO | MOENV |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **0050** | N4 VaR proxy for both Taiwan classes 台股類別的風險值代理 | TW | ✅ | ✅ | — | — | — | — | — | — |
-| **ACWI** | F3 drawdown gauge: candidate free proxy for MSCI ACWI 指數代理候選 | US | — | ✅ | — | — | ✅ | — | — | — |
-| **AAPL** | Satellite stand-in (PRD N1 example) 衛星個股範例 | US | — | ✅ | — | ⏭️ | ✅ | — | ✅ | — |
-| **2330** | Satellite stand-in (PRD N1 example) 衛星個股範例 | TW | ✅ | ✅ | ✅ | — | — | · | — | ⏭️ |
+| **ACWI** | F3 drawdown gauge: candidate free proxy for MSCI ACWI 指數代理候選 | US | — | ✅ | — | — | ⚠️ | — | — | — |
+| **AAPL** | Satellite stand-in (PRD N1 example) 衛星個股範例 | US | — | ✅ | — | ✅ | ⚠️ | — | ✅ | — |
+| **2330** | Satellite stand-in (PRD N1 example) 衛星個股範例 | TW | ✅ | ✅ | ✅ | — | — | · | — | · |
 
 The satellite sleeves name no tickers yet (US 2–3 names, Taiwan 1–2 names, tactical themes), so AAPL and 2330, the PRD N1 examples, stand in for single stocks. 衛星部位尚未指定個股，暫以 PRD N1 的範例 AAPL 與 2330 代表。
 
 ### Coverage details 覆蓋細節
 
-- **VOO**: FinMind ✅ Vanguard S&P 500 ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ 500 holdings on the first page
-- **VT**: FinMind ✅ Vanguard Total World Stock Index ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ 500 holdings on the first page
+- **VOO**: FinMind ✅ Vanguard S&P 500 ETF · Issuer file ✅ 500 holdings on the first page
+- **VT**: FinMind ✅ Vanguard Total World Stock Index ETF · Issuer file ✅ 500 holdings on the first page
 - **00692**: TWSE ✅ close 92.45 · FinMind ✅ twse · ETF · Issuer file · no verified machine-readable issuer file yet 尚無已確認的官方檔案
 - **009816**: TWSE ✅ close 15.93 · FinMind ✅ twse · ETF · Issuer file · no verified machine-readable issuer file yet 尚無已確認的官方檔案
 - **00922**: TWSE ✅ close 39.56 · FinMind ✅ twse · ETF
-- **BNDW**: FinMind ✅ Vanguard Total World Bond ETF · Alpha Vantage ✅ NASDAQ ETF · Issuer file ✅ 500 holdings on the first page
-- **AGGU (LSE)**: Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
-- **GLDM**: FinMind ✅ SPDR Gold MiniShares Trust · Alpha Vantage ✅ NYSE ETF · Issuer file — holds physical gold; nothing to look through
-- **BIL**: FinMind ✅ State Street SPDR Bloomberg 1-3 Month T-Bill ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ xlsx sheet "holdings", 120 rows, As of 19-Oct-2026
+- **BNDW**: FinMind ✅ Vanguard Total World Bond ETF · Issuer file ✅ 500 holdings on the first page
+- **AGGU (LSE)**: Alpha Vantage ❌ Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. · Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
+- **GLDM**: FinMind ✅ SPDR Gold MiniShares Trust · Issuer file — holds physical gold; nothing to look through
+- **BIL**: FinMind ✅ State Street SPDR Bloomberg 1-3 Month T-Bill ETF · Issuer file ✅ xlsx sheet "holdings", 120 rows, As of 19-Oct-2026
 - **0050**: TWSE ✅ close 107.25 · FinMind ✅ twse · ETF
-- **ACWI**: FinMind ✅ iShares MSCI ACWI ETF · Alpha Vantage ✅ NASDAQ ETF
-- **AAPL**: FinMind ✅ Apple Inc. Common Stock · Alpha Vantage ✅ NASDAQ Stock · EPA ECHO ✅ matched by facility name, not ticker: N3 needs a company-to-facility map
-- **2330**: TWSE ✅ close 2405.00 · FinMind ✅ twse · 電子工業 · MOPS ✅ company profile 公司基本資料 · TWSE CG · tier lists are in the linked results PDF; read with N3 in Phase 2
+- **ACWI**: FinMind ✅ iShares MSCI ACWI ETF
+- **AAPL**: FinMind ✅ Apple Inc. Common Stock · SEC ✅ CIK 320193 · Nasdaq · EPA ECHO ✅ matched by facility name, not ticker: N3 needs a company-to-facility map
+- **2330**: TWSE ✅ close 2405.00 · FinMind ✅ twse · 電子工業 · MOPS ✅ company profile 公司基本資料 · TWSE CG · tier lists are in the linked results PDF; read with N3 in Phase 2 · MOENV · records carry no ticker; N3 matches them by business ID 統一編號 in Phase 2
 
 ## AGGU price source AGGU 價格來源
 
-- ⏭️ Alpha Vantage, AGGU.LON (PRD primary price source)
+- ❌ Alpha Vantage, AGGU.LON (PRD primary price source): Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.
 - ⏭️ Financial Modeling Prep, AGGU.L
 - ❌ FinMind US list (backup source)
 - ✅ iShares NAV history (issuer file): latest 2026-10-19, 5.76
@@ -193,38 +193,40 @@ Sample 樣本: Rows for our Taiwan tickers 本專案的台股標的
 … (41 more characters)
 ```
 
-### 2. FinMind: 🟡 partial 部分
+### 2. FinMind: ✅ ok
 
 - Data 資料: Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援
 - Used by 使用功能: F12, N1, N3, F18; backup for US prices
-- Auth 驗證: none: anonymous quota 未用金鑰
+- Auth 驗證: FINMIND_TOKEN (Authorization: Bearer)
 - Documented limit 官方限制: 600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up
-- Checked 檢查時間: 2026-10-21 10:52:21
+- Checked 檢查時間: 2026-10-21 11:38:36
 
 | # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Taiwan securities list (TaiwanStockInfo) | 200 | 1223 ms | 600.2 kB | — |
-| 2 | Taiwan daily prices for 00922 (TaiwanStockPrice) | 200 | 216 ms | 1.7 kB | — |
-| 3 | Taiwan income statements for 2330 (TaiwanStockFinancialStatements) | 200 | 211 ms | 11.1 kB | — |
-| 4 | US securities list (USStockInfo) | 200 | 1862 ms | 3.7 MB | — |
-| 5 | US daily prices for VT (USStockPrice) | 200 | 218 ms | 1.3 kB | — |
+| 1 | Quota for this token (user_info) | 200 | 974 ms | 681 B | — |
+| 2 | Taiwan securities list (TaiwanStockInfo) | 200 | 1175 ms | 600.2 kB | — |
+| 3 | Taiwan daily prices for 00922 (TaiwanStockPrice) | 200 | 215 ms | 1.7 kB | — |
+| 4 | Taiwan income statements for 2330 (TaiwanStockFinancialStatements) | 200 | 212 ms | 11.1 kB | — |
+| 5 | US securities list (USStockInfo) | 200 | 1751 ms | 3.7 MB | — |
+| 6 | US daily prices for VT (USStockPrice) | 200 | 272 ms | 1.3 kB | — |
 
 Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
-1. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo`
-2. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=00922&start_date=2026-10-07`
-3. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockFinancialStatements&data_id=2330&start_date=2025-09-16`
-4. `https://api.finmindtrade.com/api/v4/data?dataset=USStockInfo`
-5. `https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice&data_id=VT&start_date=2026-10-07`
+1. `https://api.web.finmindtrade.com/v2/user_info`
+2. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo`
+3. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=00922&start_date=2026-10-07`
+4. `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockFinancialStatements&data_id=2330&start_date=2025-09-16`
+5. `https://api.finmindtrade.com/api/v4/data?dataset=USStockInfo`
+6. `https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice&data_id=VT&start_date=2026-10-07`
+
+Observed limits 實測限制:
+
+- user_info: 0 of 600 requests used 已用／上限
 
 Notes 備註:
 
 - TaiwanStockInfo: 4345 rows
 - USStockInfo: 19869 rows
-
-Skipped 略過:
-
-- Quota check (user_info) needs FINMIND_TOKEN 需要 FINMIND_TOKEN
 
 Sample 樣本: TaiwanStockPrice 00922 since 2026-10-07: 9 rows, latest 2026-10-20
 
@@ -365,93 +367,69 @@ Sample 樣本: t187ap04_L: 112 announcements
 … (74 more characters)
 ```
 
-### 4. SEC EDGAR: ⏭️ skipped 略過
+### 4. SEC EDGAR: ✅ ok
 
 - Data 資料: US filings 美股財報與 8-K
 - Used by 使用功能: F12, N3
-- Auth 驗證: SEC_USER_AGENT not set 未設定
+- Auth 驗證: SEC_USER_AGENT (declared contact)
 - Documented limit 官方限制: At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式
-- Checked 檢查時間: 2026-10-21 10:52:30
-
-_No requests made. 未發出請求。_
-
-Skipped 略過:
-
-- SEC asks every client to declare a contact: set SEC_USER_AGENT in .env.local, e.g. "LongViewInvest your-email@example.com". SEC 要求註明聯絡 email。
-
-### 5. Alpha Vantage: 🟡 partial 部分
-
-- Data 資料: US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源）
-- Used by 使用功能: All
-- Auth 驗證: public demo key: sample symbols only 公開 demo 金鑰，只限範例代號
-- Documented limit 官方限制: 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute
-- Checked 檢查時間: 2026-10-21 10:52:30
+- Checked 檢查時間: 2026-10-21 11:38:42
 
 | # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Active US listings (LISTING_STATUS, CSV) | 200 | 606 ms | 1.1 MB | — |
-| 2 | Weekly adjusted prices for IBM (TIME_SERIES_WEEKLY_ADJUSTED) | 200 | 218 ms | 420.2 kB | — |
+| 1 | Company tickers with exchange (company_tickers_exchange.json) | 200 | 466 ms | 523.9 kB | — |
+| 2 | Recent filings for Apple, CIK 320193 (submissions API) | 200 | 399 ms | 163.8 kB | — |
+
+Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
+
+1. `https://www.sec.gov/files/company_tickers_exchange.json` (Last-Modified: Fri, 16 Oct 2026 11:53:51 GMT)
+2. `https://data.sec.gov/submissions/CIK0000320193.json`
+
+Notes 備註:
+
+- company_tickers_exchange.json: 10443 tickers; fields cik, name, ticker, exchange
+- Latest 10-Q/10-K: 10-Q filed 2026-07-31 (the F12 re-run trigger)
+
+Sample 樣本: Ten most recent filings 最近十筆申報
+
+```text
+2026-10-19  4
+2026-10-19  4
+2026-10-16  144
+2026-10-15  4
+2026-10-08  4
+2026-10-05  4
+2026-10-05  4
+2026-10-05  4
+2026-10-05  4
+2026-10-02  144
+```
+
+### 5. Alpha Vantage: ❌ failed 失敗
+
+- Data 資料: US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源）
+- Used by 使用功能: All
+- Auth 驗證: ALPHAVANTAGE_API_KEY
+- Documented limit 官方限制: 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute
+- Checked 檢查時間: 2026-10-21 11:38:43
+
+| # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Active US listings (LISTING_STATUS, CSV) | 200 Alpha Vantage: JSON instead of CSV | 375 ms | 2 B | — |
+| 2 | Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 64 ms | 258 B | — |
+| 3 | Symbol search "AGGU" (SYMBOL_SEARCH) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 60 ms | 258 B | — |
+| 4 | TIME_SERIES_WEEKLY for AGGU.LON | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 59 ms | 258 B | — |
 
 Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
 1. `https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=***`
-2. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=IBM&apikey=***`
+2. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=VT&apikey=***`
+3. `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=AGGU&apikey=***`
+4. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=AGGU.LON&apikey=***`
 
 Observed limits 實測限制:
 
-- 2 requests with the public demo key; none of your own quota used 使用公開 demo 金鑰，未消耗你的額度
-
-Notes 備註:
-
-- LISTING_STATUS: 14509 active US listings; columns symbol, name, exchange, assetType, ipoDate, delistingDate, status
-
-Skipped 略過:
-
-- AGGU.LON needs ALPHAVANTAGE_API_KEY: the demo key serves only sample symbols such as IBM 需要 ALPHAVANTAGE_API_KEY
-
-Sample 樣本: TIME_SERIES_WEEKLY_ADJUSTED IBM: 1407 weeks, latest 2026-10-20
-
-```json
-{
-  "Meta Data": {
-    "1. Information": "Weekly Adjusted Prices and Volumes",
-    "2. Symbol": "IBM",
-    "3. Last Refreshed": "2026-10-20",
-    "4. Time Zone": "US/Eastern"
-  },
-  "Weekly Adjusted Time Series": {
-    "2026-10-20": {
-      "1. open": "230.6800",
-      "2. high": "242.5250",
-      "3. low": "229.2965",
-      "4. close": "241.9200",
-      "…": "3 more keys"
-    },
-    "2026-10-16": {
-      "1. open": "228.3100",
-      "2. high": "236.9800",
-      "3. low": "224.7700",
-      "4. close": "232.1400",
-      "…": "3 more keys"
-    },
-    "2026-10-09": {
-      "1. open": "222.3000",
-      "2. high": "228.7600",
-      "3. low": "217.7950",
-      "4. close": "227.1300",
-      "…": "3 more keys"
-    },
-    "2026-10-02": {
-      "1. open": "222.5000",
-      "2. high": "234.2700",
-      "3. low": "218.6000",
-      "4. close": "222.6400",
-      "…": "3 more keys"
-    },
-    "…": "1403 more keys"
-  }
-}
-```
+- Requests used this run 本次用量: 4 of the 25/day free quota
 
 ### 6. Financial Modeling Prep (FMP): ⏭️ skipped 略過
 
@@ -702,19 +680,65 @@ Sample 樣本: get_facilities reply
 }
 ```
 
-### 14. Ministry of Environment open data 環境部 (ems_p_46): ⏭️ skipped 略過
+### 14. Ministry of Environment open data 環境部 (ems_p_46): ✅ ok
 
 - Data 資料: Taiwan environmental penalties 台灣環境裁罰
 - Used by 使用功能: N3
-- Auth 驗證: MOENV_API_KEY not set 未設定
+- Auth 驗證: MOENV_API_KEY
 - Documented limit 官方限制: Free member API key required; no limit stated in the docs found 需免費會員金鑰
-- Checked 檢查時間: 2026-10-21 10:52:45
+- Checked 檢查時間: 2026-10-21 11:46:26
 
-_No requests made. 未發出請求。_
+| # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | First five penalty records (ems_p_46) | 200 | 1420 ms | 9.8 kB | — |
 
-Skipped 略過:
+Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
-- MOENV_API_KEY not set: register free at https://data.moenv.gov.tw/ 請到環境部資料開放平臺免費註冊
+1. `https://data.moenv.gov.tw/api/v2/ems_p_46?api_key=***&format=JSON&limit=5&offset=0`
+
+Notes 備註:
+
+- 5 records in this reply; fields: ems_no, fac_name, county_name, document_no, transgress_date, transgress_law, penalty_money, penalty_date, ispetition, petition_results, appeal_or_rescind, transgress_type, fac_address, transgress_name, openinfor, lawsuit_date_1, illegal_money, track_illegal_money, petition_agency, ban, transgress_address, subject, gist_define, improve_deadline, inspection_condition, transgress_control_id, is_improve, inspection_datetime_s, penaltykind, isimportant, paymentstate, isreminder, isadmincourt, isreducemoney, allow_rework_date, fac_city_code, fac_area_code, transgress_city_code
+- Penalty dates in these records 裁處日期: 2026-07-07 to 2026-09-14
+- Records carry a business ID 統一編號, so they can be matched to listed companies.
+
+Sample 樣本: First records in the reply 回傳的前幾筆
+
+```json
+[
+  {
+    "ems_no": "L89097000842",
+    "fac_name": "興亞營造工程股份有限公司",
+    "county_name": "苗栗縣",
+    "document_no": "40-115-070014",
+    "transgress_date": "2026-06-30",
+    "transgress_law": "廢棄物清理法第31條第1項第2款",
+    "penalty_money": "6000",
+    "penalty_date": "2026-07-28",
+    "ispetition": "0",
+    "petition_results": "",
+    "appeal_or_rescind": "",
+    "transgress_type": "事業廢棄物",
+    "…": "26 more keys"
+  },
+  {
+    "ems_no": "A43097016489",
+    "fac_name": "宏倫企業有限公司",
+    "county_name": "臺北市",
+    "document_no": "21-115-070396",
+    "transgress_date": "2026-06-02",
+    "transgress_law": "空氣污染防制法第44條第1項",
+    "penalty_money": "500",
+    "penalty_date": "2026-07-07",
+    "ispetition": "0",
+    "petition_results": "",
+    "appeal_or_rescind": "",
+    "transgress_type": "移動污染",
+    "…": "26 more keys"
+  },
+  "… 3 more items"
+]
+```
 
 ### 15. ETF issuer holdings files ETF 發行商持股檔: 🟡 partial 部分
 

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-21 10:59:28",
+  "generatedAt": "2026-10-21 11:46:27",
   "node": "v22.22.0",
   "runner": "local run 本機執行",
   "keys": {
-    "ALPHAVANTAGE_API_KEY": false,
-    "FINMIND_TOKEN": false,
+    "ALPHAVANTAGE_API_KEY": true,
+    "FINMIND_TOKEN": true,
     "FRED_API_KEY": false,
     "FMP_API_KEY": false,
-    "MOENV_API_KEY": false,
-    "SEC_USER_AGENT": false
+    "MOENV_API_KEY": true,
+    "SEC_USER_AGENT": true
   },
   "sources": [
     {
@@ -83,22 +83,32 @@
       "short": "FinMind",
       "row": "Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援",
       "usedBy": "F12, N1, N3, F18; backup for US prices",
-      "auth": "none: anonymous quota 未用金鑰",
+      "auth": "FINMIND_TOKEN (Authorization: Bearer)",
       "documentedLimit": "600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up",
       "coverageMarkets": [
         "TW",
         "US",
         "UK"
       ],
-      "checkedAt": "2026-10-21 10:52:21",
-      "status": "partial",
+      "checkedAt": "2026-10-21 11:38:36",
+      "status": "ok",
       "calls": [
+        {
+          "label": "Quota for this token (user_info)",
+          "url": "https://api.web.finmindtrade.com/v2/user_info",
+          "status": 200,
+          "ok": true,
+          "ms": 974,
+          "bytes": 681,
+          "rateLimitHeaders": {},
+          "contentType": "application/json"
+        },
         {
           "label": "Taiwan securities list (TaiwanStockInfo)",
           "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo",
           "status": 200,
           "ok": true,
-          "ms": 1223,
+          "ms": 1175,
           "bytes": 600164,
           "rateLimitHeaders": {},
           "contentType": "application/json",
@@ -109,7 +119,7 @@
           "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=00922&start_date=2026-10-07",
           "status": 200,
           "ok": true,
-          "ms": 216,
+          "ms": 215,
           "bytes": 1680,
           "rateLimitHeaders": {},
           "contentType": "application/json",
@@ -120,7 +130,7 @@
           "url": "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockFinancialStatements&data_id=2330&start_date=2025-09-16",
           "status": 200,
           "ok": true,
-          "ms": 211,
+          "ms": 212,
           "bytes": 11107,
           "rateLimitHeaders": {},
           "contentType": "application/json",
@@ -131,7 +141,7 @@
           "url": "https://api.finmindtrade.com/api/v4/data?dataset=USStockInfo",
           "status": 200,
           "ok": true,
-          "ms": 1862,
+          "ms": 1751,
           "bytes": 3703487,
           "rateLimitHeaders": {},
           "contentType": "application/json",
@@ -142,14 +152,16 @@
           "url": "https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice&data_id=VT&start_date=2026-10-07",
           "status": 200,
           "ok": true,
-          "ms": 218,
+          "ms": 272,
           "bytes": 1333,
           "rateLimitHeaders": {},
           "contentType": "application/json",
           "sampleFile": "samples/finmind/05-us-daily-prices-for-vt-usstockprice.json"
         }
       ],
-      "observedLimits": [],
+      "observedLimits": [
+        "user_info: 0 of 600 requests used 已用／上限"
+      ],
       "coverage": {
         "2330": {
           "mark": "yes",
@@ -225,9 +237,7 @@
         "TaiwanStockInfo: 4345 rows",
         "USStockInfo: 19869 rows"
       ],
-      "skipped": [
-        "Quota check (user_info) needs FINMIND_TOKEN 需要 FINMIND_TOKEN"
-      ]
+      "skipped": []
     },
     {
       "id": "mops",
@@ -310,7 +320,7 @@
       "short": "SEC",
       "row": "US filings 美股財報與 8-K",
       "usedBy": "F12, N3",
-      "auth": "SEC_USER_AGENT not set 未設定",
+      "auth": "SEC_USER_AGENT (declared contact)",
       "documentedLimit": "At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式",
       "coverageMarkets": [
         "US"
@@ -318,17 +328,53 @@
       "coverageKinds": [
         "stock"
       ],
-      "checkedAt": "2026-10-21 10:52:30",
-      "status": "skipped",
-      "calls": [],
+      "checkedAt": "2026-10-21 11:38:42",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "Company tickers with exchange (company_tickers_exchange.json)",
+          "url": "https://www.sec.gov/files/company_tickers_exchange.json",
+          "status": 200,
+          "ok": true,
+          "ms": 466,
+          "bytes": 523851,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "lastModified": "Fri, 16 Oct 2026 11:53:51 GMT",
+          "sampleFile": "samples/sec/01-company-tickers-with-exchange-company-tickers-exchange-json.json"
+        },
+        {
+          "label": "Recent filings for Apple, CIK 320193 (submissions API)",
+          "url": "https://data.sec.gov/submissions/CIK0000320193.json",
+          "status": 200,
+          "ok": true,
+          "ms": 399,
+          "bytes": 163778,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/sec/02-recent-filings-for-apple-cik-320193-submissions-api.json"
+        }
+      ],
       "observedLimits": [],
-      "coverage": {},
+      "coverage": {
+        "AAPL": {
+          "mark": "yes",
+          "detail": "CIK 320193 · Nasdaq"
+        }
+      },
       "series": [],
-      "previews": [],
-      "notes": [],
-      "skipped": [
-        "SEC asks every client to declare a contact: set SEC_USER_AGENT in .env.local, e.g. \"LongViewInvest your-email@example.com\". SEC 要求註明聯絡 email。"
-      ]
+      "previews": [
+        {
+          "label": "Ten most recent filings 最近十筆申報",
+          "lang": "text",
+          "text": "2026-10-19  4\n2026-10-19  4\n2026-10-16  144\n2026-10-15  4\n2026-10-08  4\n2026-10-05  4\n2026-10-05  4\n2026-10-05  4\n2026-10-05  4\n2026-10-02  144"
+        }
+      ],
+      "notes": [
+        "company_tickers_exchange.json: 10443 tickers; fields cik, name, ticker, exchange",
+        "Latest 10-Q/10-K: 10-Q filed 2026-07-31 (the F12 re-run trigger)"
+      ],
+      "skipped": []
     },
     {
       "id": "alphavantage",
@@ -336,88 +382,98 @@
       "short": "Alpha Vantage",
       "row": "US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源）",
       "usedBy": "All",
-      "auth": "public demo key: sample symbols only 公開 demo 金鑰，只限範例代號",
+      "auth": "ALPHAVANTAGE_API_KEY",
       "documentedLimit": "25 requests/day on a free key (PRD §6); also commonly cited as 5/minute",
       "coverageMarkets": [
         "US",
         "UK"
       ],
-      "checkedAt": "2026-10-21 10:52:30",
-      "status": "partial",
+      "checkedAt": "2026-10-21 11:38:43",
+      "status": "failed",
       "calls": [
         {
           "label": "Active US listings (LISTING_STATUS, CSV)",
           "url": "https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=***",
           "status": 200,
-          "ok": true,
-          "ms": 606,
-          "bytes": 1070503,
-          "rateLimitHeaders": {},
-          "contentType": "application/x-download",
-          "sampleFile": "samples/alphavantage/01-active-us-listings-listing-status-csv.csv"
-        },
-        {
-          "label": "Weekly adjusted prices for IBM (TIME_SERIES_WEEKLY_ADJUSTED)",
-          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=IBM&apikey=***",
-          "status": 200,
-          "ok": true,
-          "ms": 218,
-          "bytes": 420194,
+          "ok": false,
+          "ms": 375,
+          "bytes": 2,
           "rateLimitHeaders": {},
           "contentType": "application/json",
-          "sampleFile": "samples/alphavantage/02-weekly-adjusted-prices-for-ibm-time-series-weekly-adjusted.json"
+          "sampleFile": "samples/alphavantage/01-active-us-listings-listing-status-csv.csv",
+          "error": "Alpha Vantage: JSON instead of CSV"
+        },
+        {
+          "label": "Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED)",
+          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=VT&apikey=***",
+          "status": 200,
+          "ok": false,
+          "ms": 64,
+          "bytes": 258,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/alphavantage/02-weekly-adjusted-prices-for-vt-time-series-weekly-adjusted.json",
+          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+        },
+        {
+          "label": "Symbol search \"AGGU\" (SYMBOL_SEARCH)",
+          "url": "https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=AGGU&apikey=***",
+          "status": 200,
+          "ok": false,
+          "ms": 60,
+          "bytes": 258,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/alphavantage/03-symbol-search-aggu-symbol-search.json",
+          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+        },
+        {
+          "label": "TIME_SERIES_WEEKLY for AGGU.LON",
+          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=AGGU.LON&apikey=***",
+          "status": 200,
+          "ok": false,
+          "ms": 59,
+          "bytes": 258,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/alphavantage/04-time-series-weekly-for-aggu-lon.json",
+          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
         }
       ],
       "observedLimits": [
-        "2 requests with the public demo key; none of your own quota used 使用公開 demo 金鑰，未消耗你的額度"
+        "Requests used this run 本次用量: 4 of the 25/day free quota"
       ],
       "coverage": {
         "VOO": {
-          "mark": "yes",
-          "detail": "NYSE ETF"
+          "mark": "failed"
         },
         "VT": {
-          "mark": "yes",
-          "detail": "NYSE ETF"
+          "mark": "failed"
         },
         "BNDW": {
-          "mark": "yes",
-          "detail": "NASDAQ ETF"
+          "mark": "failed"
         },
         "GLDM": {
-          "mark": "yes",
-          "detail": "NYSE ETF"
+          "mark": "failed"
         },
         "BIL": {
-          "mark": "yes",
-          "detail": "NYSE ETF"
+          "mark": "failed"
         },
         "ACWI": {
-          "mark": "yes",
-          "detail": "NASDAQ ETF"
+          "mark": "failed"
         },
         "AAPL": {
-          "mark": "yes",
-          "detail": "NASDAQ Stock"
+          "mark": "failed"
         },
         "AGGU": {
-          "mark": "skipped"
+          "mark": "no",
+          "detail": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
         }
       },
       "series": [],
-      "previews": [
-        {
-          "label": "TIME_SERIES_WEEKLY_ADJUSTED IBM: 1407 weeks, latest 2026-10-20",
-          "lang": "json",
-          "text": "{\n  \"Meta Data\": {\n    \"1. Information\": \"Weekly Adjusted Prices and Volumes\",\n    \"2. Symbol\": \"IBM\",\n    \"3. Last Refreshed\": \"2026-10-20\",\n    \"4. Time Zone\": \"US/Eastern\"\n  },\n  \"Weekly Adjusted Time Series\": {\n    \"2026-10-20\": {\n      \"1. open\": \"230.6800\",\n      \"2. high\": \"242.5250\",\n      \"3. low\": \"229.2965\",\n      \"4. close\": \"241.9200\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-16\": {\n      \"1. open\": \"228.3100\",\n      \"2. high\": \"236.9800\",\n      \"3. low\": \"224.7700\",\n      \"4. close\": \"232.1400\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-09\": {\n      \"1. open\": \"222.3000\",\n      \"2. high\": \"228.7600\",\n      \"3. low\": \"217.7950\",\n      \"4. close\": \"227.1300\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-02\": {\n      \"1. open\": \"222.5000\",\n      \"2. high\": \"234.2700\",\n      \"3. low\": \"218.6000\",\n      \"4. close\": \"222.6400\",\n      \"…\": \"3 more keys\"\n    },\n    \"…\": \"1403 more keys\"\n  }\n}"
-        }
-      ],
-      "notes": [
-        "LISTING_STATUS: 14509 active US listings; columns symbol, name, exchange, assetType, ipoDate, delistingDate, status"
-      ],
-      "skipped": [
-        "AGGU.LON needs ALPHAVANTAGE_API_KEY: the demo key serves only sample symbols such as IBM 需要 ALPHAVANTAGE_API_KEY"
-      ]
+      "previews": [],
+      "notes": [],
+      "skipped": []
     },
     {
       "id": "fmp",
@@ -816,7 +872,7 @@
       "short": "MOENV",
       "row": "Taiwan environmental penalties 台灣環境裁罰",
       "usedBy": "N3",
-      "auth": "MOENV_API_KEY not set 未設定",
+      "auth": "MOENV_API_KEY",
       "documentedLimit": "Free member API key required; no limit stated in the docs found 需免費會員金鑰",
       "coverageMarkets": [
         "TW"
@@ -824,17 +880,42 @@
       "coverageKinds": [
         "stock"
       ],
-      "checkedAt": "2026-10-21 10:52:45",
-      "status": "skipped",
-      "calls": [],
+      "checkedAt": "2026-10-21 11:46:26",
+      "status": "ok",
+      "calls": [
+        {
+          "label": "First five penalty records (ems_p_46)",
+          "url": "https://data.moenv.gov.tw/api/v2/ems_p_46?api_key=***&format=JSON&limit=5&offset=0",
+          "status": 200,
+          "ok": true,
+          "ms": 1420,
+          "bytes": 9769,
+          "rateLimitHeaders": {},
+          "contentType": "application/json",
+          "sampleFile": "samples/moenv/01-first-five-penalty-records-ems-p-46.json"
+        }
+      ],
       "observedLimits": [],
-      "coverage": {},
+      "coverage": {
+        "2330": {
+          "mark": "unchecked",
+          "detail": "records carry no ticker; N3 matches them by business ID 統一編號 in Phase 2"
+        }
+      },
       "series": [],
-      "previews": [],
-      "notes": [],
-      "skipped": [
-        "MOENV_API_KEY not set: register free at https://data.moenv.gov.tw/ 請到環境部資料開放平臺免費註冊"
-      ]
+      "previews": [
+        {
+          "label": "First records in the reply 回傳的前幾筆",
+          "lang": "json",
+          "text": "[\n  {\n    \"ems_no\": \"L89097000842\",\n    \"fac_name\": \"興亞營造工程股份有限公司\",\n    \"county_name\": \"苗栗縣\",\n    \"document_no\": \"40-115-070014\",\n    \"transgress_date\": \"2026-06-30\",\n    \"transgress_law\": \"廢棄物清理法第31條第1項第2款\",\n    \"penalty_money\": \"6000\",\n    \"penalty_date\": \"2026-07-28\",\n    \"ispetition\": \"0\",\n    \"petition_results\": \"\",\n    \"appeal_or_rescind\": \"\",\n    \"transgress_type\": \"事業廢棄物\",\n    \"…\": \"26 more keys\"\n  },\n  {\n    \"ems_no\": \"A43097016489\",\n    \"fac_name\": \"宏倫企業有限公司\",\n    \"county_name\": \"臺北市\",\n    \"document_no\": \"21-115-070396\",\n    \"transgress_date\": \"2026-06-02\",\n    \"transgress_law\": \"空氣污染防制法第44條第1項\",\n    \"penalty_money\": \"500\",\n    \"penalty_date\": \"2026-07-07\",\n    \"ispetition\": \"0\",\n    \"petition_results\": \"\",\n    \"appeal_or_rescind\": \"\",\n    \"transgress_type\": \"移動污染\",\n    \"…\": \"26 more keys\"\n  },\n  \"… 3 more items\"\n]"
+        }
+      ],
+      "notes": [
+        "5 records in this reply; fields: ems_no, fac_name, county_name, document_no, transgress_date, transgress_law, penalty_money, penalty_date, ispetition, petition_results, appeal_or_rescind, transgress_type, fac_address, transgress_name, openinfor, lawsuit_date_1, illegal_money, track_illegal_money, petition_agency, ban, transgress_address, subject, gist_define, improve_deadline, inspection_condition, transgress_control_id, is_improve, inspection_datetime_s, penaltykind, isimportant, paymentstate, isreminder, isadmincourt, isreducemoney, allow_rework_date, fac_city_code, fac_area_code, transgress_city_code",
+        "Penalty dates in these records 裁處日期: 2026-07-07 to 2026-09-14",
+        "Records carry a business ID 統一編號, so they can be matched to listed companies."
+      ],
+      "skipped": []
     },
     {
       "id": "issuers",
