@@ -17,12 +17,15 @@ Tables: the 19 from PRD Section 7 plus `push_subscriptions` and `audit_log`. Ref
 
 1. 登入 <https://supabase.com/dashboard>，按 **New project**。
 2. 填寫：
-   - **Organization**：用預設的個人組織。
+   - **Organization**：你的個人組織（Free 方案）。
+   - **GitHub (optional)**：先不要連。連上後，每次合併到 main，Supabase 會自動套用資料庫變更；第一次部署先用指令手動做，每一步都看得到。之後想自動化，可以在專案的 Integrations 設定再連，不必重建專案。
    - **Project name**：`long-view-invest`。
-   - **Database password**：按 **Generate a password** 產生，**存進密碼管理器**（例如 Mac／iPhone 的「密碼」App）。第 3 步會用到一次；它不放進任何檔案。
-   - **Region**：`Northeast Asia (Tokyo)`，離台灣最近。
-   - **Plan**：Free。
-   - 如果看到 **Automatically expose new tables**：保持**不勾選**（新專案的預設）。每張資料表的存取權限都由 migration 明確設定。
+   - **Database password**：按 **Generate a password** 產生，再按 **Copy**，**存進密碼管理器**（例如 Mac／iPhone 的「密碼」App）。不要用生日之類的日期。第 3 步會用到一次；它不放進任何檔案。
+   - **Region**：選 **Northeast Asia (Tokyo)**，離台灣最近；如果選單只有 **Asia-Pacific** 這種大區，選它也可以。
+   - **Security**：
+     - **Enable Data API**：保持勾選。網頁 App 透過它讀寫資料，仍受 row-level security 保護。
+     - **Automatically expose new tables**：**取消勾選**。每張資料表的存取權限由 migration 明確設定。
+     - **Enable automatic RLS**：**勾選**。之後新建的資料表都會自動開啟 row-level security，多一層保險；已實測與這裡的 migration 相容。
 3. 按 **Create new project**，等一兩分鐘建立完成。
 
 ## 2. 記下專案網址與 publishable key
