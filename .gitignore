@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Secrets: API keys live only in .env.local and each service's secret settings (CLAUDE.md).
+.env*
+!.env.example
+
+# Raw payloads from scripts/check_sources.ts: vendor data, kept on your machine only.
+reports/source-check/samples/
+
+# OS and editor files
+.DS_Store
+*.log

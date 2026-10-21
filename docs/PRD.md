@@ -481,7 +481,7 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 - [ ] Weekly review day and time 每週檢視的星期與時間
 - [x] 複委託 only, in principle (decided); pick the broker after F15 comparison 原則上僅使用複委託，依 F15 比較結果選定券商
 - [ ] N3 exclusion list (industries to avoid) N3 排除產業清單
-- [ ] Free price source for LSE-listed AGGU (Phase 1, step 1) 確認倫敦掛牌 AGGU 的免費價格來源
+- [x] Free price source for LSE-listed AGGU (Phase 1, step 1): Alpha Vantage AGGU.LON, weekly adjusted prices in USD on the free key; iShares daily NAV as fallback (confirmed by the source check, 2026-10-21) 確認倫敦掛牌 AGGU 的免費價格來源：Alpha Vantage 免費金鑰可取得 AGGU.LON 美元週線，iShares 每日淨值為備援（2026-10-21 資料來源檢查已確認）
 - [x] Public GitHub repo for the portfolio, with personal data excluded (decided): bilingual README; holdings, API keys and windfall figures stay out of the repo, demo data only 公開 GitHub 作為作品集（已決定）：中英雙語 README；持股、API 金鑰與大額資金數字不進 repo，只放示範資料
 
 ## 10. Glossary 雙語術語表
