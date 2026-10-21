@@ -280,6 +280,28 @@ describe('reference data from the PRD', () => {
   });
 });
 
+describe('latest quote views', () => {
+  it('give the newest close per ticker and the newest rate per pair', async () => {
+    // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.prices (ticker, price_date, close, source) values ('VT', '2026-10-19', 150, 'demo'), ('VT', '2026-10-21', 160, 'demo')`);
+      assert.equal(await scalar(tx, `select close from public.latest_prices where ticker = 'VT'`), '160');
+      assert.equal(await scalar(tx, `select count(*) from public.latest_prices where ticker = 'VT'`), 1);
+      assert.equal(await scalar(tx, `select rate from public.latest_fx_rates where pair = 'USD/TWD'`), '32.40');
+    });
+  });
+
+  it('follow the row-level security of their tables: nothing for a stranger, refused for anon', async () => {
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.latest_prices'), 0);
+      assert.equal(await scalar(tx, 'select count(*) from public.latest_fx_rates'), 0);
+    });
+    for (const view of ['latest_prices', 'latest_fx_rates']) {
+      assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query(`select 1 from public.${view}`))), DENIED, view);
+    }
+  });
+});
+
 describe('demo seed', () => {
   it('marks every price and FX rate as demo data', async () => {
     assert.equal(await scalar(db, `select count(*) from public.prices where source <> 'demo'`), 0);
