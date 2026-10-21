@@ -15,9 +15,9 @@ node --version
 **2. 下載專案並安裝工具。** `git clone` 會把 GitHub 上的專案複製到你的電腦；`npm install` 會依照 `package.json` 下載這支程式需要的四個小工具（只裝在專案資料夾內的 `node_modules/`，不影響電腦其他地方，也不會上傳）。
 
 ```bash
-git clone https://github.com/GoatC/Invest.git
-cd Invest
-git checkout claude/exciting-clarke-ud732l   # 合併到 main 之前，程式在這個分支
+git clone https://github.com/GoatC/invest.git
+cd invest
+git checkout claude/peaceful-knuth-gzi48q   # 合併到 main 之前，最新的程式在這個分支
 npm install
 ```
 
@@ -36,9 +36,14 @@ npm install
 
 ```bash
 cp .env.example .env.local
+open -e .env.local   # Mac：用「文字編輯」打開；檔名以 . 開頭，在 Finder 裡預設看不到
 ```
 
+金鑰直接貼在 `=` 後面，不用加引號或空格，存檔（⌘S）即可。
+
 ## 執行 Run
+
+先用 `cd` 進入專案資料夾再執行；在別的資料夾執行，npm 會因為找不到 `package.json` 而出現 `ENOENT` 錯誤。
 
 ```bash
 npm run check:sources
