@@ -13,9 +13,10 @@
     "start": "next start",
     "check:sources": "tsx scripts/check_sources.ts",
     "check:supabase": "tsx scripts/check_supabase.ts",
-    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts tests/db/*.test.ts lib/*.test.ts lib/*/*.test.ts",
+    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts scripts/lib/*/*.test.ts tests/db/*.test.ts lib/*.test.ts lib/*/*.test.ts",
     "typecheck": "tsc -p scripts && tsc -p tests && tsc --noEmit -p .",
-    "test:e2e": "bash tests/e2e/run.sh"
+    "test:e2e": "bash tests/e2e/run.sh",
+    "nightly": "tsx scripts/nightly.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

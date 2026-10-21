@@ -10,11 +10,13 @@ const DENIED = '42501';
 const CHECK_FAILED = '23514';
 const KEY_MISSING = '23503';
 
-// PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and the N5 audit log adds audit_log.
+// PRD Section 7 lists 19 tables; Web Push adds push_subscriptions, the N5 audit log adds audit_log
+// and the nightly job (Phase 1, step 4) adds job_runs.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
+  'job_runs',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -34,7 +36,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions and audit_log', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log and job_runs', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -111,6 +113,30 @@ describe('row-level security', () => {
       await tx.query(`insert into public.prices (ticker, price_date, close, source) values ('VT', '2026-10-21', 158.1, 'alphavantage')`);
       assert.equal(await scalar(tx, `select count(*) from public.prices where price_date = '2026-10-21'`), 1);
     });
+  });
+
+  it('lets the jobs record their runs, and the owner only read them', async () => {
+    const run = `insert into public.job_runs (job, started_at, finished_at, status, detail)
+                 values ('nightly_prices', now() - interval '1 minute', now(), 'ok', '{"prices": 12}')`;
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(run);
+      assert.equal(await scalar(tx, `select count(*) from public.job_runs where job = 'nightly_prices'`), 1);
+    });
+    // A committed run, as the job leaves it, for the owner to read and a stranger not to see.
+    await db.query(run);
+    try {
+      await as(db, 'owner', async (tx) => {
+        assert.equal(await scalar(tx, `select status from public.job_runs where job = 'nightly_prices'`), 'ok');
+      });
+      await as(db, 'stranger', async (tx) => {
+        assert.equal(await scalar(tx, 'select count(*) from public.job_runs'), 0);
+      });
+    } finally {
+      await db.query(`delete from public.job_runs where job = 'nightly_prices'`);
+    }
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(run))), DENIED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query('delete from public.job_runs'))), DENIED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(run))), DENIED);
   });
 
   it('keeps the owner table and the owner check out of reach', async () => {
