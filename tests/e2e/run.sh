@@ -6,7 +6,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+export REPO="$(cd "$HERE/../.." && pwd)"
 export E2E_HOME="${E2E_HOME:-/tmp/invest-e2e}"
 export BIN="$E2E_HOME/bin" LOGS="$E2E_HOME/logs" SHOTS="$E2E_HOME/shots" CSV="$E2E_HOME/demo-statement-big5.csv"
 export PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}" PGDATA="${PGDATA:-/var/lib/postgresql/invest-e2e}" PGPORT="${PGPORT:-55432}"
@@ -17,7 +17,7 @@ AUTH_VERSION=v2.177.0
 
 # Throwaway credentials, new for every run and never written to the repository.
 random() { node -e "console.log(require('node:crypto').randomBytes($1).toString('hex'))"; }
-export JWT_SECRET="$(random 32)" PUBLISHABLE_KEY="sb_publishable_e2e_$(random 8)"
+export JWT_SECRET="$(random 32)" PUBLISHABLE_KEY="sb_publishable_e2e_$(random 8)" SECRET_KEY="sb_secret_e2e_$(random 8)"
 export OWNER_EMAIL='owner@example.com' OWNER_PASSWORD="$(random 12)"
 
 mkdir -p "$BIN" "$LOGS" "$SHOTS"
@@ -62,6 +62,9 @@ export GOTRUE_DISABLE_SIGNUP=true GOTRUE_EXTERNAL_EMAIL_ENABLED=true GOTRUE_MAIL
 (cd "$BIN/auth" && ./auth migrate) >"$LOGS/auth-migrate.log" 2>&1
 for file in "$REPO"/supabase/migrations/*.sql; do "${PSQL[@]}" -f "$file"; done
 "${PSQL[@]}" -f "$REPO/supabase/seed.sql"
+# The seed's newest rate again, dated today in Taipei: the trade form defaults to the trade date's
+# rate, so the check reads the same whatever day it runs.
+"${PSQL[@]}" -c "insert into public.fx_rates (pair, rate_date, rate, source) values ('USD/TWD', (now() at time zone 'Asia/Taipei')::date, 32.40, 'demo') on conflict do nothing;"
 
 echo "4/7 services"
 (cd "$BIN/auth" && exec ./auth serve) >"$LOGS/auth.log" 2>&1 &

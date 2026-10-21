@@ -399,23 +399,24 @@ The stack is a Next.js PWA on Vercel plus a Supabase backend, built entirely wit
 
 &#91;embedded content: System architecture · 3 layers, 1 human checkpoint\]
 
-Nightly jobs pull free data into Postgres; the rules engine turns fired rules into proposals, pushes them, and Hugo trades by hand. Fills come back through manual entry or a broker statement CSV. A GitHub Actions cron starts the nightly job by calling a Supabase Edge Function, which also keeps the free project from auto-pausing. 每夜排程把免費資料寫入資料庫；規則引擎把觸發的規則變成提案並推播，由 Hugo 手動下單；成交資料再以手動輸入或券商對帳單 CSV 匯回。每夜排程由 GitHub Actions 呼叫 Supabase Edge Function 觸發，同時避免免費專案因閒置而自動暫停。
+Nightly jobs pull free data into Postgres; the rules engine turns fired rules into proposals, pushes them, and Hugo trades by hand. Fills come back through manual entry or a broker statement CSV. A GitHub Actions cron runs the nightly job itself and writes to Postgres with the Supabase secret key, kept in GitHub's encrypted secrets; its nightly reads and writes also keep the free project from auto-pausing. (Changed in Phase 1, step 4 from calling a Supabase Edge Function: on the free plan an Edge Function stops after 2 seconds of CPU time and 150 seconds in all, too little for three years of prices and AGGU's 25 MB fund file.) 每夜排程把免費資料寫入資料庫；規則引擎把觸發的規則變成提案並推播，由 Hugo 手動下單；成交資料再以手動輸入或券商對帳單 CSV 匯回。每夜排程直接在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 中的 Supabase secret key 寫入資料庫；每晚的讀寫同時避免免費專案因閒置而自動暫停。（第一階段第 4 步起改變：原本規劃呼叫 Supabase Edge Function，但免費方案每次只有 2 秒 CPU、最長 150 秒，不足以處理三年價格與 AGGU 的 25 MB 基金檔案。）
 
 | Data 資料 | Free source 免費來源 | Used by 使用者 |
 | --- | --- | --- |
-| Taiwan prices, financials, filings 台股價格、財報、重大訊息 | TWSE OpenAPI, FinMind, MOPS 公開資訊觀測站 | F12, N1, N3, F18 |
+| Taiwan prices, financials, filings 台股價格、財報、重大訊息 | TWSE OpenAPI, FinMind, MOPS 公開資訊觀測站. Daily closes: FinMind, dividend-adjusted by the nightly job from its ex-dividend results; TWSE OpenAPI as backup 每日收盤價以 FinMind 為主（由每夜排程依除權息結果還原），證交所 OpenAPI 備援 | F12, N1, N3, F18 |
 | US filings 美股財報與 8-K | SEC EDGAR | F12, N3 |
-| US stock, ETF and index prices 美股、ETF 與指數價格 | Alpha Vantage free key as primary (25 requests/day; weekly and monthly history); FinMind US prices as backup. LSE-listed AGGU needs a source check 主要用 Alpha Vantage，備援 FinMind；倫敦掛牌的 AGGU 需確認來源 | All |
-| US rates, TWD/USD 美國利率與匯率 | FRED | F11, F18, N2 |
+| US stock, ETF and index prices 美股、ETF 與指數價格 | FinMind US prices as primary (daily, with adjusted close); Alpha Vantage free key as backup (25 requests/day; fills missing days only). LSE-listed AGGU: iShares daily NAV, with Alpha Vantage AGGU.LON weekly as backup (step 4) 主要用 FinMind（每日、含還原收盤價），Alpha Vantage 備援；倫敦掛牌的 AGGU 用 iShares 每日淨值，Alpha Vantage 週線備援（第 4 步） | All |
+| TWD/USD 台幣匯率 | Bank of Taiwan daily rates through FinMind, the middle of spot buy and sell; FRED (weekly) as backup 臺灣銀行每日牌告（經 FinMind，取即期買賣中間值），FRED 週資料備援 | F18, N2, N5 |
+| US rates 美國利率 | FRED | F11 |
 | Taiwan 10-year yield 台灣 10 年期公債殖利率 | Central Bank of the ROC 中央銀行 | F11 |
 | US CAPE 週期調整本益比 | Robert Shiller's online data | F3 |
 | Factor returns 因子報酬 | Kenneth French Data Library | N1 |
 | Equity risk premium 股票風險溢酬 | Damodaran Online | F11 |
 | Governance and penalties 公司治理與裁罰 | TWSE 公司治理評鑑, EPA ECHO, 環境部 | N3 |
 | ETF holdings ETF 成分股 | Issuer CSV downloads 發行商公開檔案 | F14 |
-| Gold price in TWD 台幣金價 | Bank of Taiwan gold price 臺灣銀行黃金牌價 | N5, N4, N6 |
+| Gold price in TWD 台幣金價 | International gold price in USD per ounce (FinMind) × the Bank of Taiwan USD rate, as the bank's own gold page blocks scripts; the value entered by hand as fallback (step 4) 國際金價（FinMind，每盎司美元）× 臺灣銀行美元匯率（臺銀黃金牌價網頁會擋程式）；手動估值備援（第 4 步） | N5, N4, N6 |
 
-Free tiers checked October 2026: Alpha Vantage allows 25 requests a day, Financial Modeling Prep 250 a day, FinMind 600 an hour with a token, and Supabase Free pauses a project after about 7 days of low activity. A once-a-night batch for about 20 tickers fits inside all of them. 2026 年 10 月確認：Alpha Vantage 每日 25 次、Financial Modeling Prep 每日 250 次、FinMind 有金鑰時每小時 600 次；Supabase 免費專案約 7 天低活動即暫停。約 20 檔標的的每夜批次都在額度內。
+Free tiers checked October 2026: Alpha Vantage allows 25 requests a day, Financial Modeling Prep 250 a day, FinMind 600 an hour with a token, and Supabase Free pauses a project after about 7 days of low activity. A once-a-night batch for about 20 tickers fits inside all of them. GitHub Actions is free for public repositories, but it turns a schedule off after 60 days without repository activity. 2026 年 10 月確認：Alpha Vantage 每日 25 次、Financial Modeling Prep 每日 250 次、FinMind 有金鑰時每小時 600 次；Supabase 免費專案約 7 天低活動即暫停。約 20 檔標的的每夜批次都在額度內。GitHub Actions 對公開 repo 免費，但 repo 連續 60 天沒有活動時會暫停排程。
 
 ## 7. Data Model 資料結構
 
@@ -445,6 +446,8 @@ Nineteen Postgres tables cover holdings, market data, rules and model outputs; a
 
 A 20th table, push\_subscriptions (endpoint, keys, device name), is added in Phase 1 with the Web Push setup. 第 20 張資料表 push\_subscriptions（端點、金鑰、裝置名稱）會在第一階段建置 Web Push 時一併加入。
 
+Two bookkeeping tables join them in Phase 1: audit\_log (table, row, old and new values, who and when) for N5's edit history (step 2), and job\_runs (job, start, finish, status, per-feed detail) for the nightly job's outcomes and the data-failure alert (step 4). 第一階段另有兩張紀錄用資料表：audit\_log（資料表、資料列、修改前後內容、修改者與時間），供 N5 的修改紀錄使用（第 2 步）；job\_runs（工作、開始與結束時間、狀態、各資料來源明細），記錄每夜排程結果並供資料異常警示使用（第 4 步）。
+
 ## 8. Roadmap 開發路線圖
 
 Phase 1 comes first because every alert, proposal and weekly summary depends on the nightly data job and working push. 第一階段優先，因為所有警報、提案與週報都依賴每夜資料排程與可用的推播。
@@ -466,7 +469,8 @@ The largest design risk is windfall acceleration, which may commit most of the c
 | Tax rules change 稅法變動 | Thresholds in F15 may go stale F15 的門檻可能過時 | Stored as config with a "last verified" date 存為設定並標示最後確認日期 |
 | iPhone push 手機推播 | Web Push on iOS works only after Add to Home Screen iOS 需先加入主畫面才能收推播 | Install step in the setup checklist 列入安裝檢查清單 |
 | Data privacy 資料隱私 | Holdings and windfall data are sensitive 持股與大額資金資料屬敏感資訊 | Single-user login, row-level security, no broker credentials stored 單人登入、資料列層級權限、不儲存券商帳密 |
-| Supabase auto-pause 免費專案暫停 | A Free project with little activity for 7 days is paused 免費專案 7 天低活動會被暫停 | Nightly GitHub Actions call to an Edge Function; data-failure push if it stops 每夜由 GitHub Actions 呼叫；中斷即推播 |
+| Supabase auto-pause 免費專案暫停 | A Free project with little activity for 7 days is paused 免費專案 7 天低活動會被暫停 | The nightly GitHub Actions job reads and writes the database every night; data-failure alert if it stops 每夜由 GitHub Actions 排程讀寫資料庫；中斷即警示 |
+| Schedule switched off 排程被暫停 | GitHub turns off the schedule of a public repo after 60 days without activity GitHub 會暫停 60 天無活動的公開 repo 排程 | Missed nights count toward the data-failure alert; re-enable in the Actions tab 未執行的夜晚計入資料異常警示；於 Actions 分頁重新啟用 |
 | Minimum fees 最低手續費 | NT$10,000 split across 8 sleeves means very small 複委託 orders 每月 1 萬分到 8 個部位，單筆複委託金額過小 | F8 sends each month's cash to at most 2 classes; F15 compares minimum fees 每月最多投入 2 個類別；F15 比較低消 |
 | Phase 1 scope 第一階段範圍 | 11 items is heavy for 2–4 weeks 2–4 週內完成 11 項偏重 | Strict build order in Section 11; the gate decides, not the calendar 依第 11 節順序建置，以關卡而非日期為準 |
 
@@ -481,17 +485,22 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 - [ ] Weekly review day and time 每週檢視的星期與時間
 - [x] 複委託 only, in principle (decided); pick the broker after F15 comparison 原則上僅使用複委託，依 F15 比較結果選定券商
 - [ ] N3 exclusion list (industries to avoid) N3 排除產業清單
-- [x] Free price source for LSE-listed AGGU (Phase 1, step 1): Alpha Vantage AGGU.LON, weekly adjusted prices in USD on the free key; iShares daily NAV as fallback (confirmed by the source check, 2026-10-21) 確認倫敦掛牌 AGGU 的免費價格來源：Alpha Vantage 免費金鑰可取得 AGGU.LON 美元週線，iShares 每日淨值為備援（2026-10-21 資料來源檢查已確認）
+- [x] Free price source for LSE-listed AGGU (Phase 1, step 1): Alpha Vantage AGGU.LON, weekly adjusted prices in USD on the free key; iShares daily NAV as fallback (confirmed by the source check, 2026-10-21). Swapped in step 4: the iShares daily NAV is now primary, as Alpha Vantage gives weekly prices only and refused requests from a cloud server in testing; Alpha Vantage weekly is the fallback 確認倫敦掛牌 AGGU 的免費價格來源：Alpha Vantage 免費金鑰可取得 AGGU.LON 美元週線，iShares 每日淨值為備援（2026-10-21 資料來源檢查已確認）。第 4 步起對調：改以 iShares 每日淨值為主，因為 Alpha Vantage 只有週線，且測試時拒絕來自雲端主機的請求；Alpha Vantage 週線改為備援
 - [x] Public GitHub repo for the portfolio, with personal data excluded (decided): bilingual README; holdings, API keys and windfall figures stay out of the repo, demo data only 公開 GitHub 作為作品集（已決定）：中英雙語 README；持股、API 金鑰與大額資金數字不進 repo，只放示範資料
 
 Raised by the spec review after Phase 1, step 3 (2026-10-21) 第一階段第 3 步後檢視規格時提出:
 
 - [ ] Cash flows (monthly contributions, dividends, the windfall's arrival, withdrawals) have no entry page, and the CSV import skips dividend rows; F18 (step 5) and F2's actual-vs-projected path (step 8) need them. Proposed: a cash-flow form on N5 and dividend rows in the CSV import, before step 5 現金流（每月投入、股利、大額資金入帳、提領）尚無登錄頁面，CSV 匯入也會略過股利列；F18（第 5 步）與 F2 的實際與預測對照（第 8 步）都需要。建議在第 5 步之前，於 N5 加入現金流表單並讓 CSV 匯入讀取股利列
-- [ ] Gold price in TWD: the Bank of Taiwan page blocks scripts (source check, 2026-10-21), so physical gold is valued by hand for now. Proposed for step 4: the USD gold price × TWD/USD, keeping the hand-entered value as fallback 台幣金價：臺灣銀行頁面會擋程式（2026-10-21 資料來源檢查），目前實體黃金以手動估值。建議第 4 步改以美元金價 × 台幣匯率換算，手動估值作為備援
-- [ ] Daily FX source: FRED's TWD/USD (DEXTAUS) is published weekly, days late. Step 4 picks a daily source, and trade entry and the CSV import then default to the trade date's rate instead of the newest one 每日匯率來源：FRED 的台幣匯率（DEXTAUS）每週公布、延遲數天。第 4 步需選定每日來源，之後交易登錄與 CSV 匯入改為預設帶入交易日的匯率，而非最新匯率
+- [x] Gold price in TWD: the Bank of Taiwan page blocks scripts (source check, 2026-10-21), so physical gold was valued by hand. Done in step 4: the international USD gold price (FinMind GoldPrice, each day's last price) × that day's Bank of Taiwan USD rate, ÷ 31.1035 grams per ounce; the hand-entered value stays as fallback 台幣金價：臺灣銀行頁面會擋程式（2026-10-21 資料來源檢查），原本以手動估值。第 4 步完成：國際美元金價（FinMind GoldPrice，每日最後一筆）× 當日臺銀美元匯率 ÷ 每盎司 31.1035 克，手動估值作為備援
+- [x] Daily FX source: FRED's TWD/USD (DEXTAUS) is published weekly, days late. Done in step 4: Bank of Taiwan daily rates through FinMind (TaiwanExchangeRate), FRED as fallback. Trade entry and the CSV import now default to the trade date's rate, or the newest one at most `fx_rate_check.max_age_days` (10) before it, and check typed rates against it 每日匯率來源：FRED 的台幣匯率（DEXTAUS）每週公布、延遲數天。第 4 步完成：改用經 FinMind 取得的臺灣銀行每日牌告，FRED 為備援；交易登錄與 CSV 匯入預設帶入交易日的匯率（當天沒有則取前 `fx_rate_check.max_age_days`（10）天內最近一筆），並以此檢查輸入的匯率
 - [ ] Foreign-currency cash left in the 複委託 account after a USD-settled sale has no place in the data model (manual_assets holds grams or TWD only): settle in TWD, or add foreign-currency balances 複委託以外幣交割時，賣出後留在帳戶的外幣現金在資料結構中沒有位置（manual_assets 只有克與台幣）：改以台幣交割，或新增外幣餘額
 - [ ] Deploying to Vercel and installing the PWA are not a build step, yet Web Push (step 10) needs both. Proposed: deploy once step 4 is done 部署到 Vercel 與安裝 PWA 不在建置順序中，但第 10 步的推播兩者都需要。建議第 4 步完成後部署
 - [ ] DCA debit day (config `dca.day_of_month`), needed by the monthly-contribution rule (step 9) and the weekly view (step 10) 定期定額扣款日（config 的 `dca.day_of_month`），每月投入規則（第 9 步）與週檢視（第 10 步）需要
+
+Decided in Phase 1, step 4 (2026-10-21) 第一階段第 4 步決定:
+
+- [x] The nightly job runs in GitHub Actions itself, writing with the Supabase secret key kept in GitHub's encrypted secrets, instead of calling an Edge Function (Section 6): the free plan's 2-second CPU limit is too small, and Actions keeps a log of every run. Its public log shows counts only; which tickers were loaded is kept in the `job_runs` table and shown in the app 每夜排程直接在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的 Supabase secret key 寫入，不再呼叫 Edge Function（第 6 節）：免費方案 2 秒 CPU 上限不夠，且 Actions 會留下每次執行紀錄。公開的執行紀錄只寫數量；載入了哪些代號存在 `job_runs` 表，在 App 內顯示
+- [x] The data-failure alert (rule `DATA_FAILURE`, two misses in a row) counts failed runs and nights with no run at all; it shows on the holdings page now and becomes a push in step 10 資料異常警示（`DATA_FAILURE` 規則，連續兩次）同時計入失敗的執行與完全沒有執行的夜晚；目前顯示在持倉頁，第 10 步改為推播
 
 ## 10. Glossary 雙語術語表
 
