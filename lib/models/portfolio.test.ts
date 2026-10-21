@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildPortfolio, previewTrade, type PortfolioData } from './portfolio';
+import { addedShortfalls, buildPortfolio, previewImport, previewTrade, type PortfolioData } from './portfolio';
 import { ASSET_CLASSES, CAPS, SECURITIES, trade } from './test-helpers';
 
 /** NT$200,000 of 0050 and nothing else, priced at NT$100. */
@@ -64,5 +64,39 @@ describe('previewTrade', () => {
   it('leaves a windfall buy of a satellite ticker without warnings', () => {
     const windfall = trade({ ticker: '2330', qty: 100, price: 2_500, currency: 'TWD', fxRate: 1, pool: 'windfall' });
     assert.deepEqual(previewTrade(data(), windfall, CAPS).breaches, []);
+  });
+});
+
+describe('previewTrade and shortfalls', () => {
+  it('does not blame a trade for a shortfall that was already there', () => {
+    // A sell of 2330 that was never bought exists already; buying more 0050 is unrelated.
+    const orphan = trade({ id: 2, ticker: '2330', side: 'sell', qty: 1, price: 2_500, currency: 'TWD', fxRate: 1 });
+    const buy = trade({ ticker: '0050', qty: 10, price: 100, currency: 'TWD', fxRate: 1 });
+    assert.deepEqual(previewTrade(data({ trades: [...data().trades, orphan] }), buy, CAPS).shortfalls, []);
+  });
+
+  it('counts a shortfall that grows as new', () => {
+    const before = [{ ticker: 'VT', pool: 'regular' as const, tradeDate: '2026-10-05', missingQty: 1 }];
+    assert.deepEqual(addedShortfalls(before, before), []);
+    assert.deepEqual(addedShortfalls(before, [{ ...before[0]!, missingQty: 3 }]).map((s) => s.missingQty), [3]);
+  });
+});
+
+describe('previewImport', () => {
+  it('checks many new trades at once: a later sell can use an earlier imported buy', () => {
+    const buy = trade({ tradeDate: '2026-10-01', ticker: '2330', qty: 5, price: 2_500, currency: 'TWD', fxRate: 1 });
+    const sell = trade({ tradeDate: '2026-10-02', ticker: '2330', side: 'sell', qty: 2, price: 2_600, currency: 'TWD', fxRate: 1 });
+    const preview = previewImport(data(), [buy, sell], CAPS);
+    assert.deepEqual(preview.shortfalls, []);
+    // 3 shares left at the newest trade price, NT$2,600: NT$7,800 of NT$207,800 is 3.8%, within R1.
+    assert.deepEqual(preview.breaches, []);
+  });
+
+  it('reports an imported sell larger than the holding', () => {
+    const sell = trade({ tradeDate: '2026-10-02', ticker: '2330', side: 'sell', qty: 2, price: 2_600, currency: 'TWD', fxRate: 1 });
+    assert.deepEqual(
+      previewImport(data(), [sell], CAPS).shortfalls.map((s) => [s.ticker, s.missingQty]),
+      [['2330', 2]],
+    );
   });
 });

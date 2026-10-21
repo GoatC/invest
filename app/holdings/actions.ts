@@ -7,7 +7,7 @@ import { DataError, loadHoldingsData, orDataError, transactionColumns } from '@/
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, shortfallMessage, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
-import { previewTrade } from '@/lib/models/portfolio';
+import { addedShortfalls, previewTrade } from '@/lib/models/portfolio';
 import { buildPositions } from '@/lib/models/positions';
 import { parseTrade, type FieldErrors, type TradeField } from '@/lib/validation';
 
@@ -54,10 +54,8 @@ export async function deleteTrade(_previous: DeleteState, formData: FormData): P
   if (data instanceof DataError) return { message: saveFailed(data.detail) };
   if (id === undefined || !data.trades.some((trade) => trade.id === id)) return { message: ACTION_MESSAGES.notFound };
 
-  const before = buildPositions(data.trades).shortfalls.length;
-  const after = buildPositions(data.trades.filter((trade) => trade.id !== id)).shortfalls;
-  const [shortfall] = after;
-  if (shortfall && after.length > before) return { message: shortfallMessage(shortfall) };
+  const [shortfall] = addedShortfalls(buildPositions(data.trades).shortfalls, buildPositions(data.trades.filter((trade) => trade.id !== id)).shortfalls);
+  if (shortfall) return { message: shortfallMessage(shortfall) };
 
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) return { message: saveFailed(error.message) };

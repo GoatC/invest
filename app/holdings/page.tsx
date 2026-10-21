@@ -36,8 +36,8 @@ function savedMessage(params: Params): Bilingual | undefined {
   const added = count('added');
   const skipped = count('skipped');
   return {
-    en: `Imported ${added} trade${added === 1 ? '' : 's'}${skipped > 0 ? `; skipped ${skipped} already saved` : ''}.`,
-    zh: `已匯入 ${added} 筆交易${skipped > 0 ? `，略過 ${skipped} 筆已存在的交易` : ''}。`,
+    en: `Imported ${added} trade${added === 1 ? '' : 's'}${skipped > 0 ? `; ${skipped} row${skipped === 1 ? '' : 's'} of the file skipped` : ''}.`,
+    zh: `已匯入 ${added} 筆交易${skipped > 0 ? `，略過檔案中的 ${skipped} 列` : ''}。`,
   };
 }
 

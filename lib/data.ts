@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
 import type { PortfolioData } from './models/portfolio';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import type { AssetClass, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
@@ -223,6 +224,16 @@ export async function loadHoldingsData(supabase: SupabaseClient): Promise<Holdin
     caps: capsFromRules(rules),
     fxMaxGap: fxMaxGap(settings[0]?.value),
   };
+}
+
+/** The CSV column mappings saved per broker by the import (config keys csv_mapping.*), by broker name. */
+export async function loadCsvMappings(supabase: SupabaseClient): Promise<SavedMapping[]> {
+  const settings = await rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').like('key', `${MAPPING_PREFIX}%`));
+  return settings
+    .filter((row) => row.key.startsWith(MAPPING_PREFIX))
+    .map((row) => parseSavedMapping(row.value))
+    .filter((saved) => saved !== undefined)
+    .sort((a, b) => a.broker.localeCompare(b.broker));
 }
 
 /** One non-listed asset, or undefined when the id does not exist. */

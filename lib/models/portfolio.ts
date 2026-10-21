@@ -36,10 +36,34 @@ export function buildPortfolio(data: PortfolioData): Portfolio {
 }
 
 export interface TradePreview {
-  /** Breaches the trade would leave in place, with "new" marking the ones it causes. */
+  /** Breaches the change would leave in place, with "new" marking the ones it causes. */
   breaches: Array<CapBreach & { isNew: boolean }>;
-  /** Sells larger than the holding once this trade is in the book. */
+  /** Sells the change would leave larger than the holding, beyond any that were already there. */
   shortfalls: Shortfall[];
+}
+
+function shortfallKey(shortfall: Shortfall): string {
+  return `${shortfall.pool}:${shortfall.ticker}:${shortfall.tradeDate}`;
+}
+
+/** Shortfalls in `after` that `before` did not have, or that grew. */
+export function addedShortfalls(before: readonly Shortfall[], after: readonly Shortfall[]): Shortfall[] {
+  const was = new Map(before.map((shortfall) => [shortfallKey(shortfall), shortfall.missingQty]));
+  return after.filter((shortfall) => shortfall.missingQty - (was.get(shortfallKey(shortfall)) ?? 0) > 1e-9);
+}
+
+function breachKey(breach: CapBreach): string {
+  return `${breach.rule}:${breach.subject}`;
+}
+
+function compare(data: PortfolioData, trades: Trade[], caps: Caps): TradePreview {
+  const current = buildPortfolio(data);
+  const next = buildPortfolio({ ...data, trades });
+  const existing = new Set(capBreaches(current.holdings, caps).map(breachKey));
+  return {
+    breaches: capBreaches(next.holdings, caps).map((breach) => ({ ...breach, isNew: !existing.has(breachKey(breach)) })),
+    shortfalls: addedShortfalls(current.shortfalls, next.shortfalls),
+  };
 }
 
 /**
@@ -47,12 +71,11 @@ export interface TradePreview {
  * on these without blocking the save; the same function runs live in the form and after saving.
  */
 export function previewTrade(data: PortfolioData, trade: Trade, caps: Caps): TradePreview {
-  const before = capBreaches(buildPortfolio(data).holdings, caps);
   const trades = trade.id === undefined ? [...data.trades, trade] : data.trades.map((saved) => (saved.id === trade.id ? trade : saved));
-  const after = buildPortfolio({ ...data, trades });
-  const existing = new Set(before.map((breach) => `${breach.rule}:${breach.subject}`));
-  return {
-    breaches: capBreaches(after.holdings, caps).map((breach) => ({ ...breach, isNew: !existing.has(`${breach.rule}:${breach.subject}`) })),
-    shortfalls: after.shortfalls,
-  };
+  return compare(data, trades, caps);
+}
+
+/** The same picture for many new trades at once: a CSV import. */
+export function previewImport(data: PortfolioData, added: readonly Trade[], caps: Caps): TradePreview {
+  return compare(data, [...data.trades, ...added], caps);
 }
