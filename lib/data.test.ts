@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { diffRows, fxMaxGap, toTransaction } from './data';
+
+describe('diffRows', () => {
+  it('lists only the columns that changed, skipping bookkeeping columns', () => {
+    const before = { id: 7, qty: 4, price: 68, note: null, updated_at: '2026-10-20T01:00:00Z' };
+    const after = { id: 7, qty: 5, price: 68, note: 'fixed', updated_at: '2026-10-21T01:00:00Z' };
+    assert.deepEqual(diffRows(before, after), [
+      { column: 'qty', before: 4, after: 5 },
+      { column: 'note', before: null, after: 'fixed' },
+    ]);
+  });
+
+  it('shows every value going away when a row is deleted', () => {
+    assert.deepEqual(diffRows({ id: 7, qty: 4 }, null), [{ column: 'qty', before: 4, after: null }]);
+  });
+});
+
+describe('toTransaction', () => {
+  it('turns numeric strings from the database into numbers', () => {
+    const trade = toTransaction({
+      id: 1,
+      trade_date: '2026-10-07',
+      ticker: 'VT',
+      side: 'buy',
+      qty: '2' as unknown as number,
+      price: '150.00' as unknown as number,
+      currency: 'USD',
+      fee: '1.00' as unknown as number,
+      tax: 0,
+      fx_rate: '31.80' as unknown as number,
+      pool: 'regular',
+      source: 'manual',
+      note: null,
+    });
+    assert.deepEqual([trade.qty, trade.price, trade.fee, trade.fxRate], [2, 150, 1, 31.8]);
+  });
+});
+
+describe('fxMaxGap', () => {
+  it('reads the margin from the fx_rate_check setting', () => {
+    assert.equal(fxMaxGap({ max_gap: 0.2 }), 0.2);
+  });
+
+  it('turns the check off when the setting is missing or malformed', () => {
+    for (const value of [undefined, null, 0.2, {}, { max_gap: '0.2' }, { max_gap: 0 }, { max_gap: -1 }]) {
+      assert.equal(fxMaxGap(value), null);
+    }
+  });
+});

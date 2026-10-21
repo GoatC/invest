@@ -15,6 +15,16 @@ export class DataError extends Error {
   }
 }
 
+/** The result, or the DataError a failed read threw, so a form can show it instead of an error page. */
+export async function orDataError<T>(promise: Promise<T>): Promise<T | DataError> {
+  try {
+    return await promise;
+  } catch (err) {
+    if (err instanceof DataError) return err;
+    throw err;
+  }
+}
+
 type Result<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
 
 async function rows<T>(table: string, query: Result<T>): Promise<T[]> {
@@ -154,45 +164,71 @@ export function toManualAsset(row: ManualAssetRow): ManualAsset {
 // Loaders
 // ---------------------------------------------------------------------------
 
+export async function loadSecurities(supabase: SupabaseClient): Promise<SecurityRecord[]> {
+  const securities = await rows<SecurityRow>(
+    'securities',
+    supabase.from('securities').select('ticker, name, market, product_type, asset_class_id, sleeve, currency, domicile').order('ticker'),
+  );
+  return securities.map((row) => ({
+    ticker: row.ticker,
+    name: row.name,
+    market: row.market,
+    productType: row.product_type,
+    assetClassId: row.asset_class_id,
+    sleeve: row.sleeve,
+    currency: row.currency,
+    domicile: row.domicile,
+  }));
+}
+
+export async function loadAssetClasses(supabase: SupabaseClient): Promise<AssetClass[]> {
+  const assetClasses = await rows<AssetClassRow>('asset_classes', supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order').order('sort_order'));
+  return assetClasses.map((row) => ({ id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order }));
+}
+
+/** The share an FX rate may stray from the newest known one before a warning (config fx_rate_check); null turns the check off. */
+export function fxMaxGap(value: unknown): number | null {
+  const gap = typeof value === 'object' && value !== null ? (value as Record<string, unknown>)['max_gap'] : undefined;
+  return typeof gap === 'number' && gap > 0 ? gap : null;
+}
+
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */
 export interface HoldingsData extends PortfolioData {
   trades: TransactionRecord[];
   securities: SecurityRecord[];
   caps: Caps;
+  fxMaxGap: number | null;
 }
 
 export async function loadHoldingsData(supabase: SupabaseClient): Promise<HoldingsData> {
-  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules] = await Promise.all([
+  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules, settings] = await Promise.all([
     allRows<TransactionRow>('transactions', (from, to) =>
       supabase.from('transactions').select(TRANSACTION_COLUMNS).order('trade_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
     ),
-    rows<SecurityRow>('securities', supabase.from('securities').select('ticker, name, market, product_type, asset_class_id, sleeve, currency, domicile').order('ticker')),
-    rows<AssetClassRow>('asset_classes', supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order').order('sort_order')),
+    loadSecurities(supabase),
+    loadAssetClasses(supabase),
     rows<{ ticker: string; price_date: string; close: number }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close')),
     rows<{ pair: string; rate_date: string; rate: number }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate')),
     rows<ManualAssetRow>('manual_assets', supabase.from('manual_assets').select(MANUAL_ASSET_COLUMNS).order('id')),
     rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])),
+    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'fx_rate_check')),
   ]);
   return {
     trades: transactions.map(toTransaction),
-    securities: securities.map((row) => ({
-      ticker: row.ticker,
-      name: row.name,
-      market: row.market,
-      productType: row.product_type,
-      assetClassId: row.asset_class_id,
-      sleeve: row.sleeve,
-      currency: row.currency,
-      domicile: row.domicile,
-    })),
-    assetClasses: assetClasses.map(
-      (row): AssetClass => ({ id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order }),
-    ),
+    securities,
+    assetClasses,
     prices: prices.map((row): PriceQuote => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close) })),
     fx: fx.map((row): FxQuote => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
     manualAssets: manualAssets.map(toManualAsset),
     caps: capsFromRules(rules),
+    fxMaxGap: fxMaxGap(settings[0]?.value),
   };
+}
+
+/** One non-listed asset, or undefined when the id does not exist. */
+export async function loadManualAsset(supabase: SupabaseClient, id: number): Promise<ManualAsset | undefined> {
+  const [row] = await rows<ManualAssetRow>('manual_assets', supabase.from('manual_assets').select(MANUAL_ASSET_COLUMNS).eq('id', id));
+  return row ? toManualAsset(row) : undefined;
 }
 
 // ---------------------------------------------------------------------------

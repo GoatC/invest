@@ -259,6 +259,10 @@ describe('reference data from the PRD', () => {
     for (const row of rows) assert.equal(row.enabled, !['F3', 'F12', 'N3'].includes(row.feature), row.id);
   });
 
+  it('keeps the trade-entry FX typo check in config, as a share of the newest rate', async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'fx_rate_check'`), { max_gap: 0.2 });
+  });
+
   it('lists every Investment Principles core vehicle as a security', async () => {
     const { rows } = await db.query<{ ticker: string }>('select ticker from public.securities');
     const tickers = new Set(rows.map((row) => row.ticker));

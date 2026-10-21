@@ -371,11 +371,3 @@ button:disabled {
 .estimate {
   color: var(--muted);
 }
-
-.drift-high {
-  color: var(--danger-text);
-}
-
-.drift-mid {
-  color: var(--warn-text);
-}
