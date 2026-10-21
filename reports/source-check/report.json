@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-21 12:06:27",
+  "generatedAt": "2026-10-21 12:13:26",
   "node": "v22.22.0",
   "runner": "local run 本機執行",
   "keys": {
@@ -388,56 +388,52 @@
         "US",
         "UK"
       ],
-      "checkedAt": "2026-10-21 12:06:21",
-      "status": "failed",
+      "checkedAt": "2026-10-21 12:04:09",
+      "status": "ok",
       "calls": [
         {
           "label": "Active US listings (LISTING_STATUS, CSV)",
           "url": "https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=***",
           "status": 200,
-          "ok": false,
-          "ms": 438,
-          "bytes": 2,
+          "ok": true,
+          "ms": 2189,
+          "bytes": 1070503,
           "rateLimitHeaders": {},
-          "contentType": "application/json",
-          "sampleFile": "samples/alphavantage/01-active-us-listings-listing-status-csv.csv",
-          "error": "Alpha Vantage: JSON instead of CSV"
+          "contentType": "application/x-download",
+          "sampleFile": "samples/alphavantage/01-active-us-listings-listing-status-csv.csv"
         },
         {
           "label": "Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED)",
           "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=VT&apikey=***",
           "status": 200,
-          "ok": false,
-          "ms": 69,
-          "bytes": 258,
+          "ok": true,
+          "ms": 1480,
+          "bytes": 282253,
           "rateLimitHeaders": {},
           "contentType": "application/json",
-          "sampleFile": "samples/alphavantage/02-weekly-adjusted-prices-for-vt-time-series-weekly-adjusted.json",
-          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+          "sampleFile": "samples/alphavantage/02-weekly-adjusted-prices-for-vt-time-series-weekly-adjusted.json"
         },
         {
           "label": "Symbol search \"AGGU\" (SYMBOL_SEARCH)",
           "url": "https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=AGGU&apikey=***",
           "status": 200,
-          "ok": false,
-          "ms": 81,
-          "bytes": 258,
+          "ok": true,
+          "ms": 1065,
+          "bytes": 419,
           "rateLimitHeaders": {},
           "contentType": "application/json",
-          "sampleFile": "samples/alphavantage/03-symbol-search-aggu-symbol-search.json",
-          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+          "sampleFile": "samples/alphavantage/03-symbol-search-aggu-symbol-search.json"
         },
         {
-          "label": "TIME_SERIES_WEEKLY for AGGU.LON",
-          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=AGGU.LON&apikey=***",
+          "label": "TIME_SERIES_WEEKLY_ADJUSTED for AGGU.LON",
+          "url": "https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=AGGU.LON&apikey=***",
           "status": 200,
-          "ok": false,
-          "ms": 55,
-          "bytes": 258,
+          "ok": true,
+          "ms": 2302,
+          "bytes": 135374,
           "rateLimitHeaders": {},
           "contentType": "application/json",
-          "sampleFile": "samples/alphavantage/04-time-series-weekly-for-aggu-lon.json",
-          "error": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+          "sampleFile": "samples/alphavantage/04-time-series-weekly-adjusted-for-aggu-lon.json"
         }
       ],
       "observedLimits": [
@@ -445,34 +441,51 @@
       ],
       "coverage": {
         "VOO": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NYSE ETF"
         },
         "VT": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NYSE ETF"
         },
         "BNDW": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NASDAQ ETF"
         },
         "GLDM": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NYSE ETF"
         },
         "BIL": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NYSE ETF"
         },
         "ACWI": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NASDAQ ETF"
         },
         "AAPL": {
-          "mark": "failed"
+          "mark": "yes",
+          "detail": "NASDAQ Stock"
         },
         "AGGU": {
-          "mark": "failed",
-          "detail": "Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits."
+          "mark": "yes",
+          "detail": "AGGU.LON 468 weeks, latest 2026-10-20"
         }
       },
       "series": [],
-      "previews": [],
-      "notes": [],
+      "previews": [
+        {
+          "label": "TIME_SERIES_WEEKLY_ADJUSTED VT: 956 weeks, latest 2026-10-20",
+          "lang": "json",
+          "text": "{\n  \"Meta Data\": {\n    \"1. Information\": \"Weekly Adjusted Prices and Volumes\",\n    \"2. Symbol\": \"VT\",\n    \"3. Last Refreshed\": \"2026-10-20\",\n    \"4. Time Zone\": \"US/Eastern\"\n  },\n  \"Weekly Adjusted Time Series\": {\n    \"2026-10-20\": {\n      \"1. open\": \"157.5000\",\n      \"2. high\": \"158.4000\",\n      \"3. low\": \"156.7592\",\n      \"4. close\": \"157.8000\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-16\": {\n      \"1. open\": \"159.8500\",\n      \"2. high\": \"159.8900\",\n      \"3. low\": \"156.3250\",\n      \"4. close\": \"156.8200\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-09\": {\n      \"1. open\": \"159.3300\",\n      \"2. high\": \"161.2200\",\n      \"3. low\": \"158.1100\",\n      \"4. close\": \"159.8300\",\n      \"…\": \"3 more keys\"\n    },\n    \"2026-10-02\": {\n      \"1. open\": \"159.2400\",\n      \"2. high\": \"159.6401\",\n      \"3. low\": \"156.7700\",\n      \"4. close\": \"159.1300\",\n      \"…\": \"3 more keys\"\n    },\n    \"…\": \"952 more keys\"\n  }\n}"
+        }
+      ],
+      "notes": [
+        "LISTING_STATUS: 14509 active US listings; columns symbol, name, exchange, assetType, ipoDate, delistingDate, status",
+        "SYMBOL_SEARCH AGGU → AGGU.LON (United Kingdom, USD)",
+        "Run on Hugo's own computer 在 Hugo 的電腦上執行. Two minutes later, after the daily reset, the same key was refused from the Claude cloud environment with the 25/day message although it had used only these 4 requests: Alpha Vantage also counts requests per IP address, so test it from GitHub Actions in Phase 1 step 4 before the nightly job relies on it."
+      ],
       "skipped": []
     },
     {

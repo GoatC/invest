@@ -2,9 +2,9 @@
 
 PRD Phase 1, step 1: each PRD Section 6 source called once, with its limits, a sample payload and ticker coverage. 第一階段第 1 步：每個資料來源呼叫一次，記錄流量限制、樣本與標的覆蓋。
 
-- Generated 產生時間: 2026-10-21 12:06:27 (Asia/Taipei)
+- Generated 產生時間: 2026-10-21 12:13:26 (Asia/Taipei)
 - Runner 執行環境: local run 本機執行 · Node v22.22.0
-- Requests 請求: 29 of 35 succeeded 成功
+- Requests 請求: 33 of 35 succeeded 成功
 - Keys present 已設定的金鑰 (values never written 不寫出內容): `ALPHAVANTAGE_API_KEY` ✅ · `FINMIND_TOKEN` ✅ · `FRED_API_KEY` ❌ · `FMP_API_KEY` ❌ · `MOENV_API_KEY` ✅ · `SEC_USER_AGENT` ✅
 
 Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not applicable 不適用 · ⏭️ skipped, key not set 略過（未設金鑰） · ⚠️ call failed, coverage unknown 呼叫失敗 · · not checked this run 本次未檢查
@@ -17,7 +17,7 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 | 2 | FinMind | Taiwan prices and financials; US prices (backup) 台股價格與財報；美股價格備援 | ✅ ok | 6 | 600 requests/hour with a token (PRD §6); 300/hour without (FinMind docs); HTTP 402 when used up | user_info: 0 of 600 requests used 已用／上限 |
 | 3 | MOPS 公開資訊觀測站 | Taiwan filings and material information 台股財報與重大訊息 | ✅ ok | 3 | No published limit; no key 未公布限制，免金鑰 | no rate-limit headers 無流量標頭 |
 | 4 | SEC EDGAR | US filings 美股財報與 8-K | ✅ ok | 2 | At most 10 requests/second; a User-Agent with contact details is required (SEC fair-access policy) 每秒最多 10 次，需註明聯絡方式 | no rate-limit headers 無流量標頭 |
-| 5 | Alpha Vantage | US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源） | ❌ failed 失敗 | 4 | 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute | Requests used this run 本次用量: 4 of the 25/day free quota; error: Alpha Vantage: JSON instead of CSV; error: Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. |
+| 5 | Alpha Vantage | US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源） | ✅ ok | 4 | 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute | Requests used this run 本次用量: 4 of the 25/day free quota |
 | 6 | Financial Modeling Prep (FMP) | Optional price source from the §6 free-tier note; tested only for AGGU 選用來源，只測 AGGU | ⏭️ skipped 略過 | 0 | 250 requests/day on the free plan (PRD §6) | — |
 | 7 | FRED (St. Louis Fed) | US rates, TWD/USD 美國利率與匯率 | ✅ ok | 2 | API: 120 requests/minute per key (commonly cited); keyless CSV download: no published limit | no rate-limit headers 無流量標頭 |
 | 8 | Central Bank of the ROC 中央銀行 (data.gov.tw dataset 10840) | Taiwan 10-year government bond yield 台灣 10 年期公債殖利率 | ✅ ok | 2 | Open-data file updated monthly; no published limit 每月更新的開放資料，未公布限制 | no rate-limit headers 無流量標頭 |
@@ -36,16 +36,16 @@ Legend 圖例: ✅ covered 有涵蓋 · ❌ not found 找不到 · — not appli
 
 | Ticker 標的 | Role 角色 | Market 市場 | TWSE | FinMind | Alpha Vantage | FMP | Issuer file | BoT gold |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **VOO** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ⚠️ | — | ✅ | — |
-| **VT** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ⚠️ | — | ✅ | — |
+| **VOO** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ✅ | — | ✅ | — |
+| **VT** | Core · US / global equity 美股／全球大盤 28% | US | — | ✅ | ✅ | — | ✅ | — |
 | **00692** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | · | — |
 | **009816** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | · | — |
 | **00922** | Core · Taiwan market-cap equity 台股市值型 12% | TW | ✅ | ✅ | — | — | ⚠️ | — |
-| **BNDW** | Core · Global bonds 全球債券 22% | US | — | ✅ | ⚠️ | — | ✅ | — |
-| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ⚠️ | ⏭️ | ✅ | — |
-| **GLDM** | Core · Real assets 實體資產 10% | US | — | ✅ | ⚠️ | — | — | — |
+| **BNDW** | Core · Global bonds 全球債券 22% | US | — | ✅ | ✅ | — | ✅ | — |
+| **AGGU (LSE)** | Core · Global bonds 全球債券 22% | UK | — | ❌ | ✅ | ⏭️ | ✅ | — |
+| **GLDM** | Core · Real assets 實體資產 10% | US | — | ✅ | ✅ | — | — | — |
 | **Physical gold 實體黃金** | Core · Real assets 實體資產 10% | unlisted | — | — | — | — | — | ⚠️ |
-| **BIL** | Core · Strategic cash 戰略現金 8% | US | — | ✅ | ⚠️ | — | ✅ | — |
+| **BIL** | Core · Strategic cash 戰略現金 8% | US | — | ✅ | ✅ | — | ✅ | — |
 | **MMF 貨幣基金** | Core · Strategic cash 戰略現金 8% | unlisted | — | — | — | — | — | — |
 | **High-yield savings 高利活存** | Core · Strategic cash 戰略現金 8% | unlisted | — | — | — | — | — | — |
 
@@ -56,36 +56,36 @@ MMF and high-yield savings are entered as balances on the N5 page and need no ma
 | Ticker 標的 | Role 角色 | Market 市場 | TWSE | FinMind | MOPS | SEC | Alpha Vantage | TWSE CG | EPA ECHO | MOENV |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **0050** | N4 VaR proxy for both Taiwan classes 台股類別的風險值代理 | TW | ✅ | ✅ | — | — | — | — | — | — |
-| **ACWI** | F3 drawdown gauge: candidate free proxy for MSCI ACWI 指數代理候選 | US | — | ✅ | — | — | ⚠️ | — | — | — |
-| **AAPL** | Satellite stand-in (PRD N1 example) 衛星個股範例 | US | — | ✅ | — | ✅ | ⚠️ | — | ✅ | — |
+| **ACWI** | F3 drawdown gauge: candidate free proxy for MSCI ACWI 指數代理候選 | US | — | ✅ | — | — | ✅ | — | — | — |
+| **AAPL** | Satellite stand-in (PRD N1 example) 衛星個股範例 | US | — | ✅ | — | ✅ | ✅ | — | ✅ | — |
 | **2330** | Satellite stand-in (PRD N1 example) 衛星個股範例 | TW | ✅ | ✅ | ✅ | — | — | · | — | · |
 
 The satellite sleeves name no tickers yet (US 2–3 names, Taiwan 1–2 names, tactical themes), so AAPL and 2330, the PRD N1 examples, stand in for single stocks. 衛星部位尚未指定個股，暫以 PRD N1 的範例 AAPL 與 2330 代表。
 
 ### Coverage details 覆蓋細節
 
-- **VOO**: FinMind ✅ Vanguard S&P 500 ETF · Issuer file ✅ 500 holdings on the first page
-- **VT**: FinMind ✅ Vanguard Total World Stock Index ETF · Issuer file ✅ 500 holdings on the first page
+- **VOO**: FinMind ✅ Vanguard S&P 500 ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ 500 holdings on the first page
+- **VT**: FinMind ✅ Vanguard Total World Stock Index ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ 500 holdings on the first page
 - **00692**: TWSE ✅ close 92.45 · FinMind ✅ twse · ETF · Issuer file · no verified machine-readable issuer file yet 尚無已確認的官方檔案
 - **009816**: TWSE ✅ close 15.93 · FinMind ✅ twse · ETF · Issuer file · no verified machine-readable issuer file yet 尚無已確認的官方檔案
 - **00922**: TWSE ✅ close 39.56 · FinMind ✅ twse · ETF
-- **BNDW**: FinMind ✅ Vanguard Total World Bond ETF · Issuer file ✅ 500 holdings on the first page
-- **AGGU (LSE)**: Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
-- **GLDM**: FinMind ✅ SPDR Gold MiniShares Trust · Issuer file — holds physical gold; nothing to look through
-- **BIL**: FinMind ✅ State Street SPDR Bloomberg 1-3 Month T-Bill ETF · Issuer file ✅ xlsx sheet "holdings", 120 rows, As of 19-Oct-2026
+- **BNDW**: FinMind ✅ Vanguard Total World Bond ETF · Alpha Vantage ✅ NASDAQ ETF · Issuer file ✅ 500 holdings on the first page
+- **AGGU (LSE)**: Alpha Vantage ✅ AGGU.LON 468 weeks, latest 2026-10-20 · Issuer file ✅ 19977 holdings as of 19/Oct/2026 (Holdings sheet, 20018 rows)
+- **GLDM**: FinMind ✅ SPDR Gold MiniShares Trust · Alpha Vantage ✅ NYSE ETF · Issuer file — holds physical gold; nothing to look through
+- **BIL**: FinMind ✅ State Street SPDR Bloomberg 1-3 Month T-Bill ETF · Alpha Vantage ✅ NYSE ETF · Issuer file ✅ xlsx sheet "holdings", 120 rows, As of 19-Oct-2026
 - **0050**: TWSE ✅ close 107.25 · FinMind ✅ twse · ETF
-- **ACWI**: FinMind ✅ iShares MSCI ACWI ETF
-- **AAPL**: FinMind ✅ Apple Inc. Common Stock · SEC ✅ CIK 320193 · Nasdaq · EPA ECHO ✅ matched by facility name, not ticker: N3 needs a company-to-facility map
+- **ACWI**: FinMind ✅ iShares MSCI ACWI ETF · Alpha Vantage ✅ NASDAQ ETF
+- **AAPL**: FinMind ✅ Apple Inc. Common Stock · SEC ✅ CIK 320193 · Nasdaq · Alpha Vantage ✅ NASDAQ Stock · EPA ECHO ✅ matched by facility name, not ticker: N3 needs a company-to-facility map
 - **2330**: TWSE ✅ close 2405.00 · FinMind ✅ twse · 電子工業 · MOPS ✅ company profile 公司基本資料 · TWSE CG · tier lists are in the linked results PDF; read with N3 in Phase 2 · MOENV · records carry no ticker; N3 matches them by business ID 統一編號 in Phase 2
 
 ## AGGU price source AGGU 價格來源
 
-- ⚠️ Alpha Vantage, AGGU.LON (PRD primary price source): Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits.
+- ✅ Alpha Vantage, AGGU.LON (PRD primary price source): AGGU.LON 468 weeks, latest 2026-10-20
 - ⏭️ Financial Modeling Prep, AGGU.L
 - ❌ FinMind US list (backup source)
 - ✅ iShares NAV history (issuer file): latest 2026-10-19, 5.76
 
-**Verdict 結論:** no free market-price feed confirmed for AGGU yet; the issuer’s daily NAV history works as a fallback valuation. 尚未確認免費的 AGGU 市價來源；可先用 iShares 每日淨值估值。
+**Verdict 結論:** Alpha Vantage, AGGU.LON (PRD primary price source) serves AGGU prices on the free tier. 可用此來源取得 AGGU 價格。
 
 ## Market-level series 市場層級資料
 
@@ -405,31 +405,81 @@ Sample 樣本: Ten most recent filings 最近十筆申報
 2026-10-02  144
 ```
 
-### 5. Alpha Vantage: ❌ failed 失敗
+### 5. Alpha Vantage: ✅ ok
 
 - Data 資料: US stock, ETF and index prices (primary) 美股、ETF 與指數價格（主要來源）
 - Used by 使用功能: All
 - Auth 驗證: ALPHAVANTAGE_API_KEY
 - Documented limit 官方限制: 25 requests/day on a free key (PRD §6); also commonly cited as 5/minute
-- Checked 檢查時間: 2026-10-21 12:06:21
+- Checked 檢查時間: 2026-10-21 12:04:09
 
 | # | Call 呼叫 | HTTP | Time 時間 | Size 大小 | Rate-limit headers 流量標頭 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Active US listings (LISTING_STATUS, CSV) | 200 Alpha Vantage: JSON instead of CSV | 438 ms | 2 B | — |
-| 2 | Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 69 ms | 258 B | — |
-| 3 | Symbol search "AGGU" (SYMBOL_SEARCH) | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 81 ms | 258 B | — |
-| 4 | TIME_SERIES_WEEKLY for AGGU.LON | 200 Alpha Vantage: We have detected your API key as *** and our standard API rate limit is 25 requests per day. Please subscribe to any of the premium plans at https://www.alphavantage.co/premium/ to instantly remove all daily rate limits. | 55 ms | 258 B | — |
+| 1 | Active US listings (LISTING_STATUS, CSV) | 200 | 2189 ms | 1.1 MB | — |
+| 2 | Weekly adjusted prices for VT (TIME_SERIES_WEEKLY_ADJUSTED) | 200 | 1480 ms | 282.3 kB | — |
+| 3 | Symbol search "AGGU" (SYMBOL_SEARCH) | 200 | 1065 ms | 419 B | — |
+| 4 | TIME_SERIES_WEEKLY_ADJUSTED for AGGU.LON | 200 | 2302 ms | 135.4 kB | — |
 
 Request URLs (keys blanked) 請求網址（金鑰已遮蔽）:
 
 1. `https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=***`
 2. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=VT&apikey=***`
 3. `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=AGGU&apikey=***`
-4. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=AGGU.LON&apikey=***`
+4. `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=AGGU.LON&apikey=***`
 
 Observed limits 實測限制:
 
 - Requests used this run 本次用量: 4 of the 25/day free quota
+
+Notes 備註:
+
+- LISTING_STATUS: 14509 active US listings; columns symbol, name, exchange, assetType, ipoDate, delistingDate, status
+- SYMBOL_SEARCH AGGU → AGGU.LON (United Kingdom, USD)
+- Run on Hugo's own computer 在 Hugo 的電腦上執行. Two minutes later, after the daily reset, the same key was refused from the Claude cloud environment with the 25/day message although it had used only these 4 requests: Alpha Vantage also counts requests per IP address, so test it from GitHub Actions in Phase 1 step 4 before the nightly job relies on it.
+
+Sample 樣本: TIME_SERIES_WEEKLY_ADJUSTED VT: 956 weeks, latest 2026-10-20
+
+```json
+{
+  "Meta Data": {
+    "1. Information": "Weekly Adjusted Prices and Volumes",
+    "2. Symbol": "VT",
+    "3. Last Refreshed": "2026-10-20",
+    "4. Time Zone": "US/Eastern"
+  },
+  "Weekly Adjusted Time Series": {
+    "2026-10-20": {
+      "1. open": "157.5000",
+      "2. high": "158.4000",
+      "3. low": "156.7592",
+      "4. close": "157.8000",
+      "…": "3 more keys"
+    },
+    "2026-10-16": {
+      "1. open": "159.8500",
+      "2. high": "159.8900",
+      "3. low": "156.3250",
+      "4. close": "156.8200",
+      "…": "3 more keys"
+    },
+    "2026-10-09": {
+      "1. open": "159.3300",
+      "2. high": "161.2200",
+      "3. low": "158.1100",
+      "4. close": "159.8300",
+      "…": "3 more keys"
+    },
+    "2026-10-02": {
+      "1. open": "159.2400",
+      "2. high": "159.6401",
+      "3. low": "156.7700",
+      "4. close": "159.1300",
+      "…": "3 more keys"
+    },
+    "…": "952 more keys"
+  }
+}
+```
 
 ### 6. Financial Modeling Prep (FMP): ⏭️ skipped 略過
 
