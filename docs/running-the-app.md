@@ -2,7 +2,7 @@
 
 這份說明接在 [Supabase 設定](supabase-setup.md) 之後：那 6 個步驟做完（`npm run check:supabase` 全部 ✅）就可以在自己的 Mac 上打開 App，登入、輸入交易、匯入券商對帳單。
 
-This follows the Supabase setup. Once its six steps pass, the app runs on your Mac: sign in, record trades, import broker statements. Putting it online (Vercel) comes in a later step.
+This follows the Supabase setup. Once its six steps pass, the app runs on your Mac: sign in, record trades, import broker statements. To put it online and on your phone, see [Deploy to Vercel](deploy-vercel.md).
 
 ## 1. 取得最新程式並更新資料庫 Get the code, update the database
 

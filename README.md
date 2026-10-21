@@ -57,7 +57,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 ## How it is built 技術架構
 
-- **Next.js** (App Router, server actions) with **Supabase** (Postgres, Auth, Data API). Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
+- **Next.js** (App Router, server actions) as an installable PWA on **Vercel**, with **Supabase** (Postgres, Auth, Data API). Nightly jobs run on **GitHub Actions** and write with a secret key kept in GitHub's encrypted secrets; alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程在 GitHub Actions 執行，以存放在 GitHub 加密 secrets 的金鑰寫入；推播使用 Web Push。
 - **Single owner, enforced by the database**: row-level security on every table lets only the one owner account in; strangers holding the public key are refused, which `npm run check:supabase` verifies from outside. 由資料庫保證只有一位擁有者：每張表都開啟 row-level security；持有公開金鑰的陌生人一律被拒，可用 `npm run check:supabase` 從外部驗證。
 - **Money in trade currency plus the day's FX rate, reported in TWD.** 金額以交易幣別加當日匯率儲存，以台幣呈現。
 - **Free data only**, checked source by source in step 1. 只使用免費資料，第 1 步已逐一檢查。
@@ -68,7 +68,8 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 
 1. [Set up Supabase](docs/supabase-setup.md) once: create the project, apply the schema, create the owner account. 先[設定 Supabase](docs/supabase-setup.md)：建立專案、套用資料庫結構、建立擁有者帳號。
 2. [Run the app](docs/running-the-app.md): `npm install`, then `npm run dev`. 再[執行 App](docs/running-the-app.md)。
-3. [Turn on the nightly job](docs/nightly-job.md): four GitHub secrets, then one run by hand. 最後[啟用每夜排程](docs/nightly-job.md)：設定 4 個 GitHub secrets，再手動執行一次。
+3. [Turn on the nightly job](docs/nightly-job.md): four GitHub secrets, then one run by hand. 再[啟用每夜排程](docs/nightly-job.md)：設定 4 個 GitHub secrets，再手動執行一次。
+4. [Deploy to Vercel](docs/deploy-vercel.md) and add it to the phone's home screen. 最後[部署到 Vercel](docs/deploy-vercel.md)，並加到手機主畫面。
 
 ## Tests 測試
 

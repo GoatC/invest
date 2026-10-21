@@ -7,6 +7,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Every page and server action, but not static files and images.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // Every page and server action, but not static files, images, the web app manifest and
+  // robots.txt: a phone fetches the manifest without the session cookie.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };

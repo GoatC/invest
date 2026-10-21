@@ -46,6 +46,26 @@ function check(condition, message) {
 }
 const body = (target = page) => target.locator('body').innerText();
 
+await step('installable: manifest, icons and robots.txt load without a session; pages send the security headers', async () => {
+  const manifest = await page.request.get(`${BASE}/manifest.webmanifest`, { maxRedirects: 0 });
+  check(manifest.status() === 200, `manifest HTTP ${manifest.status()}`);
+  const json = await manifest.json();
+  check(json.display === 'standalone' && json.start_url === '/holdings', 'standalone, opens on holdings');
+  for (const icon of [...json.icons.map((i) => i.src), '/apple-icon.png']) {
+    const res = await page.request.get(`${BASE}${icon}`, { maxRedirects: 0 });
+    check(res.status() === 200 && res.headers()['content-type'] === 'image/png', `${icon} HTTP ${res.status()}`);
+  }
+  const robots = await page.request.get(`${BASE}/robots.txt`, { maxRedirects: 0 });
+  check(robots.status() === 200 && (await robots.text()).includes('Disallow: /'), 'robots.txt disallows everything');
+  const login = await page.request.get(`${BASE}/login`);
+  const headers = login.headers();
+  check(headers['x-frame-options'] === 'DENY' && headers['x-content-type-options'] === 'nosniff', 'framing and sniffing refused');
+  const html = await login.text();
+  check(/<link rel="manifest" href="\/manifest.webmanifest"/.test(html), 'manifest linked');
+  check(html.includes('name="mobile-web-app-capable"') || html.includes('name="apple-mobile-web-app-capable"'), 'home-screen app meta');
+  check(html.includes('rel="apple-touch-icon"') && /name="robots" content="noindex, nofollow"/.test(html), 'apple icon and noindex');
+});
+
 await step('an unsigned visit goes to sign-in', async () => {
   await page.goto(`${BASE}/holdings`);
   await page.waitForURL('**/login');

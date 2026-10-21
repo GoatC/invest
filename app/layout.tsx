@@ -12,12 +12,20 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Long-View Invest 長期投資',
   description: 'A single-user app that runs a 30-year core–satellite portfolio on written rules. 依書面規則運行的 30 年核心／衛星投資組合。',
+  // Added to an iPhone home screen, it opens full screen under this name (PRD Section 9: iPhone push).
+  appleWebApp: { capable: true, title: '長期投資', statusBarStyle: 'default' },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   colorScheme: 'light dark',
+  // The header colour (--surface in globals.css), light and dark, for the phone's status bar.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a2029' },
+  ],
 };
 
 // Every page depends on the signed-in session; nothing may be cached or prerendered.
