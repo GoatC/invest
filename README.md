@@ -1,0 +1,90 @@
+# Long-View Invest 長期投資
+
+A single-user web app that runs a 30-year core–satellite portfolio on written rules, is reviewed once a week, and pushes an alert only when a decision is due. It drafts orders; the owner places every trade by hand.
+
+一個單人使用的網頁 App：依書面規則運行 30 年的核心／衛星投資組合，每週檢視一次，只有在需要做決定時才推播。App 產生建議清單，每筆交易都由使用者手動下單。
+
+This app supports its owner's own decisions; it is not financial advice. 本 App 用於輔助使用者自己的決策，不構成投資建議。
+
+![Holdings page with demo data: pool totals, R1 warnings and target weights](docs/images/holdings.png)
+
+## The rules it runs 運行的規則
+
+| Sleeve 部位 | Asset class 資產類別 | Target 目標 |
+| --- | --- | --- |
+| Core 核心 80% | US / global equity 美股／全球大盤 | 28% |
+| | Taiwan market-cap equity 台股市值型 | 12% |
+| | Global bonds 全球債券 | 22% |
+| | Real assets 實體資產 | 10% |
+| | Strategic cash 戰略現金 | 8% |
+| Satellite 衛星 20% | US stocks 美股個股 | 10% |
+| | Taiwan stocks 台股個股 | 5% |
+| | Tactical themes 戰術主題 | 5% |
+
+- **R1**: no single stock above 5% of the regular-contribution pool. 任何單一個股不超過一般投入資金池的 5%。
+- **R2**: when the satellite rises above 25%, trim it back to 20%. 衛星部位超過 25% 時減碼回 20%。
+- A windfall is tracked as its own pool and never counts toward R1 or R2. 大額資金獨立成一個資金池，不計入 R1 與 R2。
+
+Every threshold lives in the database (`rules` and `config` tables), never in code, and every rule edit is logged. 所有門檻都存在資料庫（`rules` 與 `config` 表），不寫死在程式中，每次修改規則都留下紀錄。
+
+## Status 進度
+
+Built phase by phase from [the product spec](docs/PRD.md); a phase starts only after the previous one passes its gate. 依[產品規格書](docs/PRD.md)分階段建置，前一階段通過關卡後才開始下一階段。
+
+| Phase 1 step 第一階段步驟 | State 狀態 |
+| --- | --- |
+| 1. Check every free data source 免費資料來源檢查 | ✅ [report 報告](reports/source-check/report.md) |
+| 2. Database schema, row-level security, demo data 資料庫結構、權限、示範資料 | ✅ |
+| 3. Holdings entry and broker CSV import 持倉登錄與券商 CSV 匯入 | ✅ |
+| 4. Nightly prices and FX 每夜價格與匯率 | next 下一步 |
+| 5–11. Performance, allocation donuts, VaR, compounding calculator, rules engine and proposals, Web Push and the weekly dashboard, fee and tax drag 績效、配置圓餅圖、風險值、複利計算機、規則引擎與提案、推播與每週儀表板、費用與稅務 | planned 規劃中 |
+
+Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), the windfall planner, Monte Carlo, the efficient frontier, stress tests and Brinson attribution. 第二、三階段加入證券分析、大額資金分批、蒙地卡羅、效率前緣、壓力測試與 Brinson 歸因。
+
+## What works today 目前的功能
+
+- **Holdings 持倉總覽**: regular and windfall pools, R1 / R2 status with the trim each needs, actual vs target weight per asset class, and every position at weighted-average cost with its TWD value and unrealised gain. The R1 / R2 figures expand to show their formulas and inputs, and the other figures are defined under their tables. 一般與大額資金池、R1／R2 狀態與所需減碼金額、各資產類別的實際與目標權重、每檔持股的平均成本、台幣市值與未實現損益；R1／R2 的數字可展開查看公式與輸入值，其他數字的定義寫在表格下方。
+- **Trade entry 交易登錄**: currency and FX rate filled in from the security, a live R1 / R2 preview that warns without blocking, and a refusal when a sell exceeds the holding. 依證券自動帶入幣別與匯率，即時預覽 R1／R2（只提醒不阻擋），賣出超過持有數量時拒絕儲存。
+- **Broker CSV import 券商 CSV 匯入**: UTF-8 or Big5 files, title lines above the header, ROC (民國) dates, column mapping remembered per broker, and trades already saved are skipped. 支援 UTF-8 與 Big5、標題列在上方的檔案、民國日期；欄位對應依券商記住，已存在的交易自動略過。
+- **Non-listed assets 非上市資產**: physical gold in grams, savings and money-market balances in TWD. 實體黃金以克數、活存與貨幣基金以台幣餘額記錄。
+- **Securities and edit history 證券與修改紀錄**: every entry can be edited or deleted, and the database logs each change, deleted entries included. 每筆資料都能修改或刪除，資料庫會記錄每次變更，包含已刪除的資料。
+
+![CSV import preview: every row explained, unknown tickers can be added on the spot](docs/images/import-preview.png)
+
+## How it is built 技術架構
+
+- **Next.js** (App Router, server actions) with **Supabase** (Postgres, Auth, Data API). Nightly jobs will run on **GitHub Actions**, and alerts will use **Web Push**. Next.js 搭配 Supabase；每夜排程使用 GitHub Actions，推播使用 Web Push。
+- **Single owner, enforced by the database**: row-level security on every table lets only the one owner account in; strangers holding the public key are refused, which `npm run check:supabase` verifies from outside. 由資料庫保證只有一位擁有者：每張表都開啟 row-level security；持有公開金鑰的陌生人一律被拒，可用 `npm run check:supabase` 從外部驗證。
+- **Money in trade currency plus the day's FX rate, reported in TWD.** 金額以交易幣別加當日匯率儲存，以台幣呈現。
+- **Free data only**, checked source by source in step 1. 只使用免費資料，第 1 步已逐一檢查。
+- **Bilingual throughout**: every label, message and error is in English and Traditional Chinese. 所有標籤、訊息與錯誤都是中英雙語。
+- **L2 automation**: the app proposes, a person decides and trades. It never holds broker credentials. 由 App 提案、人決定並下單；App 不保存券商帳密。
+
+## Run it 執行方式
+
+1. [Set up Supabase](docs/supabase-setup.md) once: create the project, apply the schema, create the owner account. 先[設定 Supabase](docs/supabase-setup.md)：建立專案、套用資料庫結構、建立擁有者帳號。
+2. [Run the app](docs/running-the-app.md): `npm install`, then `npm run dev`. 再[執行 App](docs/running-the-app.md)。
+
+## Tests 測試
+
+| Command 指令 | What it checks 檢查內容 |
+| --- | --- |
+| `npm test` | Model, CSV and form unit tests with the spec's acceptance values, plus the whole schema and its row-level security rebuilt in an in-memory Postgres (PGlite) 單元測試（含規格書驗收值），以及在記憶體 Postgres 中重建整個資料庫並檢查權限 |
+| `npm run typecheck` | TypeScript across the app, scripts and tests 型別檢查 |
+| `npm run test:e2e` | The built app against a local Supabase stand-in, driven in Chromium ([details](tests/e2e/README.md)) 以 Chromium 實際操作連到本機 Supabase 替身的 App |
+
+## Repository layout 專案結構
+
+| Path 路徑 | Contents 內容 |
+| --- | --- |
+| `app/` | Pages and server actions 頁面與伺服器動作 |
+| `lib/models/` | Positions, valuation and the R1 / R2 rules, as pure functions 持倉、估值與 R1／R2 規則（純函式） |
+| `lib/csv/` | Statement reading, column mapping and the import plan 對帳單讀取、欄位對應與匯入計畫 |
+| `supabase/migrations/` | Schema, row-level security, reference data and change logs 資料庫結構、權限、參考資料與變更紀錄 |
+| `supabase/seed.sql` | Demo data for local use only 僅供本機使用的示範資料 |
+| `scripts/` | Data-source check and the outside-in Supabase check 資料來源檢查與 Supabase 外部檢查 |
+| `docs/` | Product spec and runbooks 產品規格與操作說明 |
+
+## Data and privacy 資料與隱私
+
+This repository is public and holds no personal data: no holdings, windfall figures or keys. The screenshots and `supabase/seed.sql` use invented demo numbers. Real data lives only in the owner's Supabase project, behind row-level security. 本 repo 公開，不含任何個人資料：沒有持股、大額資金數字或金鑰。截圖與 `supabase/seed.sql` 都是虛構的示範數字；真實資料只存在擁有者的 Supabase 專案中，受 row-level security 保護。
