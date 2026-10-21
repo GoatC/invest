@@ -54,13 +54,13 @@ npm run check:supabase
 排程要寫入價格，需要 Supabase 的 **secret key**。它可以略過 row-level security、讀寫所有資料，所以**只放在 GitHub 的 secret 設定**：不要貼進 `NEXT_PUBLIC_` 開頭的變數、Vercel、聊天訊息或任何會進 git 的檔案。
 
 1. 打開 <https://supabase.com/dashboard>，進入你的專案，點左下 **Project Settings → API Keys**。
-2. 找到 **Secret keys** 區塊。每個專案都有一把名為 `default` 的 key；建議另外新增一把只給排程用（新增按鈕，名稱填 `github_nightly`）。之後如果懷疑外洩，只要刪掉這一把，不影響其他東西。介面不同找不到新增按鈕時，用 `default` 那把也可以。
+2. 找到 **Secret keys** 區塊。每個專案都有一把名為 `default` 的 key；建議另外新增一把只給排程用（新增按鈕，名稱填 `nightly_job`）。這個名稱只是 Supabase 裡的標籤，不會填到 GitHub。之後如果懷疑外洩，只要刪掉這一把，不影響其他東西。介面不同找不到新增按鈕時，用 `default` 那把也可以。
 3. 按該把 key 旁的複製圖示（以 `sb_secret_` 開頭），下一步馬上貼上。
 
 ### 3. 把值存進 GitHub secrets
 
 1. 打開 <https://github.com/GoatC/Invest>，點上方 **Settings** → 左側 **Secrets and variables → Actions** → **Secrets** 分頁 → **New repository secret**。
-2. 一次新增一個。**Name** 要完全照抄（大寫、底線），**Secret** 貼上值，按 **Add secret**：
+2. 一次新增一個。**Name** 填下表左欄的名稱，要完全照抄（大寫、底線）；**Secret** 貼上值，按 **Add secret**。第 2 步在 Supabase 取的 key 名稱不要填在這裡，而且 GitHub 不接受 `GITHUB_` 開頭的名稱。
 
 | Name | 值 Value | 從哪裡拿 Where from |
 | --- | --- | --- |
@@ -105,6 +105,7 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | 看到的訊息 Message | 原因與處理 Fix |
 | --- | --- |
 | `Missing SUPABASE_URL, …` | 第 3 步的 secret 漏了或名稱打錯，重新新增 |
+| 新增 secret 時出現 `Secret names must not start with GITHUB_` | Name 欄填錯了：要填 `SUPABASE_SECRET_KEY` 這類表格裡的名稱，不是 Supabase 裡的 key 名稱 |
 | `reading the database: Invalid API key` | `SUPABASE_SECRET_KEY` 貼錯：要 `sb_secret_` 開頭，不是 publishable key |
 | `job_runs` 找不到資料表，或持倉頁寫「無法讀取每夜排程狀態」 | 第 1 步的 `npx supabase db push` 還沒執行 |
 | `FinMind …: Your level is register …`、額度用完 | FinMind token 錯了，或這一小時的額度用完；隔天會自動重試 |
