@@ -1,7 +1,7 @@
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCsvMappings, loadHoldingsData, orDataError } from '@/lib/data';
+import { DataError, loadCsvMappings, loadFxHistory, loadHoldingsData, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
 
@@ -9,9 +9,9 @@ import { ImportWizard } from './import-wizard';
 
 export default async function ImportPage() {
   const { supabase } = await requireSession();
-  const loaded = await orDataError(Promise.all([loadHoldingsData(supabase), loadCsvMappings(supabase)]));
+  const loaded = await orDataError(Promise.all([loadHoldingsData(supabase), loadFxHistory(supabase), loadCsvMappings(supabase)]));
   if (loaded instanceof DataError) return <DataProblem table={loaded.table} detail={loaded.detail} />;
-  const [data, mappings] = loaded;
+  const [data, rates, mappings] = loaded;
 
   return (
     <section className="card form">
@@ -24,7 +24,7 @@ export default async function ImportPage() {
           zh="匯入存成 CSV 的券商對帳單，例如複委託成交明細。按下「匯入」之前不會儲存任何資料；欄位對應會依券商記住。"
         />
       </p>
-      <ImportWizard data={data} mappings={mappings} today={taipeiToday()} />
+      <ImportWizard data={data} rates={rates} mappings={mappings} today={taipeiToday()} />
     </section>
   );
 }

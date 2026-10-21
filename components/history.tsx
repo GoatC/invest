@@ -1,4 +1,5 @@
 import type { AuditEntry, FieldChange } from '@/lib/data';
+import { taipeiDateTime } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
@@ -42,12 +43,10 @@ function shown(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-const TAIPEI_TIME = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', dateStyle: 'short', timeStyle: 'short', hour12: false });
-
 export function TaipeiTime({ at }: { at: string }) {
   return (
     <span className="muted small">
-      {TAIPEI_TIME.format(new Date(at))} <Bi en="Taipei time" zh="台北時間" />
+      {taipeiDateTime(at)} <Bi en="Taipei time" zh="台北時間" />
     </span>
   );
 }

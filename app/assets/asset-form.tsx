@@ -5,8 +5,10 @@ import { useActionState, useMemo, useState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { twd } from '@/lib/format';
 import { bi, LABELS, POOL, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
-import type { AssetClass } from '@/lib/models/types';
+import type { AssetClass, FxQuote } from '@/lib/models/types';
+import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
 import { parseManualAsset, parseNumber, type ManualAssetField } from '@/lib/validation';
 
 import { saveAsset, type AssetFormState } from './actions';
@@ -25,6 +27,7 @@ function isKind(value: string): value is Kind {
 export function AssetForm({
   assetClasses,
   defaultClass,
+  goldPrice,
   today,
   id,
   initial,
@@ -32,14 +35,17 @@ export function AssetForm({
   assetClasses: AssetClass[];
   /** The class each kind starts on, from the securities of the same kind. */
   defaultClass: Record<Kind, string>;
+  /** The newest XAU/TWD (TWD per troy ounce) the nightly job loaded. */
+  goldPrice: FxQuote | undefined;
   today: string;
   id?: number;
   initial: AssetValues;
 }) {
   const [values, setValues] = useState(initial);
   const [edited, setEdited] = useState<ReadonlySet<ManualAssetField>>(new Set());
-  // Price per gram is a helper for the value; only the value is stored.
-  const [gramPrice, setGramPrice] = useState('');
+  // Price per gram is a helper for the value; only the value is stored. It starts at the loaded gold price.
+  const perGram = goldPrice ? Math.round(goldPrice.rate / GRAMS_PER_TROY_OUNCE) : undefined;
+  const [gramPrice, setGramPrice] = useState(perGram === undefined ? '' : String(perGram));
   const [state, formAction, pending] = useActionState(saveAsset, INITIAL_STATE);
   const classMap = useMemo(() => new Map(assetClasses.map((assetClass) => [assetClass.id, assetClass])), [assetClasses]);
   const isGold = values.productType === 'gold';
@@ -107,13 +113,22 @@ export function AssetForm({
         </Field>
         {isGold && (
           <>
-            <Field label={{ en: 'Gold price per gram (TWD)', zh: '每克金價（台幣）' }} hint={<Bi en="Optional; fills in the value" zh="選填，自動算出估值" />}>
+            <Field
+              label={{ en: 'Gold price per gram (TWD)', zh: '每克金價（台幣）' }}
+              hint={
+                goldPrice && perGram !== undefined ? (
+                  <Bi en={`${twd(perGram)} on ${goldPrice.date}, loaded nightly; fills in the value`} zh={`${goldPrice.date} 為 ${twd(perGram)}（每夜載入），自動算出估值`} />
+                ) : (
+                  <Bi en="Optional; fills in the value" zh="選填，自動算出估值" />
+                )
+              }
+            >
               <input inputMode="decimal" value={gramPrice} onChange={(e) => changeGramPrice(e.target.value)} />
             </Field>
             <Field
               label={LABELS.lastValue}
               error={error('lastValueTwd')}
-              hint={<Bi en="Grams × the Bank of Taiwan price per gram" zh="克數 × 臺灣銀行每克牌價" />}
+              hint={<Bi en="Grams × price per gram; used while no gold price is loaded" zh="克數 × 每克金價；尚未載入金價時使用" />}
             >
               <input name="lastValueTwd" inputMode="decimal" value={values.lastValueTwd} onChange={(e) => change('lastValueTwd', e.target.value)} />
             </Field>
@@ -136,8 +151,8 @@ export function AssetForm({
       {isGold && (
         <p className="muted small">
           <Bi
-            en="Gold keeps the value entered here until the TWD gold price feed is added."
-            zh="在台幣金價資料接上之前，黃金以這裡輸入的估值計算。"
+            en="The holdings page values gold every night at grams × the international gold price in TWD (the US dollar price at the Bank of Taiwan rate); the value entered here counts only until the nightly job has loaded a gold price."
+            zh="持倉頁每夜以「克數 × 國際金價換算台幣」（美元金價乘以臺灣銀行匯率）計算黃金市值；這裡輸入的估值只在每夜排程尚未載入金價時使用。"
           />
         </p>
       )}

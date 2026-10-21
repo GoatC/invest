@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { money, percent, points, quantity, twd } from './format';
+import { money, percent, points, quantity, taipeiDateTime, twd } from './format';
 
 describe('format', () => {
   it('writes TWD rounded to the dollar, with a dash for unknown values', () => {
@@ -18,5 +18,10 @@ describe('format', () => {
     assert.equal(points(0.032), '+3.2 pp');
     assert.equal(points(-0.0049), '−0.5 pp');
     assert.equal(points(0.00001), '0.0 pp');
+  });
+
+  it('writes a timestamp in Taipei time, a day ahead of UTC late in the evening', () => {
+    assert.equal(taipeiDateTime('2026-10-21T14:24:10Z'), '2026-10-21, 22:24');
+    assert.equal(taipeiDateTime('2026-10-21T16:30:00+00:00'), '2026-10-22, 00:30');
   });
 });

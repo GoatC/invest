@@ -1,7 +1,7 @@
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadSecurities, orDataError } from '@/lib/data';
+import { DataError, loadAssetClasses, loadGoldPrice, loadSecurities, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
 
@@ -10,9 +10,9 @@ import { assetClassDefaults } from '../defaults';
 
 export default async function NewAssetPage() {
   const { supabase } = await requireSession();
-  const loaded = await orDataError(Promise.all([loadAssetClasses(supabase), loadSecurities(supabase)]));
+  const loaded = await orDataError(Promise.all([loadAssetClasses(supabase), loadSecurities(supabase), loadGoldPrice(supabase)]));
   if (loaded instanceof DataError) return <DataProblem table={loaded.table} detail={loaded.detail} />;
-  const [assetClasses, securities] = loaded;
+  const [assetClasses, securities, goldPrice] = loaded;
   const defaults = assetClassDefaults(assetClasses, securities);
 
   return (
@@ -23,6 +23,7 @@ export default async function NewAssetPage() {
       <AssetForm
         assetClasses={assetClasses}
         defaultClass={defaults}
+        goldPrice={goldPrice}
         today={taipeiToday()}
         initial={{ name: '', productType: 'gold', assetClassId: defaults.gold, quantity: '', lastValueTwd: '', valuedOn: '', pool: 'regular' }}
       />

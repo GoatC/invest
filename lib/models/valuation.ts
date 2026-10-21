@@ -1,5 +1,9 @@
+import { GOLD } from './fx';
 import { chronological, type Position } from './positions';
 import type { AssetClass, FxQuote, ManualAsset, Pool, PriceQuote, ProductType, Security, Sleeve, Trade } from './types';
+
+/** Grams in one troy ounce, the unit gold prices are quoted in. */
+export const GRAMS_PER_TROY_OUNCE = 31.1034768;
 
 /** A price or FX rate and where it came from: a trade-derived value is an estimate until the nightly job loads a real one. */
 export interface Quote {
@@ -26,7 +30,10 @@ export function latestPrices(prices: readonly PriceQuote[], trades: readonly Tra
   return quotes;
 }
 
-/** TWD per 1 unit of each currency: the newest "<CUR>/TWD" rate, else the newest trade rate in that currency. */
+/**
+ * TWD per 1 unit of each currency: the newest "<CUR>/TWD" rate, else the newest trade rate in that
+ * currency. Gold comes along as XAU, TWD per troy ounce, from the nightly job's XAU/TWD.
+ */
 export function latestFx(rates: readonly FxQuote[], trades: readonly Trade[]): Map<string, Quote> {
   const quotes = new Map<string, Quote>([['TWD', { value: 1, date: '', estimated: false }]]);
   for (const rate of rates) {
@@ -54,8 +61,10 @@ export interface Holding {
   valueTwd: number | null;
   /** Remaining cost basis in TWD; null for manual assets. */
   costTwd: number | null;
-  /** True when the price or FX rate came from a trade, or a manual asset carries its own value. */
+  /** True when the price or FX rate came from a trade, or gold carries the value entered by hand. */
   estimated: boolean;
+  /** Date of the close, gold price, balance or entered value behind valueTwd; null when there is none. */
+  priceDate: string | null;
 }
 
 export interface ValuationInput {
@@ -89,13 +98,17 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       valueTwd: price && rate ? position.qty * price.value * rate.value : null,
       costTwd: position.costTwd,
       estimated: Boolean(price?.estimated || rate?.estimated),
+      priceDate: price?.date ?? null,
     });
   }
+  const gold = input.fx.get(GOLD);
   for (const asset of input.manualAssets) {
     const assetClass = input.assetClasses.get(asset.assetClassId);
     if (!assetClass) continue;
-    // A TWD balance is its own value; gold needs the TWD gold price, so it uses the last value entered.
-    const valueTwd = asset.unit === 'TWD' ? asset.quantity : asset.lastValueTwd;
+    // A TWD balance is its own value. Gold is grams at the loaded gold price; the value entered by
+    // hand stands in only until the nightly job has loaded one.
+    const atGoldPrice = asset.unit === 'grams' && gold !== undefined;
+    const valueTwd = asset.unit === 'TWD' ? asset.quantity : atGoldPrice ? (asset.quantity * gold.value) / GRAMS_PER_TROY_OUNCE : asset.lastValueTwd;
     holdings.push({
       key: `manual:${asset.id}`,
       ticker: null,
@@ -108,7 +121,8 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       currency: 'TWD',
       valueTwd,
       costTwd: null,
-      estimated: asset.unit === 'grams',
+      estimated: asset.unit === 'grams' && !atGoldPrice,
+      priceDate: atGoldPrice ? gold.date : asset.valuedOn,
     });
   }
   return holdings;

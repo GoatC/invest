@@ -8,7 +8,7 @@ export interface Bilingual {
 }
 
 export function bi(text: Bilingual): string {
-  return `${text.en} ${text.zh}`;
+  return text.en === text.zh ? text.en : `${text.en} ${text.zh}`;
 }
 
 export const LABELS = {
@@ -62,6 +62,7 @@ export const LABELS = {
   actual: { en: 'Actual', zh: '實際' },
   drift: { en: 'Drift', zh: '偏離' },
   history: { en: 'Edit history', zh: '修改紀錄' },
+  dataStatus: { en: 'Data status', zh: '資料狀態' },
 } as const satisfies Record<string, Bilingual>;
 
 export const SIDE = {
@@ -97,4 +98,24 @@ export const PRODUCT = {
 export const SOURCE = {
   manual: { en: 'Manual', zh: '手動' },
   csv: { en: 'CSV import', zh: 'CSV 匯入' },
+} as const satisfies Record<string, Bilingual>;
+
+/** The feeds the nightly job loads from (prices.source, fx_rates.source). */
+export const FEED: Record<string, Bilingual> = {
+  finmind: { en: 'FinMind', zh: 'FinMind' },
+  twse: { en: 'TWSE', zh: '證交所' },
+  ishares_nav: { en: 'iShares NAV', zh: 'iShares 淨值' },
+  alphavantage: { en: 'Alpha Vantage', zh: 'Alpha Vantage' },
+  fred: { en: 'FRED', zh: 'FRED' },
+  demo: { en: 'Demo data', zh: '示範資料' },
+};
+
+export function feedLabel(source: string): Bilingual {
+  return FEED[source] ?? { en: source, zh: source };
+}
+
+export const RUN_STATUS = {
+  ok: { en: 'OK', zh: '正常' },
+  partial: { en: 'Partly loaded', zh: '部分載入' },
+  failed: { en: 'Failed', zh: '失敗' },
 } as const satisfies Record<string, Bilingual>;

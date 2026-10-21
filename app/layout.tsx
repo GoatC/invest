@@ -49,6 +49,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/securities">
                 <Bi {...LABELS.securities} />
               </Link>
+              <Link href="/data">
+                <Bi {...LABELS.dataStatus} />
+              </Link>
               <form action={signOut}>
                 <button type="submit" className="link-button">
                   <Bi {...LABELS.signOut} />

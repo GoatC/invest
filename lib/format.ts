@@ -37,3 +37,10 @@ export function points(value: number, digits = 1): string {
   if (Number(text) === 0) return `0.${'0'.repeat(digits)} pp`;
   return `${scaled > 0 ? '+' : '−'}${text} pp`;
 }
+
+const TAIPEI_TIME = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', dateStyle: 'short', timeStyle: 'short', hour12: false });
+
+/** A timestamp as a date and time in Taipei, e.g. "2026-10-21, 22:24". */
+export function taipeiDateTime(at: string): string {
+  return TAIPEI_TIME.format(new Date(at));
+}

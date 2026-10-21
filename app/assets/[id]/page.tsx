@@ -5,7 +5,7 @@ import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { History } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadAuditHistory, loadManualAsset, loadSecurities, orDataError } from '@/lib/data';
+import { DataError, loadAssetClasses, loadAuditHistory, loadGoldPrice, loadManualAsset, loadSecurities, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { parseId } from '@/lib/forms';
 import { LABELS } from '@/lib/i18n';
@@ -19,10 +19,16 @@ export default async function EditAssetPage({ params }: { params: Promise<{ id: 
   const id = parseId((await params).id);
   if (id === undefined) notFound();
   const loaded = await orDataError(
-    Promise.all([loadManualAsset(supabase, id), loadAssetClasses(supabase), loadSecurities(supabase), loadAuditHistory(supabase, 'manual_assets', String(id))]),
+    Promise.all([
+      loadManualAsset(supabase, id),
+      loadAssetClasses(supabase),
+      loadSecurities(supabase),
+      loadGoldPrice(supabase),
+      loadAuditHistory(supabase, 'manual_assets', String(id)),
+    ]),
   );
   if (loaded instanceof DataError) return <DataProblem table={loaded.table} detail={loaded.detail} />;
-  const [asset, assetClasses, securities, history] = loaded;
+  const [asset, assetClasses, securities, goldPrice, history] = loaded;
   if (!asset) notFound();
 
   return (
@@ -34,6 +40,7 @@ export default async function EditAssetPage({ params }: { params: Promise<{ id: 
         <AssetForm
           assetClasses={assetClasses}
           defaultClass={assetClassDefaults(assetClasses, securities)}
+          goldPrice={goldPrice}
           today={taipeiToday()}
           id={id}
           initial={{

@@ -5,10 +5,11 @@ import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { History } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAuditHistory, loadHoldingsData, type AuditEntry, type HoldingsData } from '@/lib/data';
+import { DataError, loadAuditHistory, loadFxHistory, loadHoldingsData, type AuditEntry, type HoldingsData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { parseId } from '@/lib/forms';
 import { LABELS, SOURCE } from '@/lib/i18n';
+import type { FxQuote } from '@/lib/models/types';
 
 import { deleteTrade } from '../actions';
 import { TradeForm } from '../trade-form';
@@ -18,9 +19,10 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
   const id = parseId((await params).id);
   if (id === undefined) notFound();
   let data: HoldingsData;
+  let rates: FxQuote[];
   let history: AuditEntry[];
   try {
-    [data, history] = await Promise.all([loadHoldingsData(supabase), loadAuditHistory(supabase, 'transactions', String(id))]);
+    [data, rates, history] = await Promise.all([loadHoldingsData(supabase), loadFxHistory(supabase), loadAuditHistory(supabase, 'transactions', String(id))]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -41,6 +43,7 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
         </div>
         <TradeForm
           data={data}
+          rates={rates}
           today={taipeiToday()}
           id={id}
           initial={{

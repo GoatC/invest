@@ -21,6 +21,7 @@ export function holding(overrides: Partial<Holding> = {}): Holding {
     valueTwd: 0,
     costTwd: 0,
     estimated: false,
+    priceDate: '2026-10-20',
     ...overrides,
   };
 }

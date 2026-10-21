@@ -174,10 +174,21 @@ describe('change logs', () => {
 
   it('skip an update that changes nothing', async () => {
     await as(db, 'owner', async (tx) => {
+      // Migrations that change a setting are logged too, so count from here.
+      const logged = await scalar(tx, 'select count(*) from public.audit_log');
       await tx.query(`update public.rules set enabled = enabled where id = 'R2'`);
       await tx.query(`update public.config set value = value where key = 'quiet_hours'`);
       assert.equal(await scalar(tx, 'select count(*) from public.rule_changes'), 0);
-      assert.equal(await scalar(tx, 'select count(*) from public.audit_log'), 0);
+      assert.equal(await scalar(tx, 'select count(*) from public.audit_log'), logged);
+    });
+  });
+
+  it('log the step 4 change to the FX setting, made by a migration rather than a person', async () => {
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query(
+        `select action, new_row -> 'value' as value, changed_by from public.audit_log where table_name = 'config' and row_key = 'fx_rate_check'`,
+      );
+      assert.deepEqual(rows, [{ action: 'update', value: { max_gap: 0.2, max_age_days: 10 }, changed_by: null }]);
     });
   });
 
@@ -285,8 +296,8 @@ describe('reference data from the PRD', () => {
     for (const row of rows) assert.equal(row.enabled, !['F3', 'F12', 'N3'].includes(row.feature), row.id);
   });
 
-  it('keeps the trade-entry FX typo check in config, as a share of the newest rate', async () => {
-    assert.deepEqual(await scalar(db, `select value from public.config where key = 'fx_rate_check'`), { max_gap: 0.2 });
+  it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'fx_rate_check'`), { max_gap: 0.2, max_age_days: 10 });
   });
 
   it('lists every Investment Principles core vehicle as a security', async () => {
