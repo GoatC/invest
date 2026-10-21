@@ -1,0 +1,68 @@
+# 執行 App Running the app
+
+這份說明接在 [Supabase 設定](supabase-setup.md) 之後：那 6 個步驟做完（`npm run check:supabase` 全部 ✅）就可以在自己的 Mac 上打開 App，登入、輸入交易、匯入券商對帳單。
+
+This follows the Supabase setup. Once its six steps pass, the app runs on your Mac: sign in, record trades, import broker statements. Putting it online (Vercel) comes in a later step.
+
+## 1. 取得最新程式並更新資料庫 Get the code, update the database
+
+在 `invest` 資料夾執行：
+
+```bash
+git checkout main && git pull           # 合併前想先試用：改用 git checkout claude/peaceful-knuth-gzi48q && git pull
+npm install
+npx supabase db push
+npm run check:supabase
+```
+
+- `git pull`：下載合併後的最新程式。
+- `npm install`：安裝網頁需要的套件（Next.js、React、Supabase 用戶端），只裝在專案資料夾裡。
+- `npx supabase db push`：會列出 **2 個新的 migration**，輸入 `Y` 套用：
+  - `latest_quotes`：「每檔最新價格」與「每個幣別最新匯率」兩個檢視表（view），持倉頁用它們計算市值。
+  - `fx_rate_check`：匯率打錯字的警示門檻（預設 20%），存在 `config` 表，之後可以自己改。
+- `npm run check:supabase`：應該看到 **24 項全部 ✅**（比上次多了 2 個 view，陌生人同樣讀不到）。如果出現「找不到資料表，請先執行 db push」，代表上一行還沒成功。
+
+`db push` adds two views for the newest price and FX rate, and the FX typo-check setting; the check then shows 24 passes.
+
+## 2. 啟動 App Start the app
+
+```bash
+npm run dev
+```
+
+看到 `Local: http://localhost:3000` 之後，用瀏覽器打開 <http://localhost:3000>，以 Supabase 設定第 4 步建立的 email 與密碼登入。
+
+- App 只在你的 Mac 上執行；Terminal 視窗要保持開著。
+- 關閉 App：在 Terminal 按 `Control` + `C`。
+- 下次要用時，在 `invest` 資料夾再執行一次 `npm run dev` 即可（`npm install` 與 `db push` 只有程式更新後才需要）。
+
+Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase account. Stop it with Control-C.
+
+## 3. 第一次使用 First use
+
+持倉頁一開始是空的：示範資料只用在測試，不會送到你的專案。
+
+- **新增交易**：輸入代號後，幣別與最近一筆匯率會自動帶入；匯率請改成券商對帳單上的成交匯率。市場與部位（核心／衛星）由證券自動帶入。
+  - 找不到代號：按「找不到？新增證券」，填名稱、市場、產品類別與資產類別後儲存，會回到新增交易。
+  - 儲存前會即時檢查 R1（單一個股超過一般資金池 5%）與 R2（衛星部位超過 25%）：違反時只提醒，不會阻擋。
+  - 賣出數量超過當時持有數量會被拒絕，通常代表漏記了一筆買進。
+- **黃金與現金**：按「新增非上市資產」。實體黃金以克數輸入，可填每克金價自動算出估值；高利活存與貨幣基金以台幣餘額輸入。
+- **匯入 CSV**：
+  1. 從券商網站下載成交明細，存成 CSV。
+  2. 在「匯入 CSV」頁填券商名稱、選擇檔案。Big5 編碼、檔案上方的標題列都會自動判斷。
+  3. 檢查欄位對應與每一列的預覽：股利、合計列會略過並說明原因；已經存在的交易會標示「已存在」，不會重複匯入。
+  4. 外幣交易如果檔案裡沒有匯率欄，請在「沒有匯率的列使用的匯率」填一個匯率。
+  5. 檔案裡有還沒新增的代號時，點「新增 XXX」（在新分頁開啟）新增後，回來按「重新檢查」。
+  6. 按「匯入」。欄位對應會依券商名稱記住，下次選同一家券商就會自動套用。
+- **修改與刪除**：持倉頁最下方的交易紀錄、非上市資產都有「修改」連結；每次修改都留下紀錄，顯示在該筆資料頁面的最下方。
+
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, and trades already saved are skipped). R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+
+## 補充 Notes
+
+- 標著 ＊ 的金額是估計值：每夜價格排程（第一階段第 4 步）上線前，市值以你最近一筆交易的價格與匯率估算；黃金以你最後輸入的估值計算。
+- R1／R2 的門檻來自 `rules` 表，匯率警示門檻來自 `config` 表的 `fx_rate_check`；都能在 Supabase 的 Table Editor 修改，不需要改程式。
+- 只有登入後的你看得到資料；畫面顯示「無法從資料庫讀取」時，多半是程式更新後還沒執行 `npx supabase db push`。
+- 如果 `npm run dev` 顯示 Node.js 版本太舊，請到 <https://nodejs.org> 安裝 LTS 版本後重開 Terminal。
+
+Figures marked * are estimates until the nightly price job (Phase 1, step 4) runs. Thresholds live in the `rules` and `config` tables, never in code. A "could not read" page usually means `npx supabase db push` is still to be run.

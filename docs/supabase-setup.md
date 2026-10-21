@@ -89,6 +89,8 @@ npm run check:supabase
 
 The check sees exactly what a stranger sees; every table must refuse and the private schema must stay hidden.
 
+全部 ✅ 之後，請接著看 [執行 App](running-the-app.md)。 Next: [Running the app](running-the-app.md).
+
 ## 補充 Notes
 
 - 儀表板的 **Table Editor** 看得到所有資料：它用資料庫管理員身分，不受 row-level security 限制。陌生人走的是 Data API，會被擋下。
