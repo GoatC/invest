@@ -9,12 +9,15 @@
   },
   "scripts": {
     "check:sources": "tsx scripts/check_sources.ts",
-    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts",
-    "typecheck": "tsc -p scripts"
+    "check:supabase": "tsx scripts/check_supabase.ts",
+    "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts tests/db/*.test.ts",
+    "typecheck": "tsc -p scripts && tsc -p tests"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22.20.5",
     "fflate": "^0.8.3",
+    "supabase": "^2.120.0",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   }
