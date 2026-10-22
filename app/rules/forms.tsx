@@ -23,6 +23,7 @@ const KEYS: Record<string, Bilingual> = {
   max_classes: { en: 'Most classes one buy list spreads over', zh: '每份買進清單最多類別數' },
   satellite_share_with_buy_alert: { en: 'Satellite share of a contribution during a buy-zone alert', zh: '買入區警報時投入衛星的比例上限' },
   month: { en: 'Month', zh: '月份' },
+  usd: { en: 'US-situs assets above, US$', zh: '美國資產超過（美元）' },
 };
 
 function label(key: string): Bilingual {

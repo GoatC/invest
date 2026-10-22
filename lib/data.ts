@@ -6,6 +6,7 @@ import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun,
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
+import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
 import { evaluate, readDetail, readOrders, type ClosedReason, type DraftOrder, type EngineInput, type EngineQuote, type EngineRule, type Outcome, type ProposalDetail, type ProposalRecord, type ProposalStatus } from './models/engine';
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
@@ -950,6 +951,7 @@ export async function loadEngineInput(
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const day = configNumber(value('dca'), 'day_of_month');
   const expiry = configNumber(value('proposal_expiry_days'));
+  const usd = latestFx(data.fx, data.trades).get('USD');
   const input: EngineInput = {
     today,
     now,
@@ -960,6 +962,8 @@ export async function loadEngineInput(
     dca: { amountTwd: dcaAmount(value('dca')), dayOfMonth: day !== null && Number.isInteger(day) && day >= 1 && day <= 31 ? day : null },
     expiryDays: expiry !== null && expiry > 0 ? expiry : null,
     proposals,
+    domiciles: new Map(data.securities.map((security) => [security.ticker, security.domicile])),
+    usdTwd: usd?.value ?? null,
   };
   return { input, rules, proposals, orders: orderSettings(value('orders')) };
 }
@@ -1185,4 +1189,89 @@ export async function sendNotification(supabase: SupabaseClient, notification: N
   }
   await finish(result.delivered.length, result.errors.length > 0 ? result.errors.join('; ') : result.gone.length > 0 ? `${result.gone.length} device(s) gone, removed` : null);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// F15 fee and tax drag (Phase 1, step 11)
+// ---------------------------------------------------------------------------
+
+/** The F15 config rows as the app reads them; `applied` is false until the step 11 migration is. */
+export interface CostConfig {
+  applied: boolean;
+  fees: FeeSettings;
+  brokers: Broker[];
+  funds: FundCost[];
+  /** Undefined while a threshold the checks need is missing. */
+  tax: TaxSettings | undefined;
+  taxVerifiedOn: string | null;
+}
+
+export const COST_KEYS = ['fees', 'brokers', 'fund_costs', 'tax'] as const;
+
+export async function loadCostConfig(supabase: SupabaseClient): Promise<CostConfig> {
+  const found = await rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', [...COST_KEYS]));
+  const row = (key: string) => found.find((candidate) => candidate.key === key);
+  return {
+    applied: COST_KEYS.every((key) => row(key) !== undefined),
+    fees: readFeeSettings(row('fees')?.value),
+    brokers: readBrokers(row('brokers')?.value),
+    funds: readFundCosts(row('fund_costs')?.value),
+    tax: readTaxSettings(row('tax')?.value),
+    taxVerifiedOn: row('tax')?.last_verified ?? null,
+  };
+}
+
+/** The broker the estimates use, from config fees; null until one is chosen. */
+export function chosenBroker(config: CostConfig): Broker | null {
+  return config.brokers.find((broker) => broker.id === config.fees.brokerId) ?? null;
+}
+
+/** What the fee estimates on draft orders need: the chosen broker, the Taiwan commission, the tax, and each security's market and kind. */
+export interface FeeContext {
+  costs: CostSettings;
+  securities: Map<string, { market: Market; productType: ProductType }>;
+}
+
+export async function loadFeeContext(supabase: SupabaseClient): Promise<FeeContext> {
+  const [config, securities] = await Promise.all([loadCostConfig(supabase), loadSecurities(supabase)]);
+  return {
+    costs: { broker: chosenBroker(config), tw: config.fees.tw, tax: config.tax },
+    securities: new Map(securities.map((security) => [security.ticker, { market: security.market, productType: security.productType }])),
+  };
+}
+
+/** Everything the costs page reads. */
+export interface CostsData extends HoldingsData {
+  config: CostConfig;
+  classSettings: AssetClassSettings[];
+  flows: CashFlowRecord[];
+  rules: RuleRecord[];
+  /** config projection, dca and the target mix's expected return, for the plan costs are measured over. */
+  planSettings: PlanSettings | undefined;
+  dcaAmount: number | null;
+  mix: { expectedReturn: number; share: number } | null;
+}
+
+export async function loadCostsData(supabase: SupabaseClient): Promise<CostsData> {
+  const [holdings, config, classSettings, flows, rules, planConfig, assumptions] = await Promise.all([
+    loadHoldingsData(supabase),
+    loadCostConfig(supabase),
+    loadAssetClassSettings(supabase),
+    loadCashFlows(supabase),
+    loadRules(supabase),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['projection', 'dca'])),
+    loadAssumptions(supabase),
+  ]);
+  const value = (key: string) => planConfig.find((row) => row.key === key);
+  const projection = value('projection');
+  return {
+    ...holdings,
+    config,
+    classSettings,
+    flows,
+    rules,
+    planSettings: projection ? readPlanSettings(projection.value) : undefined,
+    dcaAmount: dcaAmount(value('dca')?.value),
+    mix: assumptions ? mixReturn(classSettings, assumptions.assumptions) : null,
+  };
 }

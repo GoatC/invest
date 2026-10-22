@@ -15,14 +15,18 @@ weekly demo closes, the 1-month toggle at × √4.33, the histogram with its cut
 without risk, the formula, dark mode), the compounding calculator (the PRD acceptance case on
 screen, the target mix's return and the DCA amount as starting values, the start month filling in
 the starting value, a saved plan against the demo month ends with the gap split, dark mode), the
-the rules engine (each rule's finding on the Rules page, the DCA day and
+rules engine (each rule's finding on the Rules page, the DCA day and
 a threshold edit with its log, Check the rules now drafting R1, F8 and the monthly contribution
 with their reasons and whole-share orders and nothing twice, editing the orders, approving,
 recording the trade from the checklist, marking it filled, dismissing with a reason and the
 cooldown that follows), Web Push (the service worker loading without a session, a test push to
 a stand-in push service on local HTTPS read with the stand-in device's own keys, a device that left
 removed, the push job sending the weekly review and the open proposal once each), the weekly
-dashboard as home (its three lines and the Section 5 order, approving from it, dark mode), the data status page, a phone-width check of every page,
+dashboard as home (its three lines and the Section 5 order, approving from it, dark mode), the
+costs page (the yearly drag, each fund and broker over the plan with the demo figures, choosing a
+broker so proposals estimate their fees, a fund's costs edited and checked, the Taiwan tax checks),
+the US estate-tax rule (a windfall buy past US$60,000 drafts a suggestion with no orders, then is
+undone), the data status page, a phone-width check of every page,
 and sign-out. With a `FINMIND_TOKEN` in the environment it then removes the invented weekly
 history, runs the real nightly job (`scripts/nightly.ts`, live feeds) against the stand-in
 twice, the second time as on GitHub Actions, checks that the VaR proxies' live weekly closes hold

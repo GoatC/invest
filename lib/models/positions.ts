@@ -14,6 +14,14 @@ export interface Position {
   realizedTwd: number;
 }
 
+/** One sell's gain or loss against the average cost of what it sold, TWD, after its fee and tax. */
+export interface Sale {
+  tradeDate: string;
+  ticker: string;
+  pool: Pool;
+  gainTwd: number;
+}
+
 /** A sell larger than the holding on its date: a buy is missing or a quantity is wrong. */
 export interface Shortfall {
   ticker: string;
@@ -46,9 +54,10 @@ export function positionKey(pool: Pool, ticker: string): string {
  * proceeds, net of fee and tax, as a realized gain. Pools are kept apart, so windfall money never
  * mixes into the regular pool's cost or weights.
  */
-export function buildPositions(trades: readonly Trade[]): { positions: Position[]; shortfalls: Shortfall[] } {
+export function buildPositions(trades: readonly Trade[]): { positions: Position[]; shortfalls: Shortfall[]; sales: Sale[] } {
   const book = new Map<string, Position>();
   const shortfalls: Shortfall[] = [];
+  const sales: Sale[] = [];
   for (const trade of chronological(trades)) {
     const key = positionKey(trade.pool, trade.ticker);
     const position = book.get(key) ?? {
@@ -78,6 +87,7 @@ export function buildPositions(trades: readonly Trade[]): { positions: Position[
       position.costLocal -= costOutLocal;
       position.costTwd -= costOutTwd;
       position.realizedTwd += proceedsTwd - costOutTwd;
+      sales.push({ tradeDate: trade.tradeDate, ticker: trade.ticker, pool: trade.pool, gainTwd: proceedsTwd - costOutTwd });
       if (position.qty < EPSILON) {
         position.qty = 0;
         position.costLocal = 0;
@@ -86,5 +96,5 @@ export function buildPositions(trades: readonly Trade[]): { positions: Position[
     }
     book.set(key, position);
   }
-  return { positions: [...book.values()], shortfalls };
+  return { positions: [...book.values()], shortfalls, sales };
 }

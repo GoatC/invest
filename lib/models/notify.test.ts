@@ -114,6 +114,12 @@ describe('messages', () => {
       new Map([['global_bonds', { en: 'Global bonds', zh: '全球債券' }]]),
     );
     assert.equal(drift.body, 'Rebalance: Global bonds −12.9 pp.\n再平衡：全球債券 −12.9 pp。');
+    const estate = proposalMessage(
+      { ...r1, id: 9, ruleId: 'US_ESTATE_TAX', condition: 'us_situs_value_above', title: { en: 'US_ESTATE_TAX · US estate tax', zh: 'US_ESTATE_TAX · 美國遺產稅' }, state: 'over', detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, situsUsd: 61_000, limitUsd: 60_000 } },
+      new Map(),
+    );
+    assert.equal(estate.title, 'US_ESTATE_TAX · US estate tax 美國遺產稅');
+    assert.equal(estate.body, 'US assets 61,000 USD, above the 60,000 USD exemption: consider Irish-domiciled ETFs.\n美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
   });
 
   it('alerts once per streak of missed nights, keyed by the last good run', () => {

@@ -67,6 +67,7 @@ export const LABELS = {
   allocation: { en: 'Allocation', zh: '資產配置' },
   risk: { en: 'Value at Risk', zh: '風險值' },
   calculator: { en: 'Calculator', zh: '複利計算機' },
+  costs: { en: 'Costs & tax', zh: '費用與稅務' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },

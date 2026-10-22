@@ -669,6 +669,7 @@ await step('calculator: saving the plan compares the regular pool with it at eac
 
 /** Yesterday in Taipei, YYYY-MM-DD: a DCA debit then makes the monthly rule fire today. */
 const taipeiYesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - 86_400_000));
+const taipeiToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 await step('rules: each rule says what it finds now; the monthly contribution waits for the DCA day, which is set here', async () => {
   await page.goto(`${BASE}/rules`);
@@ -761,6 +762,8 @@ await step('proposals: edit the orders, approve, record the trade from the check
   await page.waitForURL(/\/holdings\/new\?/);
   check((await page.inputValue('select[name=side]')) === 'sell', 'a sell');
   check(Number(await page.inputValue('input[name=qty]')) > 0 && Number(await page.inputValue('input[name=price]')) > 0, 'shares and the latest close filled in');
+  // R1's first sale is 2330: the Taiwan minimum commission, and the 0.3% transaction tax on one share at 2,405.
+  check((await page.inputValue('input[name=fee]')) === '20' && (await page.inputValue('input[name=tax]')) === '7', `the estimated fee and tax, got ${await page.inputValue('input[name=fee]')} and ${await page.inputValue('input[name=tax]')}`);
   check((await body()).includes(`Filled in from proposal #${id}`), 'says where it came from');
   await page.click('main button[type=submit]');
   await page.waitForURL('**/proposals?saved=trade*');
@@ -790,6 +793,81 @@ await step('holdings: the open proposals come first; dark mode and the proposals
   await page.goto(`${BASE}/proposals`);
   await snap('proposals-dark');
   await page.emulateMedia({ colorScheme: 'light' });
+});
+
+await step('costs: the yearly drag, each fund and broker over the plan, the Taiwan tax checks; choosing a broker prices the orders', async () => {
+  await page.goto(`${BASE}/costs`);
+  await page.locator('#fund-choices .chart svg').waitFor();
+  const text = await body();
+  check(/Holding costs: [\d.]+% a year, about NT\$[\d,]+ on NT\$[\d,]+/.test(text), `the yearly drag, got ${text.slice(0, 600)}`);
+  check(/US estate tax: US-situs assets [\d,]+ USD of the 60,000 USD exemption \(\d+%\)\./.test(text), 'the estate-tax line');
+  // The VT dividends recorded and the gain on the AAPL sale: far under the floor.
+  check(/Minimum tax: overseas income this year NT\$[\d,]+, under the NT\$1,000,000 floor/.test(text), 'overseas income');
+  check(text.includes('Supplementary premium: no Taiwan dividend this year reached NT$20,000 in one payment.'), 'the supplementary premium');
+  check(text.includes('Order fees: choose your 複委託 broker below'), 'no broker chosen yet');
+  const row = (ticker) => page.locator('#fund-choices tbody tr').filter({ has: page.locator('strong', { hasText: new RegExp(`^${ticker}$`) }) });
+  // VT: TER 0.06% + 1.8% × 30% withheld; VWRA: TER 0.19% + 1.8% × 9% inside the fund.
+  check((await row('VT').innerText()).includes('0.6%') && (await row('VWRA').innerText()).includes('0.352%'), `the drags, got ${await row('VT').innerText()} / ${await row('VWRA').innerText()}`);
+  await snap('costs');
+
+  await page.selectOption('#fee-settings + form select[name=broker]', 'cathay');
+  await page.locator('#fee-settings + form button[type=submit]').click();
+  await page.waitForURL('**/costs?saved=fees*');
+  check((await body()).includes('Order fees: estimated with the prices of Cathay Securities.'), 'the broker chosen');
+  // A typical order is NT$5,000 (NT$10,000 over two classes): US$3 at 32.4 plus 0.1% FX is 2.044% of it.
+  check((await row('VT').innerText()).includes('2.044%'), `VT's order cost, got ${await row('VT').innerText()}`);
+  const brokers = await page.locator('#brokers table').innerText();
+  check(/Cathay Securities[\s\S]*yours/.test(brokers) && brokers.includes('35.00 USD · 22.78%'), `the minimum fee on a small order, got ${brokers}`);
+  await page.setViewportSize({ width: 1280, height: 1400 });
+  await docShot('costs', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // A fund's costs are edited in place, and the box records today as the day checked.
+  await page.locator('#fund-costs > summary').click();
+  await page.locator('#fund-VT > summary').click();
+  await page.fill('#fund-VT input[name=yield]', '2');
+  await page.locator('#fund-VT input[name=checked]').check();
+  await page.locator('#fund-VT button[type=submit]').first().click();
+  await page.waitForURL('**/costs?saved=fund*');
+  check((await row('VT').innerText()).includes('0.66%'), 'VT: 0.06% + 2% × 30%');
+  // The reloaded page has the settings folded again, so read the text rather than what is drawn.
+  check(((await page.locator('#fund-VT > summary').textContent()) ?? '').includes(`checked ${taipeiToday}`), 'checked today');
+
+  await page.goto(`${BASE}/proposals`);
+  const monthly = await page.locator('article.proposal').filter({ hasText: 'Monthly contribution' }).innerText();
+  check(monthly.includes('3.00 USD') && /Estimated fees and tax: about NT\$[\d,]+, with the prices of Cathay Securities abroad/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
+});
+
+await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; the rule suggests Irish ETFs, with no orders', async () => {
+  await page.goto(`${BASE}/holdings/new`);
+  await page.fill('input[name=ticker]', 'VT');
+  await page.fill('input[name=qty]', '380');
+  await page.fill('input[name=price]', '157.80');
+  await page.selectOption('select[name=pool]', 'windfall');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=added');
+  await page.goto(`${BASE}/proposals`);
+  await page.getByRole('button', { name: /Check the rules now/ }).click();
+  await page.waitForURL('**/proposals?saved=checked*');
+  const estate = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
+  const text = await estate.innerText();
+  check(/US-situs assets, US shares and US-domiciled ETFs in both pools, come to 6\d,\d{3} USD/.test(text) && text.includes('Irish-domiciled equivalents') && text.includes('No orders'), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  await page.goto(`${BASE}/costs#estate-tax`);
+  const section = await page.locator('#estate-tax').innerText();
+  check(section.includes('VWRA') && section.includes('AGGU') && (await page.locator('#estate-tax .meter.over').count()) === 1, `over the exemption, alternatives named, got ${section}`);
+  await snap('costs-estate');
+  // Leave the later steps the demo as it was: dismiss the suggestion and delete the windfall buy.
+  await page.goto(`${BASE}/proposals`);
+  const open = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
+  await open.locator('input[name=reason]').fill('Demo: a test buy 示範');
+  await open.getByRole('button', { name: /^Dismiss/ }).click();
+  await page.waitForURL('**/proposals?saved=dismissed*');
+  await page.goto(`${BASE}/holdings`);
+  await page.locator('#trades tbody tr').first().getByRole('link').click();
+  await page.waitForURL(/\/holdings\/\d+$/);
+  check((await page.inputValue('input[name=qty]')) === '380', 'the windfall buy');
+  await page.getByRole('button', { name: /Delete/ }).click();
+  await page.waitForURL('**/holdings?saved=deleted');
 });
 
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
@@ -955,7 +1033,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -968,7 +1046,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
     if (path === '/') await page.locator('.chart-donut svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

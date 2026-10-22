@@ -168,10 +168,14 @@ function Proposals({ list, rules, names }: { list: readonly Proposal[]; rules: r
               </p>
             )}
             <p className="muted small">
-              <Bi
-                en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'}: ${twd(sold)} out, ${twd(bought)} in.`}
-                zh={`${proposal.orders.length} 筆下單：賣出／轉出 ${twd(sold)}，買進／存入 ${twd(bought)}。`}
-              />{' '}
+              {proposal.orders.length === 0 ? (
+                <Bi en="No orders: a decision to make, nothing to trade yet." zh="沒有下單清單：需要做決定，尚無需交易。" />
+              ) : (
+                <Bi
+                  en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'}: ${twd(sold)} out, ${twd(bought)} in.`}
+                  zh={`${proposal.orders.length} 筆下單：賣出／轉出 ${twd(sold)}，買進／存入 ${twd(bought)}。`}
+                />
+              )}{' '}
               <Link href={`/proposals#proposal-${proposal.id}`}>
                 <Bi en="Details and edit" zh="詳細內容與修改" />
               </Link>

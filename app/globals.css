@@ -759,3 +759,20 @@ tr.selected td {
   border-radius: 5px;
   background: var(--chart-1);
 }
+
+/* Costs page (F15): a meter past its limit, and the settings' entries nested in their list. */
+
+.meter.over > span {
+  background: var(--status-critical);
+}
+
+details.nested {
+  margin: 0.5rem 0 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+details > .form,
+details > form {
+  margin-top: 0.75rem;
+}
