@@ -19,6 +19,7 @@ const TITLES: Record<string, Bilingual> = {
   class_drift_exceeds: { en: 'Drift rebalance', zh: '偏離再平衡' },
   day_after_dca: { en: 'Monthly contribution', zh: '每月投入' },
   first_weekend_of_month: { en: 'Annual review', zh: '年度檢查' },
+  us_situs_value_above: { en: 'US estate tax', zh: '美國遺產稅' },
 };
 
 /** "R1 · Single-stock trim". */
@@ -149,6 +150,21 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       });
       for (const row of detail.classes ?? []) lines.push(classLine(row, names));
       break;
+    case 'us_situs_value_above': {
+      const total = money(detail.situsUsd ?? 0, 'USD', 0);
+      const limit = money(detail.limitUsd ?? 0, 'USD', 0);
+      const rate = detail.usdTwd ? `${detail.usdTwd}` : '—';
+      const held = (detail.situs ?? []).map((row) => `${row.ticker} ${money(row.valueUsd, 'USD', 0)}`).join(', ');
+      lines.push({
+        en: `US-situs assets, US shares and US-domiciled ETFs in both pools, come to ${total} at NT$${rate} a dollar: ${held}. A non-US resident's estate is exempt only up to ${limit}; above it the US taxes the estate.`,
+        zh: `美國資產（兩個資金池的美股與美國註冊 ETF）以 1 美元兌 ${rate} 台幣計共 ${total}：${held}。非美國居民的遺產只有 ${limit} 免稅，超過的部分會被課美國遺產稅。`,
+      });
+      lines.push({
+        en: 'Consider Irish-domiciled equivalents, which are not US assets: for new money first, and for what is held where the sale is worth its fees and its tax (a gain abroad is overseas income). The Costs page compares them. No orders are drafted: approve it when you have decided, mark it filled once done.',
+        zh: '可考慮改用愛爾蘭註冊的同類 ETF（不屬於美國資產）：先用於新資金；已持有的部分，若賣出值得其手續費與稅負（海外的已實現獲利屬海外所得）再轉換。「費用與稅務」頁有比較。本提案不產生下單清單：決定後核准，完成後標記為已成交。',
+      });
+      break;
+    }
     default:
       break;
   }
@@ -173,8 +189,8 @@ export function orderLine(order: DraftOrder): Bilingual {
 export function checkText(check: Check, condition?: string): Bilingual {
   if (check.outcome === 'later' && condition === 'job_failed_consecutively') {
     return {
-      en: 'Watched by the data status check, not the engine: failed nights in a row raise the alert on the holdings page; a push comes with step 10.',
-      zh: '由資料狀態檢查負責，不經規則引擎：連續失敗的夜晚會在持倉頁顯示警示；推播在第 10 步加入。',
+      en: 'Watched by the data status check, not the engine: failed nights in a row raise the alert on the holdings page and a push.',
+      zh: '由資料狀態檢查負責，不經規則引擎：連續失敗的夜晚會在持倉頁顯示警示並推播。',
     };
   }
   switch (check.outcome) {
@@ -189,9 +205,9 @@ export function checkText(check: Check, condition?: string): Bilingual {
         ? { en: "Over its trigger, but R1's trims bring it back.", zh: '超過觸發點，但 R1 的減碼已足以回到目標。' }
         : { en: 'A class is under its band, but the next monthly contribution covers it, so no sale is proposed (cash first).', zh: '有類別低於門檻，但下一次每月投入即可補足，因此不提出賣出（現金流優先）。' };
     case 'waiting':
-      return check.why === 'dca_day'
-        ? { en: 'Waiting for the DCA debit day: set it below.', zh: '尚未設定定期定額扣款日：請在下方設定。' }
-        : { en: 'Nothing in the regular pool to measure yet.', zh: '一般投入資金池尚無可衡量的持股。' };
+      if (check.why === 'dca_day') return { en: 'Waiting for the DCA debit day: set it below.', zh: '尚未設定定期定額扣款日：請在下方設定。' };
+      if (check.why === 'usd') return { en: 'Waiting for a USD/TWD rate to value US assets in dollars.', zh: '等待美元匯率，才能以美元計算美國資產。' };
+      return { en: 'Nothing in the regular pool to measure yet.', zh: '一般投入資金池尚無可衡量的持股。' };
     case 'unreadable':
       return { en: 'A threshold is missing or malformed; fix it below.', zh: '門檻數值缺漏或格式錯誤：請在下方修正。' };
     case 'off':

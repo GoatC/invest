@@ -12,11 +12,11 @@ import { parseNumber } from '@/lib/validation';
 
 import { TradeForm, type TradeValues } from '../trade-form';
 
-type Params = { ticker?: string; side?: string; qty?: string; pool?: string; proposal?: string };
+type Params = { ticker?: string; side?: string; qty?: string; pool?: string; proposal?: string; fee?: string; tax?: string };
 
 export default async function NewTradePage({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
-  const { ticker: requested, side, qty, pool, proposal } = await searchParams;
+  const { ticker: requested, side, qty, pool, proposal, fee, tax } = await searchParams;
   let data: HoldingsData;
   let rates: FxQuote[];
   try {
@@ -27,13 +27,18 @@ export default async function NewTradePage({ searchParams }: { searchParams: Pro
   }
 
   // Arriving from "Add security" pre-fills that ticker with its currency and today's FX rate; from
-  // an approved proposal's checklist, its side, quantity and pool too, with the latest close as the price.
+  // an approved proposal's checklist, its side, quantity and pool too, with the latest close as the
+  // price and the estimated fee and tax (F15).
   const today = taipeiToday();
   const security = data.securities.find((candidate) => candidate.ticker === requested?.toUpperCase());
   const rate = security ? suggestedRate(security.currency, today, rateHistory(rates), data.fxMaxAgeDays, latestFx(data.fx, data.trades)) : undefined;
   const shares = parseNumber(qty);
   const close = security ? latestPrices(data.prices, data.trades).get(security.ticker) : undefined;
   const fromProposal = parseId(proposal);
+  const estimate = (value: string | undefined) => {
+    const amount = fromProposal !== undefined ? parseNumber(value) : undefined;
+    return amount !== undefined && amount >= 0 ? String(amount) : '';
+  };
   const initial: TradeValues = {
     tradeDate: today,
     ticker: security?.ticker ?? '',
@@ -41,8 +46,8 @@ export default async function NewTradePage({ searchParams }: { searchParams: Pro
     qty: shares !== undefined && shares > 0 ? String(shares) : '',
     price: fromProposal !== undefined && close ? String(close.value) : '',
     currency: security?.currency ?? '',
-    fee: '',
-    tax: '',
+    fee: estimate(fee),
+    tax: estimate(tax),
     fxRate: rate === undefined ? '' : String(rate),
     pool: pool === 'windfall' ? 'windfall' : 'regular',
     note: fromProposal !== undefined ? `Proposal #${fromProposal} 提案 #${fromProposal}` : '',

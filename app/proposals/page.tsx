@@ -4,10 +4,11 @@ import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadProposals, loadRules, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, loadAssetClasses, loadFeeContext, loadProposals, loadRules, orDataError, type FeeContext, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, quantity, twd } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
+import { orderCost, type OrderCost } from '@/lib/models/costs';
 import { orderTotals, type DraftOrder } from '@/lib/models/engine';
 import { CLOSED, orderLine, proposalTitle, stateText, STATUS, whyLines, type RuleLike } from '@/lib/proposal-text';
 
@@ -54,11 +55,13 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
   let proposals: Proposal[];
   let rules: RuleRecord[];
   let names: Map<string, Bilingual>;
+  let fees: FeeContext | undefined;
   try {
-    const [found, ruleRows, classes] = await Promise.all([loadProposals(supabase, today), loadRules(supabase), loadAssetClasses(supabase)]);
+    const [found, ruleRows, classes, feeContext] = await Promise.all([loadProposals(supabase, today), loadRules(supabase), loadAssetClasses(supabase), orDataError(loadFeeContext(supabase))]);
     proposals = found;
     rules = ruleRows;
     names = new Map(classes.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]));
+    fees = feeContext instanceof DataError ? undefined : feeContext;
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -114,7 +117,7 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
             <Bi en="No open proposals: no rule needs a decision now." zh="沒有待處理的提案：目前沒有需要決定的事。" />
           </p>
         ) : (
-          open.map((proposal) => <OpenProposal key={proposal.id} proposal={proposal} rule={ruleOf(proposal)} names={names} />)
+          open.map((proposal) => <OpenProposal key={proposal.id} proposal={proposal} rule={ruleOf(proposal)} names={names} fees={fees} />)
         )}
       </section>
 
@@ -124,7 +127,7 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
             <Bi en={`Approved, to trade (${approved.length})`} zh={`已核准，待下單（${approved.length}）`} />
           </h2>
           {approved.map((proposal) => (
-            <ApprovedProposal key={proposal.id} proposal={proposal} rule={ruleOf(proposal)} names={names} />
+            <ApprovedProposal key={proposal.id} proposal={proposal} rule={ruleOf(proposal)} names={names} fees={fees} />
           ))}
         </section>
       )}
@@ -171,15 +174,55 @@ const ACTION: Record<DraftOrder['side'], Bilingual> = {
   withdraw: { en: 'Take out', zh: '轉出' },
 };
 
-/** Where to record an order once traded: the trade form filled in, or the balance's edit page. */
-function recordLink(order: DraftOrder, proposalId: number): string {
+/** Where to record an order once traded: the trade form filled in (with the estimated fee and tax), or the balance's edit page. */
+function recordLink(order: DraftOrder, proposalId: number, cost: OrderCost | undefined): string {
   if (order.kind === 'balance') return `/assets/${order.assetId}`;
   const query = new URLSearchParams({ ticker: order.ticker, side: order.side, qty: String(order.qty), pool: 'regular', proposal: String(proposalId) });
+  if (cost?.known) {
+    query.set('fee', String(cost.fee));
+    if (cost.tax > 0) query.set('tax', String(cost.tax));
+  }
   return `/holdings/new?${query.toString()}`;
 }
 
-function Orders({ proposal, checklist }: { proposal: Proposal; checklist?: boolean }) {
+/** Each trade order's estimated fee and tax (F15), by its security's market and kind; undefined for a balance. */
+function orderCosts(orders: readonly DraftOrder[], fees: FeeContext | undefined): Array<OrderCost | undefined> {
+  return orders.map((order) => {
+    if (order.kind !== 'trade' || !fees) return undefined;
+    const security = fees.securities.get(order.ticker);
+    return security ? orderCost(order, security, fees.costs) : undefined;
+  });
+}
+
+function costText(cost: OrderCost | undefined, currency: string): string {
+  if (!cost?.known) return '—';
+  return cost.tax > 0 ? `${money(cost.fee, currency, currency === 'TWD' ? 0 : 2)} + ${money(cost.tax, currency, 0)}` : money(cost.fee, currency, currency === 'TWD' ? 0 : 2);
+}
+
+/** Under the orders: the fees in TWD, the schedules they come from, and what is missing for the rest. */
+function FeeNote({ proposal, fees }: { proposal: Proposal; fees: FeeContext | undefined }) {
+  const trades = proposal.orders.filter((order) => order.kind === 'trade');
+  if (trades.length === 0) return null;
+  const costs = orderCosts(proposal.orders, fees).filter((cost): cost is OrderCost => cost !== undefined);
+  const totalTwd = costs.reduce((sum, cost) => sum + (cost.known ? cost.feeTwd + cost.taxTwd : 0), 0);
+  const unknown = trades.length - costs.filter((cost) => cost.known).length;
+  const broker = fees?.costs.broker;
+  return (
+    <p className="muted small">
+      <Bi
+        en={`Estimated fees and tax: about ${twd(totalTwd)}${broker ? `, with the prices of ${broker.nameEn} abroad` : ''} and the Taiwan commission, paid from the cash left.${unknown > 0 ? ` ${unknown} order${unknown === 1 ? ' is' : 's are'} not estimated: choose your 複委託 broker, or enter its London prices, on the Costs page.` : ''}`}
+        zh={`預估手續費與稅：約 ${twd(totalTwd)}${broker ? `（海外依${broker.nameZh}的費率）` : ''}，含台股手續費，由剩餘現金支付。${unknown > 0 ? `有 ${unknown} 筆未估算：請在「費用與稅務」頁選擇你的複委託券商，或填入其英股費率。` : ''}`}
+      />{' '}
+      <Link href="/costs#brokers">
+        <Bi en="Costs" zh="費用與稅務" />
+      </Link>
+    </p>
+  );
+}
+
+function Orders({ proposal, checklist, fees }: { proposal: Proposal; checklist?: boolean; fees?: FeeContext | undefined }) {
   const { orders } = proposal;
+  const costs = orderCosts(orders, fees);
   if (orders.length === 0) {
     return (
       <p className="muted">
@@ -228,10 +271,10 @@ function Orders({ proposal, checklist }: { proposal: Proposal; checklist?: boole
               <td className="num">{order.kind === 'trade' ? quantity(order.qty) : '—'}</td>
               <td className="num">{order.kind === 'trade' ? money(order.price, order.currency) : '—'}</td>
               <td className="num">{twd(order.amountTwd)}</td>
-              <td className="num">—</td>
+              <td className="num nowrap">{order.kind === 'trade' ? costText(costs[index], order.currency) : '—'}</td>
               {checklist && (
                 <td>
-                  <Link href={recordLink(order, proposal.id)}>
+                  <Link href={recordLink(order, proposal.id, costs[index])}>
                     <Bi {...(order.kind === 'trade' ? { en: 'Record the trade', zh: '登錄交易' } : { en: 'Update the balance', zh: '修改餘額' })} />
                   </Link>
                 </td>
@@ -271,19 +314,19 @@ function DismissForm({ proposal, label }: { proposal: Proposal; label: Bilingual
   );
 }
 
-function OpenProposal({ proposal, rule, names }: { proposal: Proposal; rule: RuleLike; names: ReadonlyMap<string, Bilingual> }) {
+function OpenProposal({ proposal, rule, names, fees }: { proposal: Proposal; rule: RuleLike; names: ReadonlyMap<string, Bilingual>; fees: FeeContext | undefined }) {
   return (
     <article id={`proposal-${proposal.id}`} className="proposal form">
       <Heading proposal={proposal} rule={rule} />
       <Why proposal={proposal} rule={rule} names={names} />
-      <Orders proposal={proposal} />
-      <p className="muted small">
-        <Bi
-          en={`Fees are estimated once F15 is built (step 11). ${proposal.expiresAt ? 'Unless acted on, it closes on ' : ''}`}
-          zh={`費用在 F15 完成後估算（第 11 步）。${proposal.expiresAt ? '若未處理，將於以下時間關閉：' : ''}`}
-        />
-        {proposal.expiresAt && <TaipeiTime at={proposal.expiresAt} />}
-      </p>
+      <Orders proposal={proposal} fees={fees} />
+      <FeeNote proposal={proposal} fees={fees} />
+      {proposal.expiresAt && (
+        <p className="muted small">
+          <Bi en="Unless acted on, it closes on " zh="若未處理，將於以下時間關閉：" />
+          <TaipeiTime at={proposal.expiresAt} />
+        </p>
+      )}
       <div className="row">
         <form action={approveProposal}>
           <input type="hidden" name="id" value={proposal.id} />
@@ -302,7 +345,7 @@ function OpenProposal({ proposal, rule, names }: { proposal: Proposal; rule: Rul
   );
 }
 
-function ApprovedProposal({ proposal, rule, names }: { proposal: Proposal; rule: RuleLike; names: ReadonlyMap<string, Bilingual> }) {
+function ApprovedProposal({ proposal, rule, names, fees }: { proposal: Proposal; rule: RuleLike; names: ReadonlyMap<string, Bilingual>; fees: FeeContext | undefined }) {
   return (
     <article id={`proposal-${proposal.id}`} className="proposal form">
       <Heading proposal={proposal} rule={rule} />
@@ -312,7 +355,8 @@ function ApprovedProposal({ proposal, rule, names }: { proposal: Proposal; rule:
           zh="執行清單：到券商逐筆下單，再在此登錄，或匯入券商對帳單 CSV。全部登錄後，把提案標記為已成交。"
         />
       </p>
-      <Orders proposal={proposal} checklist />
+      <Orders proposal={proposal} checklist fees={fees} />
+      <FeeNote proposal={proposal} fees={fees} />
       <details>
         <summary>
           <Bi en="Why it was proposed" zh="提案原因" />

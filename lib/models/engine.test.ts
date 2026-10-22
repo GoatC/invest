@@ -399,6 +399,44 @@ describe('annual review', () => {
   });
 });
 
+describe('US estate tax', () => {
+  const estate: EngineRule = { id: 'US_ESTATE_TAX', condition: 'us_situs_value_above', threshold: { usd: 60_000 }, enabled: true, cooldownDays: 30 };
+  const domiciles = new Map([
+    ['VT', 'US'],
+    ['BNDW', 'US'],
+    ['AGGU', 'IE'],
+    ['00692', 'TW'],
+  ]);
+  // US$1 = NT$32.5: VT NT$1,300,000 (US$40,000) in the windfall pool, BNDW NT$650,000 (US$20,000).
+  const holdings = [
+    listed('VT', 'us_global_equity', 1_300_000, { key: 'windfall:VT', pool: 'windfall' }),
+    listed('BNDW', 'global_bonds', 650_000),
+    listed('AGGU', 'global_bonds', 3_000_000, { market: 'UK' }),
+    listed('00692', 'tw_market_cap', 500_000, { market: 'TW' }),
+  ];
+
+  it("fires when both pools' US-domiciled holdings exceed the exemption, with no orders, and names them in dollars", () => {
+    const quiet = evaluate(input({ rules: [estate], holdings, domiciles, usdTwd: 32.5 }));
+    assert.equal(checkOf(quiet, 'US_ESTATE_TAX').outcome, 'quiet');
+    const over = [...holdings, listed('BNDW', 'global_bonds', 32_500, { key: 'windfall:BNDW', pool: 'windfall' })];
+    const draft = draftOf(evaluate(input({ rules: [estate], holdings: over, domiciles, usdTwd: 32.5 })), 'US_ESTATE_TAX');
+    assert.ok(draft);
+    assert.equal(draft.state, 'over');
+    assert.deepEqual(draft.orders, []);
+    assert.deepEqual(draft.detail.situs, [
+      { ticker: 'VT', valueTwd: 1_300_000, valueUsd: 40_000 },
+      { ticker: 'BNDW', valueTwd: 682_500, valueUsd: 21_000 },
+    ]);
+    assert.equal(draft.detail.situsUsd, 61_000);
+    assert.equal(draft.detail.limitUsd, 60_000);
+  });
+
+  it('waits for the domiciles and a USD rate, and refuses a threshold it cannot read', () => {
+    assert.deepEqual(checkOf(evaluate(input({ rules: [estate], holdings })), 'US_ESTATE_TAX'), { ruleId: 'US_ESTATE_TAX', outcome: 'waiting', why: 'usd' });
+    assert.equal(checkOf(evaluate(input({ rules: [{ ...estate, threshold: { usd: 'lots' } }], holdings, domiciles, usdTwd: 32.5 })), 'US_ESTATE_TAX').outcome, 'unreadable');
+  });
+});
+
 describe('deciding what to save', () => {
   const holdings = onTarget(200_000, [listed('AAPL', 'us_stocks', 11_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 29_000, { productType: 'theme_etf' })]);
   const record = (overrides: Partial<ProposalRecord>): ProposalRecord => ({ id: 1, ruleId: 'R1', state: 'AAPL', status: 'open', createdAt: '2026-10-21T01:00:00.000Z', expiresAt: '2026-11-04T01:00:00.000Z', ...overrides });

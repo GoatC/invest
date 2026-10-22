@@ -3,6 +3,7 @@ import { after, before, describe, it } from 'node:test';
 
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
+import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
 // SQLSTATE codes. 42501 covers both a missing privilege and a row-level security refusal.
@@ -160,7 +161,8 @@ describe('change logs', () => {
   it('record a rule edit with only the changed values and who made it', async () => {
     await as(db, 'owner', async (tx) => {
       await tx.query(`update public.rules set threshold = jsonb_set(threshold, '{max_weight}', '0.06') where id = 'R1'`);
-      const { rows } = await tx.query('select rule_id, old_value, new_value, changed_by from public.rule_changes');
+      // Rule changes made by a migration are logged too, with no one as their author.
+      const { rows } = await tx.query('select rule_id, old_value, new_value, changed_by from public.rule_changes where changed_by is not null');
       assert.deepEqual(rows, [
         {
           rule_id: 'R1',
@@ -178,7 +180,7 @@ describe('change logs', () => {
       const logged = await scalar(tx, 'select count(*) from public.audit_log');
       await tx.query(`update public.rules set enabled = enabled where id = 'R2'`);
       await tx.query(`update public.config set value = value where key = 'quiet_hours'`);
-      assert.equal(await scalar(tx, 'select count(*) from public.rule_changes'), 0);
+      assert.equal(await scalar(tx, 'select count(*) from public.rule_changes where changed_by is not null'), 0);
       assert.equal(await scalar(tx, 'select count(*) from public.audit_log'), logged);
     });
   });
@@ -424,6 +426,37 @@ describe('web push (step 10)', () => {
     await as(db, 'stranger', async (tx) => {
       assert.equal(await scalar(tx, 'select count(*) from public.notifications'), 0);
       assert.equal(await scalar(tx, 'select count(*) from public.push_subscriptions'), 0);
+    });
+  });
+});
+
+describe('fee and tax drag (step 11)', () => {
+  it('seed the tax thresholds with the date checked, the fees, the brokers and the fund costs, all readable by the app', async () => {
+    const value = (key: string) => scalar(db, `select value from public.config where key = $1`, [key]);
+    const tax = readTaxSettings(await value('tax'));
+    assert.deepEqual(tax?.amt, { overseasFloorTwd: 1_000_000, exemptionTwd: 7_500_000, rate: 0.2 });
+    assert.deepEqual(tax?.withholding, { US: 0.3, IE: 0.15, TW: 0 });
+    assert.equal((await scalar<Date>(db, `select last_verified from public.config where key = 'tax'`)).toISOString().slice(0, 10), '2026-10-22');
+    assert.deepEqual(readFeeSettings(await value('fees')), { brokerId: null, tw: { rate: 0.001425, discount: 1, minTwd: 20 }, fxSpread: 0.001 });
+    assert.deepEqual(
+      readBrokers(await value('brokers')).map((broker) => broker.id),
+      ['cathay', 'sinopac', 'yuanta', 'masterlink'],
+    );
+    const funds = readFundCosts(await value('fund_costs'));
+    assert.equal(funds.length, 14);
+    const classes = (await db.query<{ id: string }>('select id from public.asset_classes')).rows.map((row) => row.id);
+    assert.deepEqual(
+      funds.filter((fund) => !classes.includes(fund.assetClassId)),
+      [],
+    );
+  });
+
+  it('evaluate US_ESTATE_TAX at most once a month while it holds', async () => {
+    assert.deepEqual(await scalar(db, `select threshold from public.rules where id = 'US_ESTATE_TAX'`), { usd: 60000 });
+    assert.equal(await scalar(db, `select cooldown_days from public.rules where id = 'US_ESTATE_TAX'`), 30);
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query(`select old_value ->> 'cooldown_days' as old, new_value ->> 'cooldown_days' as new, changed_by from public.rule_changes where rule_id = 'US_ESTATE_TAX'`);
+      assert.deepEqual(rows, [{ old: '7', new: '30', changed_by: null }]);
     });
   });
 });

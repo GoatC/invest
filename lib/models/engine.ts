@@ -16,6 +16,9 @@
  *   most underweight core classes.
  * - first_weekend_of_month (ANNUAL_REVIEW): from the first Saturday of January → a full rebalance of
  *   the core back to its targets, and a prompt to review the rules.
+ * - us_situs_value_above (US_ESTATE_TAX, step 11): US-situs assets (every US-domiciled holding, both
+ *   pools, as the estate counts everything) above the exemption → a suggestion to use Irish-domiciled
+ *   equivalents, with no orders: a sale abroad is overseas income, so the swap is the owner's call.
  *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
@@ -32,6 +35,7 @@ import { addDays } from '../dates';
 import { classDrifts, type DriftBands } from './allocation';
 import { daysBetween } from './fx';
 import { classWeights, regularPool, type PoolView } from './rules';
+import { usSitusExposure } from './tax';
 import type { AssetClass, Side } from './types';
 import type { Holding } from './valuation';
 
@@ -96,6 +100,10 @@ export interface EngineInput {
   expiryDays: number | null;
   /** Proposals of the last while (every open and approved one, and recent others for the cooldown). */
   proposals: readonly ProposalRecord[];
+  /** Each security's domicile, ISO code (US_ESTATE_TAX); without it the rule waits. */
+  domiciles?: ReadonlyMap<string, string>;
+  /** TWD per USD, the latest rate (US_ESTATE_TAX); without it the rule waits. */
+  usdTwd?: number | null;
 }
 
 /** A listed buy or sell, in whole shares or, where the broker takes them, fractions. */
@@ -161,6 +169,11 @@ export interface ProposalDetail {
   untradedTwd?: number;
   /** Core classes with no fund to buy: no listed holding, TWD balance or priced benchmark ETF. */
   noFund?: string[];
+  /** US_ESTATE_TAX: the US-situs holdings, both pools, their total in USD, the exemption and the rate used. */
+  situs?: Array<{ ticker: string; valueTwd: number; valueUsd: number }>;
+  situsUsd?: number;
+  limitUsd?: number;
+  usdTwd?: number;
 }
 
 export interface Draft {
@@ -182,7 +195,7 @@ export interface Check {
   ruleId: string;
   outcome: CheckOutcome;
   draft?: Draft;
-  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'window'. */
+  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd'. */
   why?: string;
   /** For a firing rule: held back by its cooldown until this date. */
   cooldownUntil?: string;
@@ -716,8 +729,35 @@ function evaluateAnnual(rule: EngineRule, context: Context, drift: EngineRule | 
   };
 }
 
+function evaluateEstate(rule: EngineRule, context: Context): Result {
+  const limit = record(rule.threshold)['usd'];
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return { outcome: 'unreadable' };
+  const { domiciles, usdTwd, holdings } = context.input;
+  const exposure = domiciles && usdTwd ? usSitusExposure(holdings, (ticker) => domiciles.get(ticker), usdTwd) : null;
+  if (!exposure || !usdTwd) return { outcome: 'waiting', why: 'usd' };
+  if (exposure.totalUsd - limit <= EPS) return { outcome: 'quiet' };
+  const total = holdings.reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: 'over',
+      orders: [],
+      detail: {
+        poolTwd: total,
+        situs: exposure.rows.map((row) => ({ ticker: row.ticker, valueTwd: row.valueTwd, valueUsd: row.valueUsd })),
+        situsUsd: exposure.totalUsd,
+        limitUsd: limit,
+        usdTwd,
+        cashTwd: 0,
+        leftTwd: 0,
+      },
+    },
+  };
+}
+
 /** The conditions this engine evaluates, in the order it runs them (R2 counts what R1 sells). */
-export const CONDITIONS = ['single_stock_weight_above', 'satellite_weight_above', 'class_drift_exceeds', 'day_after_dca', 'first_weekend_of_month'] as const;
+export const CONDITIONS = ['single_stock_weight_above', 'satellite_weight_above', 'class_drift_exceeds', 'day_after_dca', 'first_weekend_of_month', 'us_situs_value_above'] as const;
 
 /** Conditions that fire once per period: their state is the month or the year. */
 const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month'];
@@ -764,6 +804,7 @@ export function evaluate(input: EngineInput): Outcome {
     else if (rule.condition === 'satellite_weight_above') result = evaluateR2(rule, context);
     else if (rule.condition === 'class_drift_exceeds') result = evaluateDrift(rule, context);
     else if (rule.condition === 'day_after_dca') result = evaluateMonthly(rule, context);
+    else if (rule.condition === 'us_situs_value_above') result = evaluateEstate(rule, context);
     else result = evaluateAnnual(rule, context, drift);
     const check: Check = { ruleId: rule.id, ...result };
     checks.push(check);

@@ -27,6 +27,30 @@ describe('proposal text', () => {
     });
   });
 
+  it('explains the US estate-tax check in dollars, holding by holding', () => {
+    const [first, second] = whyLines(
+      { id: 'US_ESTATE_TAX', condition: 'us_situs_value_above' },
+      {
+        poolTwd: 5_482_500,
+        situs: [
+          { ticker: 'VT', valueTwd: 1_300_000, valueUsd: 40_000 },
+          { ticker: 'BNDW', valueTwd: 682_500, valueUsd: 21_000 },
+        ],
+        situsUsd: 61_000,
+        limitUsd: 60_000,
+        usdTwd: 32.5,
+        cashTwd: 0,
+        leftTwd: 0,
+      },
+      NAMES,
+    );
+    assert.equal(
+      first?.en,
+      "US-situs assets, US shares and US-domiciled ETFs in both pools, come to 61,000 USD at NT$32.5 a dollar: VT 40,000 USD, BNDW 21,000 USD. A non-US resident's estate is exempt only up to 60,000 USD; above it the US taxes the estate.",
+    );
+    assert.ok(second?.zh.includes('愛爾蘭註冊'));
+  });
+
   it('says when a whole share sells much more than the trim', () => {
     const lines = whyLines(
       { id: 'R1', condition: 'single_stock_weight_above' },
@@ -75,6 +99,7 @@ describe('proposal text', () => {
     assert.equal(checkText({ ruleId: 'R2', outcome: 'covered', why: 'R1' }).en, "Over its trigger, but R1's trims bring it back.");
     assert.equal(checkText({ ruleId: 'F8_DRIFT', outcome: 'covered', why: 'contribution' }).zh, '有類別低於門檻，但下一次每月投入即可補足，因此不提出賣出（現金流優先）。');
     assert.equal(checkText({ ruleId: 'MONTHLY_CONTRIBUTION', outcome: 'waiting', why: 'dca_day' }).en, 'Waiting for the DCA debit day: set it below.');
+    assert.equal(checkText({ ruleId: 'US_ESTATE_TAX', outcome: 'waiting', why: 'usd' }).en, 'Waiting for a USD/TWD rate to value US assets in dollars.');
     assert.equal(checkText({ ruleId: 'BUY_ZONE', outcome: 'later' }).en, 'Evaluated once its feature is built (a later step).');
     assert.ok(checkText({ ruleId: 'DATA_FAILURE', outcome: 'later' }, 'job_failed_consecutively').en.startsWith('Watched by the data status check'));
   });

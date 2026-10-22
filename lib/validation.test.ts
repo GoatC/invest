@@ -3,7 +3,28 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, fractionalShares, parseEngineSettings, parseOrderSizes, parsePlanForm, parseRuleForm, parseSchedule, parseSubscription, parseSecurity, parseTargets, parseTrade } from './validation';
+import {
+  MESSAGES,
+  parseAssumptionForm,
+  parseBrokerForm,
+  parseCashFlow,
+  parseFeeForm,
+  parseFundForm,
+  parseManualAsset,
+  parseNumber,
+  fractionalShares,
+  parseEngineSettings,
+  parseOrderSizes,
+  parsePlanForm,
+  parseRuleForm,
+  parseSchedule,
+  parseSubscription,
+  parseSecurity,
+  parseTargets,
+  parseTaxForm,
+  parseTrade,
+  withholdingField,
+} from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));
@@ -316,5 +337,67 @@ describe('parseSchedule', () => {
     assert.deepEqual(parsed.errors, { quietStart: MESSAGES.clock, weeklyDay: MESSAGES.weekday, weeklyTime: MESSAGES.clock });
     const same = parseSchedule({ quietStart: '22:00', quietEnd: '22:00', weeklyDay: 'monday', weeklyTime: '09:00' });
     assert.ok(!same.ok && same.errors.quietEnd === MESSAGES.quietSame);
+  });
+});
+
+describe('cost settings (F15)', () => {
+  it('reads the Taiwan commission in percent and its discount in 折, and the broker from the list', () => {
+    const parsed = parseFeeForm({ broker: 'cathay', twRate: '0.1425', twDiscount: '2.8', twMin: '1', fxSpread: '0.1' }, ['cathay']);
+    assert.deepEqual(parsed, { ok: true, value: { brokerId: 'cathay', tw: { rate: 0.001425, discount: 0.28, minTwd: 1 }, fxSpread: 0.001 } });
+    const bad = parseFeeForm({ broker: 'nobody', twRate: '0.14251', twDiscount: '12', twMin: '1.5', fxSpread: '' }, ['cathay']);
+    assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['broker', 'fxSpread', 'twDiscount', 'twMin', 'twRate']);
+    assert.equal(parseFeeForm({ broker: '', twRate: '0.1425', twDiscount: '10', twMin: '20', fxSpread: '0' }, []).ok, true);
+  });
+
+  it('reads the tax thresholds, a withholding rate per domicile, and refuses a top estate rate under the bottom one', () => {
+    const raw = {
+      [withholdingField('US')]: '30',
+      [withholdingField('IE')]: '15',
+      twStock: '0.3',
+      twEtf: '0.1',
+      twBondEtf: '0',
+      amtFloor: '1000000',
+      amtExemption: '7500000',
+      amtRate: '20',
+      nhiRate: '2.11',
+      nhiSingle: '20000',
+      nhiMax: '10000000',
+      estateMin: '18',
+      estateMax: '40',
+      checked: 'on',
+    };
+    const parsed = parseTaxForm(raw, ['US', 'IE']);
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.tax.withholding, { US: 0.3, IE: 0.15 });
+    assert.deepEqual(parsed.value.tax.nhi, { rate: 0.0211, singlePaymentTwd: 20_000, maxPaymentTwd: 10_000_000 });
+    assert.equal(parsed.value.checked, true);
+    const bad = parseTaxForm({ ...raw, estateMax: '10', amtFloor: '1e6.5' }, ['US', 'IE']);
+    assert.deepEqual(bad.ok ? {} : bad.errors, { amtFloor: MESSAGES.wholeTwdAmount, estateMax: MESSAGES.rateRange });
+  });
+
+  it('reads a broker: shares by rate and minimum, ETFs flat, DCA either way, London only when entered', () => {
+    const raw = { id: 'cathay', nameEn: 'Cathay', nameZh: '國泰', usRate: '0.08', usMin: '', etfFlat: '3', dcaFlat: '0.1', dcaRate: '', dcaMax: '', ukRate: '', ukMin: '', lseEtfs: 'unknown', custody: '0', fxSpread: '', promoUntil: '2026-12-31', source: 'x', noteEn: '', noteZh: '', checked: 'on' };
+    const parsed = parseBrokerForm(raw, [], null, '2026-10-22');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.usStock, { rate: 0.0008, min: 0, max: null, flat: null });
+    assert.deepEqual(parsed.value.usEtf, { rate: 0, min: 0, max: null, flat: 3 });
+    assert.deepEqual(parsed.value.usDca, { rate: 0, min: 0, max: null, flat: 0.1 });
+    assert.equal(parsed.value.uk, null);
+    assert.equal(parsed.value.lseEtfs, null);
+    assert.equal(parsed.value.checked, '2026-10-22');
+    const taken = parseBrokerForm({ ...raw, usRate: '', checked: '' }, ['cathay'], null, '2026-10-22');
+    assert.deepEqual(taken.ok ? {} : taken.errors, { id: MESSAGES.idTaken, usRate: MESSAGES.required });
+    const edited = parseBrokerForm({ ...raw, id: 'ignored', checked: '', checkedOn: '2026-09-27' }, ['cathay'], 'cathay', '2026-10-22');
+    assert.equal(edited.ok && edited.value.id, 'cathay');
+    assert.equal(edited.ok && edited.value.checked, '2026-09-27');
+  });
+
+  it('reads a fund: rates in percent, blanks as not entered, a new ticker that is free', () => {
+    const raw = { ticker: 'vwra', name: 'Vanguard FTSE All-World', assetClass: 'us_global_equity', domicile: 'ie', market: 'UK', distribution: 'acc', ter: '0.19', yield: '1.8', withholding: '9', trackingDifference: '', source: '', noteEn: '', noteZh: '' };
+    const parsed = parseFundForm(raw, ['VT'], null, new Set(['us_global_equity']), '2026-10-22');
+    assert.ok(parsed.ok);
+    assert.deepEqual([parsed.value.ticker, parsed.value.domicile, parsed.value.ter, parsed.value.yield, parsed.value.withholding, parsed.value.trackingDifference, parsed.value.checked], ['VWRA', 'IE', 0.0019, 0.018, 0.09, null, null]);
+    const bad = parseFundForm({ ...raw, ticker: 'VT', market: 'JP', ter: '-1' }, ['VT'], null, new Set(['us_global_equity']), '2026-10-22');
+    assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['market', 'ter', 'ticker']);
   });
 });

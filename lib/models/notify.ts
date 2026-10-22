@@ -6,7 +6,7 @@
  * streak is pushed once however often the job runs. Pure functions; scripts/notify.ts plans and
  * sends them.
  */
-import { percent, points, signedPercent, signedTwd, twd } from '../format';
+import { money, percent, points, signedPercent, signedTwd, twd } from '../format';
 import type { Bilingual } from '../i18n';
 import { stateText } from '../proposal-text';
 import type { DataHealth } from './data-health';
@@ -175,6 +175,11 @@ function proposalAction(condition: string, state: string, detail: ProposalDetail
       };
     case 'first_weekend_of_month':
       return { en: 'The yearly review: rebalance the core to its targets and look over the rules.', zh: '年度檢查：核心類別回到目標，並檢視規則。' };
+    case 'us_situs_value_above': {
+      const total = money(detail.situsUsd ?? 0, 'USD', 0);
+      const limit = money(detail.limitUsd ?? 0, 'USD', 0);
+      return { en: `US assets ${total}, above the ${limit} exemption: consider Irish-domiciled ETFs.`, zh: `美國資產 ${total}，超過 ${limit} 免稅額：可考慮愛爾蘭註冊 ETF。` };
+    }
     default:
       return { en: 'A rule fired.', zh: '有規則觸發。' };
   }
