@@ -1,14 +1,15 @@
 /**
  * The nightly price and FX job (PRD Phase 1, step 4). It loads daily closes for every security,
  * Bank of Taiwan exchange rates and the gold price into Supabase, with one fallback per feed
- * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5), and
- * records the outcome in job_runs. Everything outside this file is injected, so the whole run can
- * be tested without a network or a database.
+ * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5) with its
+ * 1-week VaR (N4, step 7), and records the outcome in job_runs. Everything outside this file is
+ * injected, so the whole run can be tested without a network or a database.
  */
-import { SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { RISK_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
+import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
-import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, taiwanPrices, usPrices } from '../feeds/finmind.ts';
+import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredRates, fredUrl } from '../feeds/fred.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
@@ -31,12 +32,16 @@ export interface Store {
   earliestTradeDate(): Promise<string | undefined>;
   /** config var.lookback_years: the years of history the VaR card (N4) reads. */
   lookbackYears(): Promise<number>;
+  /** The tickers that can stand as VaR proxies: each class's benchmark ETF and the theme ETFs (N4). */
+  riskProxies(): Promise<string[]>;
   earliestPriceDate(ticker: string): Promise<string | undefined>;
   /** fillOnly: add missing days without overwriting saved ones (for feeds without dividend adjustment). */
   savePrices(rows: readonly DailyPrice[], options?: { fillOnly?: boolean }): Promise<void>;
   saveRates(rows: readonly DailyRate[]): Promise<void>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
   performanceInput(end: string): Promise<PerformanceInput>;
+  /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data). */
+  riskInput(from: string, end: string): Promise<RiskInput>;
   /** Saves one NAV snapshot per day and drops any from before the first (left by trades since deleted). */
   saveSnapshots(rows: readonly Snapshot[]): Promise<void>;
   recordRun(run: JobRun): Promise<void>;
@@ -52,8 +57,8 @@ export interface RunDetail {
   warnings: string[];
   /** Data that could not be loaded at all. */
   errors: string[];
-  /** The NAV snapshots saved, once anything was bought or recorded. */
-  snapshots?: { days: number; from: string; to: string };
+  /** The NAV snapshots saved, once anything was bought or recorded, and how many carry a VaR. */
+  snapshots?: { days: number; from: string; to: string; valueAtRisk?: number };
 }
 
 export interface JobRun {
@@ -86,6 +91,16 @@ export function windowStart(today: string, lookbackYears: number, earliestTrade?
   start.setUTCFullYear(start.getUTCFullYear() - lookbackYears);
   const iso = addDays(start.toISOString().slice(0, 10), -14);
   return earliestTrade && earliestTrade < iso ? earliestTrade : iso;
+}
+
+/**
+ * The first day to load for a VaR proxy (N4): a whole window of weekly returns before the first
+ * trade, or before a year ago if that is earlier, so every snapshot day and the 52-week line have
+ * their own three years; two weeks to spare.
+ */
+export function riskWindowStart(today: string, weeks: number, earliestTrade?: string): string {
+  const yearAgo = addDays(today, -364);
+  return addDays(gridStart(earliestTrade && earliestTrade < yearAgo ? earliestTrade : yearAgo, weeks), -14);
 }
 
 /** XAU/TWD (TWD per troy ounce) for each gold close, at that day's USD/TWD rate or the latest one before it. */
@@ -145,17 +160,23 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
 
   let securities: Security[];
   let start: string;
+  let riskStart: string;
+  let proxies: Set<string>;
   try {
-    const [found, years, earliestTrade] = await Promise.all([store.securities(), store.lookbackYears(), store.earliestTradeDate()]);
+    const [found, years, earliestTrade, riskProxies] = await Promise.all([store.securities(), store.lookbackYears(), store.earliestTradeDate(), store.riskProxies()]);
     securities = found;
     start = windowStart(today, years, earliestTrade);
+    riskStart = riskWindowStart(today, lookbackWeeks({ lookbackYears: years }), earliestTrade);
+    proxies = new Set(riskProxies);
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[0]}: ${message(err)}`);
     return finish('failed');
   }
-  detail.window = { start, end: today };
-  const range = { start, end: today };
-  const inWindow = (row: { date: string }) => row.date >= start && row.date <= today;
+  // The VaR proxies reach further back; the rates cover the earliest of both.
+  const earliest = riskStart < start ? riskStart : start;
+  detail.window = { start: earliest, end: today };
+  const range = { start: earliest, end: today };
+  const inWindow = (row: { date: string }) => row.date >= earliest && row.date <= today;
 
   // TWSE lists every Taiwan close of the last trading day in one reply, fetched only if needed.
   let twseAll: Promise<string> | undefined;
@@ -164,6 +185,8 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   const prices: DailyPrice[] = [];
   const fills: DailyPrice[] = [];
   for (const { ticker, market } of securities) {
+    const from = proxies.has(ticker) ? earliest : start;
+    const span = { start: from, end: today };
     const attempts: Array<Attempt<DailyPrice>> = [];
     const symbol = avSymbol(ticker, market);
     if (market === 'TW') {
@@ -171,16 +194,18 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
         source: 'finmind',
         load: async () => {
           const [closes, dividends] = await Promise.all([
-            finmind.rows('TaiwanStockPrice', { dataId: ticker, ...range }),
-            finmind.rows('TaiwanStockDividendResult', { dataId: ticker, ...range }),
+            finmind.rows('TaiwanStockPrice', { dataId: ticker, ...span }),
+            finmind.rows('TaiwanStockDividendResult', { dataId: ticker, ...span }),
           ]);
-          return adjustForDividends(taiwanPrices(closes, ticker), exDividendFactors(dividends));
+          const prices = taiwanPrices(closes, ticker);
+          const events = exDividendFactors(dividends);
+          return adjustForDividends(prices, [...events, ...splitFactors(prices, events)]);
         },
       });
       // The last trading day's close is also its adjusted close: no ex-date follows it yet.
       attempts.push({ source: 'twse', load: async () => twseCloses(await twseReply(), new Set([ticker])).map((p) => ({ ...p, adjClose: p.close })) });
     } else if (market === 'US') {
-      attempts.push({ source: 'finmind', load: async () => usPrices(await finmind.rows('USStockPrice', { dataId: ticker, ...range }), ticker) });
+      attempts.push({ source: 'finmind', load: async () => usPrices(await finmind.rows('USStockPrice', { dataId: ticker, ...span }), ticker) });
       if (avKey && symbol) {
         attempts.push({ source: 'alphavantage', fillOnly: true, load: async () => avDaily(await get(avUrl('TIME_SERIES_DAILY', symbol, avKey)), ticker) });
       }
@@ -192,9 +217,9 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
           load: async () => {
             const page = await get(fund.productPage);
             const newest = navFromProductPage(page, ticker);
-            const earliest = await store.earliestPriceDate(ticker);
             // The 25 MB fund download is needed only while the saved history is shorter than the window.
-            if (newest && earliest && earliest <= start) return [newest];
+            const saved = await store.earliestPriceDate(ticker);
+            if (newest && saved && saved <= from) return [newest];
             const history = navHistory(await get(downloadLink(page, fund.productPage) ?? fund.download), ticker);
             return newest ? [...history, newest] : history;
           },
@@ -205,12 +230,12 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       }
     }
     const result = await firstWorking(ticker, attempts, detail);
-    const rows = unique(result?.rows.filter(inWindow) ?? [], (row) => row.date);
+    const rows = unique(result?.rows.filter((row) => row.date >= from && row.date <= today) ?? [], (row) => row.date);
     if (result && rows.length > 0) {
       (result.fillOnly ? fills : prices).push(...rows);
       detail.prices[ticker] = { source: result.source, rows: rows.length, latest: latest(rows) };
     } else if (result) {
-      detail.errors.push(`${ticker}: ${result.source} had nothing from ${start} on`);
+      detail.errors.push(`${ticker}: ${result.source} had nothing from ${from} on`);
     }
   }
 
@@ -222,7 +247,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       { source: 'finmind', load: async () => bankOfTaiwanRates(await finmind.rows('TaiwanExchangeRate', { dataId: currency, ...range }), currency) },
     ];
     const series = FRED_SERIES[currency];
-    if (series) attempts.push({ source: 'fred', load: async () => fredRates(await get(fredUrl(series, start)), pair) });
+    if (series) attempts.push({ source: 'fred', load: async () => fredRates(await get(fredUrl(series, earliest)), pair) });
     const result = await firstWorking(pair, attempts, detail);
     const rows = result?.rows.filter(inWindow) ?? [];
     if (result && rows.length > 0) {
@@ -251,12 +276,27 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   }
 
   // Every day's NAV from the first trade on, recomputed each night so that an edited trade or a
-  // close that arrived late corrects the past. A failure here leaves the prices saved.
+  // close that arrived late corrects the past, each with its 1-week VaR. A failure here leaves the
+  // prices saved; a failure of the VaR alone saves the snapshots and leaves their VaR as it was.
   try {
-    const rows = snapshots(buildSeries(await store.performanceInput(today)));
+    const input = await store.performanceInput(today);
+    const days = buildSeries(input);
+    let valueAtRisk: Map<string, number | null> | undefined;
+    const firstDay = days[0]?.date;
+    if (firstDay) {
+      try {
+        valueAtRisk = dailyValueAtRisk(days, input, await store.riskInput(firstDay, today));
+      } catch (err) {
+        detail.errors.push(`${RISK_ERROR}: ${message(err)}`);
+      }
+    }
+    const rows = snapshots(days, valueAtRisk);
     await store.saveSnapshots(rows);
     const [first, last] = [rows[0], rows[rows.length - 1]];
-    if (first && last) detail.snapshots = { days: rows.length, from: first.date, to: last.date };
+    if (first && last) {
+      detail.snapshots = { days: rows.length, from: first.date, to: last.date };
+      if (valueAtRisk) detail.snapshots.valueAtRisk = rows.filter((row) => row.valueAtRisk !== null && row.valueAtRisk !== undefined).length;
+    }
   } catch (err) {
     detail.errors.push(`${SNAPSHOT_ERROR}: ${message(err)}`);
   }

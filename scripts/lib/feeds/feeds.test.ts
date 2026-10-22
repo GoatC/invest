@@ -7,7 +7,7 @@ import { makeRedactor } from '../http.ts';
 import { avDaily, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
 import { fredRates } from './fred.ts';
 import { makeGet } from './get.ts';
-import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, finmindRows, goldCloses, taiwanPrices, usPrices } from './finmind.ts';
+import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, finmindRows, goldCloses, splitFactors, taiwanPrices, usPrices } from './finmind.ts';
 import { navFromProductPage, navHistory } from './ishares.ts';
 import { rocDateToIso, twseCloses } from './twse.ts';
 import { FeedError } from './types.ts';
@@ -70,6 +70,32 @@ describe('FinMind', () => {
     ]);
     const prices = [{ ticker: 'X', date: '2026-01-02', close: 100, adjClose: null, source: 'finmind' }];
     assert.equal(adjustForDividends(prices, factors)[0]?.adjClose, 97.02);
+  });
+
+  it("finds a split in the closes: 0050's 1-into-4 split of June 2025 is a jump to a quarter, the day's own move left in", () => {
+    const close = (date: string, price: number) => ({ ticker: '0050', date, close: price, adjClose: null, source: 'finmind' });
+    // Trading stopped from 11 to 17 June; it reopened at a quarter of the price, 0.4% below it.
+    const prices = [close('2025-06-09', 186), close('2025-06-10', 188), close('2025-06-18', 46.81), close('2025-06-19', 47.2)];
+    const splits = splitFactors(prices);
+    assert.deepEqual(splits, [{ date: '2025-06-18', factor: 0.25 }]);
+    assert.deepEqual(
+      adjustForDividends(prices, splits).map((p) => [p.date, p.adjClose]),
+      [
+        ['2025-06-09', 46.5],
+        ['2025-06-10', 47],
+        ['2025-06-18', 46.81],
+        ['2025-06-19', 47.2],
+      ],
+    );
+  });
+
+  it('never takes a move within the 10% daily limit for a split, and finds a reverse split and one on an ex-dividend day', () => {
+    const close = (date: string, price: number) => ({ ticker: 'X', date, close: price, adjClose: null, source: 'finmind' });
+    assert.deepEqual(splitFactors([close('2026-01-02', 100), close('2026-01-05', 90), close('2026-01-06', 99)]), []);
+    assert.deepEqual(splitFactors([close('2026-01-02', 20), close('2026-01-05', 41)]), [{ date: '2026-01-05', factor: 2 }]);
+    // Ex-dividend from 100 to 98 and a 1-into-2 split the same day: 49 is half of 98.
+    const dividend = exDividendFactors([{ date: '2026-01-05', before_price: 100, after_price: 98 }]);
+    assert.deepEqual(splitFactors([close('2026-01-02', 100), close('2026-01-05', 49)], dividend), [{ date: '2026-01-05', factor: 0.5 }]);
   });
 
   it('reads US closes with the adjusted close', () => {

@@ -673,3 +673,29 @@ tr.selected td {
 .changes li {
   overflow-wrap: anywhere;
 }
+
+/* Value at Risk (components/risk-charts.tsx) */
+
+/* The tile's figure: large, in proportional digits (tabular ones look loose at this size). */
+.var-value {
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.15;
+  font-variant-numeric: normal;
+}
+
+.chart.sparkline {
+  height: 72px;
+}
+
+.chart.chart-histogram {
+  height: 260px;
+}
+
+.formula {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  overflow-wrap: anywhere;
+}

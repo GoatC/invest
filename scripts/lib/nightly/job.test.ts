@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
+import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get } from '../feeds/types.ts';
-import { goldInTwd, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -62,13 +64,26 @@ function fakeGet(fail: (key: string) => boolean = () => false): { get: Get; urls
   return { get, urls };
 }
 
+/** Weekly 0050 closes to 16 October 2026, three years of them, moving ±a so their sample σ is exactly 2%. */
+function weeklyHistory(): PriceRow[] {
+  const grid = fridays(gridStart('2026-10-16', 156), '2026-10-16');
+  const a = 0.02 * Math.sqrt(155 / 156);
+  let close = 100;
+  return grid.map((date, week) => {
+    if (week > 0) close *= week % 2 === 0 ? 1 + a : 1 - a;
+    return { ticker: '0050', date, close, adjClose: close };
+  });
+}
+
 class MemoryStore implements Store {
   prices: DailyPrice[] = [];
   fills: DailyPrice[] = [];
   rates: DailyRate[] = [];
   runs: JobRun[] = [];
   snapshots: Snapshot[] = [];
-  constructor(private readonly options: { failRead?: boolean; earliestAggu?: string; failSnapshots?: boolean } = {}) {}
+  constructor(
+    private readonly options: { failRead?: boolean; earliestAggu?: string; failSnapshots?: boolean; proxies?: string[]; riskHistory?: PriceRow[]; failRisk?: boolean } = {},
+  ) {}
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
     return SECURITIES;
@@ -78,6 +93,20 @@ class MemoryStore implements Store {
   }
   async lookbackYears() {
     return 3;
+  }
+  async riskProxies() {
+    return this.options.proxies ?? [];
+  }
+  /** 0050 as the Taiwan proxy, with the weekly history the test gives it (none by default). */
+  async riskInput(): Promise<RiskInput> {
+    if (this.options.failRisk) throw new Error('weekly_prices: permission denied');
+    return {
+      settings: { confidence: 0.95, horizonWeeks: 1, monthWeeks: 4.33, lookbackYears: 3 },
+      benchmarks: new Map([['tw_market_cap', '0050']]),
+      proxies: new Map([['0050', 'TWD']]),
+      prices: this.options.riskHistory ?? [],
+      rates: [],
+    };
   }
   async earliestPriceDate(ticker: string) {
     return ticker === 'AGGU' ? this.options.earliestAggu : undefined;
@@ -126,6 +155,13 @@ describe('windowStart', () => {
     assert.equal(windowStart(TODAY, 3, '2026-05-07'), '2023-10-07');
     assert.equal(windowStart(TODAY, 3, '2019-03-01'), '2019-03-01');
   });
+
+  it('reaches back a VaR proxy 156 weeks before a year ago, or before an older first trade', () => {
+    // A year ago is Wednesday 22 October 2025; its Friday is the 17th, 156 weeks after 21 October 2022.
+    assert.equal(riskWindowStart(TODAY, 156), '2022-10-07');
+    assert.equal(riskWindowStart(TODAY, 156, '2026-05-07'), '2022-10-07');
+    assert.equal(riskWindowStart(TODAY, 156, '2019-03-01'), '2016-02-19');
+  });
 });
 
 describe('goldInTwd', () => {
@@ -147,7 +183,8 @@ describe('runNightly', () => {
     const store = new MemoryStore();
     const run = await runNightly(deps(fakeGet().get, store));
     assert.equal(run.status, 'ok', JSON.stringify(run.detail));
-    assert.deepEqual(run.detail.window, { start: '2023-10-07', end: TODAY });
+    // A year ago, less 156 weeks and two weeks to spare: the VaR proxies' window (none here) sets the rates'.
+    assert.deepEqual(run.detail.window, { start: '2022-10-07', end: TODAY });
     const byKey = (rows: DailyPrice[]) => rows.map((p) => `${p.ticker} ${p.date} ${p.close} ${p.adjClose} ${p.source}`);
     assert.deepEqual(byKey(store.prices), [
       '0050 2026-07-18 99.2 98.6 finmind',
@@ -169,12 +206,47 @@ describe('runNightly', () => {
   it("saves each day's NAV snapshot at the closes it just loaded", async () => {
     const store = new MemoryStore();
     const run = await runNightly(deps(fakeGet().get, store));
-    // On the 20th 0050 still stood at its 21 July close; the 21st has that day's.
+    // On the 20th 0050 still stood at its 21 July close; the 21st has that day's. No proxy has three
+    // years of weekly closes here, so neither day has a VaR.
     assert.deepEqual(store.snapshots, [
-      { date: '2026-10-20', totalTwd: 986, weightsByClass: { tw_market_cap: 1 } },
-      { date: '2026-10-21', totalTwd: 1081.5, weightsByClass: { tw_market_cap: 1 } },
+      { date: '2026-10-20', totalTwd: 986, weightsByClass: { tw_market_cap: 1 }, valueAtRisk: null },
+      { date: '2026-10-21', totalTwd: 1081.5, weightsByClass: { tw_market_cap: 1 }, valueAtRisk: null },
     ]);
+    assert.deepEqual(run.detail.snapshots, { days: 2, from: '2026-10-20', to: '2026-10-21', valueAtRisk: 0 });
+  });
+
+  it("saves each day's 1-week VaR with its snapshot once the proxy has three years of weekly closes", async () => {
+    const store = new MemoryStore({ riskHistory: weeklyHistory() });
+    const run = await runNightly(deps(fakeGet().get, store));
+    // 1.645 × 2% × the day's value; both days read the weeks to Friday 16 October.
+    assert.deepEqual(
+      store.snapshots.map((row) => [row.date, row.valueAtRisk]),
+      [
+        ['2026-10-20', Math.round(0.0329 * 986 * 100) / 100],
+        ['2026-10-21', Math.round(0.0329 * 1081.5 * 100) / 100],
+      ],
+    );
+    assert.equal(run.detail.snapshots?.valueAtRisk, 2);
+    assert.equal(run.status, 'ok');
+  });
+
+  it('saves the snapshots without touching their VaR when its inputs fail, and reports a partial run', async () => {
+    const store = new MemoryStore({ failRisk: true });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['VaR: weekly_prices: permission denied']);
+    assert.ok(store.snapshots.length === 2 && store.snapshots.every((row) => !('valueAtRisk' in row)));
     assert.deepEqual(run.detail.snapshots, { days: 2, from: '2026-10-20', to: '2026-10-21' });
+  });
+
+  it('loads a VaR proxy from further back than the other securities, and the rates with it', async () => {
+    const { get, urls } = fakeGet();
+    const run = await runNightly(deps(get, new MemoryStore({ proxies: ['0050'] })));
+    const startOf = (piece: string) => new URL(urls.find((url) => url.includes(piece)) ?? 'http://none').searchParams.get('start_date');
+    assert.equal(startOf('TaiwanStockPrice'), '2022-10-07');
+    assert.equal(startOf('USStockPrice'), '2023-10-07');
+    assert.equal(startOf('TaiwanExchangeRate'), '2022-10-07');
+    assert.deepEqual(run.detail.window, { start: '2022-10-07', end: TODAY });
   });
 
   it('keeps the prices and reports a partial run when the snapshots fail', async () => {

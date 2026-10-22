@@ -27,6 +27,16 @@ describe('makeRedactor', () => {
   it('ignores values too short to be keys', () => {
     assert.equal(makeRedactor(['abc'])('abc abc'), 'abc abc');
   });
+
+  it("blanks the tail of a key a reply echoes back, as FinMind's quota error does", () => {
+    const redact = makeRedactor(['fake-test-token-0000-1111-WXYZ_987']);
+    assert.equal(
+      redact('{"msg":"Requests reach the upper limit.","status":402,"token_tail":"...WXYZ_987"}'),
+      '{"msg":"Requests reach the upper limit.","status":402,"token_tail":"***"}',
+    );
+    // Even a tail that is not in a field of that name.
+    assert.equal(redact('key ending ..._987 or ...XYZ_987'), 'key ending ..._987 or ...***');
+  });
 });
 
 describe('pickRateLimitHeaders', () => {

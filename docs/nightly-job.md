@@ -1,15 +1,15 @@
 # 每夜價格排程 Nightly price job
 
-第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。第 5 步起，排程也會存下每一天的淨值快照。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
+第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。第 5 步起，排程也會存下每一天的淨值快照；第 7 步起，每個快照另附當天的一週風險值。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
 
-Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot. Each run is recorded in `job_runs` and shown on the app's Data status page.
+Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot, and since step 7 each snapshot's 1-week Value at Risk. Each run is recorded in `job_runs` and shown on the app's Data status page.
 
 ## 它怎麼運作 How it works
 
 - **時間**：每晚台北時間約 22:23（GitHub 有時會晚幾分鐘才開始）。這時台股已收盤、臺銀已公布當天匯率，前一個美股交易日的收盤價與 AGGU 的淨值也都已公布。
 - **在哪裡跑**：GitHub Actions，也就是 GitHub 提供的雲端電腦，公開 repo 免費。排程設定在 `.github/workflows/nightly.yml`，程式在 `scripts/nightly.ts`。
-- **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
-- **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
+- **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。風險值的代理 ETF（各資產類別的基準 ETF，例如 VT、0050）會再往前多載入：從第一筆交易（或一年前，取較早者）往前 3 年起，讓過去每一天的風險值都有完整的 3 年週報酬。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
+- **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。第 7 步起，每一天也附上當天的一週風險值（`var_95_1w`），風險值卡片的近 52 週走勢線就是取自這裡；風險值的資料讀取失敗時，快照照樣存入，風險值維持上一次的數值。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
 - **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在持倉頁顯示警示。推播通知要等第 10 步。
 
 It runs at about 22:23 Taipei time, reloads the last three years of closes each night (dividend adjustments change past adjusted closes), then recomputes every day's NAV snapshot since the first trade, keeps the last good prices when a night fails, and flags two misses in a row.
@@ -20,11 +20,13 @@ It runs at about 22:23 Taipei time, reloads the last three years of closes each 
 
 | 資料 Data | 主要來源 Primary | 備援 Fallback |
 | --- | --- | --- |
-| 台股、台股 ETF | FinMind 每日收盤價，加上除權息結果算出還原收盤價 | 證交所 OpenAPI（只有最新一天） |
+| 台股、台股 ETF | FinMind 每日收盤價，加上除權息結果與股票分割（由收盤價判斷）算出還原收盤價 | 證交所 OpenAPI（只有最新一天） |
 | 美股、美國 ETF | FinMind 美股價格（含還原收盤價） | Alpha Vantage，只補缺的日子（選填） |
 | AGGU（倫敦） | iShares 官網的每日淨值 | Alpha Vantage AGGU.LON 週線（選填） |
 | 美元匯率 USD/TWD | 臺灣銀行牌告（經 FinMind），即期買入與賣出的中間值 | FRED（每週公布、晚幾天） |
 | 黃金（台幣） | 國際金價（FinMind，每盎司美元）× 當天臺銀美元匯率 | 你在 App 手動輸入的估值 |
+
+股票分割（例如 0050 在 2025 年 6 月 1 拆 4）不在 FinMind 的除權息資料裡，所以由收盤價判斷：台股單日漲跌最多 10%，某天收盤價突然變成前一天的 ½、⅓、¼ 等（上下 10% 以內），就是分割，之前的還原收盤價會依比例調整。風險值與績效都用還原收盤價，所以不會把分割誤算成大跌。
 
 黃金每克台幣價格 = 每盎司台幣價格 ÷ 31.1035。臺銀的黃金牌價網頁會擋程式（第 1 步資料來源檢查），所以改用國際金價換算；銀行實際回收價通常略低一點。
 

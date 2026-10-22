@@ -368,6 +368,55 @@ describe('latest quote views', () => {
   });
 });
 
+describe('weekly prices for the VaR (step 7)', () => {
+  it('give the last close of each week to Friday, a holiday Friday falling back to Thursday', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(
+        `insert into public.prices (ticker, price_date, close, adj_close, source) values
+           ('VT', '2026-10-26', 150, 150, 'demo'), ('VT', '2026-10-29', 151, 151, 'demo'),
+           ('VT', '2026-11-02', 152, 152, 'demo'), ('VT', '2026-11-06', 153, 152.5, 'demo')`,
+      );
+      const { rows } = await tx.query<{ week_ending: Date; price_date: Date; close: string; adj_close: string }>(
+        `select week_ending, price_date, close, adj_close from public.weekly_prices where ticker = 'VT' and week_ending >= '2026-10-30' order by week_ending`,
+      );
+      assert.deepEqual(
+        rows.map((row) => [row.week_ending.toISOString().slice(0, 10), row.price_date.toISOString().slice(0, 10), Number(row.close), Number(row.adj_close)]),
+        [
+          ['2026-10-30', '2026-10-29', 151, 151],
+          ['2026-11-06', '2026-11-06', 153, 152.5],
+        ],
+      );
+    });
+  });
+
+  it('follow the row-level security of prices: nothing for a stranger, refused for anon', async () => {
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.weekly_prices'), 0);
+    });
+    assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query('select 1 from public.weekly_prices'))), DENIED);
+  });
+
+  it('come with three years of invented weekly closes for every proxy and the dollar in the demo seed, ending at the first demo trade', async () => {
+    const { rows } = await db.query<{ ticker: string; weeks: string; first: Date; last: Date }>(
+      `select ticker, count(*) as weeks, min(price_date) as first, max(price_date) as last
+       from public.prices where price_date < '2026-05-07' group by ticker order by ticker`,
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.ticker, Number(row.weeks), row.first.toISOString().slice(0, 10), row.last.toISOString().slice(0, 10)]),
+      ['0050', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
+    );
+    assert.equal(await scalar(db, `select count(*) from public.fx_rates where pair = 'USD/TWD' and rate_date < '2026-05-07'`), 174);
+    // A walk that lands on the first demo trade's close, a week away, with weekly moves of shares-like size.
+    const { rows: vt } = await db.query<{ close: string }>(`select close from public.prices where ticker = 'VT' and price_date <= '2026-05-07' order by price_date`);
+    const closes = vt.map((row) => Number(row.close));
+    const returns = closes.slice(1).map((close, i) => close / (closes[i] ?? close) - 1);
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const sd = Math.sqrt(returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1));
+    assert.ok(sd > 0.015 && sd < 0.03, `VT weekly sd ${sd}`);
+    assert.ok(Math.abs((returns[returns.length - 1] ?? 1) - mean) < 4 * sd, 'the last week into the 2026-05-07 close is an ordinary one');
+  });
+});
+
 describe('demo seed', () => {
   it('marks every price and FX rate as demo data', async () => {
     assert.equal(await scalar(db, `select count(*) from public.prices where source <> 'demo'`), 0);

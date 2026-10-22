@@ -65,6 +65,7 @@ export const LABELS = {
   dataStatus: { en: 'Data status', zh: '資料狀態' },
   performance: { en: 'Performance', zh: '績效' },
   allocation: { en: 'Allocation', zh: '資產配置' },
+  risk: { en: 'Value at Risk', zh: '風險值' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },

@@ -71,6 +71,47 @@ from (values
   ('VOO', '2026-09-30', 588.00)
 ) as demo (ticker, price_date, close);
 
+-- Three years of weekly demo closes before the first demo trade for the VaR proxies (N4) and the
+-- dollar, so the VaR card has a covariance to read. Invented by a fixed recipe: a random walk
+-- backwards from each 2026-05-07 close, every Friday; each week's move is the proxy's drift, plus
+-- a shared market shock times its beta, plus a shock of its own, both drawn from an md5 hash of
+-- the date (Box–Muller), so every load gives the same numbers.
+with fridays as (
+  select day::date as friday from generate_series(date '2023-01-06', date '2026-05-01', interval '7 days') as day
+),
+shocks as (
+  select f.friday, h.name,
+         sqrt(-2 * ln((('x' || substr(h.hash, 1, 8))::bit(32)::bigint + 0.5) / 4294967296.0))
+           * cos(2 * pi() * (('x' || substr(h.hash, 9, 8))::bit(32)::bigint + 0.5) / 4294967296.0) as z
+  from fridays f
+  cross join lateral (
+    select name, md5(name || f.friday::text) as hash from unnest(array['market', 'VT', 'VOO', '0050', 'BNDW', 'GLDM', 'BIL', 'USD']) as name
+  ) as h
+),
+walks (name, anchor, weekly_vol, beta, drift) as (values
+  ('VT', 150.20, 0.022, 0.95, 0.0015),
+  ('VOO', 560.00, 0.024, 0.93, 0.0018),
+  ('0050', 98.50, 0.026, 0.75, 0.0018),
+  ('BNDW', 67.60, 0.008, 0.20, 0.0004),
+  ('GLDM', 84.00, 0.020, 0.10, 0.0025),
+  ('BIL', 91.40, 0.0003, 0.00, 0.0008),
+  -- TWD per dollar: the dollar tends to rise against TWD when shares fall.
+  ('USD', 31.80, 0.006, -0.35, 0.0000)
+),
+walked as (
+  select w.name, s.friday,
+         w.anchor * exp(-sum(w.drift + w.weekly_vol * (w.beta * m.z + sqrt(1 - w.beta * w.beta) * s.z)) over (partition by w.name order by s.friday desc)) as level
+  from walks w
+  join shocks s on s.name = w.name
+  join shocks m on m.name = 'market' and m.friday = s.friday
+),
+demo_prices as (
+  insert into public.prices (ticker, price_date, close, adj_close, source)
+  select name, friday, round(level::numeric, 4), round(level::numeric, 4), 'demo' from walked where name <> 'USD'
+)
+insert into public.fx_rates (pair, rate_date, rate, source)
+select 'USD/TWD', friday, round(level::numeric, 4), 'demo' from walked where name = 'USD';
+
 insert into public.fx_rates (pair, rate_date, rate, source) values
   ('USD/TWD', '2026-05-07', 31.80, 'demo'),
   ('USD/TWD', '2026-07-07', 32.10, 'demo'),

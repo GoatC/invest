@@ -1,8 +1,10 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadPerformanceInput } from '../../../lib/data.ts';
+import { loadPerformanceInput, loadRiskInput } from '../../../lib/data.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
+import { candidateProxies } from '../../../lib/models/risk.ts';
+import type { ProductType } from '../../../lib/models/types.ts';
 import type { DailyPrice, DailyRate } from '../feeds/types.ts';
 import type { JobRun, Security, Store } from './job.ts';
 
@@ -39,6 +41,17 @@ export function supabaseStore(client: SupabaseClient): Store {
       if (typeof years !== 'number' || years <= 0) throw new Error('config var.lookback_years is missing or not a positive number');
       return years;
     },
+    async riskProxies() {
+      const [classes, securities] = await Promise.all([
+        client.from('asset_classes').select('id, benchmark_ticker'),
+        client.from('securities').select('ticker, product_type, currency'),
+      ]);
+      check('asset_classes', classes.error);
+      check('securities', securities.error);
+      const benchmarks = new Map(((classes.data ?? []) as Array<{ id: string; benchmark_ticker: string | null }>).map((row) => [row.id, row.benchmark_ticker]));
+      const rows = (securities.data ?? []) as Array<{ ticker: string; product_type: ProductType; currency: string }>;
+      return [...candidateProxies(benchmarks, rows.map((row) => ({ ticker: row.ticker, productType: row.product_type, currency: row.currency }))).keys()];
+    },
     async earliestPriceDate(ticker) {
       const { data, error } = await client.from('prices').select('price_date').eq('ticker', ticker).order('price_date').limit(1);
       check('prices', error);
@@ -62,17 +75,26 @@ export function supabaseStore(client: SupabaseClient): Store {
       }
     },
     performanceInput: (end) => loadPerformanceInput(client, end),
+    riskInput: (from, end) => loadRiskInput(client, from, end),
     async saveSnapshots(rows: readonly Snapshot[]) {
       const first = rows[0]?.date;
       // Days before the first one were left by trades since deleted; with nothing held, none stay.
       const stale = client.from('nav_snapshots').delete();
       const { error: staleError } = await (first ? stale.lt('snapshot_date', first) : stale.gte('snapshot_date', '1900-01-01'));
       check('nav_snapshots', staleError);
-      // var_95_1w is left as it is: an upsert writes only the columns it sends.
+      // Without a VaR (its inputs failed to load), var_95_1w is left as it is: an upsert writes only
+      // the columns it sends, so every row of a request sends the same ones.
+      const withVar = rows.some((row) => row.valueAtRisk !== undefined);
       for (const batch of batches(rows)) {
-        const { error } = await client
-          .from('nav_snapshots')
-          .upsert(batch.map((row) => ({ snapshot_date: row.date, total_twd: row.totalTwd, weights_by_class: row.weightsByClass })), { onConflict: 'snapshot_date' });
+        const { error } = await client.from('nav_snapshots').upsert(
+          batch.map((row) => ({
+            snapshot_date: row.date,
+            total_twd: row.totalTwd,
+            weights_by_class: row.weightsByClass,
+            ...(withVar ? { var_95_1w: row.valueAtRisk ?? null } : {}),
+          })),
+          { onConflict: 'snapshot_date' },
+        );
         check('nav_snapshots', error);
       }
     },

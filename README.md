@@ -39,8 +39,9 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 4. Nightly prices and FX 每夜價格與匯率 | ✅ [setup 設定](docs/nightly-job.md) |
 | 5. NAV snapshots and F18 performance 淨值快照與真實績效 | ✅ |
 | 6. Targets and allocation donuts 目標權重與配置圓餅圖 | ✅ |
-| 7. VaR card 風險值卡片 | next 下一步 |
-| 8–11. Compounding calculator, rules engine and proposals, Web Push and the weekly dashboard, fee and tax drag 複利計算機、規則引擎與提案、推播與每週儀表板、費用與稅務 | planned 規劃中 |
+| 7. VaR card 風險值卡片 | ✅ |
+| 8. Compounding calculator 複利計算機 | next 下一步 |
+| 9–11. Rules engine and proposals, Web Push and the weekly dashboard, fee and tax drag 規則引擎與提案、推播與每週儀表板、費用與稅務 | planned 規劃中 |
 
 Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), the windfall planner, Monte Carlo, the efficient frontier, stress tests and Brinson attribution. 第二、三階段加入證券分析、大額資金分批、蒙地卡羅、效率前緣、壓力測試與 Brinson 歸因。
 
@@ -51,14 +52,17 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 - **Broker CSV import 券商 CSV 匯入**: UTF-8 or Big5 files, title lines above the header, ROC (民國) dates, column mapping remembered per broker, each row's trade-date FX rate when the file has none, cash dividends saved as cash flows, and entries already saved are skipped. 支援 UTF-8 與 Big5、標題列在上方的檔案、民國日期；欄位對應依券商記住，檔案沒有匯率時帶入各列交易日的匯率，現金股利存為現金流，已存在的資料自動略過。
 - **Performance 績效**: the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), and each month's and each foreign holding's TWD return split into local-currency, currency and cross terms, for both pools or each alone, with a table under every chart. 時間加權報酬與 SAA 基準的比較、資金加權報酬（XIRR），以及每月與每檔外幣持股的台幣報酬拆解為當地幣別、匯率與交叉項；可看兩個資金池合計或分開看，每張圖下方都有表格。
 - **Allocation 資產配置**: each asset class's drift from its SAA target, coloured by the 5/25 rebalancing rule with the satellite left to R2; the targets and the capital market assumptions (expected return, volatility, source) edited in the app; and donuts by product type, listing country and active vs passive, with the 80/20 target as an inner ring and each slice listing its holdings. 各資產類別相對 SAA 目標的偏離（依 5/25 再平衡規則上色，衛星交給 R2）；在 App 內修改目標權重與資本市場假設（預期報酬、波動度、來源）；以產品類別、上市國家、主動與被動三種分法的圓餅圖，內圈為 80／20 目標，點選區塊即列出持股。
+- **Value at Risk 風險值**: how much the whole portfolio could lose in a bad week, as "95% 1-week VaR: NT$X (Y% of portfolio)" with a 1-month toggle and a 52-week line, on the holdings page and its own page. Parametric VaR from three years of weekly returns in TWD of each class's proxy ETF; the page shows where it sits among those weeks, what it is made of, and the formula with today's numbers. 整個投資組合在不利的一週可能損失多少：「95% 一週風險值：NT$X（投資組合的 Y%）」，可切換一個月，並附近 52 週走勢線，顯示在持倉頁與獨立頁面。以各類別代理 ETF 過去三年的台幣週報酬計算參數法風險值；頁面列出它在這些週報酬中的位置、組成，以及代入今天數值的公式。
 - **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate; dividends count in the money-weighted return. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄；股利計入資金加權報酬。
 - **Non-listed assets 非上市資產**: physical gold in grams, valued nightly at the gold price in TWD, and savings and money-market balances in TWD. 實體黃金以克數記錄、每夜以台幣金價估值；活存與貨幣基金以台幣餘額記錄。
-- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (dividend-adjusted), Bank of Taiwan exchange rates and the gold price, with one fallback feed each, then saves every day's NAV snapshot; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息還原）、臺灣銀行匯率與金價，每種資料都有備援來源，再存入每一天的淨值快照；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
+- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (adjusted for dividends and splits), Bank of Taiwan exchange rates and the gold price, with one fallback feed each, then saves every day's NAV snapshot with its 1-week VaR; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息與分割還原）、臺灣銀行匯率與金價，每種資料都有備援來源，再存入每一天的淨值快照與一週風險值；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
 - **Securities and edit history 證券與修改紀錄**: every entry can be edited or deleted, and the database logs each change, deleted entries included. 每筆資料都能修改或刪除，資料庫會記錄每次變更，包含已刪除的資料。
 
 ![Performance with demo data: TWR against the SAA benchmark, XIRR and the gain](docs/images/performance.png)
 
 ![Allocation with demo data: drift from the targets, coloured by the 5/25 rule](docs/images/allocation.png)
+
+![Value at Risk with demo holdings: the 1-week figure, its 52-week line, and where it sits among three years of weekly returns](docs/images/risk.png)
 
 ![CSV import preview: every row explained, unknown tickers can be added on the spot](docs/images/import-preview.png)
 
@@ -93,7 +97,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 | Path 路徑 | Contents 內容 |
 | --- | --- |
 | `app/` | Pages and server actions 頁面與伺服器動作 |
-| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, and the capital market assumptions, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設，皆為純函式 |
+| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, the capital market assumptions, and the Value at Risk, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設、風險值，皆為純函式 |
 | `lib/csv/` | Statement reading, column mapping and the import plan 對帳單讀取、欄位對應與匯入計畫 |
 | `supabase/migrations/` | Schema, row-level security, reference data and change logs 資料庫結構、權限、參考資料與變更紀錄 |
 | `supabase/seed.sql` | Demo data for local use only 僅供本機使用的示範資料 |

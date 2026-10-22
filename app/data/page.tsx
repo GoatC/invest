@@ -7,7 +7,7 @@ import { DataError, loadDataStatus, type DataStatus, type LatestQuote } from '@/
 import { taipeiToday } from '@/lib/dates';
 import { quantity, twd } from '@/lib/format';
 import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
-import { dataHealth, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
+import { dataHealth, RISK_ERROR, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
 import { GOLD } from '@/lib/models/fx';
 import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
 
@@ -55,9 +55,18 @@ export default async function DataStatusPage() {
   );
 }
 
+/** How many of the snapshot days carry their 1-week VaR (N4). */
+function snapshotRisk(withVar: number, days: number): Bilingual {
+  if (withVar === days) return { en: 'Each carries its 1-week VaR.', zh: '每一天都附有一週風險值。' };
+  return {
+    en: `${withVar} of them carry a 1-week VaR: a day needs three years of weekly closes for every proxy before it.`,
+    zh: `其中 ${withVar} 天附有一週風險值：每一天都需要之前三年各代理 ETF 的週收盤價。`,
+  };
+}
+
 function LatestRun({ run }: { run: JobRun }) {
   const { detail } = run;
-  const isSnapshotError = (line: string) => line.startsWith(`${SNAPSHOT_ERROR}:`);
+  const isSnapshotError = (line: string) => [SNAPSHOT_ERROR, RISK_ERROR].some((label) => line.startsWith(`${label}:`));
   const notLoaded = detail.errors.filter((line) => !isSnapshotError(line));
   const snapshotErrors = detail.errors.filter(isSnapshotError);
   return (
@@ -82,7 +91,8 @@ function LatestRun({ run }: { run: JobRun }) {
           <Bi
             en={`Saved the daily NAV snapshot for each day from ${detail.snapshots.from} to ${detail.snapshots.to} (${detail.snapshots.days} days).`}
             zh={`已存入 ${detail.snapshots.from} 至 ${detail.snapshots.to} 每一天的淨值快照（共 ${detail.snapshots.days} 天）。`}
-          />
+          />{' '}
+          {detail.snapshots.valueAtRisk !== null && <Bi {...snapshotRisk(detail.snapshots.valueAtRisk, detail.snapshots.days)} />}
         </p>
       )}
       {notLoaded.length > 0 && (
@@ -98,8 +108,8 @@ function LatestRun({ run }: { run: JobRun }) {
       {snapshotErrors.length > 0 && (
         <div className="banner warn">
           <Bi
-            en="The NAV snapshots were not saved; the performance page works from the trades, so it is still up to date:"
-            zh="淨值快照未能存入；績效頁直接由交易計算，仍是最新的："
+            en="The NAV snapshots or their VaR were not saved; the performance and risk pages work from the trades, so they are still up to date:"
+            zh="淨值快照或其風險值未能存入；績效頁與風險值頁直接由交易計算，仍是最新的："
           />
           <ul>
             {snapshotErrors.map((line) => (
