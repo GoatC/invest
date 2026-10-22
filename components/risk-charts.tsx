@@ -165,7 +165,7 @@ function histogramOption(bins: readonly Bin[], cutoff: number, cutoffLabel: Bili
         const bin = bins[dataIndex(params) ?? -1];
         if (!bin) return '';
         const weeks = { en: bin.count === 1 ? 'week' : 'weeks', zh: '週' };
-        return tooltip(`${signedPercent(bin.from, 2)} to ${signedPercent(bin.to, 2)}`, [
+        return tooltip(`${signedPercent(bin.from, 2)} → ${signedPercent(bin.to, 2)}`, [
           {
             value: String(bin.count),
             label: isBeyond(bin) ? { en: `${weeks.en}, ${BEYOND.en.toLowerCase()}`, zh: `${weeks.zh}，${BEYOND.zh}` } : weeks,
