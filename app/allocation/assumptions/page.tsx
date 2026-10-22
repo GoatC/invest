@@ -22,8 +22,8 @@ export default async function AssumptionsPage() {
         </h1>
         <p className="muted">
           <Bi
-            en="Your own long-run expectation for each class: the yearly return and how much it swings (volatility, one standard deviation), with where it comes from. The compounding calculator (F2), Monte Carlo (F5) and the efficient frontier (F7) will use them. Leave a class blank to set it later."
-            zh="你對各類別的長期預期：每年報酬與波動程度（波動度，一個標準差），並註明來源。複利計算機（F2）、蒙地卡羅（F5）與效率前緣（F7）會使用這些數字。尚未決定的類別可以先留白。"
+            en="Your own long-run expectation for each class: the yearly return and how much it swings (volatility, one standard deviation), with where it comes from. The compounding calculator (F2) starts from their target mix; Monte Carlo (F5) and the efficient frontier (F7) will use them too. Leave a class blank to set it later."
+            zh="你對各類別的長期預期：每年報酬與波動程度（波動度，一個標準差），並註明來源。複利計算機（F2）以它們算出的目標配置報酬為預設值，之後的蒙地卡羅（F5）與效率前緣（F7）也會使用。尚未決定的類別可以先留白。"
           />
         </p>
         {saved === undefined ? (

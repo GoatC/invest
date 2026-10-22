@@ -66,6 +66,7 @@ export const LABELS = {
   performance: { en: 'Performance', zh: '績效' },
   allocation: { en: 'Allocation', zh: '資產配置' },
   risk: { en: 'Value at Risk', zh: '風險值' },
+  calculator: { en: 'Calculator', zh: '複利計算機' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },
@@ -141,6 +142,16 @@ export const RETURN_SERIES = {
   currency: { en: 'Currency', zh: '匯率' },
   cross: { en: 'Cross term', zh: '交叉項' },
   total: { en: 'TWD return', zh: '台幣報酬' },
+} as const satisfies Record<string, Bilingual>;
+
+/** The series of the compounding calculator's charts and tables (F2). */
+export const PLAN_SERIES = {
+  growth: { en: 'Growth', zh: '累計成長' },
+  contributed: { en: 'Put in', zh: '累計投入' },
+  real: { en: "Value in today's money", zh: '換算今天的幣值' },
+  value: { en: 'Value', zh: '資產價值' },
+  actual: { en: 'Actual', zh: '實際' },
+  planned: { en: 'Plan', zh: '計畫' },
 } as const satisfies Record<string, Bilingual>;
 
 /** The N6 lenses. */

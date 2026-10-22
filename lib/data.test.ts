@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { diffRows, fxMaxAgeDays, fxMaxGap, toTransaction } from './data';
+import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -69,6 +69,15 @@ describe('fxMaxAgeDays', () => {
   it('fills in no rate when the setting is missing or malformed', () => {
     for (const value of [undefined, { max_gap: 0.2 }, { max_age_days: '10' }, { max_age_days: 2.5 }, { max_age_days: -1 }]) {
       assert.equal(fxMaxAgeDays(value), null);
+    }
+  });
+});
+
+describe('dcaAmount', () => {
+  it('reads the monthly contribution from the dca setting, and nothing from a malformed one', () => {
+    assert.equal(dcaAmount({ amount_twd: 10000, day_of_month: null }), 10000);
+    for (const value of [undefined, null, {}, { amount_twd: '10000' }, { amount_twd: -1 }]) {
+      assert.equal(dcaAmount(value), null);
     }
   });
 });

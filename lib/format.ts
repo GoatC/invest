@@ -13,6 +13,13 @@ export function twd(value: number | null | undefined): string {
   return `${rounded < 0 ? '−' : ''}NT$${grouped(Math.abs(rounded), 0)}`;
 }
 
+/** A TWD difference with its sign: +NT$1,200, −NT$350; one that rounds to zero has none. */
+export function signedTwd(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return DASH;
+  const rounded = Math.round(value);
+  return rounded > 0 ? `+${twd(rounded)}` : twd(rounded === 0 ? 0 : rounded);
+}
+
 /** An amount in its own currency, e.g. "1,234.50 USD". */
 export function money(value: number | null | undefined, currency: string, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return DASH;

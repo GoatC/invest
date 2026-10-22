@@ -54,3 +54,23 @@ export function targetReturn(assetClasses: readonly AssetClass[], assumptions: A
   }
   return total;
 }
+
+/**
+ * The expected yearly return F2 starts from: the target mix's over the classes that have an
+ * assumption, re-weighted to 100% of them; `share` is how much of the targets those classes hold
+ * (1 once every class with a target has one). Null while none has.
+ */
+export function mixReturn(assetClasses: readonly AssetClass[], assumptions: Assumptions): { expectedReturn: number; share: number } | null {
+  let covered = 0;
+  let weighted = 0;
+  let total = 0;
+  for (const assetClass of assetClasses) {
+    if (assetClass.targetWeight <= 0) continue;
+    total += assetClass.targetWeight;
+    const assumption = assumptions[assetClass.id];
+    if (!assumption) continue;
+    covered += assetClass.targetWeight;
+    weighted += assetClass.targetWeight * assumption.expectedReturn;
+  }
+  return covered > 0 ? { expectedReturn: weighted / covered, share: covered / total } : null;
+}

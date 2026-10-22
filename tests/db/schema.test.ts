@@ -346,6 +346,34 @@ describe('allocation settings (step 6)', () => {
   });
 });
 
+describe('compounding plan (step 8)', () => {
+  it('starts with no plan saved: the calculator offers its own starting values', async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'projection'`), {
+      start: null,
+      pv: null,
+      pmt: null,
+      step_up: 0,
+      expected_return: null,
+      inflation: 0.02,
+      years: 30,
+    });
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'dca'`), { amount_twd: 10000, day_of_month: null });
+  });
+
+  it('logs a saved plan and keeps it from strangers', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(
+        `update public.config set value = '{"start": "2026-05", "pv": 0, "pmt": 10000, "step_up": 0.03, "expected_return": 0.05, "inflation": 0.02, "years": 30}' where key = 'projection'`,
+      );
+      const { rows } = await tx.query(`select row_key, changed_by, new_row -> 'value' ->> 'start' as start from public.audit_log where table_name = 'config' and row_key = 'projection'`);
+      assert.deepEqual(rows, [{ row_key: 'projection', changed_by: OWNER_ID, start: '2026-05' }]);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.config where key = 'projection'`), 0);
+    });
+  });
+});
+
 describe('latest quote views', () => {
   it('give the newest close per ticker and the newest rate per pair', async () => {
     // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.

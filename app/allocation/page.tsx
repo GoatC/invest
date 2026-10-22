@@ -226,8 +226,8 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
         <>
           <p className="muted small">
             <Bi
-              en={`Your expected yearly return and volatility per class, which the compounding calculator (F2), Monte Carlo (F5) and the efficient frontier (F7) will read.${saved.verifiedOn ? ` Last reviewed on ${saved.verifiedOn}.` : ''}`}
-              zh={`各類別的預期年報酬與年化波動度，供複利計算機（F2）、蒙地卡羅（F5）與效率前緣（F7）使用。${saved.verifiedOn ? `最後檢視日期：${saved.verifiedOn}。` : ''}`}
+              en={`Your expected yearly return and volatility per class, which the compounding calculator (F2) reads, and Monte Carlo (F5) and the efficient frontier (F7) will.${saved.verifiedOn ? ` Last reviewed on ${saved.verifiedOn}.` : ''}`}
+              zh={`各類別的預期年報酬與年化波動度，供複利計算機（F2）使用，之後也供蒙地卡羅（F5）與效率前緣（F7）使用。${saved.verifiedOn ? `最後檢視日期：${saved.verifiedOn}。` : ''}`}
             />
           </p>
           <div className="table-wrap">

@@ -2,8 +2,9 @@
  * Form parsing shared by the browser (instant feedback) and the server actions (the authority;
  * the server never trusts what the browser sends). Every error message is bilingual.
  */
-import { isIsoDate } from './dates';
+import { isIsoDate, isMonth } from './dates';
 import type { Bilingual } from './i18n';
+import type { SavedPlan } from './models/projection';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
 export type RawForm = Record<string, string | undefined>;
@@ -28,6 +29,10 @@ export const MESSAGES = {
   expectedReturn: { en: 'Enter a yearly return from −50% to 50%.', zh: '請輸入 −50% 到 50% 之間的年報酬。' },
   volatility: { en: 'Enter a yearly volatility from 0% to 100%.', zh: '請輸入 0% 到 100% 之間的年化波動度。' },
   source: { en: 'Say where the assumption comes from.', zh: '請註明假設的來源。' },
+  month: { en: 'Enter a month as YYYY-MM.', zh: '請以 YYYY-MM 格式輸入月份。' },
+  stepUp: { en: 'Enter a yearly step-up from 0% to 30%, with at most two decimals.', zh: '請輸入 0% 到 30% 之間的每年調升比例，最多兩位小數。' },
+  inflation: { en: 'Enter a yearly inflation from −5% to 20%, with at most two decimals.', zh: '請輸入 −5% 到 20% 之間的年通膨率，最多兩位小數。' },
+  years: { en: 'Enter a whole number of years from 1 to 60.', zh: '請輸入 1 到 60 之間的整數年數。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -351,4 +356,38 @@ export function parseAssumptionForm(raw: RawForm, classes: readonly AssetClass[]
     rows.push({ id: assetClass.id, expectedReturn: expectedReturn ?? 0, volatility: volatility ?? 0, source });
   }
   return finish(errors, () => rows);
+}
+
+// ---------------------------------------------------------------------------
+// F2 compounding plan (calculator fields)
+// ---------------------------------------------------------------------------
+
+export type PlanField = keyof SavedPlan;
+
+/** The calculator's inputs: amounts in TWD, rates in percent, whole years. */
+export function parsePlanForm(raw: RawForm): Parsed<SavedPlan, PlanField> {
+  const errors: FieldErrors<PlanField> = {};
+  const start = text(raw['start']);
+  if (!isMonth(start)) errors.start = MESSAGES.month;
+  const pv = parseNumber(raw['pv']);
+  if (pv === undefined || pv < 0) errors.pv = MESSAGES.nonNegative;
+  const pmt = parseNumber(raw['pmt']);
+  if (pmt === undefined || pmt < 0) errors.pmt = MESSAGES.nonNegative;
+  const stepUp = percentField(raw['stepUp'], 0, 30);
+  if (stepUp === undefined) errors.stepUp = MESSAGES.stepUp;
+  const expectedReturn = percentField(raw['expectedReturn'], -50, 50);
+  if (expectedReturn === undefined) errors.expectedReturn = MESSAGES.expectedReturn;
+  const inflation = percentField(raw['inflation'], -5, 20);
+  if (inflation === undefined) errors.inflation = MESSAGES.inflation;
+  const years = parseNumber(raw['years']);
+  if (years === undefined || !Number.isInteger(years) || years < 1 || years > 60) errors.years = MESSAGES.years;
+  return finish(errors, () => ({
+    start,
+    pv: pv ?? 0,
+    pmt: pmt ?? 0,
+    stepUp: stepUp ?? 0,
+    expectedReturn: expectedReturn ?? 0,
+    inflation: inflation ?? 0,
+    years: years ?? 0,
+  }));
 }
