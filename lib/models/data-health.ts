@@ -13,6 +13,8 @@ export const NIGHTLY_JOB = 'nightly_prices';
 export const SNAPSHOT_ERROR = 'NAV snapshots';
 /** …and when the snapshots were saved without their N4 VaR. */
 export const RISK_ERROR = 'VaR';
+/** …and when the rules could not be evaluated after the refresh (step 9). */
+export const RULES_ERROR = 'Rules';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -33,6 +35,8 @@ export interface RunDetail {
   errors: string[];
   /** The daily NAV snapshots the run saved (F18), and how many carry a VaR (N4; null before step 7); null when it saved none. */
   snapshots: { days: number; from: string; to: string; valueAtRisk: number | null } | null;
+  /** The rules evaluated after the refresh: proposals drafted and closed (step 9); null before. */
+  rules: { created: number; closed: number } | null;
 }
 
 export interface JobRun {
@@ -65,6 +69,7 @@ export function parseRunDetail(value: unknown): RunDetail {
   const detail = record(value);
   const window = record(detail['window']);
   const { days, from, to, valueAtRisk } = record(detail['snapshots']);
+  const { created, closed } = record(detail['rules']);
   return {
     window: typeof window['start'] === 'string' && typeof window['end'] === 'string' ? { start: window['start'], end: window['end'] } : null,
     prices: loadedMap(detail['prices']),
@@ -75,6 +80,7 @@ export function parseRunDetail(value: unknown): RunDetail {
       typeof days === 'number' && typeof from === 'string' && typeof to === 'string'
         ? { days, from, to, valueAtRisk: typeof valueAtRisk === 'number' ? valueAtRisk : null }
         : null,
+    rules: typeof created === 'number' && typeof closed === 'number' ? { created, closed } : null,
   };
 }
 

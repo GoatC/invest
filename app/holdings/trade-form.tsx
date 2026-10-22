@@ -34,7 +34,22 @@ function addSecurityHref(ticker: string, id: number | undefined): string {
   return text ? `/securities/new?${text}` : '/securities/new';
 }
 
-export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsData; rates: FxQuote[]; today: string; id?: number; initial: TradeValues }) {
+export function TradeForm({
+  data,
+  rates,
+  today,
+  id,
+  initial,
+  proposal,
+}: {
+  data: HoldingsData;
+  rates: FxQuote[];
+  today: string;
+  id?: number;
+  initial: TradeValues;
+  /** The approved proposal this trade fills, to return to it once saved. */
+  proposal?: number;
+}) {
   const [values, setValues] = useState(initial);
   // Fields changed since the last submit: their server errors are stale, their live errors are fresh.
   const [edited, setEdited] = useState<ReadonlySet<TradeField>>(new Set());
@@ -86,6 +101,7 @@ export function TradeForm({ data, rates, today, id, initial }: { data: HoldingsD
       className="form"
     >
       {id !== undefined && <input type="hidden" name="id" value={id} />}
+      {proposal !== undefined && <input type="hidden" name="proposal" value={proposal} />}
       <div className="form-grid">
         <Field label={LABELS.tradeDate} error={error('tradeDate')}>
           <input type="date" name="tradeDate" value={values.tradeDate} max={today} required onChange={(e) => change('tradeDate', e.target.value)} />

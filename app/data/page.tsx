@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Bi } from '@/components/bi';
 import { DataHealthBanner, RunStatusBadge } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
@@ -7,7 +9,7 @@ import { DataError, loadDataStatus, type DataStatus, type LatestQuote } from '@/
 import { taipeiToday } from '@/lib/dates';
 import { quantity, twd } from '@/lib/format';
 import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
-import { dataHealth, RISK_ERROR, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
+import { dataHealth, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
 import { GOLD } from '@/lib/models/fx';
 import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
 
@@ -67,8 +69,10 @@ function snapshotRisk(withVar: number, days: number): Bilingual {
 function LatestRun({ run }: { run: JobRun }) {
   const { detail } = run;
   const isSnapshotError = (line: string) => [SNAPSHOT_ERROR, RISK_ERROR].some((label) => line.startsWith(`${label}:`));
-  const notLoaded = detail.errors.filter((line) => !isSnapshotError(line));
+  const isRulesError = (line: string) => line.startsWith(`${RULES_ERROR}:`);
+  const notLoaded = detail.errors.filter((line) => !isSnapshotError(line) && !isRulesError(line));
   const snapshotErrors = detail.errors.filter(isSnapshotError);
+  const rulesErrors = detail.errors.filter(isRulesError);
   return (
     <section className="card form">
       <div className="row spread">
@@ -94,6 +98,27 @@ function LatestRun({ run }: { run: JobRun }) {
           />{' '}
           {detail.snapshots.valueAtRisk !== null && <Bi {...snapshotRisk(detail.snapshots.valueAtRisk, detail.snapshots.days)} />}
         </p>
+      )}
+      {detail.rules && (
+        <p className="muted small">
+          <Bi
+            en={`Checked the rules: ${detail.rules.created} new proposal${detail.rules.created === 1 ? '' : 's'}, ${detail.rules.closed} closed.`}
+            zh={`已檢查規則：新增 ${detail.rules.created} 份提案，關閉 ${detail.rules.closed} 份。`}
+          />{' '}
+          <Link href="/proposals">
+            <Bi en="Proposals" zh="提案" />
+          </Link>
+        </p>
+      )}
+      {rulesErrors.length > 0 && (
+        <div className="banner warn">
+          <Bi en="The rules could not be checked; use Check the rules now on the proposals page:" zh="無法檢查規則；請到提案頁按「立即檢查規則」：" />
+          <ul>
+            {rulesErrors.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {notLoaded.length > 0 && (
         <div className="banner warn">

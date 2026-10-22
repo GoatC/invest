@@ -7,7 +7,7 @@ import { RiskCard } from '@/components/risk-card';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, loadRiskData, orDataError, type CashFlowRecord, type HoldingsData, type RiskData } from '@/lib/data';
+import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, loadProposals, loadRiskData, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RiskData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, points, quantity, twd } from '@/lib/format';
 import { FLOW_TYPE, LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
@@ -18,6 +18,7 @@ import { positionKey, type Shortfall } from '@/lib/models/positions';
 import { riskReport, sparkline } from '@/lib/models/risk';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
 import type { Holding } from '@/lib/models/valuation';
+import { stateText } from '@/lib/proposal-text';
 import { breachText } from '@/lib/rule-text';
 
 type Params = Record<string, string | string[] | undefined>;
@@ -77,13 +78,15 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   // The job status and the VaR only add to the page, so a failed read of them does not hide the holdings.
   let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
   let risk: RiskData | DataError;
+  let proposals: Proposal[] | DataError;
   const today = taipeiToday();
   try {
-    [data, flows, jobs, risk] = await Promise.all([
+    [data, flows, jobs, risk, proposals] = await Promise.all([
       loadHoldingsData(supabase),
       loadCashFlows(supabase),
       orDataError(loadJobRuns(supabase)),
       orDataError(loadRiskData(supabase, today)),
+      orDataError(loadProposals(supabase, today)),
     ]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
@@ -118,6 +121,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       ) : (
         <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />
       )}
+      {!(proposals instanceof DataError) && <OpenProposals proposals={proposals} />}
       {portfolio.shortfalls.length > 0 && (
         <div className="banner danger" role="alert">
           <Bi en="Some sells are larger than the holding; fix these trades so the figures add up:" zh="部分賣出數量超過持有數量，請修正以下交易，數字才會正確：" />
@@ -174,6 +178,30 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} />
       {!empty && <Footnotes />}
     </>
+  );
+}
+
+/** Proposals waiting on a decision or a trade: first on the page, as on the weekly dashboard (PRD Section 5). */
+function OpenProposals({ proposals }: { proposals: readonly Proposal[] }) {
+  const open = proposals.filter((proposal) => proposal.status === 'open');
+  const approved = proposals.filter((proposal) => proposal.status === 'approved');
+  if (open.length === 0 && approved.length === 0) return null;
+  const names = (list: readonly Proposal[]) => list.map((proposal) => `${proposal.ruleId}${proposal.state ? ` (${stateText(proposal.state)})` : ''}`).join('; ');
+  return (
+    <p id="open-proposals" className="banner info" role="status">
+      {open.length > 0 && (
+        <Bi
+          en={`${open.length} proposal${open.length === 1 ? '' : 's'} to decide: ${names(open)}.`}
+          zh={`${open.length} 份提案待決定：${names(open)}。`}
+        />
+      )}{' '}
+      {approved.length > 0 && (
+        <Bi en={`${approved.length} approved, to trade: ${names(approved)}.`} zh={`${approved.length} 份已核准、待下單：${names(approved)}。`} />
+      )}{' '}
+      <Link href="/proposals">
+        <Bi en="Open the proposals" zh="查看提案" />
+      </Link>
+    </p>
   );
 }
 
@@ -241,6 +269,9 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
               </li>
             ))}
           </ul>
+          <Link href="/proposals">
+            <Bi en="The rules engine drafts the trim as a proposal" zh="規則引擎會把減碼擬成提案" />
+          </Link>
         </div>
       ) : (
         <div className="banner ok">

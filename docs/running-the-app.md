@@ -23,6 +23,7 @@ npm run check:supabase
   - 之後的步驟若有新的 migration，PR 說明裡會寫出來。第 6 步新增 `allocation_settings`：在 `config` 表加入 `cma`（資本市場假設，一開始是空的）與 `drift_display`（偏離何時轉黃色）兩個設定。
   - 第 7 步新增 `value_at_risk`：一個檢視表 `weekly_prices`（每檔證券每週最後一筆收盤價，風險值卡片用它計算三年的週報酬），並在 `nav_snapshots` 的 `var_95_1w` 欄位加上說明。不會改動任何資料。
   - 第 8 步新增 `projection`：在 `config` 表加入一個設定，存放複利計算機儲存的計畫（一開始沒有計畫，只有通膨率 2%、每年調升 0%、30 年三個暫定值）。不會改動任何資料。
+  - 第 9 步新增 `rules_engine`：替 `proposals`（提案）表加上「觸發狀態、計算依據、關閉原因、成交時間」四個欄位，並記錄每次提案變更。不會改動任何資料。
 - `npm run check:supabase`：應該看到 **24 項全部 ✅**（比上次多了 2 個 view，陌生人同樣讀不到；第 4 步之後是 25 項，第 7 步之後是 26 項，多的是 `weekly_prices`）。如果出現「找不到資料表，請先執行 db push」，代表上一行還沒成功。
 
 `db push` adds two views for the newest price and FX rate, and the FX typo-check setting; the check then shows 24 passes.
@@ -85,6 +86,13 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - **近 52 週走勢線**：每夜排程每天存下當天的風險值，卡片下方的線每週取一點。剛開始只有幾點，會隨時間變長。
   - **「風險值」頁**：分布圖顯示今天的持股組合在過去三年每週的報酬，以及有幾週損失超過風險值（預期約每 20 週 1 週）；下面列出每檔代理 ETF 的權重、波動度與占風險值的比例，以及代入今天數值的公式。
   - 卡片寫「代理 ETF 的資料還不夠久」：代表每夜排程還沒載入三年的價格；啟用排程並執行一次後就會出現。信賴水準等數值存在 `config` 表的 `var`，可以在 Table Editor 修改。
+- **提案與規則**：上方選單「提案」。
+  - **先設定扣款日**：按「規則與門檻」，在最上方填每月定期定額的金額與**扣款日**（例如每月 6 日填 6），按「儲存」。沒填扣款日之前，「每月投入」規則不會觸發。
+  - **提案從哪來**：每晚價格更新後，App 會檢查規則；也可以按「立即檢查規則」。規則觸發時會產生提案，例如「R1：2330 超過一般資金池 5%，賣出 1 股」、「每月投入：把 NT$10,000 買進最低於目標的兩個類別」。每份提案都寫出原因、數字與整股的下單清單（以最近收盤價估算）。
+  - **你要做的事**：看過後按「核准」，或先按「修改下單清單」改股數（填 0 代表不做這筆），不同意就填理由按「略過」。核准後會出現執行清單：到券商下單後，按每一筆的「登錄交易」，交易表單會自動帶入代號、買賣與股數，把價格、手續費、匯率改成成交單上的數字再儲存（也可以改用匯入券商 CSV）。全部登錄後，按「標記為已成交」。
+  - **不會一直吵**：同一條規則一週內最多提一次（除非觸發的狀態改變，例如換了一檔股票超標）；14 天沒處理的提案會自動關閉並重新檢查；略過的每月投入不會再提。
+  - **App 從不下單**：所有交易都由你在券商完成（L2）。
+  - **規則頁**：列出每條規則目前的狀態（觸發中、未觸發、冷卻中、等待扣款日、之後的步驟才會評估），並可以展開修改門檻、冷卻天數與啟用狀態；每次修改都留下紀錄。
 - **複利計算機**：上方選單「複利計算機」。
   - **輸入**：起始月份、起始金額（PV）、每月投入（PMT，預設為定期定額 NT$10,000）、每年調升比例（例如隨加薪多投入 3%）、預期年報酬（預設為「資本市場假設」依目標權重算出的報酬）、通膨率與年數。改任何一格，下面的數字與圖表立刻重算。
   - **結果**：幾年後的資產（名目台幣）、換算今天的幣值、累計投入、累計成長、實質年報酬，以及最後一個月要投入多少。長條圖每年一根：灰色是投入的錢，藍色是成長；橘色線是換算今天幣值的資產。
@@ -93,12 +101,12 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - 計畫保存自己的數字：之後修改定期定額金額或資本市場假設，不會改變已儲存的計畫；想用新數字，就重新儲存一次。每次儲存都留下紀錄。
   - 這是以固定報酬計算的預測，不是預言；實際報酬每年起伏，第三階段的蒙地卡羅模擬會顯示可能的範圍。
 
-Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. The Allocation page shows each class's drift from its target, coloured by the 5/25 rule, lets you edit the targets and the capital market assumptions, and slices the portfolio by product type, listing country and active vs passive. The Value at Risk card (holdings page and its own page) shows how much the whole portfolio could lose in a bad week, 1 week in 20, with a 1-month toggle and a 52-week line; TWD balances add value but no risk. The Calculator projects the regular pool year by year from a starting value, a monthly contribution with a yearly step-up, an expected return and inflation, in nominal TWD and today's money; save the inputs as your plan to compare the pool with it at every month end. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. The Allocation page shows each class's drift from its target, coloured by the 5/25 rule, lets you edit the targets and the capital market assumptions, and slices the portfolio by product type, listing country and active vs passive. The Value at Risk card (holdings page and its own page) shows how much the whole portfolio could lose in a bad week, 1 week in 20, with a 1-month toggle and a 52-week line; TWD balances add value but no risk. Proposals: after each nightly update, or with Check the rules now, a rule that fires (R1, R2, F8 drift, the monthly contribution once its debit day is set on the Rules page, the January review) drafts a proposal with whole-share orders; approve, edit or dismiss it, record the trades from its checklist and mark it filled. The app never trades. The Calculator projects the regular pool year by year from a starting value, a monthly contribution with a yearly step-up, an expected return and inflation, in nominal TWD and today's money; save the inputs as your plan to compare the pool with it at every month end. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
 
 ## 補充 Notes
 
 - 標著 ＊ 的金額是估計值：每夜排程還沒載入的證券或幣別，暫以你最近一筆交易的價格與匯率估算；還沒有金價時，黃金以你最後輸入的估值計算。每夜排程的設定見 [每夜價格排程](nightly-job.md)。
-- R1／R2 的門檻來自 `rules` 表，匯率警示門檻來自 `config` 表的 `fx_rate_check`；都能在 Supabase 的 Table Editor 修改，不需要改程式。
+- R1／R2 的門檻來自 `rules` 表，匯率警示門檻來自 `config` 表的 `fx_rate_check`；都能在 Supabase 的 Table Editor 修改，不需要改程式。第 9 步起，規則的門檻、冷卻天數與啟用狀態也可以在 App 的「規則」頁修改。
 - 只有登入後的你看得到資料；畫面顯示「無法從資料庫讀取」時，多半是程式更新後還沒執行 `npx supabase db push`。
 - 如果 `npm run dev` 顯示 Node.js 版本太舊，請到 <https://nodejs.org> 安裝 LTS 版本後重開 Terminal。
 

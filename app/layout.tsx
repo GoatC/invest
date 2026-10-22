@@ -60,6 +60,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/plan">
                 <Bi {...LABELS.calculator} />
               </Link>
+              <Link href="/proposals">
+                <Bi {...LABELS.proposals} />
+              </Link>
               <Link href="/holdings/new">
                 <Bi {...LABELS.addTrade} />
               </Link>

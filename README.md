@@ -41,8 +41,9 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 6. Targets and allocation donuts 目標權重與配置圓餅圖 | ✅ |
 | 7. VaR card 風險值卡片 | ✅ |
 | 8. Compounding calculator 複利計算機 | ✅ |
-| 9. Rules engine: R1, R2, F8 drift, proposals 規則引擎與提案 | next 下一步 |
-| 10–11. Web Push and the weekly dashboard, fee and tax drag 推播與每週儀表板、費用與稅務 | planned 規劃中 |
+| 9. Rules engine: R1, R2, F8 drift, proposals 規則引擎與提案 | ✅ |
+| 10. Web Push and the weekly dashboard 推播與每週儀表板 | next 下一步 |
+| 11. Fee and tax drag 費用與稅務拖累 | planned 規劃中 |
 
 Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), the windfall planner, Monte Carlo, the efficient frontier, stress tests and Brinson attribution. 第二、三階段加入證券分析、大額資金分批、蒙地卡羅、效率前緣、壓力測試與 Brinson 歸因。
 
@@ -54,6 +55,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 - **Performance 績效**: the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), and each month's and each foreign holding's TWD return split into local-currency, currency and cross terms, for both pools or each alone, with a table under every chart. 時間加權報酬與 SAA 基準的比較、資金加權報酬（XIRR），以及每月與每檔外幣持股的台幣報酬拆解為當地幣別、匯率與交叉項；可看兩個資金池合計或分開看，每張圖下方都有表格。
 - **Allocation 資產配置**: each asset class's drift from its SAA target, coloured by the 5/25 rebalancing rule with the satellite left to R2; the targets and the capital market assumptions (expected return, volatility, source) edited in the app; and donuts by product type, listing country and active vs passive, with the 80/20 target as an inner ring and each slice listing its holdings. 各資產類別相對 SAA 目標的偏離（依 5/25 再平衡規則上色，衛星交給 R2）；在 App 內修改目標權重與資本市場假設（預期報酬、波動度、來源）；以產品類別、上市國家、主動與被動三種分法的圓餅圖，內圈為 80／20 目標，點選區塊即列出持股。
 - **Value at Risk 風險值**: how much the whole portfolio could lose in a bad week, as "95% 1-week VaR: NT$X (Y% of portfolio)" with a 1-month toggle and a 52-week line, on the holdings page and its own page. Parametric VaR from three years of weekly returns in TWD of each class's proxy ETF; the page shows where it sits among those weeks, what it is made of, and the formula with today's numbers. 整個投資組合在不利的一週可能損失多少：「95% 一週風險值：NT$X（投資組合的 Y%）」，可切換一個月，並附近 52 週走勢線，顯示在持倉頁與獨立頁面。以各類別代理 ETF 過去三年的台幣週報酬計算參數法風險值；頁面列出它在這些週報酬中的位置、組成，以及代入今天數值的公式。
+- **Rules engine and proposals 規則引擎與提案**: after every nightly update, or on request, the written rules are evaluated: R1 single-stock cap, R2 satellite trigger, F8's 5/25 drift band, the monthly contribution and the January review. A rule that fires drafts a proposal with an order list in whole shares and says why, figures included; you approve, edit or dismiss it, trade at your broker, record the trades from its checklist and mark it filled (L2: the app never trades). Each rule fires at most once a week unless what it fired on changes, and every threshold and its edit history is on the Rules page. 每晚資料更新後（或手動）評估書面規則：R1 單一個股上限、R2 衛星觸發、F8 的 5/25 偏離門檻、每月投入與 1 月的年度檢查。規則觸發時產生附整股下單清單的提案，並寫明原因與數字；由你核准、修改或略過，到券商下單，再從執行清單登錄交易並標記成交（L2：App 從不下單）。除非觸發狀態改變，同一規則每週最多觸發一次；所有門檻與修改紀錄都在「規則」頁。
 - **Compounding calculator 複利計算機**: where monthly investing could take the regular pool, worked out live as the inputs change: start month, starting value, monthly contribution with a yearly step-up, expected return (from the capital market assumptions' target mix) and inflation. It shows the value year by year in nominal TWD and in today's money, what was put in against what it grew, and, once a plan is saved, the regular pool against it at every month end with the gap split into money put in and growth. 一般投入資金池透過每月投入可能成長到多少，輸入即時計算：起始月份、起始金額、每月投入與每年調升比例、預期報酬（依資本市場假設的目標配置）與通膨率。顯示逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長；儲存計畫後，每個月底把資金池與計畫對照，差距拆成投入金額與成長。
 - **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate; dividends count in the money-weighted return. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄；股利計入資金加權報酬。
 - **Non-listed assets 非上市資產**: physical gold in grams, valued nightly at the gold price in TWD, and savings and money-market balances in TWD. 實體黃金以克數記錄、每夜以台幣金價估值；活存與貨幣基金以台幣餘額記錄。
@@ -65,6 +67,8 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 ![Allocation with demo data: drift from the targets, coloured by the 5/25 rule](docs/images/allocation.png)
 
 ![Value at Risk with demo holdings: the 1-week figure, its 52-week line, and where it sits among three years of weekly returns](docs/images/risk.png)
+
+![Proposals with demo data: the monthly contribution and a drift rebalance, each explained, with whole-share orders](docs/images/proposals.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 

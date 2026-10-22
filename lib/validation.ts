@@ -4,6 +4,7 @@
  */
 import { isIsoDate, isMonth } from './dates';
 import type { Bilingual } from './i18n';
+import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
@@ -33,6 +34,13 @@ export const MESSAGES = {
   stepUp: { en: 'Enter a yearly step-up from 0% to 30%, with at most two decimals.', zh: '請輸入 0% 到 30% 之間的每年調升比例，最多兩位小數。' },
   inflation: { en: 'Enter a yearly inflation from −5% to 20%, with at most two decimals.', zh: '請輸入 −5% 到 20% 之間的年通膨率，最多兩位小數。' },
   years: { en: 'Enter a whole number of years from 1 to 60.', zh: '請輸入 1 到 60 之間的整數年數。' },
+  shares: { en: 'Enter whole shares, 0 or more; 0 drops the order.', zh: '請輸入整數股數（0 或以上）；0 代表刪除這筆。' },
+  wholeTwd: { en: 'Enter whole NT$, 0 or more; 0 drops the order.', zh: '請輸入整數台幣金額（0 或以上）；0 代表刪除這筆。' },
+  fraction: { en: 'Enter a number between 0 and 1, e.g. 0.05 for 5%.', zh: '請輸入 0 到 1 之間的數字，例如 5% 填 0.05。' },
+  wholeNumber: { en: 'Enter a whole number, 0 or more.', zh: '請輸入 0 或以上的整數。' },
+  cooldown: { en: 'Enter whole days from 0 to 365.', zh: '請輸入 0 到 365 的整數天數。' },
+  dcaDay: { en: 'Enter a day of the month from 1 to 31, or leave it blank.', zh: '請輸入 1 到 31 的日期，或留白。' },
+  expiryDays: { en: 'Enter whole days from 1 to 365.', zh: '請輸入 1 到 365 的整數天數。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -390,4 +398,90 @@ export function parsePlanForm(raw: RawForm): Parsed<SavedPlan, PlanField> {
     inflation: inflation ?? 0,
     years: years ?? 0,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Proposal orders (edit before approving)
+// ---------------------------------------------------------------------------
+
+/** Field name of an order's size: shares for a trade, NT$ for a balance. */
+export function sizeField(index: number): string {
+  return `size_${index}`;
+}
+
+/** Each order's new size: whole shares for a trade, whole NT$ for a balance; 0 drops it. */
+export function parseOrderSizes(raw: RawForm, orders: readonly DraftOrder[]): { sizes: number[]; errors: FieldErrors<string> } {
+  const errors: FieldErrors<string> = {};
+  const sizes = orders.map((order, index) => {
+    const name = sizeField(index);
+    const value = parseNumber(raw[name]);
+    if (value === undefined || value < 0 || !Number.isInteger(value)) {
+      errors[name] = order.kind === 'trade' ? MESSAGES.shares : MESSAGES.wholeTwd;
+      return 0;
+    }
+    return value;
+  });
+  return { sizes, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Rules and the engine's settings (rules page)
+// ---------------------------------------------------------------------------
+
+/** Field name of a threshold's number. */
+export function thresholdField(key: string): string {
+  return `threshold_${key}`;
+}
+
+export interface RuleInput {
+  enabled: boolean;
+  cooldownDays: number;
+  /** The threshold with its numbers replaced; other entries (lists, words) kept as they are. */
+  threshold: Record<string, unknown>;
+}
+
+/**
+ * A rule's edit: on or off, its cooldown, and each number in its threshold. A whole number stays
+ * whole, a share (between 0 and 1) stays one, and any other number stays above 0 (a multiple such as 1.25).
+ */
+export function parseRuleForm(raw: RawForm, threshold: Record<string, unknown>): Parsed<RuleInput, string> {
+  const errors: FieldErrors<string> = {};
+  const cooldownDays = parseNumber(raw['cooldownDays']);
+  if (cooldownDays === undefined || !Number.isInteger(cooldownDays) || cooldownDays < 0 || cooldownDays > 365) errors['cooldownDays'] = MESSAGES.cooldown;
+  const next: Record<string, unknown> = { ...threshold };
+  for (const [key, was] of Object.entries(threshold)) {
+    if (typeof was !== 'number') continue;
+    const name = thresholdField(key);
+    const value = parseNumber(raw[name]);
+    if (Number.isInteger(was)) {
+      if (value === undefined || value < 0 || !Number.isInteger(value)) errors[name] = MESSAGES.wholeNumber;
+    } else if (was > 0 && was < 1) {
+      if (value === undefined || value <= 0 || value >= 1) errors[name] = MESSAGES.fraction;
+    } else if (value === undefined || value <= 0) {
+      errors[name] = MESSAGES.positive;
+    }
+    if (value !== undefined) next[key] = value;
+  }
+  return finish(errors, () => ({ enabled: raw['enabled'] === 'on', cooldownDays: cooldownDays ?? 0, threshold: next }));
+}
+
+export interface EngineSettingsInput {
+  dcaAmountTwd: number;
+  dcaDay: number | null;
+  expiryDays: number;
+}
+
+export type EngineSettingsField = keyof EngineSettingsInput;
+
+/** The monthly DCA (config dca) and how long a proposal stays open (config proposal_expiry_days). */
+export function parseEngineSettings(raw: RawForm): Parsed<EngineSettingsInput, EngineSettingsField> {
+  const errors: FieldErrors<EngineSettingsField> = {};
+  const dcaAmountTwd = parseNumber(raw['dcaAmountTwd']);
+  if (dcaAmountTwd === undefined || dcaAmountTwd < 0) errors.dcaAmountTwd = MESSAGES.nonNegative;
+  const dayText = text(raw['dcaDay']);
+  const dcaDay = dayText === '' ? null : parseNumber(dayText);
+  if (dcaDay === undefined || (dcaDay !== null && (!Number.isInteger(dcaDay) || dcaDay < 1 || dcaDay > 31))) errors.dcaDay = MESSAGES.dcaDay;
+  const expiryDays = parseNumber(raw['expiryDays']);
+  if (expiryDays === undefined || !Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 365) errors.expiryDays = MESSAGES.expiryDays;
+  return finish(errors, () => ({ dcaAmountTwd: dcaAmountTwd ?? 0, dcaDay: dcaDay ?? null, expiryDays: expiryDays ?? 14 }));
 }

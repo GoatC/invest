@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadPerformanceInput, loadRiskInput } from '../../../lib/data.ts';
+import { loadPerformanceInput, loadRiskInput, runRules } from '../../../lib/data.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
@@ -98,6 +98,7 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('nav_snapshots', error);
       }
     },
+    evaluateRules: (today, now) => runRules(client, today, now),
     async recordRun(run: JobRun) {
       const { error } = await client
         .from('job_runs')

@@ -658,6 +658,130 @@ await step('calculator: saving the plan compares the regular pool with it at eac
   await page.emulateMedia({ colorScheme: 'light' });
 });
 
+/** Yesterday in Taipei, YYYY-MM-DD: a DCA debit then makes the monthly rule fire today. */
+const taipeiYesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - 86_400_000));
+
+await step('rules: each rule says what it finds now; the monthly contribution waits for the DCA day, which is set here', async () => {
+  await page.goto(`${BASE}/rules`);
+  await page.getByRole('heading', { level: 1, name: /^Rules/ }).waitFor();
+  const monthly = await page.locator('#rule-MONTHLY_CONTRIBUTION').innerText();
+  check(monthly.includes('Waiting for the DCA debit day'), `monthly waits, got ${monthly}`);
+  // "Fires:" or "Fires, but" is the engine's finding; the cooldown hint says "Fires at most once".
+  const fires = async (id) => /Fires[:,]/.test(await page.locator(`#rule-${id}`).innerText());
+  check(await fires('R1'), 'R1 fires on the demo holdings');
+  check((await page.locator('#rule-R2').innerText()).includes('Not firing'), 'R2 quiet at the demo satellite share');
+  check((await page.locator('#rule-BUY_ZONE').innerText()).includes('a later step'), 'Phase 2 rules wait for their feature');
+  check((await body()).includes('可執行版本的投資政策聲明'), 'Chinese text');
+  await page.fill('input[name=dcaDay]', '32');
+  await page.getByText('Enter a day of the month from 1 to 31').waitFor();
+  await page.fill('input[name=dcaDay]', String(Number(taipeiYesterday.slice(8))));
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/rules?saved=settings*');
+  check(await fires('MONTHLY_CONTRIBUTION'), 'the monthly rule fires the day after the debit');
+  // A threshold edit is logged with its old and new value, then put back.
+  await page.locator('#rule-R1 summary').click();
+  await page.fill('#rule-R1 input[name=threshold_max_weight]', '0.5');
+  await page.locator('#rule-R1 input[name=threshold_max_weight]').blur();
+  check((await page.locator('#rule-R1').innerText()).includes('= 50.00%'), 'the share shown as a percentage');
+  await page.locator('#rule-R1 button[type=submit]').click();
+  await page.waitForURL('**/rules?saved=R1*');
+  check((await page.locator('#rule-R1').innerText()).includes('Not firing'), 'with a 50% cap R1 stops firing');
+  const log = await page.locator('section', { hasText: 'Edit history of the rules' }).innerText();
+  check(/R1[\s\S]*max_weight[\s\S]*0\.05[\s\S]*0\.5/.test(log), `the edit is logged, got ${log}`);
+  // From a fresh address, so the redirect after saving is a new one to wait for.
+  await page.goto(`${BASE}/rules`);
+  await page.locator('#rule-R1 summary').click();
+  await page.fill('#rule-R1 input[name=threshold_max_weight]', '0.05');
+  await page.locator('#rule-R1 button[type=submit]').click();
+  await page.waitForURL('**/rules?saved=R1*');
+  check(await fires('R1'), 'back to 5%');
+  await snap('rules');
+});
+
+await step('proposals: checking the rules drafts R1, F8 and the monthly contribution, each explained, with whole-share orders', async () => {
+  await page.goto(`${BASE}/proposals`);
+  check((await body()).includes('No open proposals'), 'none before a check');
+  await page.getByRole('button', { name: /Check the rules now/ }).click();
+  await page.waitForURL('**/proposals?saved=checked*');
+  check(/Rules checked: [3-9] new proposals, 0 closed\./.test(await body()), `three or more drafted, got ${await body()}`);
+  const open = page.locator('article.proposal');
+  const titles = await open.locator('h3').allInnerTexts();
+  check(titles.some((title) => title.startsWith('R1 · Single-stock trim')), `R1 drafted, got ${titles}`);
+  check(titles.some((title) => title.startsWith('F8_DRIFT · Drift rebalance')), 'F8 drafted');
+  check(titles.some((title) => title.startsWith('MONTHLY_CONTRIBUTION · Monthly contribution')), 'monthly drafted');
+  const r1 = open.filter({ hasText: 'Single-stock trim' });
+  const r1Text = await r1.innerText();
+  check(/is [\d.]+% of the regular pool \(NT\$[\d,]+ of NT\$[\d,]+\), above the 5% single-stock cap/.test(r1Text), `R1 explained, got ${r1Text}`);
+  check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order in whole shares, bilingual');
+  // The demo savings (NT$20,000) put strategic cash far over its 8%: money out of the balance funds the buys.
+  const f8Text = await open.filter({ hasText: 'Drift rebalance' }).innerText();
+  check(/Strategic cash: [\d.]+% against a 8% target/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
+  const monthlyText = await open.filter({ hasText: 'Monthly contribution' }).innerText();
+  check(monthlyText.includes(`The NT$10,000 debited on ${taipeiYesterday}`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
+  await snap('proposals');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('proposals', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Checking again drafts nothing twice (from a fresh page, so the redirect is a new address).
+  await page.goto(`${BASE}/proposals`);
+  await page.getByRole('button', { name: /Check the rules now/ }).click();
+  await page.waitForURL('**/proposals?saved=checked*');
+  check((await body()).includes('Rules checked: 0 new proposals, 0 closed.'), 'no duplicates');
+});
+
+await step('proposals: edit the orders, approve, record the trade from the checklist, mark filled; dismiss with a reason', async () => {
+  await page.goto(`${BASE}/proposals`);
+  const monthly = page.locator('article.proposal').filter({ hasText: 'Monthly contribution' });
+  await monthly.getByRole('link', { name: /Edit the orders/ }).click();
+  await page.waitForURL(/\/proposals\/\d+$/);
+  await page.fill('input[name=size_0]', '1.5');
+  await page.getByText('Enter whole shares').waitFor();
+  await page.fill('input[name=size_0]', '1');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/proposals?saved=edited*');
+  check((await body()).includes('Orders saved'), 'edited');
+
+  const r1 = page.locator('article.proposal').filter({ hasText: 'Single-stock trim' });
+  const id = (await r1.getAttribute('id'))?.replace('proposal-', '');
+  await r1.getByRole('button', { name: /^Approve/ }).click();
+  await page.waitForURL('**/proposals?saved=approved*');
+  const approved = page.locator(`#proposal-${id}`);
+  check((await approved.innerText()).includes('Execution checklist'), 'the checklist');
+  await approved.getByRole('link', { name: /Record the trade/ }).first().click();
+  await page.waitForURL(/\/holdings\/new\?/);
+  check((await page.inputValue('select[name=side]')) === 'sell', 'a sell');
+  check(Number(await page.inputValue('input[name=qty]')) > 0 && Number(await page.inputValue('input[name=price]')) > 0, 'shares and the latest close filled in');
+  check((await body()).includes(`Filled in from proposal #${id}`), 'says where it came from');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/proposals?saved=trade*');
+  check((await body()).includes('Trade recorded'), 'back at the proposal');
+  await page.locator(`#proposal-${id}`).getByRole('button', { name: /Mark filled/ }).click();
+  await page.waitForURL('**/proposals?saved=filled*');
+
+  const f8 = page.locator('article.proposal').filter({ hasText: 'Drift rebalance' });
+  await f8.locator('input[name=reason]').fill('Demo: keep the savings 示範');
+  await f8.getByRole('button', { name: /^Dismiss/ }).click();
+  await page.waitForURL('**/proposals?saved=dismissed*');
+  const decided = await page.locator('section', { hasText: 'Decided and closed' }).innerText();
+  check(/Filled/.test(decided) && /Dismissed[\s\S]*Demo: keep the savings/.test(decided), `decided listed, got ${decided}`);
+  // A dismissed state is held back for its cooldown.
+  await page.goto(`${BASE}/rules`);
+  check(/held back until \d{4}-\d{2}-\d{2}/.test(await page.locator('#rule-F8_DRIFT').innerText()), 'F8 in its cooldown');
+  await page.goto(`${BASE}/history`);
+  const history = await body();
+  check(history.includes('Proposal') && history.includes('Demo: keep the savings'), 'proposal changes in the edit history');
+});
+
+await step('holdings: the open proposals come first; dark mode and the proposals page', async () => {
+  await page.goto(`${BASE}/holdings`);
+  const banner = await page.locator('#open-proposals').innerText();
+  check(banner.includes('to decide') && banner.includes('MONTHLY_CONTRIBUTION'), `open proposals banner, got ${banner}`);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${BASE}/proposals`);
+  await snap('proposals-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -672,7 +796,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -684,7 +808,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
-    if (['/holdings', '/performance', '/allocation', '/risk', '/plan', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (['/holdings', '/performance', '/allocation', '/risk', '/plan', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -731,6 +855,8 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
     check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
+    // After the refresh the job checks the rules, with the secret key, as the owner's Check now does.
+    check(/Checked the rules: \d+ new proposals?, \d+ closed\./.test(text), 'the rules checked after the refresh');
     await snap('data-status-after');
     await docShot('data-status', page);
   });

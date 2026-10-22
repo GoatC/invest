@@ -43,6 +43,9 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
       ? await supabase.from('transactions').insert({ ...columns, source: 'manual' })
       : await supabase.from('transactions').update(columns).eq('id', id);
   if (error) return { errors: {}, message: saveFailed(error.message) };
+  // A trade recorded from an approved proposal's checklist goes back to it.
+  const proposal = id === undefined ? parseId(fields['proposal']) : undefined;
+  if (proposal !== undefined) redirect(`/proposals?saved=trade#proposal-${proposal}`);
   redirect(`/holdings?saved=${id === undefined ? 'added' : 'updated'}`);
 }
 

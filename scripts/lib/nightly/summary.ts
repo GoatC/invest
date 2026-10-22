@@ -3,7 +3,7 @@
  * shows counts and database errors only; which tickers were loaded stays in job_runs, behind
  * row-level security, and the app shows it. A run by hand prints everything.
  */
-import { RISK_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { DATABASE_ERRORS, type JobRun } from './job.ts';
 
 export function fullSummary(run: JobRun): string[] {
@@ -17,13 +17,14 @@ export function fullSummary(run: JobRun): string[] {
     const withVar = risk === undefined ? '' : `; with a 1-week VaR 含一週風險值: ${risk} days 天`;
     lines.push(`NAV snapshots 淨值快照: ${detail.snapshots.days} days 天, ${detail.snapshots.from} → ${detail.snapshots.to}${withVar}`);
   }
+  if (detail.rules) lines.push(`Rules 規則: ${detail.rules.created} proposals drafted 新提案, ${detail.rules.closed} closed 關閉`);
   for (const warning of detail.warnings) lines.push(`  warning 警告: ${warning}`);
   for (const error of detail.errors) lines.push(`  error 錯誤: ${error}`);
   return lines;
 }
 
-/** Errors about the database, the snapshots or their VaR name no tickers or amounts, so the public log can show them. */
-const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR].some((label) => line.startsWith(`${label}:`));
+/** Errors about the database, the snapshots, their VaR or the rules name no tickers or amounts, so the public log can show them. */
+const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR, RULES_ERROR].some((label) => line.startsWith(`${label}:`));
 
 /** Lines with GitHub annotations, so a failed or partial run is flagged on the run's page. */
 export function publicSummary(run: JobRun): string[] {
@@ -39,9 +40,11 @@ export function publicSummary(run: JobRun): string[] {
     : detail.snapshots.valueAtRisk
       ? { en: ' NAV snapshots and VaR updated.', zh: '淨值快照與風險值已更新。' }
       : { en: ' NAV snapshots updated.', zh: '淨值快照已更新。' };
+  // That the rules ran, never what they proposed.
+  const rules = detail.rules ? { en: ' Rules checked.', zh: '規則已檢查。' } : { en: '', zh: '' };
   return [
-    `::${level}::Nightly prices: ${run.status}. Loaded ${securities} securities and ${rates} rates; ${fallbacks} fallbacks, ${errors} errors.${snapshots.en} The app's data status lists them.` +
-      ` 每夜價格：${run.status}。載入 ${securities} 檔證券、${rates} 組匯率；使用備援 ${fallbacks} 次，錯誤 ${errors} 項。${snapshots.zh}明細見 App 的資料狀態。`,
+    `::${level}::Nightly prices: ${run.status}. Loaded ${securities} securities and ${rates} rates; ${fallbacks} fallbacks, ${errors} errors.${snapshots.en}${rules.en} The app's data status lists them.` +
+      ` 每夜價格：${run.status}。載入 ${securities} 檔證券、${rates} 組匯率；使用備援 ${fallbacks} 次，錯誤 ${errors} 項。${snapshots.zh}${rules.zh}明細見 App 的資料狀態。`,
     ...detail.errors.filter(isDatabaseError).map((line) => `::error::${line}`),
   ];
 }
