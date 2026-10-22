@@ -65,7 +65,7 @@ function driftOption(rows: readonly DriftRow[], colors: Colors, width: number): 
   };
   return {
     textStyle: { fontFamily: colors.font },
-    grid: { left: 4, right: 12, top: 4, bottom: 4 },
+    grid: { left: 4, right: 12, top: 12, bottom: 4 },
     tooltip: {
       ...tooltipStyle(colors, 'item'),
       formatter: (params) => {
@@ -93,7 +93,8 @@ function driftOption(rows: readonly DriftRow[], colors: Colors, width: number): 
       data: rows.map((row) => `${row.label.en}\n${row.label.zh}`),
       axisTick: { show: false },
       axisLine: { lineStyle: { color: colors.grid } },
-      axisLabel: { color: colors.muted, width: narrow ? 96 : 170, overflow: 'break', lineHeight: 14 },
+      // Every class named, wrapping on a phone; rows are tall enough for three lines.
+      axisLabel: { color: colors.muted, interval: 0, width: narrow ? 120 : 170, overflow: 'break', lineHeight: 14 },
     },
     series: [bars, edges],
   };
@@ -113,7 +114,7 @@ export function DriftChart({ rows, label }: { rows: readonly DriftRow[]; label: 
           { label: { en: 'F8 band', zh: 'F8 門檻' }, color: 'var(--muted)', shape: 'line' },
         ]}
       />
-      <div ref={ref} className="chart chart-tall" style={{ height: `${Math.max(240, rows.length * 44 + 40)}px` }} role="img" aria-label={bi(label)} />
+      <div ref={ref} className="chart chart-tall" style={{ height: `${Math.max(240, rows.length * 52 + 48)}px` }} role="img" aria-label={bi(label)} />
     </figure>
   );
 }
