@@ -3,13 +3,16 @@
 // FINMIND_TOKEN in the environment, the last steps also run the real nightly job against the
 // stand-in and check what it loaded (E2E_NIGHTLY=0 skips them).
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createDecipheriv, createECDH, createHmac, randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:https';
 import { promisify } from 'node:util';
 
 import { chromium } from 'playwright-core';
 
 // DOCS_SHOTS, when set, also saves the README screenshots there (npm run test:e2e with DOCS_SHOTS=$PWD/docs/images).
-const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS, GATEWAY_PORT, SECRET_KEY, FINMIND_TOKEN, E2E_NIGHTLY, REPO } = process.env;
+const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS, GATEWAY_PORT, SECRET_KEY, FINMIND_TOKEN, E2E_NIGHTLY, REPO, PUSH_PORT, PUSH_KEY, PUSH_CERT, VAPID_PUBLIC_KEY } =
+  process.env;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 
 const browser = await chromium.launch(CHROMIUM && existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {});
@@ -50,7 +53,11 @@ await step('installable: manifest, icons and robots.txt load without a session; 
   const manifest = await page.request.get(`${BASE}/manifest.webmanifest`, { maxRedirects: 0 });
   check(manifest.status() === 200, `manifest HTTP ${manifest.status()}`);
   const json = await manifest.json();
-  check(json.display === 'standalone' && json.start_url === '/holdings', 'standalone, opens on holdings');
+  check(json.display === 'standalone' && json.start_url === '/', 'standalone, opens on the dashboard');
+  // The service worker loads without a session, fresh each time, as a phone fetches it.
+  const worker = await page.request.get(`${BASE}/sw.js`, { maxRedirects: 0 });
+  check(worker.status() === 200 && worker.headers()['content-type']?.includes('javascript') && worker.headers()['cache-control']?.includes('no-cache'), `sw.js HTTP ${worker.status()}`);
+  check((await worker.text()).includes("addEventListener('push'"), 'the worker shows pushes');
   for (const icon of [...json.icons.map((i) => i.src), '/apple-icon.png']) {
     const res = await page.request.get(`${BASE}${icon}`, { maxRedirects: 0 });
     check(res.status() === 200 && res.headers()['content-type'] === 'image/png', `${icon} HTTP ${res.status()}`);
@@ -82,10 +89,12 @@ await step('a wrong password is refused with one generic message', async () => {
   check((await page.inputValue('input[name=email]')) === OWNER_EMAIL, 'the email stays filled in');
 });
 
-await step('the owner signs in and lands on holdings', async () => {
+await step('the owner signs in and lands on the weekly dashboard', async () => {
   await page.fill('input[name=password]', OWNER_PASSWORD);
   await page.click('main button[type=submit]');
-  await page.waitForURL('**/holdings');
+  await page.waitForURL(`${BASE}/`);
+  await page.getByRole('heading', { level: 1, name: /This week/ }).waitFor();
+  await page.goto(`${BASE}/holdings`);
   await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
 });
 
@@ -712,7 +721,7 @@ await step('proposals: checking the rules drafts R1, F8 and the monthly contribu
   const r1 = open.filter({ hasText: 'Single-stock trim' });
   const r1Text = await r1.innerText();
   check(/is [\d.]+% of the regular pool \(NT\$[\d,]+ of NT\$[\d,]+\), above the 5% single-stock cap/.test(r1Text), `R1 explained, got ${r1Text}`);
-  check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order in whole shares, bilingual');
+  check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order with its shares, bilingual');
   // The demo savings (NT$20,000) put strategic cash far over its 8%: money out of the balance funds the buys.
   const f8Text = await open.filter({ hasText: 'Drift rebalance' }).innerText();
   check(/Strategic cash: [\d.]+% against a 8% target/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
@@ -734,9 +743,10 @@ await step('proposals: edit the orders, approve, record the trade from the check
   const monthly = page.locator('article.proposal').filter({ hasText: 'Monthly contribution' });
   await monthly.getByRole('link', { name: /Edit the orders/ }).click();
   await page.waitForURL(/\/proposals\/\d+$/);
-  await page.fill('input[name=size_0]', '1.5');
-  await page.getByText('Enter whole shares').waitFor();
-  await page.fill('input[name=size_0]', '1');
+  // US funds are ordered in fractions, to four decimals (config orders).
+  await page.fill('input[name=size_0]', '1.23456');
+  await page.getByText('with at most 4 decimals').waitFor();
+  await page.fill('input[name=size_0]', '1.2345');
   await page.click('main button[type=submit]');
   await page.waitForURL('**/proposals?saved=edited*');
   check((await body()).includes('Orders saved'), 'edited');
@@ -782,6 +792,155 @@ await step('holdings: the open proposals come first; dark mode and the proposals
   await page.emulateMedia({ colorScheme: 'light' });
 });
 
+// A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
+// job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
+const pushes = [];
+const pushService = createServer({ key: readFileSync(PUSH_KEY), cert: readFileSync(PUSH_CERT) }, (req, res) => {
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    pushes.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) });
+    res.writeHead(req.url.endsWith('/gone') ? 410 : 201);
+    res.end();
+  });
+});
+await new Promise((resolve) => pushService.listen(Number(PUSH_PORT), '127.0.0.1', resolve));
+
+/** A stand-in device: its keys, as a browser makes them when it subscribes. */
+function pushDevice() {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  return { ecdh, auth: randomBytes(16) };
+}
+const phone = pushDevice();
+const hmac = (key, data) => createHmac('sha256', key).update(data).digest();
+/** Decrypts an aes128gcm push (RFC 8188, RFC 8291) as the device would. */
+function readPush(body, device) {
+  const salt = body.subarray(0, 16);
+  const idLength = body.readUInt8(20);
+  const serverKey = body.subarray(21, 21 + idLength);
+  const ciphertext = body.subarray(21 + idLength);
+  const ikm = hmac(hmac(device.auth, device.ecdh.computeSecret(serverKey)), Buffer.concat([Buffer.from('WebPush: info\0'), device.ecdh.getPublicKey(), serverKey, Buffer.from([1])]));
+  const prk = hmac(salt, ikm);
+  const decipher = createDecipheriv('aes-128-gcm', hmac(prk, Buffer.from('Content-Encoding: aes128gcm\0\x01', 'binary')).subarray(0, 16), hmac(prk, Buffer.from('Content-Encoding: nonce\0\x01', 'binary')).subarray(0, 12));
+  decipher.setAuthTag(ciphertext.subarray(ciphertext.length - 16));
+  const padded = Buffer.concat([decipher.update(ciphertext.subarray(0, ciphertext.length - 16)), decipher.final()]);
+  return JSON.parse(padded.subarray(0, padded.lastIndexOf(2)).toString('utf8'));
+}
+const phonePushes = () => pushes.filter((push) => push.path === '/push/phone').map((push) => readPush(push.body, phone));
+
+/** Taipei time now plus `minutes`, as the schedule form's day and HH:MM. */
+function taipeiClock(minutes) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Taipei', weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date(Date.now() + minutes * 60_000))
+      .map((part) => [part.type, part.value]),
+  );
+  return { day: parts.weekday.toLowerCase(), time: `${parts.hour}:${parts.minute}` };
+}
+
+const notify = () =>
+  promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/notify.ts'], {
+    cwd: REPO,
+    timeout: 5 * 60_000,
+    env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY },
+  });
+
+await step('notifications: a test push reaches a device encrypted to its keys and signed with the app key; a device that left is removed', async () => {
+  await page.goto(`${BASE}/notifications`);
+  await page.getByRole('heading', { level: 1, name: /Notifications/ }).waitFor();
+  await page.locator('#push-status').filter({ hasNotText: 'Checking' }).waitFor();
+  const status = await page.locator('#push-status').innerText();
+  check(status.includes('Notifications are off on this device') && status.includes('這台裝置尚未開啟推播'), `this browser can turn push on, got ${status}`);
+  check((await body()).includes('No device has notifications on yet'), 'no devices yet');
+  // Two devices as a browser would save them: this one, and one whose push service now says it is gone.
+  const save = async (name, device) => {
+    const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/push_subscriptions`, {
+      method: 'POST',
+      headers: { apikey: SECRET_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: `https://127.0.0.1:${PUSH_PORT}/push/${name}`, keys: { p256dh: device.ecdh.getPublicKey().toString('base64url'), auth: device.auth.toString('base64url') }, device_name: name }),
+    });
+    check(res.ok, `device ${name}: HTTP ${res.status}`);
+  };
+  await save('phone', phone);
+  await save('gone', pushDevice());
+  await page.reload();
+  await page.getByRole('button', { name: /Send a test to every device/ }).click();
+  await page.getByText('Sent to 1 device').waitFor();
+  check(pushes.length === 2, `the push service got ${pushes.length} pushes`);
+  const [test] = phonePushes();
+  check(test?.title === 'Test 測試推播' && test.url === '/notifications', `the device reads the test, got ${JSON.stringify(test)}`);
+  const headers = pushes.find((push) => push.path === '/push/phone')?.headers ?? {};
+  check(headers['content-encoding'] === 'aes128gcm' && String(headers.authorization).endsWith(`k=${VAPID_PUBLIC_KEY}`) && headers.ttl === '86400', 'encrypted, signed with the VAPID key, kept a day');
+  // The page refreshes after a test: the device that left is gone, and the test is in the log.
+  await page.getByText('1 device(s) gone, removed').waitFor();
+  check((await page.getByRole('button', { name: /^Remove/ }).count()) === 1 && (await body()).includes('phone since'), 'only this device left');
+  check((await page.locator('section', { hasText: 'Recent pushes' }).innerText()).includes('Test 測試推播'), 'the test in the log');
+  await snap('notifications');
+});
+
+await step('push job: plans the weekly review and the open proposal, sends each once, and holds pushes in the quiet hours', async () => {
+  await page.goto(`${BASE}/notifications`);
+  // The review an hour ago today, and quiet hours that start later: both pushes go out now.
+  const review = taipeiClock(-60);
+  const quietStart = taipeiClock(120).time;
+  const quietEnd = taipeiClock(180).time;
+  await page.fill('input[name=quietStart]', quietStart);
+  await page.fill('input[name=quietEnd]', quietEnd);
+  await page.selectOption('select[name=weeklyDay]', review.day);
+  await page.fill('input[name=weeklyTime]', review.time);
+  await page.locator('section', { hasText: 'When pushes may arrive' }).locator('button[type=submit]').click();
+  await page.waitForURL('**/notifications?saved=schedule');
+  const before = phonePushes().length;
+  const { stdout } = await notify();
+  check(/::notice::Web Push: 2 planned, 2 sent \(2 deliveries\)/.test(stdout), `two pushes, got ${stdout}`);
+  check(!/MONTHLY|Weekly review|NT\$/.test(stdout), 'the public log has counts only');
+  const received = phonePushes().slice(before);
+  const weekly = received.find((push) => push.title === 'Weekly review 每週檢視');
+  const monthly = received.find((push) => push.title.startsWith('MONTHLY_CONTRIBUTION · Monthly contribution 每月投入'));
+  check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('Rules: 1 proposal waiting.') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
+  check(monthly && /^Invest the NT\$10,000 debited on \d{4}-\d{2}-\d{2}/.test(monthly.body) && /^\/proposals#proposal-\d+$/.test(monthly.url), `the proposal names its action, got ${JSON.stringify(monthly)}`);
+  const again = await notify();
+  check(/Web Push: 0 planned, 0 sent/.test(again.stdout) && phonePushes().length === before + 2, 'nothing twice');
+  await page.reload();
+  const log = await page.locator('section', { hasText: 'Recent pushes' }).innerText();
+  check(log.includes('Weekly review') && log.includes('Monthly contribution') && log.includes('to 1 device'), `the log, got ${log}`);
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('notifications', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+});
+
+await step('dashboard: the three lines, then proposals, drift, VaR, donut, windfall, watchlist, coming week and actual vs plan, in that order', async () => {
+  await page.goto(`${BASE}/`);
+  await page.locator('.chart-donut svg').waitFor();
+  const text = await body();
+  check(text.includes('Rules: 1 proposal waiting.') && text.includes('規則：1 份提案待處理。'), 'the rules line, bilingual');
+  check(/Allocation: largest drift [^\n]+ [+−][\d.]+ pp\./.test(text), 'the largest drift');
+  check(text.includes('Value: no NAV snapshot yet.'), 'no snapshot before the nightly job');
+  const headings = await page.locator('main h2').allInnerTexts();
+  const order = ['Open proposals (1)', 'Drift from the targets', 'Value at Risk', 'Allocation, regular pool', 'Windfall progress', 'Watchlist', 'Coming week', 'Actual vs plan'];
+  const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
+  check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
+  check(/Deployed NT\$[\d,]+ \([\d.]+%\); waiting as cash NT\$[\d,]+\./.test(text), 'windfall deployed and waiting');
+  check(text.includes('Weekly review push'), 'the coming week lists the review');
+  check((await page.locator('#dashboard-proposals').innerText()).includes('Monthly contribution'), 'the open proposal first, with approve and dismiss');
+  await snap('dashboard');
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await docShot('dashboard', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Approving from the dashboard opens the checklist.
+  await page.locator('#dashboard-proposals').getByRole('button', { name: /^Approve/ }).click();
+  await page.waitForURL('**/proposals?saved=approved*');
+  check((await body()).includes('Execution checklist'), 'approved from the dashboard');
+  await page.goto(`${BASE}/`);
+  check((await body()).includes('Rules: 1 proposal waiting (1 approved, to trade).'), 'the approved one still waits on trades');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.reload();
+  await page.locator('.chart-donut svg').waitFor();
+  await snap('dashboard-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -796,7 +955,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -808,7 +967,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
-    if (['/holdings', '/performance', '/allocation', '/risk', '/plan', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/') await page.locator('.chart-donut svg').waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -921,6 +1081,7 @@ await step('signing out ends the session', async () => {
 });
 
 await browser.close();
+pushService.close();
 for (; expectedNotFound > 0; expectedNotFound--) {
   const index = problems.findIndex((line) => line.includes('status of 404'));
   if (index !== -1) problems.splice(index, 1);

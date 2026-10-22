@@ -10,13 +10,13 @@ const DENIED = '42501';
 const CHECK_FAILED = '23514';
 const KEY_MISSING = '23503';
 
-// PRD Section 7 lists 19 tables; Web Push adds push_subscriptions, the N5 audit log adds audit_log
-// and the nightly job (Phase 1, step 4) adds job_runs.
+// PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
+// (step 10), the N5 audit log adds audit_log and the nightly job (Phase 1, step 4) adds job_runs.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
-  'job_runs',
+  'job_runs', 'notifications',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -36,7 +36,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log and job_runs', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs and notifications', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -405,6 +405,26 @@ describe('proposals (step 9)', () => {
 describe('fractional orders (after step 9)', () => {
   it('size US orders in fractions to four decimals, other markets in whole shares', async () => {
     assert.deepEqual(await scalar(db, `select value from public.config where key = 'orders'`), { fractional_markets: ['US'], share_decimals: 4 });
+  });
+});
+
+describe('web push (step 10)', () => {
+  it('plans each push once per kind and key, and keeps the log from strangers', async () => {
+    await as(db, 'owner', async (tx) => {
+      const plan = () => tx.query(`insert into public.notifications (kind, key, title, body, url) values ('weekly', '2026-10-25', 'Weekly review', 'Rules: all on track.', '/') on conflict (kind, key) do nothing returning id`);
+      assert.equal((await plan()).rows.length, 1);
+      assert.equal((await plan()).rows.length, 0);
+      await tx.query(`update public.notifications set sent_at = now(), delivered = 2 where kind = 'weekly'`);
+      await tx.query('savepoint refused');
+      assert.equal(await errorCode(tx.query(`insert into public.notifications (kind, key, title, body, url) values ('price', 'x', 't', 'b', 'https://evil.example')`)), CHECK_FAILED);
+      await tx.query('rollback to savepoint refused');
+      await tx.query(`insert into public.push_subscriptions (endpoint, keys, device_name) values ('https://push.example.com/1', '{"p256dh": "k", "auth": "a"}', 'iPhone')`);
+      await tx.query(`update public.push_subscriptions set last_error = 'push service 429'`);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.notifications'), 0);
+      assert.equal(await scalar(tx, 'select count(*) from public.push_subscriptions'), 0);
+    });
   });
 });
 

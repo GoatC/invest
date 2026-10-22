@@ -1,7 +1,9 @@
 # The nightly price and FX job (PRD Phase 1, step 4): daily closes, Bank of Taiwan rates and the
-# gold price into Supabase, then each day's NAV snapshot (step 5). Setup and troubleshooting:
-# docs/nightly-job.md.
-# 每夜價格與匯率排程：把每日收盤價、臺灣銀行匯率與金價寫入 Supabase，再存入每一天的淨值快照。設定方式見 docs/nightly-job.md。
+# gold price into Supabase, then each day's NAV snapshot (step 5) and the rules (step 9); then the
+# pushes for any new proposal or a data failure go out (step 10). Setup and troubleshooting:
+# docs/nightly-job.md and docs/web-push.md.
+# 每夜價格與匯率排程：把每日收盤價、臺灣銀行匯率與金價寫入 Supabase，再存入每一天的淨值快照、檢查規則，
+# 最後推播新提案或資料異常。設定方式見 docs/nightly-job.md 與 docs/web-push.md。
 name: Nightly prices 每夜價格
 
 on:
@@ -37,3 +39,13 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+      # Even after a failed night: the data-failure alert is one of the pushes.
+      - name: Send the pushes due 送出推播
+        if: ${{ !cancelled() }}
+        run: npm run notify
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

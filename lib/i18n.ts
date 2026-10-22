@@ -69,6 +69,8 @@ export const LABELS = {
   calculator: { en: 'Calculator', zh: '複利計算機' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
+  notifications: { en: 'Notifications', zh: '推播' },
+  dashboard: { en: 'Dashboard', zh: '儀表板' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },

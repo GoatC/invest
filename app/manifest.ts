@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 /**
  * The web app manifest, so a phone can add the app to its home screen and open it full screen
- * (PRD Section 6: a PWA). The icons are app/icon.svg drawn at the sizes phones ask for. Web Push
- * (Phase 1, step 10) adds the service worker.
+ * (PRD Section 6: a PWA). The icons are app/icon.svg drawn at the sizes phones ask for. It opens
+ * on the weekly dashboard; public/sw.js, the service worker, shows Web Push (Phase 1, step 10).
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -11,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: '長期投資',
     description: 'A 30-year core–satellite portfolio run on written rules. 依書面規則運行的 30 年核心／衛星投資組合。',
     id: '/',
-    start_url: '/holdings',
+    start_url: '/',
     scope: '/',
     display: 'standalone',
     // The page and header colours of globals.css (light).

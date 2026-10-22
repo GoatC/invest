@@ -11,7 +11,8 @@ Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan e
 - **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。風險值的代理 ETF（各資產類別的基準 ETF，例如 VT、0050）會再往前多載入：從第一筆交易（或一年前，取較早者）往前 3 年起，讓過去每一天的風險值都有完整的 3 年週報酬。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
 - **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。第 7 步起，每一天也附上當天的一週風險值（`var_95_1w`），風險值卡片的近 52 週走勢線就是取自這裡；風險值的資料讀取失敗時，快照照樣存入，風險值維持上一次的數值。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
 - **檢查規則**（第 9 步）：快照存好之後，排程以剛載入的收盤價評估規則（R1、R2、F8 偏離、每月投入、年度檢查），觸發時在「提案」頁產生附下單清單的提案，也會關閉已逾期或不再成立的提案。這和提案頁的「立即檢查規則」按鈕是同一段程式。公開的執行紀錄只寫「Rules checked.」，不寫提案內容；規則檢查失敗時，價格與快照照樣保存，資料狀態頁會標示。
-- **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在持倉頁顯示警示。推播通知要等第 10 步。
+- **推播**（第 10 步）：排程最後一步送出新提案的推播；另有每小時執行的「Pushes 推播」排程負責每週檢視、安靜時段後補送與資料異常警示。設定見 [推播通知](web-push.md)；還沒設定 VAPID 金鑰時，這一步只會寫「Web Push is not set up yet」，不會讓排程失敗。
+- **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在首頁與持倉頁顯示警示，並推播一次（第 10 步）。
 
 It runs at about 22:23 Taipei time, reloads the last three years of closes each night (dividend adjustments change past adjusted closes), then recomputes every day's NAV snapshot since the first trade and checks the rules (step 9), keeps the last good prices when a night fails, and flags two misses in a row.
 

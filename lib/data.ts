@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
 import { addDays } from './dates';
-import { failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
+import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
@@ -11,6 +11,9 @@ import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
 import { readPlanSettings, type PlanSettings } from './models/projection';
+import { readQuietHours, readWeeklyReview, weeklySummary, type Message, type PlanInput, type ProposalForPush, type WeeklySummary } from './models/notify';
+import { proposalTitle } from './proposal-text';
+import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type Vapid } from './push';
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
@@ -982,4 +985,204 @@ export async function saveOutcome(supabase: SupabaseClient, outcome: Outcome): P
 export async function runRules(supabase: SupabaseClient, today: string, now: string): Promise<{ created: number; closed: number }> {
   const { input } = await loadEngineInput(supabase, today, now);
   return saveOutcome(supabase, evaluate(input));
+}
+
+// ---------------------------------------------------------------------------
+// Web Push and the weekly review (Phase 1, step 10)
+// ---------------------------------------------------------------------------
+
+/** Both pools' value at the newest NAV snapshot up to `today`, and at the newest one a week or more before it. */
+export async function loadValueWeek(supabase: SupabaseClient, today: string): Promise<{ valueTwd: number | null; weekAgoTwd: number | null }> {
+  const latest = await rows<{ snapshot_date: string; total_twd: number }>(
+    'nav_snapshots',
+    supabase.from('nav_snapshots').select('snapshot_date, total_twd').lte('snapshot_date', today).order('snapshot_date', { ascending: false }).limit(1),
+  );
+  const newest = latest[0];
+  if (!newest) return { valueTwd: null, weekAgoTwd: null };
+  const weekAgo = await rows<{ total_twd: number }>(
+    'nav_snapshots',
+    supabase.from('nav_snapshots').select('total_twd').lte('snapshot_date', addDays(newest.snapshot_date, -7)).order('snapshot_date', { ascending: false }).limit(1),
+  );
+  return { valueTwd: Number(newest.total_twd), weekAgoTwd: weekAgo[0] ? Number(weekAgo[0].total_twd) : null };
+}
+
+/**
+ * The weekly review's three figures (PRD Section 5): proposals waiting, the core class furthest
+ * from its target in the regular pool as held now, and both pools' value at the newest NAV
+ * snapshot against the one a week before it.
+ */
+export async function loadWeeklySummary(supabase: SupabaseClient, today: string): Promise<WeeklySummary> {
+  const [holdings, proposals, value] = await Promise.all([
+    loadHoldingsData(supabase),
+    rows<{ status: ProposalStatus }>('proposals', supabase.from('proposals').select('status').in('status', ['open', 'approved'])),
+    loadValueWeek(supabase, today),
+  ]);
+  const portfolio = buildPortfolio(holdings);
+  return weeklySummary({ statuses: proposals.map((row) => row.status), classes: portfolio.classes, poolTwd: portfolio.pool.totalTwd, ...value });
+}
+
+/** Everything the push plan reads besides the time (lib/models/notify.ts plan). */
+export async function loadNotifyInput(supabase: SupabaseClient, today: string): Promise<Omit<PlanInput, 'now'>> {
+  const [proposals, rules, classes, config, planned, summary, jobs] = await Promise.all([
+    loadProposals(supabase, today),
+    loadRules(supabase),
+    loadAssetClasses(supabase),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
+    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly']).gte('created_at', addDays(today, -400))),
+    loadWeeklySummary(supabase, today),
+    loadJobRuns(supabase),
+  ]);
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const pushed = new Set(planned.filter((row) => row.kind === 'proposal').map((row) => row.key));
+  const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  const open: ProposalForPush[] = proposals
+    .filter((proposal) => proposal.status === 'open' && !pushed.has(String(proposal.id)))
+    .map((proposal) => {
+      const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
+      return { id: proposal.id, ruleId: proposal.ruleId, condition: rule.condition, title: proposalTitle(rule), state: proposal.state, detail: proposal.detail };
+    });
+  return {
+    proposals: open,
+    names: new Map(classes.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }])),
+    weekly: readWeeklyReview(value('weekly_review')),
+    weeklyKeys: new Set(planned.filter((row) => row.kind === 'weekly').map((row) => row.key)),
+    summary,
+    health: dataHealth(jobs.runs, jobs.threshold, today),
+    lastGoodRunId: jobs.runs.find((run) => run.status !== 'failed')?.id ?? null,
+    quiet: readQuietHours(value('quiet_hours')),
+  };
+}
+
+/** A planned or sent push, as the notifications table holds it. */
+export interface NotificationRecord extends Message {
+  id: number;
+  createdAt: string;
+  sendAfter: string;
+  sentAt: string | null;
+  delivered: number | null;
+  error: string | null;
+}
+
+const NOTIFICATION_COLUMNS = 'id, kind, key, title, body, url, created_at, send_after, sent_at, delivered, error';
+
+interface NotificationRow {
+  id: number;
+  kind: Message['kind'];
+  key: string;
+  title: string;
+  body: string;
+  url: string;
+  created_at: string;
+  send_after: string;
+  sent_at: string | null;
+  delivered: number | null;
+  error: string | null;
+}
+
+function toNotification(row: NotificationRow): NotificationRecord {
+  return {
+    id: Number(row.id),
+    kind: row.kind,
+    key: row.key,
+    title: row.title,
+    body: row.body,
+    url: row.url,
+    createdAt: row.created_at,
+    sendAfter: row.send_after,
+    sentAt: row.sent_at,
+    delivered: row.delivered,
+    error: row.error,
+  };
+}
+
+/** Plans pushes; one already planned (same kind and key) is left as it is. Returns how many are new. */
+export async function planNotifications(supabase: SupabaseClient, messages: ReadonlyArray<Message & { sendAfter: Date }>): Promise<number> {
+  if (messages.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('notifications')
+    .upsert(
+      messages.map((message) => ({ kind: message.kind, key: message.key, title: message.title, body: message.body, url: message.url, send_after: message.sendAfter.toISOString() })),
+      { onConflict: 'kind,key', ignoreDuplicates: true },
+    )
+    .select('id');
+  if (error) throw new DataError('notifications', error.message);
+  return data?.length ?? 0;
+}
+
+/** Pushes planned and not sent, whose time has come, oldest first. */
+export async function dueNotifications(supabase: SupabaseClient, now: Date): Promise<NotificationRecord[]> {
+  const found = await rows<NotificationRow>(
+    'notifications',
+    supabase.from('notifications').select(NOTIFICATION_COLUMNS).is('sent_at', null).lte('send_after', now.toISOString()).order('id'),
+  );
+  return found.map(toNotification);
+}
+
+/** The newest pushes, for the notifications page. */
+export async function loadNotifications(supabase: SupabaseClient, limit = 30): Promise<NotificationRecord[]> {
+  const found = await rows<NotificationRow>('notifications', supabase.from('notifications').select(NOTIFICATION_COLUMNS).order('id', { ascending: false }).limit(limit));
+  return found.map(toNotification);
+}
+
+/** A device the owner turned notifications on for. */
+export interface DeviceRecord extends DeviceSubscription {
+  deviceName: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  lastError: string | null;
+}
+
+export async function loadDevices(supabase: SupabaseClient): Promise<DeviceRecord[]> {
+  const found = await rows<{ id: number; endpoint: string; keys: { p256dh: string; auth: string }; device_name: string | null; created_at: string; last_used_at: string | null; last_error: string | null }>(
+    'push_subscriptions',
+    supabase.from('push_subscriptions').select('id, endpoint, keys, device_name, created_at, last_used_at, last_error').order('id'),
+  );
+  return found.map((row) => ({
+    id: Number(row.id),
+    endpoint: row.endpoint,
+    keys: row.keys,
+    deviceName: row.device_name,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+    lastError: row.last_error,
+  }));
+}
+
+/**
+ * Sends one planned push to every device, once: the row is claimed first, so two jobs at once
+ * cannot both send it. A proposal decided before its push went out is skipped. Devices the push
+ * service says are gone are removed. Returns the outcome, or undefined when another run had it.
+ */
+export async function sendNotification(supabase: SupabaseClient, notification: NotificationRecord, vapid: Vapid, send?: Sender): Promise<(PushResult & { skipped?: boolean }) | undefined> {
+  const now = new Date().toISOString();
+  const claimed = await supabase.from('notifications').update({ sent_at: now }).eq('id', notification.id).is('sent_at', null).select('id');
+  if (claimed.error) throw new DataError('notifications', claimed.error.message);
+  if (!claimed.data || claimed.data.length === 0) return undefined;
+  const finish = async (delivered: number, error: string | null) => {
+    const { error: updateError } = await supabase.from('notifications').update({ delivered, error }).eq('id', notification.id);
+    if (updateError) throw new DataError('notifications', updateError.message);
+  };
+  if (notification.kind === 'proposal') {
+    const [proposal] = await rows<{ status: string }>('proposals', supabase.from('proposals').select('status').eq('id', Number(notification.key)));
+    if (proposal?.status !== 'open') {
+      await finish(0, 'skipped: the proposal was decided first');
+      return { delivered: [], gone: [], errors: [], skipped: true };
+    }
+  }
+  const devices = await loadDevices(supabase);
+  if (devices.length === 0) {
+    await finish(0, 'no devices');
+    return { delivered: [], gone: [], errors: [] };
+  }
+  const result = await pushToAll(devices, { title: notification.title, body: notification.body, url: notification.url, tag: `${notification.kind}-${notification.key}` }, vapid, send);
+  if (result.gone.length > 0) {
+    const { error } = await supabase.from('push_subscriptions').delete().in('id', result.gone);
+    if (error) throw new DataError('push_subscriptions', error.message);
+  }
+  if (result.delivered.length > 0) {
+    const { error } = await supabase.from('push_subscriptions').update({ last_used_at: now, last_error: null }).in('id', result.delivered);
+    if (error) throw new DataError('push_subscriptions', error.message);
+  }
+  await finish(result.delivered.length, result.errors.length > 0 ? result.errors.join('; ') : result.gone.length > 0 ? `${result.gone.length} device(s) gone, removed` : null);
+  return result;
 }

@@ -721,3 +721,41 @@ tr.selected td {
   border-top: 1px solid var(--border);
   padding-top: 0.9rem;
 }
+
+/* A push's body keeps its line breaks (one line per language). */
+.pre-line {
+  white-space: pre-line;
+}
+
+/* The weekly dashboard (app/page.tsx) */
+
+.summary-lines {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 1.05rem;
+}
+
+.compact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+/* Windfall progress: deployed share of the windfall pool, with the figures beside it in words. */
+.meter {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--chart-1);
+}

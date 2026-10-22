@@ -33,7 +33,7 @@ The site is public but the data is not: only your account can sign in, and row-l
    | `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
    | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` |
 
-   不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。
+   不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。第 10 步的推播另外需要三個 VAPID 值，設定方式見 [推播通知](web-push.md)。
 6. 如果接著出現 **Optional Integrations**（例如 Supabase 旁邊有 **Add** 按鈕）：**不要按 Add**，直接按 **Deploy**。你已經有自己的 Supabase 專案；這個整合會另外建立或連接一個資料庫，並把 secret key 等金鑰自動放進 Vercel。
 7. 按 **Deploy**，等 1–2 分鐘，出現恭喜畫面就完成了。
 
@@ -48,7 +48,7 @@ App 用 email 和密碼登入，不改這個也能登入；改了之後，Supaba
 
 ## 4. 用電腦試一次 Try it on the computer
 
-打開網址 → 出現登入頁 → 用你的帳號登入 → 看得到持倉頁和「資料狀態」頁，就成功了。
+打開網址 → 出現登入頁 → 用你的帳號登入 → 看得到儀表板首頁和「資料狀態」頁，就成功了。
 
 ## 5. 加到手機主畫面 Add it to your phone's home screen
 
