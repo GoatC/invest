@@ -16,13 +16,22 @@
   --info-text: #1d4f94;
   --radius: 10px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-  /* Chart series: the first three categorical slots of the dataviz reference palette, validated on
-     this surface (scripts/validate_palette.js: CVD ΔE ≥ 9.2, normal vision ≥ 27.6); slot 3 sits at
-     2.8:1 on white, so every chart has its table. --chart-context is the de-emphasis gray. */
+  /* Chart series: the eight categorical slots of the dataviz reference palette, checked on this
+     surface with its validator (scripts/validate_palette.js); slots 3, 4 and 5 sit below 3:1 on
+     white, so every chart has its table and labels. --chart-context is the de-emphasis gray; the
+     status colours mean good, watch and act, and always come with an icon and a label. */
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #6250d6;
+  --chart-8: #e34948;
   --chart-context: #898781;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,6 +54,11 @@
     --chart-1: #3987e5;
     --chart-2: #d95926;
     --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #008300;
+    --chart-7: #9085e9;
+    --chart-8: #e66767;
     --chart-context: #898781;
   }
 }
@@ -567,4 +581,95 @@ details ul {
 
 .chart-tip-row span:last-child {
   color: var(--muted);
+}
+
+/* Allocation (components/allocation-charts.tsx) */
+
+.segmented .tab {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.segmented .tab.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.chart-donut {
+  height: 320px;
+}
+
+/* Narrow tables need no sideways scroll on a phone. */
+.table-wrap > table.compact {
+  min-width: 0;
+}
+
+.slice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+tr.selected td {
+  background: var(--info-bg);
+}
+
+.slice-holdings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.slice-holdings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+
+.slice-holdings li:last-child {
+  border-bottom: none;
+}
+
+.slice-holdings .num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-icon {
+  display: inline-block;
+  width: 1.1rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.status-icon.ok {
+  color: var(--ok-text);
+}
+
+.status-icon.watch {
+  color: var(--warn-text);
+}
+
+.status-icon.rebalance {
+  color: var(--danger-text);
+}
+
+/* A long logged value (a JSON setting) wraps instead of pushing a phone screen sideways. */
+.changes li {
+  overflow-wrap: anywhere;
 }

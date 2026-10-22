@@ -64,6 +64,7 @@ export const LABELS = {
   history: { en: 'Edit history', zh: '修改紀錄' },
   dataStatus: { en: 'Data status', zh: '資料狀態' },
   performance: { en: 'Performance', zh: '績效' },
+  allocation: { en: 'Allocation', zh: '資產配置' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },
@@ -140,6 +141,39 @@ export const RETURN_SERIES = {
   cross: { en: 'Cross term', zh: '交叉項' },
   total: { en: 'TWD return', zh: '台幣報酬' },
 } as const satisfies Record<string, Bilingual>;
+
+/** The N6 lenses. */
+export const LENS = {
+  product: { en: 'Product type', zh: '產品類別' },
+  country: { en: 'Listing country', zh: '上市國家' },
+  sleeve: { en: 'Active vs passive', zh: '主動與被動' },
+} as const satisfies Record<string, Bilingual>;
+
+/** The slices of every N6 lens, by key. */
+export const SLICE: Record<string, Bilingual> = {
+  equity_etf: { en: 'Equity ETF', zh: '股票 ETF' },
+  bond_etf: { en: 'Bond ETF', zh: '債券 ETF' },
+  gold: { en: 'Gold (ETF and physical)', zh: '黃金（ETF 與實體）' },
+  cash_mmf: { en: 'Cash & money-market', zh: '現金與貨幣基金' },
+  stock: { en: 'Individual stocks', zh: '個股' },
+  theme_etf: { en: 'Theme ETF', zh: '主題 ETF' },
+  US: { en: 'US', zh: '美國' },
+  UK: { en: 'UK (London)', zh: '英國（倫敦）' },
+  TW: { en: 'Taiwan', zh: '台灣' },
+  unlisted: { en: 'Not listed', zh: '非上市' },
+  core: { en: 'Passive core', zh: '被動核心' },
+  satellite: { en: 'Active satellite', zh: '主動衛星' },
+};
+
+/** F6 drift status, always shown with its icon. */
+export const DRIFT_STATUS = {
+  ok: { en: 'On target', zh: '符合目標' },
+  watch: { en: 'Watch', zh: '留意' },
+  rebalance: { en: 'Rebalance', zh: '需再平衡' },
+  unchecked: { en: 'Left to R2', zh: '由 R2 管理' },
+} as const satisfies Record<string, Bilingual>;
+
+export const DRIFT_ICON = { ok: '✓', watch: '!', rebalance: '✕', unchecked: '–' } as const;
 
 export const RUN_STATUS = {
   ok: { en: 'OK', zh: '正常' },

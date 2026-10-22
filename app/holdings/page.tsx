@@ -267,7 +267,10 @@ function ClassWeights({ portfolio }: { portfolio: Portfolio }) {
         <Bi
           en="Actual = class value ÷ regular pool (windfall money is not counted); drift = actual − target, in percentage points (pp)."
           zh="實際權重 = 類別市值 ÷ 一般投入資金池（不含大額資金）；偏離 = 實際 − 目標，單位為百分點（pp）。"
-        />
+        />{' '}
+        <Link href="/allocation">
+          <Bi en="Drift status, targets and allocation donuts" zh="偏離狀態、目標權重與配置圓餅圖" />
+        </Link>
       </p>
       <div className="table-wrap">
         <table>

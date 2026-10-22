@@ -1,4 +1,5 @@
-import type { AuditEntry, FieldChange } from '@/lib/data';
+import { describeRow, TABLE_LABELS } from '@/lib/audit';
+import type { AuditEntry, FieldChange, LogEntry } from '@/lib/data';
 import { taipeiDateTime } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 
@@ -40,6 +41,10 @@ const COLUMN: Record<string, Bilingual> = {
   type: LABELS.flowType,
   amount: LABELS.amount,
   amount_twd: LABELS.amountTwd,
+  target_weight: LABELS.target,
+  benchmark_ticker: { en: 'Benchmark ETF', zh: '基準 ETF' },
+  value: { en: 'Value', zh: '設定值' },
+  last_verified: { en: 'Last reviewed', zh: '最後檢視日期' },
 };
 
 function shown(value: unknown): string {
@@ -55,13 +60,21 @@ export function TaipeiTime({ at }: { at: string }) {
   );
 }
 
+/** A column's label; "value.global_bonds" (a part of a JSON setting) as "Value › global_bonds". */
+function columnLabel(column: string): Bilingual {
+  const [name = column, ...part] = column.split('.');
+  const label = COLUMN[name] ?? { en: name, zh: name };
+  const suffix = part.length > 0 ? ` › ${part.join('.')}` : '';
+  return { en: `${label.en}${suffix}`, zh: `${label.zh}${suffix}` };
+}
+
 /** What an edit changed, field by field. */
 export function ChangeList({ changes }: { changes: FieldChange[] }) {
   return (
-    <ul>
+    <ul className="changes">
       {changes.map((change) => (
         <li key={change.column}>
-          <Bi {...(COLUMN[change.column] ?? { en: change.column, zh: change.column })} />: {shown(change.before)} → {shown(change.after)}
+          <Bi {...columnLabel(change.column)} />: {shown(change.before)} → {shown(change.after)}
         </li>
       ))}
     </ul>
@@ -85,6 +98,38 @@ export function History({ entries }: { entries: AuditEntry[] }) {
             <Bi {...ACTION[entry.action]} />
           </strong>{' '}
           <TaipeiTime at={entry.changedAt} />
+          {entry.action === 'update' && <ChangeList changes={entry.changes} />}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Logged edits across rows, each named by the row it concerns, newest first. */
+export function LogList({ entries }: { entries: LogEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="muted">
+        <Bi en="No edits yet." zh="尚無修改紀錄。" />
+      </p>
+    );
+  }
+  return (
+    <ul className="log">
+      {entries.map((entry) => (
+        <li key={entry.id}>
+          <div className="row">
+            <span className={entry.action === 'delete' ? 'badge warn' : 'badge'}>
+              <Bi {...ACTION[entry.action]} />
+            </span>
+            <span className="muted small">
+              <Bi {...(TABLE_LABELS[entry.table] ?? { en: entry.table, zh: entry.table })} />
+            </span>
+            <strong>
+              <Bi {...describeRow(entry.table, entry.row, entry.rowKey)} />
+            </strong>
+            <TaipeiTime at={entry.changedAt} />
+          </div>
           {entry.action === 'update' && <ChangeList changes={entry.changes} />}
         </li>
       ))}

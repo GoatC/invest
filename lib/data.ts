@@ -4,6 +4,8 @@ import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapp
 import { addDays } from './dates';
 import { failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
+import { driftBands, type DriftBands } from './models/allocation';
+import { readAssumptions, type Assumptions } from './models/cma';
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import type { PortfolioData } from './models/portfolio';
@@ -237,9 +239,13 @@ export async function loadSecurities(supabase: SupabaseClient): Promise<Security
   }));
 }
 
+function toAssetClass(row: AssetClassRow): AssetClass {
+  return { id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order };
+}
+
 export async function loadAssetClasses(supabase: SupabaseClient): Promise<AssetClass[]> {
   const assetClasses = await rows<AssetClassRow>('asset_classes', supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order').order('sort_order'));
-  return assetClasses.map((row) => ({ id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order }));
+  return assetClasses.map(toAssetClass);
 }
 
 function setting(value: unknown, key: string): unknown {
@@ -423,7 +429,15 @@ export interface AuditEntry {
   changes: FieldChange[];
 }
 
-/** Columns whose value differs between two logged versions of a row; bookkeeping columns are left out. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Columns whose value differs between two logged versions of a row; bookkeeping columns are left
+ * out. A JSON setting that changed is opened one level, as "column.key", so its history names the
+ * part that changed rather than repeating the whole setting.
+ */
 export function diffRows(before: Record<string, unknown> | null, after: Record<string, unknown> | null): FieldChange[] {
   const columns = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
   const changes: FieldChange[] = [];
@@ -431,7 +445,14 @@ export function diffRows(before: Record<string, unknown> | null, after: Record<s
     if (['id', 'created_at', 'updated_at'].includes(column)) continue;
     const old = before?.[column] ?? null;
     const now = after?.[column] ?? null;
-    if (JSON.stringify(old) !== JSON.stringify(now)) changes.push({ column, before: old, after: now });
+    if (JSON.stringify(old) === JSON.stringify(now)) continue;
+    if (before && after && isPlainObject(old) && isPlainObject(now)) {
+      for (const key of new Set([...Object.keys(old), ...Object.keys(now)])) {
+        const was = old[key] ?? null;
+        const is = now[key] ?? null;
+        if (JSON.stringify(was) !== JSON.stringify(is)) changes.push({ column: `${column}.${key}`, before: was, after: is });
+      }
+    } else changes.push({ column, before: old, after: now });
   }
   return changes;
 }
@@ -470,18 +491,34 @@ export async function loadAuditLog(supabase: SupabaseClient, page: number): Prom
       .order('id', { ascending: false })
       .range(from, from + LOG_PAGE),
   );
+  return { entries: found.slice(0, LOG_PAGE).map(toLogEntry), more: found.length > LOG_PAGE };
+}
+
+function toLogEntry(entry: AuditRow): LogEntry {
   return {
-    entries: found.slice(0, LOG_PAGE).map((entry) => ({
-      id: entry.id,
-      action: entry.action,
-      changedAt: entry.changed_at,
-      changes: entry.action === 'update' ? diffRows(entry.old_row, entry.new_row) : [],
-      table: entry.table_name,
-      rowKey: entry.row_key,
-      row: entry.action === 'delete' ? entry.old_row : (entry.new_row ?? entry.old_row),
-    })),
-    more: found.length > LOG_PAGE,
+    id: entry.id,
+    action: entry.action,
+    changedAt: entry.changed_at,
+    changes: entry.action === 'update' ? diffRows(entry.old_row, entry.new_row) : [],
+    table: entry.table_name,
+    rowKey: entry.row_key,
+    row: entry.action === 'delete' ? entry.old_row : (entry.new_row ?? entry.old_row),
   };
+}
+
+/** The newest logged edits of one table, every row of it: the asset classes' targets, say. */
+export async function loadTableLog(supabase: SupabaseClient, table: string): Promise<LogEntry[]> {
+  const found = await rows<AuditRow>(
+    'audit_log',
+    supabase
+      .from('audit_log')
+      .select('id, table_name, row_key, action, changed_at, old_row, new_row')
+      .eq('table_name', table)
+      .order('changed_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(LOG_PAGE),
+  );
+  return found.map(toLogEntry);
 }
 
 export async function loadAuditHistory(supabase: SupabaseClient, table: string, rowKey: string): Promise<AuditEntry[]> {
@@ -557,4 +594,52 @@ export async function loadPerformanceInput(supabase: SupabaseClient, end: string
     prices: prices.map((row) => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close), adjClose: row.adj_close === null ? null : Number(row.adj_close) })),
     rates: rates.map((row) => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// F6 targets and N6 allocation (Phase 1, step 6)
+// ---------------------------------------------------------------------------
+
+/** An asset class with the benchmark ETF its returns are measured against (F6, F18, N4). */
+export interface AssetClassSettings extends AssetClass {
+  benchmarkTicker: string | null;
+}
+
+export async function loadAssetClassSettings(supabase: SupabaseClient): Promise<AssetClassSettings[]> {
+  const found = await rows<AssetClassRow & { benchmark_ticker: string | null }>(
+    'asset_classes',
+    supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order, benchmark_ticker').order('sort_order'),
+  );
+  return found.map((row) => ({ ...toAssetClass(row), benchmarkTicker: row.benchmark_ticker }));
+}
+
+/** The capital market assumptions (config cma) and when they were last reviewed; missing is undefined. */
+export async function loadAssumptions(supabase: SupabaseClient): Promise<{ assumptions: Assumptions; verifiedOn: string | null } | undefined> {
+  const [row] = await rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'cma'));
+  return row ? { assumptions: readAssumptions(row.value), verifiedOn: row.last_verified } : undefined;
+}
+
+/** R1 and R2 as the rules table holds them. */
+export async function loadCaps(supabase: SupabaseClient): Promise<Caps> {
+  return capsFromRules(await rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])));
+}
+
+/** The holdings, plus the targets' benchmarks, F8's drift band and the assumptions. */
+export interface AllocationData extends HoldingsData {
+  classSettings: AssetClassSettings[];
+  /** Undefined while the F8_DRIFT rule is off. */
+  bands: DriftBands | undefined;
+  /** Undefined until the step 6 migration is applied. */
+  assumptions: { assumptions: Assumptions; verifiedOn: string | null } | undefined;
+}
+
+export async function loadAllocationData(supabase: SupabaseClient): Promise<AllocationData> {
+  const [holdings, classSettings, drift, display, assumptions] = await Promise.all([
+    loadHoldingsData(supabase),
+    loadAssetClassSettings(supabase),
+    rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').eq('id', 'F8_DRIFT')),
+    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'drift_display')),
+    loadAssumptions(supabase),
+  ]);
+  return { ...holdings, classSettings, bands: driftBands(drift[0], display[0]?.value), assumptions };
 }

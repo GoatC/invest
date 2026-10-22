@@ -1,6 +1,6 @@
 import { GOLD } from './fx';
 import { chronological, type Position } from './positions';
-import type { AssetClass, FxQuote, ManualAsset, Pool, PriceQuote, ProductType, Security, Sleeve, Trade } from './types';
+import type { AssetClass, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Sleeve, Trade } from './types';
 
 /** Grams in one troy ounce, the unit gold prices are quoted in. */
 export const GRAMS_PER_TROY_OUNCE = 31.1034768;
@@ -55,6 +55,8 @@ export interface Holding {
   sleeve: Sleeve;
   assetClassId: string;
   productType: ProductType;
+  /** Where it trades (N6 listing-country lens); null for a non-listed asset. */
+  market: Market | null;
   qty: number;
   currency: string;
   /** Market value in TWD; null when no price or FX rate is known yet. */
@@ -93,6 +95,7 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       sleeve: security.sleeve,
       assetClassId: security.assetClassId,
       productType: security.productType,
+      market: security.market,
       qty: position.qty,
       currency: position.currency,
       valueTwd: price && rate ? position.qty * price.value * rate.value : null,
@@ -117,6 +120,7 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       sleeve: assetClass.sleeve,
       assetClassId: asset.assetClassId,
       productType: asset.productType,
+      market: null,
       qty: asset.quantity,
       currency: 'TWD',
       valueTwd,
