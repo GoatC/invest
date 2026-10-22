@@ -60,13 +60,21 @@ export function TaipeiTime({ at }: { at: string }) {
   );
 }
 
+/** A column's label; "value.global_bonds" (a part of a JSON setting) as "Value › global_bonds". */
+function columnLabel(column: string): Bilingual {
+  const [name = column, ...part] = column.split('.');
+  const label = COLUMN[name] ?? { en: name, zh: name };
+  const suffix = part.length > 0 ? ` › ${part.join('.')}` : '';
+  return { en: `${label.en}${suffix}`, zh: `${label.zh}${suffix}` };
+}
+
 /** What an edit changed, field by field. */
 export function ChangeList({ changes }: { changes: FieldChange[] }) {
   return (
-    <ul>
+    <ul className="changes">
       {changes.map((change) => (
         <li key={change.column}>
-          <Bi {...(COLUMN[change.column] ?? { en: change.column, zh: change.column })} />: {shown(change.before)} → {shown(change.after)}
+          <Bi {...columnLabel(change.column)} />: {shown(change.before)} → {shown(change.after)}
         </li>
       ))}
     </ul>

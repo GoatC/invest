@@ -41,7 +41,8 @@ function statusColor(status: DriftStatus, colors: Colors): string {
 
 function driftOption(rows: readonly DriftRow[], colors: Colors, width: number): Option {
   const narrow = width < NARROW;
-  const reach = Math.max(0.01, ...rows.flatMap((row) => [Math.abs(row.drift), row.band ?? 0])) * 1.3;
+  // Room past the longest bar for its label, more on a phone where the plot is narrow.
+  const reach = Math.max(0.01, ...rows.flatMap((row) => [Math.abs(row.drift), row.band ?? 0])) * (narrow ? 1.8 : 1.3);
   const bars: BarSeriesOption = {
     type: 'bar',
     barMaxWidth: 16,
@@ -143,9 +144,10 @@ const sliceLabel = (key: string): Bilingual => SLICE[key] ?? { en: key, zh: key 
 function donutOption(slices: readonly Slice[], colors: Colors, width: number, withTarget: boolean): Option {
   const narrow = width < NARROW;
   const color = (key: string) => colors.slots[SLOT[key] ?? 0] ?? colors.slots[0];
+  // On a phone the ring is smaller, so the labels around it stay inside the chart.
   const actual: PieSeriesOption = {
     type: 'pie',
-    radius: withTarget ? ['56%', '78%'] : ['48%', '76%'],
+    radius: narrow ? (withTarget ? ['46%', '64%'] : ['40%', '62%']) : withTarget ? ['56%', '78%'] : ['48%', '76%'],
     selectedMode: 'single',
     selectedOffset: 6,
     padAngle: 1,
@@ -173,7 +175,7 @@ function donutOption(slices: readonly Slice[], colors: Colors, width: number, wi
   // The SAA's split as an inner ring, the same colours paler.
   const target: PieSeriesOption = {
     type: 'pie',
-    radius: ['38%', '50%'],
+    radius: narrow ? ['30%', '40%'] : ['38%', '50%'],
     padAngle: 1,
     silent: false,
     selectedMode: false,

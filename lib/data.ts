@@ -429,7 +429,15 @@ export interface AuditEntry {
   changes: FieldChange[];
 }
 
-/** Columns whose value differs between two logged versions of a row; bookkeeping columns are left out. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Columns whose value differs between two logged versions of a row; bookkeeping columns are left
+ * out. A JSON setting that changed is opened one level, as "column.key", so its history names the
+ * part that changed rather than repeating the whole setting.
+ */
 export function diffRows(before: Record<string, unknown> | null, after: Record<string, unknown> | null): FieldChange[] {
   const columns = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
   const changes: FieldChange[] = [];
@@ -437,7 +445,14 @@ export function diffRows(before: Record<string, unknown> | null, after: Record<s
     if (['id', 'created_at', 'updated_at'].includes(column)) continue;
     const old = before?.[column] ?? null;
     const now = after?.[column] ?? null;
-    if (JSON.stringify(old) !== JSON.stringify(now)) changes.push({ column, before: old, after: now });
+    if (JSON.stringify(old) === JSON.stringify(now)) continue;
+    if (before && after && isPlainObject(old) && isPlainObject(now)) {
+      for (const key of new Set([...Object.keys(old), ...Object.keys(now)])) {
+        const was = old[key] ?? null;
+        const is = now[key] ?? null;
+        if (JSON.stringify(was) !== JSON.stringify(is)) changes.push({ column: `${column}.${key}`, before: was, after: is });
+      }
+    } else changes.push({ column, before: old, after: now });
   }
   return changes;
 }

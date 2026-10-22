@@ -16,6 +16,15 @@ describe('diffRows', () => {
   it('shows every value going away when a row is deleted', () => {
     assert.deepEqual(diffRows({ id: 7, qty: 4 }, null), [{ column: 'qty', before: 4, after: null }]);
   });
+
+  it('names the part of a JSON setting that changed', () => {
+    const before = { key: 'cma', value: { us_global_equity: { expected_return: 0.065 } }, last_verified: null };
+    const after = { key: 'cma', value: { us_global_equity: { expected_return: 0.065 }, global_bonds: { expected_return: 0.035 } }, last_verified: '2026-10-22' };
+    assert.deepEqual(diffRows(before, after), [
+      { column: 'value.global_bonds', before: null, after: { expected_return: 0.035 } },
+      { column: 'last_verified', before: null, after: '2026-10-22' },
+    ]);
+  });
 });
 
 describe('toTransaction', () => {

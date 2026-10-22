@@ -419,7 +419,7 @@ await step('performance: the windfall pool alone, year to date, and dark mode', 
 
 await step('allocation: drift from the targets coloured by the 5/25 rule, satellite left to R2', async () => {
   await page.goto(`${BASE}/allocation`);
-  await page.getByRole('heading', { name: /^Allocation/ }).waitFor();
+  await page.getByRole('heading', { level: 1, name: /Allocation/ }).waitFor();
   await page.locator('.chart svg').first().waitFor();
   const rows = page.locator('table').first().locator('tbody tr');
   check((await rows.count()) === 8, `eight asset classes, got ${await rows.count()}`);
@@ -490,7 +490,7 @@ await step('capital market assumptions: a source is required, then they show wit
   }
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=assumptions');
-  const card = await page.locator('section', { hasText: 'Capital market assumptions' }).innerText();
+  const card = await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
   check(card.includes('6.5%') && card.includes('16.0%') && card.includes('Last reviewed on'), `assumptions shown, got ${card}`);
   // The satellite classes have targets but no assumptions yet.
   check(card.includes('Once every class with a target has an assumption'), 'no target-mix return yet');

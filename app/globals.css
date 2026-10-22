@@ -668,3 +668,8 @@ tr.selected td {
 .status-icon.rebalance {
   color: var(--danger-text);
 }
+
+/* A long logged value (a JSON setting) wraps instead of pushing a phone screen sideways. */
+.changes li {
+  overflow-wrap: anywhere;
+}
