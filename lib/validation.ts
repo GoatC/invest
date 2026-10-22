@@ -24,6 +24,10 @@ export const MESSAGES = {
   choice: { en: 'Pick one of the options.', zh: '請從選項中選擇。' },
   tooLong: { en: 'Too long.', zh: '太長了。' },
   dividendTicker: { en: 'Name the security that paid the dividend.', zh: '請填寫發放股利的證券代號。' },
+  percent: { en: 'Enter a percentage from 0 to 100, with at most two decimals.', zh: '請輸入 0 到 100 的百分比，最多兩位小數。' },
+  expectedReturn: { en: 'Enter a yearly return from −50% to 50%.', zh: '請輸入 −50% 到 50% 之間的年報酬。' },
+  volatility: { en: 'Enter a yearly volatility from 0% to 100%.', zh: '請輸入 0% 到 100% 之間的年化波動度。' },
+  source: { en: 'Say where the assumption comes from.', zh: '請註明假設的來源。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -270,4 +274,81 @@ export function parseCashFlow(raw: RawForm, securities: ReadonlyMap<string, Secu
     ticker: isDividend ? ticker : null,
     note: note || null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// F6: SAA targets and capital market assumptions, one row per asset class
+// ---------------------------------------------------------------------------
+
+/** "12.5" (percent) → 0.125; at most two decimals of a percent. */
+function percentField(raw: string | undefined, min: number, max: number): number | undefined {
+  const value = parseNumber(raw);
+  if (value === undefined || value < min || value > max || Math.abs(Math.round(value * 100) - value * 100) > 1e-6) return undefined;
+  return Math.round(value * 100) / 10_000;
+}
+
+export interface TargetInput {
+  id: string;
+  targetWeight: number;
+  benchmarkTicker: string | null;
+}
+
+/** Fields are named target_<class id> and benchmark_<class id>; `total` carries the sum check. */
+export function targetFields(id: string): { target: string; benchmark: string } {
+  return { target: `target_${id}`, benchmark: `benchmark_${id}` };
+}
+
+/** Every class's target, as a percentage of the regular pool, adding up to 100%, and its benchmark ETF. */
+export function parseTargets(raw: RawForm, classes: readonly AssetClass[], tickers: ReadonlySet<string>): Parsed<TargetInput[], string> {
+  const errors: FieldErrors<string> = {};
+  const rows: TargetInput[] = [];
+  for (const assetClass of classes) {
+    const names = targetFields(assetClass.id);
+    const targetWeight = percentField(raw[names.target], 0, 100);
+    if (targetWeight === undefined) errors[names.target] = MESSAGES.percent;
+    const benchmark = text(raw[names.benchmark]).toUpperCase();
+    if (benchmark && !tickers.has(benchmark)) errors[names.benchmark] = MESSAGES.unknownTicker;
+    rows.push({ id: assetClass.id, targetWeight: targetWeight ?? 0, benchmarkTicker: benchmark || null });
+  }
+  const total = rows.reduce((sum, row) => sum + row.targetWeight, 0);
+  if (Object.keys(errors).length === 0 && Math.abs(total - 1) > 1e-9) {
+    const shown = `${Number((total * 100).toFixed(2))}%`;
+    errors['total'] = { en: `The targets add up to ${shown}; they must add up to 100%.`, zh: `目標合計為 ${shown}，必須剛好是 100%。` };
+  }
+  return finish(errors, () => rows);
+}
+
+export interface AssumptionInput {
+  id: string;
+  expectedReturn: number;
+  volatility: number;
+  source: string;
+}
+
+/** Fields are named return_<class id>, volatility_<class id> and source_<class id>. */
+export function assumptionFields(id: string): { expectedReturn: string; volatility: string; source: string } {
+  return { expectedReturn: `return_${id}`, volatility: `volatility_${id}`, source: `source_${id}` };
+}
+
+/**
+ * Each class's assumptions, in percent: a class left blank has none; one with any of the three
+ * filled in needs all of them, the source included (PRD F6: "with a source note").
+ */
+export function parseAssumptionForm(raw: RawForm, classes: readonly AssetClass[]): Parsed<AssumptionInput[], string> {
+  const errors: FieldErrors<string> = {};
+  const rows: AssumptionInput[] = [];
+  for (const assetClass of classes) {
+    const names = assumptionFields(assetClass.id);
+    const typed = [names.expectedReturn, names.volatility, names.source].some((name) => text(raw[name]) !== '');
+    if (!typed) continue;
+    const expectedReturn = percentField(raw[names.expectedReturn], -50, 50);
+    if (expectedReturn === undefined) errors[names.expectedReturn] = MESSAGES.expectedReturn;
+    const volatility = percentField(raw[names.volatility], 0, 100);
+    if (volatility === undefined) errors[names.volatility] = MESSAGES.volatility;
+    const source = text(raw[names.source]);
+    if (!source) errors[names.source] = MESSAGES.source;
+    else if (source.length > 200) errors[names.source] = MESSAGES.tooLong;
+    rows.push({ id: assetClass.id, expectedReturn: expectedReturn ?? 0, volatility: volatility ?? 0, source });
+  }
+  return finish(errors, () => rows);
 }

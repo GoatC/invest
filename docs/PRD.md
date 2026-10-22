@@ -479,7 +479,7 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 **Open questions 待決問題**
 
 - [x] Satellite cap: 20% target, trim above 25%, regular-contribution pool, windfall excluded (decided) 衛星部位上限：一般投入資金池的 20%，超過 25% 減碼，大額資金不計入（已決定）
-- [ ] SAA target weights decided (Investment Principles); CMA per asset class still open 目標權重已定（見投資原則），各類別資本市場假設待定
+- [ ] SAA target weights decided (Investment Principles); CMA per asset class still open, to be entered on the Allocation page (step 6) 目標權重已定（見投資原則），各類別資本市場假設待定，可在「資產配置」頁輸入（第 6 步）
 - [ ] Confirm F3 acceleration tiers: 15% / 25% / 35% 確認 F3 加速級距
 - [ ] Confirm valuation trim threshold: 1.25 × intrinsic value (single-stock cap now 5%, Investment Principles) 確認估值減碼門檻：內在價值 125%（單一個股上限已定為 5%）
 - [ ] Weekly review day and time 每週檢視的星期與時間
@@ -510,6 +510,13 @@ Decided in Phase 1, step 5 (2026-10-21) 第一階段第 5 步決定:
 - [x] Non-listed assets have no quantity history table: their past is replayed from the audit log (N5). A savings balance returns 0%, as its interest arrives as an edit to the balance (money in). Physical gold is priced in USD for the FX split, and before the nightly job's first saved gold price its value is moved back by GLDM's TWD return 非上市資產沒有數量歷史表，過去的數量由修改紀錄（N5）重建。存款報酬為 0%，因為利息以修改餘額記入（視為投入）。匯率拆解時實體黃金以美元計價；每夜排程存下第一筆金價之前，以 GLDM 的台幣報酬回推
 - [x] NAV snapshots: `total_twd` is both pools; `weights_by_class` is each class's share of the regular pool, the base the targets are measured on. The nightly job recomputes every day since the first trade, so an edited trade or a late close corrects the past; the performance page computes from the trades on request, so it never waits for the job 淨值快照：`total_twd` 為兩個資金池合計；`weights_by_class` 為各類別占一般投入資金池的比例，與目標權重的計算基礎相同。每夜排程重算自第一筆交易起的每一天，修改交易或晚到的收盤價都會更正過去；績效頁則在開啟時直接由交易計算，不必等排程
 - [x] Periods of a year or more are reported per year, shorter ones as they were (XIRR included), since a yearly rate over a few weeks exaggerates 一年以上的期間以年化報酬表示，未滿一年以期間報酬表示（XIRR 亦同），因為把幾週的報酬年化會誇大結果
+
+Decided in Phase 1, step 6 (2026-10-22) 第一階段第 6 步決定:
+
+- [x] The capital market assumptions are one config row, `cma` (Section 7: "CMA per asset class" in config): an expected yearly return, a volatility and a source note per asset class, with `last_verified` as the date they were last reviewed. They are edited on the Allocation page and logged like every setting; the values themselves remain the open question above 資本市場假設存為 config 表的一列 `cma`（第 7 節：CMA 放在 config）：各資產類別的預期年報酬、波動度與來源說明，`last_verified` 為最後檢視日期。在「資產配置」頁修改，並與其他設定一樣留下紀錄；數值本身仍是上方的待決問題
+- [x] F6's drift colours follow F8's 5/25 rule (rule `F8_DRIFT`): red past the band, 5 percentage points or a quarter of the target, whichever is smaller; amber past half of it (config `drift_display.warn_share`, 0.5). Satellite classes are left to R2, shown as the sleeve's own row: amber between 20% and 25%, red above 25%. "Daily drift check": drift is worked out live on every view, and the nightly NAV snapshots keep each day's class weights; drift proposals and pushes come with steps 9 and 10 F6 的偏離顏色依 F8 的 5/25 規則（`F8_DRIFT`）：超過門檻（5 個百分點或目標的四分之一，取較小者）為紅色，超過一半為黃色（config `drift_display.warn_share`，0.5）。衛星類別交給 R2，以衛星部位整體一列顯示：20% 到 25% 為黃色，超過 25% 為紅色。「每日檢查偏離」：每次開啟頁面即時計算，每夜的淨值快照也保存每天的類別權重；偏離的提案與推播在第 9、10 步完成
+- [x] Targets are edited together and must add up to 100%; they are saved in one statement, and each class that changed is logged. Adding or removing an asset class is done in Supabase's Table Editor for now, as securities refer to their class 目標權重一起修改、合計必須是 100%，以單一指令儲存，每個有變動的類別都會留下紀錄。新增或刪除資產類別目前在 Supabase 的 Table Editor 操作，因為證券會參照所屬類別
+- [x] The N6 donuts show the regular pool by default, the one the SAA is set on, with the 80/20 core/satellite target as an inner ring; both pools or the windfall pool alone show no target ring. A slice keeps its colour whatever else is held, and as six product types are more than colour alone keeps apart, every slice is also named in the chart and listed in the table N6 圓餅圖預設顯示一般資金池（SAA 的基礎），內圈為核心／衛星 80／20 目標；選兩個資金池或大額資金池時不顯示目標圈。每個區塊的顏色固定不變；產品類別有六種，超過只靠顏色能分辨的數量，所以每個區塊在圖上與表格中都標示名稱
 
 ## 10. Glossary 雙語術語表
 

@@ -2,8 +2,7 @@ import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { ACTION, ChangeList, TaipeiTime } from '@/components/history';
-import { describeRow, TABLE_LABELS } from '@/lib/audit';
+import { LogList } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAuditLog, orDataError } from '@/lib/data';
 import { LABELS } from '@/lib/i18n';
@@ -27,31 +26,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
           zh="交易、現金流、非上市資產、證券與設定的每一次修改與刪除，最新的在前。已刪除的資料會連同內容保留在這裡。"
         />
       </p>
-      {entries.length === 0 ? (
-        <p className="muted">
-          <Bi en="No edits yet." zh="尚無修改紀錄。" />
-        </p>
-      ) : (
-        <ul className="log">
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <div className="row">
-                <span className={entry.action === 'delete' ? 'badge warn' : 'badge'}>
-                  <Bi {...ACTION[entry.action]} />
-                </span>
-                <span className="muted small">
-                  <Bi {...(TABLE_LABELS[entry.table] ?? { en: entry.table, zh: entry.table })} />
-                </span>
-                <strong>
-                  <Bi {...describeRow(entry.table, entry.row, entry.rowKey)} />
-                </strong>
-                <TaipeiTime at={entry.changedAt} />
-              </div>
-              {entry.action === 'update' && <ChangeList changes={entry.changes} />}
-            </li>
-          ))}
-        </ul>
-      )}
+      <LogList entries={entries} />
       {(page > 0 || more) && (
         <div className="row">
           {page > 0 && (

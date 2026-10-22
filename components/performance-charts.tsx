@@ -7,128 +7,14 @@
  * when a chart mounts and again when the phone switches between light and dark; the legends are
  * plain HTML, and every value is also in the table under each chart.
  */
-import { BarChart, LineChart, ScatterChart, type BarSeriesOption, type LineSeriesOption, type ScatterSeriesOption } from 'echarts/charts';
-import { GridComponent, TooltipComponent, type GridComponentOption, type TooltipComponentOption } from 'echarts/components';
-import * as echarts from 'echarts/core';
-import { SVGRenderer } from 'echarts/renderers';
+import type { BarSeriesOption, LineSeriesOption, ScatterSeriesOption } from 'echarts/charts';
 import { useEffect, useRef } from 'react';
 
 import { signedPercent } from '@/lib/format';
 import { bi, RETURN_SERIES as SERIES, type Bilingual } from '@/lib/i18n';
 import type { CumulativePoint, MonthReturn } from '@/lib/models/performance';
 
-import { Bi } from './bi';
-
-echarts.use([BarChart, LineChart, ScatterChart, GridComponent, TooltipComponent, SVGRenderer]);
-
-type Option = echarts.ComposeOption<BarSeriesOption | LineSeriesOption | ScatterSeriesOption | GridComponentOption | TooltipComponentOption>;
-
-interface Colors {
-  series: [string, string, string];
-  context: string;
-  ink: string;
-  muted: string;
-  grid: string;
-  surface: string;
-  font: string;
-}
-
-function readColors(element: HTMLElement): Colors {
-  const style = getComputedStyle(element);
-  const token = (name: string) => style.getPropertyValue(name).trim();
-  return {
-    series: [token('--chart-1'), token('--chart-2'), token('--chart-3')],
-    context: token('--chart-context'),
-    ink: token('--text'),
-    muted: token('--muted'),
-    grid: token('--border'),
-    surface: token('--surface'),
-    font: style.fontFamily,
-  };
-}
-
-/** Draws a chart into the element, redrawing on a light/dark switch and resizing with it; returns the clean-up. */
-function mount(element: HTMLDivElement | null, build: (colors: Colors) => Option): (() => void) | undefined {
-  if (!element) return undefined;
-  const chart = echarts.init(element, null, { renderer: 'svg' });
-  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const dark = window.matchMedia('(prefers-color-scheme: dark)');
-  const draw = () => chart.setOption({ animation: !motion.matches, ...build(readColors(element)) }, true);
-  draw();
-  dark.addEventListener('change', draw);
-  const resize = new ResizeObserver(() => chart.resize());
-  resize.observe(element);
-  return () => {
-    dark.removeEventListener('change', draw);
-    resize.disconnect();
-    chart.dispose();
-  };
-}
-
-/** Axis ticks: whole percentages where the range allows, e.g. "−5%", "12.5%". */
-function axisPercent(value: number): string {
-  const text = `${Number((Math.abs(value) * 100).toFixed(2))}%`;
-  return value < 0 ? `−${text}` : text;
-}
-
-type Key = { color: string; shape: 'line' | 'rect' | 'dot' };
-
-/** The tooltip, built from text nodes: the value first, then what it is, keyed by a mark in the series colour. */
-function tooltip(title: string, rows: ReadonlyArray<{ value: string; label: Bilingual; key?: Key }>): HTMLElement {
-  const box = document.createElement('div');
-  box.className = 'chart-tip';
-  const head = document.createElement('div');
-  head.className = 'chart-tip-title';
-  head.textContent = title;
-  box.append(head);
-  for (const row of rows) {
-    const line = document.createElement('div');
-    line.className = 'chart-tip-row';
-    const key = document.createElement('span');
-    key.className = `chart-key ${row.key?.shape ?? 'none'}`;
-    if (row.key) key.style.background = row.key.color;
-    const value = document.createElement('strong');
-    value.textContent = row.value;
-    const label = document.createElement('span');
-    label.textContent = bi(row.label);
-    line.append(key, value, label);
-    box.append(line);
-  }
-  return box;
-}
-
-const axisTooltip = (colors: Colors, pointer: 'line' | 'shadow'): TooltipComponentOption => ({
-  trigger: 'axis',
-  confine: true,
-  axisPointer:
-    pointer === 'line'
-      ? { type: 'line', lineStyle: { color: colors.muted, width: 1, type: 'solid' } }
-      : { type: 'shadow', shadowStyle: { color: colors.grid, opacity: 0.35 } },
-  backgroundColor: colors.surface,
-  borderColor: colors.grid,
-  borderWidth: 1,
-  padding: [8, 10],
-  textStyle: { color: colors.ink, fontFamily: colors.font, fontSize: 13 },
-  extraCssText: 'box-shadow: none; border-radius: 8px;',
-});
-
-function dataIndex(params: unknown): number | undefined {
-  const first = Array.isArray(params) ? params[0] : params;
-  return typeof first === 'object' && first !== null && 'dataIndex' in first && typeof first.dataIndex === 'number' ? first.dataIndex : undefined;
-}
-
-function Legend({ items }: { items: ReadonlyArray<{ label: Bilingual; color: string; shape: Key['shape'] }> }) {
-  return (
-    <ul className="chart-legend">
-      {items.map((item) => (
-        <li key={item.label.en}>
-          <span className={`chart-key ${item.shape}`} style={{ background: item.color }} aria-hidden="true" />
-          <Bi {...item.label} />
-        </li>
-      ))}
-    </ul>
-  );
-}
+import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // Cumulative return against the SAA benchmark
@@ -160,12 +46,12 @@ function cumulativeOption(points: readonly CumulativePoint[], colors: Colors): O
     textStyle: { fontFamily: colors.font },
     grid: { left: 4, right: apart ? 56 : 12, top: 12, bottom: 4 },
     tooltip: {
-      ...axisTooltip(colors, 'line'),
+      ...tooltipStyle(colors, 'axis-line'),
       formatter: (params) => {
         const point = points[dataIndex(params) ?? -1];
         if (!point) return '';
         return tooltip(point.date, [
-          { value: signedPercent(point.twr), label: SERIES.portfolio, key: { color: colors.series[0], shape: 'line' } },
+          { value: signedPercent(point.twr), label: SERIES.portfolio, key: { color: colors.slots[0], shape: 'line' } },
           { value: signedPercent(point.benchmark), label: SERIES.benchmark, key: { color: colors.context, shape: 'line' } },
         ]);
       },
@@ -184,7 +70,7 @@ function cumulativeOption(points: readonly CumulativePoint[], colors: Colors): O
     },
     series: [
       line(SERIES.benchmark, colors.context, points.map((point) => [point.date, point.benchmark]), 2),
-      line(SERIES.portfolio, colors.series[0], points.map((point) => [point.date, point.twr]), 3),
+      line(SERIES.portfolio, colors.slots[0], points.map((point) => [point.date, point.twr]), 3),
     ],
   };
 }
@@ -230,7 +116,7 @@ function monthlyOption(months: readonly MonthReturn[], colors: Colors): Option {
     stack: 'split',
     barMaxWidth: 24,
     // The 1px edge in the surface colour leaves a 2px gap between touching segments.
-    itemStyle: { color: colors.series[index], borderColor: colors.surface, borderWidth: 1 },
+    itemStyle: { color: colors.slots[index], borderColor: colors.surface, borderWidth: 1 },
     emphasis: { disabled: true },
     data: months.map((month, at) => ({
       value: month[part],
@@ -250,15 +136,15 @@ function monthlyOption(months: readonly MonthReturn[], colors: Colors): Option {
     textStyle: { fontFamily: colors.font },
     grid: { left: 4, right: 12, top: 12, bottom: 4 },
     tooltip: {
-      ...axisTooltip(colors, 'shadow'),
+      ...tooltipStyle(colors, 'axis-shadow'),
       formatter: (params) => {
         const month = months[dataIndex(params) ?? -1];
         if (!month) return '';
         return tooltip(month.month, [
           { value: signedPercent(month.twr, 2), label: SERIES.total, key: { color: colors.ink, shape: 'dot' } },
-          { value: signedPercent(month.local, 2), label: SERIES.local, key: { color: colors.series[0], shape: 'rect' } },
-          { value: signedPercent(month.currency, 2), label: SERIES.currency, key: { color: colors.series[1], shape: 'rect' } },
-          { value: signedPercent(month.cross, 2), label: SERIES.cross, key: { color: colors.series[2], shape: 'rect' } },
+          { value: signedPercent(month.local, 2), label: SERIES.local, key: { color: colors.slots[0], shape: 'rect' } },
+          { value: signedPercent(month.currency, 2), label: SERIES.currency, key: { color: colors.slots[1], shape: 'rect' } },
+          { value: signedPercent(month.cross, 2), label: SERIES.cross, key: { color: colors.slots[2], shape: 'rect' } },
           { value: signedPercent(month.benchmark, 2), label: SERIES.benchmark },
         ]);
       },

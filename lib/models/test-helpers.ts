@@ -16,6 +16,7 @@ export function holding(overrides: Partial<Holding> = {}): Holding {
     sleeve: 'core',
     assetClassId: 'us_global_equity',
     productType: 'equity_etf',
+    market: 'US',
     qty: 1,
     currency: 'USD',
     valueTwd: 0,

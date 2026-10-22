@@ -20,6 +20,7 @@ npm run check:supabase
 - `npx supabase db push`：會列出 **2 個新的 migration**，輸入 `Y` 套用：
   - `latest_quotes`：「每檔最新價格」與「每個幣別最新匯率」兩個檢視表（view），持倉頁用它們計算市值。
   - `fx_rate_check`：匯率打錯字的警示門檻（預設 20%），存在 `config` 表，之後可以自己改。
+  - 之後的步驟若有新的 migration，PR 說明裡會寫出來。第 6 步新增 `allocation_settings`：在 `config` 表加入 `cma`（資本市場假設，一開始是空的）與 `drift_display`（偏離何時轉黃色）兩個設定。
 - `npm run check:supabase`：應該看到 **24 項全部 ✅**（比上次多了 2 個 view，陌生人同樣讀不到；第 4 步之後是 25 項）。如果出現「找不到資料表，請先執行 db push」，代表上一行還沒成功。
 
 `db push` adds two views for the newest price and FX rate, and the FX typo-check setting; the check then shows 24 passes.
@@ -69,8 +70,13 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - **每月報酬**長條圖與**外幣持股匯率拆解**表，把台幣報酬拆成「當地幣別報酬＋匯率報酬＋交叉項」，看得出報酬有多少來自美元升貶。
   - 每張圖下方按「以表格顯示」可看到所有數值；最下方「計算方式」說明每個數字怎麼算。
   - 每夜排程還沒有收盤價的日子，以交易價格或手動估值計算，頁面會註明。
+- **資產配置**：上方選單「資產配置」。
+  - **與目標權重的偏離**：各資產類別在一般資金池的實際權重減目標權重。核心類別依 5/25 規則上色：超過門檻（5 個百分點，或目標的四分之一，取較小者）為紅色 ✕「需再平衡」，超過一半為黃色 !「留意」，其餘為綠色 ✓。衛星類別由 R2 以整體衡量（表格最下面一列）。
+  - **修改目標權重**：按「修改目標權重」。合計必須剛好 100% 才能儲存；每次修改都留下紀錄。衛星目標若不是 20%，記得同時修改 rules 表中 R2 的 `target_weight`。
+  - **資本市場假設**：按「修改假設」，替每個核心類別填預期年報酬、年化波動度與來源（例如某機構的長期展望）。之後的複利計算機會用到；還沒決定的可以先留白。
+  - **配置圓餅圖**：三個分頁切換產品類別、上市國家、主動與被動；點選區塊或表格列，下方列出其中的持股。預設顯示一般資金池，內圈是 80／20 目標；也可切換到兩個資金池合計或大額資金池。
 
-Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. The Allocation page shows each class's drift from its target, coloured by the 5/25 rule, lets you edit the targets and the capital market assumptions, and slices the portfolio by product type, listing country and active vs passive. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
 
 ## 補充 Notes
 

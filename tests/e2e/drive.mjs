@@ -417,6 +417,85 @@ await step('performance: the windfall pool alone, year to date, and dark mode', 
   await page.emulateMedia({ colorScheme: 'light' });
 });
 
+await step('allocation: drift from the targets coloured by the 5/25 rule, satellite left to R2', async () => {
+  await page.goto(`${BASE}/allocation`);
+  await page.getByRole('heading', { name: /^Allocation/ }).waitFor();
+  await page.locator('.chart svg').first().waitFor();
+  const rows = page.locator('table').first().locator('tbody tr');
+  check((await rows.count()) === 8, `eight asset classes, got ${await rows.count()}`);
+  const row = (name) => page.locator('table').first().locator('tbody tr', { hasText: name }).innerText();
+  // Demo: savings and BIL, and the gold bar with GLDM, sit far above the 8% and 10% targets.
+  check((await row('Strategic cash')).includes('Rebalance'), `strategic cash red, got ${await row('Strategic cash')}`);
+  check((await row('Real assets')).includes('Rebalance'), 'real assets red');
+  check((await row('US stocks')).includes('Left to R2'), 'satellite classes left to R2');
+  check((await page.locator('tfoot').first().innerText()).includes('Satellite sleeve (R2)'), 'satellite sleeve row');
+  check((await body()).includes('需再平衡') && (await body()).includes('與目標權重的偏離'), 'Chinese labels');
+  await snap('allocation');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('allocation', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+});
+
+await step('allocation donuts: three lenses, the 80/20 target ring, a slice lists its holdings', async () => {
+  await page.goto(`${BASE}/allocation`);
+  const donut = page.locator('.chart-donut svg');
+  await donut.waitFor();
+  const slices = page.locator('table.slices');
+  check((await slices.innerText()).includes('Gold (ETF and physical)'), 'product lens: gold slice');
+  await page.getByRole('button', { name: /Gold \(ETF and physical\)/ }).click();
+  const listed = await page.locator('.slice-holdings').innerText();
+  check(listed.includes('GLDM') && listed.includes('Gold bar (demo)'), `gold slice lists GLDM and the gold bar, got ${listed}`);
+  await page.getByRole('tab', { name: /Listing country/ }).click();
+  check((await slices.innerText()).includes('Not listed'), 'country lens: not listed');
+  await page.getByRole('tab', { name: /Active vs passive/ }).click();
+  const sleeve = await slices.innerText();
+  check(sleeve.includes('Passive core') && sleeve.includes('80.0%') && sleeve.includes('20.0%'), `sleeve lens with targets, got ${sleeve}`);
+  check((await body()).includes('Inner ring: the SAA target'), 'target ring explained');
+  await snap('allocation-donut');
+  await page.goto(`${BASE}/allocation?scope=windfall`);
+  await page.locator('.chart-donut svg').waitFor();
+  check(!(await body()).includes('Inner ring'), 'no target ring for the windfall pool');
+});
+
+await step('targets: must add up to 100%, are saved together and logged', async () => {
+  await page.goto(`${BASE}/allocation/targets`);
+  await page.fill('input[name=target_us_global_equity]', '27');
+  check((await body()).includes('The targets add up to 99%'), 'live total check');
+  await page.fill('input[name=target_tw_market_cap]', '13');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/allocation?saved=targets');
+  check((await page.locator('table').first().locator('tbody tr', { hasText: 'Taiwan market-cap' }).innerText()).includes('13.0%'), 'new Taiwan target shown');
+  await page.goto(`${BASE}/allocation/targets`);
+  const log = await body();
+  check(/Changed[\s\S]*US \/ global equity[\s\S]*Target\s*目標: 0\.28 → 0\.27/.test(log), 'edit history shows 0.28 → 0.27');
+  await snap('targets');
+  // Back to the Investment Principles, for the steps that follow.
+  await page.fill('input[name=target_us_global_equity]', '28');
+  await page.fill('input[name=target_tw_market_cap]', '12');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/allocation?saved=targets');
+});
+
+await step('capital market assumptions: a source is required, then they show with the date reviewed', async () => {
+  await page.goto(`${BASE}/allocation/assumptions`);
+  await page.fill('input[name=return_us_global_equity]', '6.5');
+  await page.fill('input[name=volatility_us_global_equity]', '16');
+  await page.click('main button[type=submit]');
+  await page.getByText('Say where the assumption comes from.').waitFor();
+  const demo = { us_global_equity: ['6.5', '16'], tw_market_cap: ['6', '20'], global_bonds: ['3.5', '6'], real_assets: ['4', '15'], strategic_cash: ['1.5', '1'] };
+  for (const [id, [expected, volatility]] of Object.entries(demo)) {
+    await page.fill(`input[name=return_${id}]`, expected);
+    await page.fill(`input[name=volatility_${id}]`, volatility);
+    await page.fill(`input[name=source_${id}]`, 'Demo values, not advice 示範數值');
+  }
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/allocation?saved=assumptions');
+  const card = await page.locator('section', { hasText: 'Capital market assumptions' }).innerText();
+  check(card.includes('6.5%') && card.includes('16.0%') && card.includes('Last reviewed on'), `assumptions shown, got ${card}`);
+  // The satellite classes have targets but no assumptions yet.
+  check(card.includes('Once every class with a target has an assumption'), 'no target-mix return yet');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -431,7 +510,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/performance', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -440,7 +519,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     if (overflow > 0) wide.push(`${path} by ${overflow}px`);
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
-    if (path === '/holdings' || path === '/performance' || path === '/import') await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
+    if (['/holdings', '/performance', '/allocation', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

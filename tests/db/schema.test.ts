@@ -321,6 +321,31 @@ describe('reference data from the PRD', () => {
   });
 });
 
+describe('allocation settings (step 6)', () => {
+  it('start the capital market assumptions empty and colour drift amber at half the F8 band', async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'cma'`), {});
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'drift_display'`), { warn_share: 0.5 });
+    assert.deepEqual(await scalar(db, `select threshold from public.rules where id = 'F8_DRIFT'`), { abs_drift: 0.05, rel_drift: 0.25 });
+  });
+
+  it('log edits to the assumptions and the targets, and keep them from strangers', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(
+        `update public.config set value = '{"us_global_equity": {"expected_return": 0.065, "volatility": 0.16, "source": "demo"}}', last_verified = '2026-10-22' where key = 'cma'`,
+      );
+      await tx.query(`update public.asset_classes set target_weight = 0.27 where id = 'us_global_equity'`);
+      const { rows } = await tx.query(`select table_name, row_key, changed_by from public.audit_log where (table_name, row_key) in (('config', 'cma'), ('asset_classes', 'us_global_equity')) order by id`);
+      assert.deepEqual(rows, [
+        { table_name: 'config', row_key: 'cma', changed_by: OWNER_ID },
+        { table_name: 'asset_classes', row_key: 'us_global_equity', changed_by: OWNER_ID },
+      ]);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.config where key in ('cma', 'drift_display')`), 0);
+    });
+  });
+});
+
 describe('latest quote views', () => {
   it('give the newest close per ticker and the newest rate per pair', async () => {
     // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.
