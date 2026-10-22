@@ -36,7 +36,7 @@ const CLASSES: EngineClass[] = ASSET_CLASSES.map((assetClass) => ({ ...assetClas
 
 /** Every price NT$100 a share in TWD, so share counts read straight from the amounts. */
 function twdQuote(price = 100): EngineQuote {
-  return { price, currency: 'TWD', fxRate: 1 };
+  return { price, currency: 'TWD', fxRate: 1, decimals: 0 };
 }
 
 const QUOTES = new Map<string, EngineQuote>(
@@ -325,8 +325,8 @@ describe('monthly contribution', () => {
 
   it('buys a fund not held yet through the class benchmark, and leaves what whole shares cannot use', () => {
     const quotes = new Map(QUOTES);
-    quotes.set('VT', { price: 158, currency: 'USD', fxRate: 32.4 });
-    quotes.set('BNDW', { price: 68, currency: 'USD', fxRate: 32.4 });
+    quotes.set('VT', { price: 158, currency: 'USD', fxRate: 32.4, decimals: 0 });
+    quotes.set('BNDW', { price: 68, currency: 'USD', fxRate: 32.4, decimals: 0 });
     const draft = draftOf(evaluate(input({ holdings: [], quotes, dca: { amountTwd: 10_000, dayOfMonth: 10 } })), 'MONTHLY_CONTRIBUTION');
     assert.ok(draft);
     // One VT (NT$5,119.20) and two BNDW (NT$4,406.40); NT$474.40 left as cash.
@@ -335,6 +335,30 @@ describe('monthly contribution', () => {
       ['buy', 'BNDW', 2],
     ]);
     assert.ok(Math.abs(draft.detail.leftTwd - 474.4) < 1e-6);
+  });
+
+  it('buys US funds in fractions where the broker takes them, so almost all the cash is used', () => {
+    const quotes = new Map(QUOTES);
+    quotes.set('VT', { price: 158, currency: 'USD', fxRate: 32.4, decimals: 4 });
+    quotes.set('BNDW', { price: 68, currency: 'USD', fxRate: 32.4, decimals: 4 });
+    const draft = draftOf(evaluate(input({ holdings: [], quotes, dca: { amountTwd: 10_000, dayOfMonth: 10 } })), 'MONTHLY_CONTRIBUTION');
+    assert.ok(draft);
+    // NT$5,600 of VT at NT$5,119.20 a share is 1.0939 shares; NT$4,400 of BNDW at NT$2,203.20 is 1.9970, then what is left.
+    const [vt, bndw] = draft.orders as TradeOrder[];
+    assert.deepEqual([vt?.ticker, vt?.qty, vt?.decimals], ['VT', 1.0939, 4]);
+    assert.equal(bndw?.ticker, 'BNDW');
+    assert.ok((bndw?.qty ?? 0) >= 1.997 && draft.detail.leftTwd < 2.2032, `left ${draft.detail.leftTwd}`);
+  });
+
+  it('sells a costly US share in a fraction, so a trim takes no more than it needs', () => {
+    const quotes = new Map(QUOTES);
+    quotes.set('NVDA', { price: 180, currency: 'USD', fxRate: 32.4, decimals: 4 });
+    const nvda = listed('NVDA', 'us_stocks', 5_832, { productType: 'stock', qty: 1 });
+    const holdings = onTarget(97_500, [nvda, listed('THEME', 'tactical_themes', 13_000, { productType: 'theme_etf' })]);
+    const draft = draftOf(evaluate(input({ holdings, quotes })), 'R1');
+    const sell = draft?.orders.find((order): order is TradeOrder => order.kind === 'trade' && order.side === 'sell');
+    // NT$5,832 − 5% × NT$97,500 = NT$957, at NT$5,832 a share: 0.1641 shares, rounded up.
+    assert.deepEqual([sell?.ticker, sell?.qty], ['NVDA', 0.1641]);
   });
 
   it('is not proposed again for a month already dismissed, and dates the debit on a short month', () => {

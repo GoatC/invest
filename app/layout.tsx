@@ -40,11 +40,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en">
       <body>
         <header className="site-header">
-          <Link href={signedIn ? '/holdings' : '/login'} className="brand">
+          <Link href={signedIn ? '/' : '/login'} className="brand">
             <Bi {...LABELS.appName} />
           </Link>
           {signedIn && (
             <nav className="site-nav" aria-label="Main 主選單">
+              <Link href="/">
+                <Bi {...LABELS.dashboard} />
+              </Link>
               <Link href="/holdings">
                 <Bi {...LABELS.holdings} />
               </Link>

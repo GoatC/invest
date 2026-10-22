@@ -1,0 +1,40 @@
+# Web Push (PRD Sections 4 and 5, Phase 1 step 10): every hour, plan the pushes due (new proposals,
+# the weekly review, the data-failure alert) and send those whose time has come, after the quiet
+# hours. The nightly job also sends right after its refresh. Setup: docs/web-push.md.
+# 推播：每小時排入到期的推播（新提案、每週檢視、資料異常），並在安靜時段結束後送出。設定方式見 docs/web-push.md。
+name: Pushes 推播
+
+on:
+  schedule:
+    # Minute 7 of every hour (UTC; Taipei is UTC+8, so whole hours line up): the weekly review set
+    # for 20:00 goes out at 20:07, and pushes held through the quiet hours at 08:07.
+    # 每小時第 7 分鐘：設定為 20:00 的每週檢視會在 20:07 送出，安靜時段保留的推播在 08:07 送出。
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Send the pushes due 送出推播
+        run: npm run notify
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

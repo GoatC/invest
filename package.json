@@ -16,13 +16,16 @@
     "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts scripts/lib/*/*.test.ts tests/db/*.test.ts lib/*.test.ts lib/*/*.test.ts",
     "typecheck": "tsc -p scripts && tsc -p tests && tsc --noEmit -p .",
     "test:e2e": "bash tests/e2e/run.sh",
-    "nightly": "tsx scripts/nightly.ts"
+    "nightly": "tsx scripts/nightly.ts",
+    "notify": "tsx scripts/notify.ts",
+    "vapid-keys": "tsx scripts/vapid_keys.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
     "fflate": "^0.8.3",
     "playwright-core": "1.56.1",
     "supabase": "^2.120.0",
@@ -35,6 +38,7 @@
     "echarts": "^6.1.0",
     "next": "^16.4.2",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "web-push": "^3.6.7"
   }
 }

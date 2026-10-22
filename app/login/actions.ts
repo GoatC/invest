@@ -21,5 +21,5 @@ export async function signIn(_previous: SignInState, formData: FormData): Promis
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   // One message for every failure, so the page never tells which part was wrong.
   if (error) return { error: { en: 'Sign-in failed: check the email and password.', zh: '登入失敗：請確認電子郵件與密碼。' }, email };
-  redirect('/holdings');
+  redirect('/');
 }

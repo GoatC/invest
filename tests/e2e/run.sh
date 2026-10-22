@@ -92,6 +92,15 @@ node --input-type=module -e "
 
 echo "6/7 app (build and start)"
 export NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:$GATEWAY_PORT" NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"
+# Web Push: a fresh VAPID pair for this run, and a stand-in push service on local HTTPS (drive.mjs)
+# whose throwaway certificate the app and the push job trust, so a push goes all the way round.
+eval "$(cd "$REPO" && node -e "const k = require('web-push').generateVAPIDKeys(); console.log('export NEXT_PUBLIC_VAPID_PUBLIC_KEY=' + k.publicKey + ' VAPID_PUBLIC_KEY=' + k.publicKey + ' VAPID_PRIVATE_KEY=' + k.privateKey)")"
+export VAPID_SUBJECT="mailto:e2e@example.com" PUSH_PORT="${PUSH_PORT:-55443}"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" \
+  -keyout "$E2E_HOME/push-key.pem" -out "$E2E_HOME/push-cert.pem" >"$LOGS/push-cert.log" 2>&1
+# Added to any CA bundle already trusted (a proxy's, in cloud sessions), not in place of it.
+{ [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && cat "$NODE_EXTRA_CA_CERTS"; cat "$E2E_HOME/push-cert.pem"; } >"$E2E_HOME/extra-ca.pem"
+export PUSH_KEY="$E2E_HOME/push-key.pem" PUSH_CERT="$E2E_HOME/push-cert.pem" NODE_EXTRA_CA_CERTS="$E2E_HOME/extra-ca.pem"
 (cd "$REPO" && node node_modules/next/dist/bin/next build) >"$LOGS/next-build.log" 2>&1 || { tail -30 "$LOGS/next-build.log"; exit 1; }
 (cd "$REPO" && exec node node_modules/next/dist/bin/next start -p "$APP_PORT" -H 127.0.0.1) >"$LOGS/app.log" 2>&1 &
 echo $! >"$E2E_HOME/app.pid"

@@ -52,7 +52,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   }
   if (signedIn && onLoginPage) {
     const target = request.nextUrl.clone();
-    target.pathname = '/holdings';
+    target.pathname = '/';
     target.search = '';
     return carrySession(NextResponse.redirect(target), response);
   }

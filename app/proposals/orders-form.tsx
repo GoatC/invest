@@ -42,7 +42,7 @@ export function OrdersForm({ id, orders }: { id: number; orders: DraftOrder[] })
           <Field key={name} label={label} error={error(name)}>
             <input
               name={name}
-              inputMode="numeric"
+              inputMode={order.kind === 'trade' && order.decimals ? 'decimal' : 'numeric'}
               autoComplete="off"
               value={values[name] ?? ''}
               onChange={(e) => {

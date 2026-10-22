@@ -97,19 +97,31 @@ const SETTING_LABELS: Record<EngineSettingsField, Bilingual> = {
   dcaAmountTwd: { en: 'Monthly DCA amount, NT$', zh: '每月定期定額金額，台幣' },
   dcaDay: { en: 'DCA debit day of the month', zh: '每月扣款日' },
   expiryDays: { en: 'Days a proposal stays open', zh: '提案保留天數' },
+  fractionalUs: { en: 'US shares in fractions (複委託 零股)', zh: '美股以零股（小數股）下單' },
+  fractionalUk: { en: 'UK shares in fractions', zh: '英股以零股（小數股）下單' },
+  shareDecimals: { en: 'Decimals of a share', zh: '股數小數位數' },
 };
 
-/** config dca (amount, debit day) and proposal_expiry_days. */
+const TEXT_FIELDS: readonly EngineSettingsField[] = ['dcaAmountTwd', 'dcaDay', 'expiryDays', 'shareDecimals'];
+const CHECKBOXES: readonly EngineSettingsField[] = ['fractionalUs', 'fractionalUk'];
+
+/** config dca (amount, debit day), proposal_expiry_days, and how orders round shares (config orders). */
 export function SettingsForm({ initial }: { initial: Record<EngineSettingsField, string> }) {
   const [values, setValues] = useState(initial);
   const [edited, setEdited] = useState<ReadonlySet<EngineSettingsField>>(new Set());
   const [state, formAction, pending] = useActionState(saveEngineSettings, SETTINGS_STATE);
   const parsed = parseEngineSettings(values);
-  const hints: Record<EngineSettingsField, Bilingual> = {
+  const hints: Partial<Record<EngineSettingsField, Bilingual>> = {
     dcaAmountTwd: { en: 'The contribution the monthly rule and the calculator start from.', zh: '每月投入規則與複利計算機使用的金額。' },
     dcaDay: { en: 'The monthly-contribution rule fires the day after; leave it blank to keep it waiting.', zh: '每月投入規則在扣款日隔天觸發；留白則暫不觸發。' },
     expiryDays: { en: 'Unactioned proposals close after this, and the rule is checked again.', zh: '未處理的提案在這段天數後關閉，並重新檢查規則。' },
+    shareDecimals: { en: "For the markets ticked above; use your broker's. Taiwan odd lots are whole shares.", zh: '適用於上方勾選的市場，請依券商規定；台股零股以整股計。' },
   };
+
+  function change(field: EngineSettingsField, value: string) {
+    setEdited((previous) => new Set(previous).add(field));
+    setValues((previous) => ({ ...previous, [field]: value }));
+  }
 
   function error(field: EngineSettingsField): Bilingual | null {
     if (!edited.has(field)) return state.errors[field] ?? null;
@@ -119,21 +131,23 @@ export function SettingsForm({ initial }: { initial: Record<EngineSettingsField,
   return (
     <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
       <div className="form-grid">
-        {(Object.keys(SETTING_LABELS) as EngineSettingsField[]).map((field) => (
-          <Field key={field} label={SETTING_LABELS[field]} error={error(field)} hint={<Bi {...hints[field]} />}>
-            <input
-              name={field}
-              inputMode="numeric"
-              autoComplete="off"
-              value={values[field]}
-              onChange={(e) => {
-                setEdited((previous) => new Set(previous).add(field));
-                setValues((previous) => ({ ...previous, [field]: e.target.value }));
-              }}
-            />
+        {TEXT_FIELDS.map((field) => (
+          <Field key={field} label={SETTING_LABELS[field]} error={error(field)} hint={hints[field] && <Bi {...hints[field]} />}>
+            <input name={field} inputMode="numeric" autoComplete="off" value={values[field]} onChange={(e) => change(field, e.target.value)} />
           </Field>
         ))}
       </div>
+      <fieldset className="form">
+        <legend>
+          <Bi en="Orders in fractions of a share" zh="以零股（小數股）下單" />
+        </legend>
+        {CHECKBOXES.map((field) => (
+          <label key={field} className="row">
+            <input type="checkbox" name={field} checked={values[field] === 'on'} onChange={(e) => change(field, e.target.checked ? 'on' : '')} />
+            <Bi {...SETTING_LABELS[field]} />
+          </label>
+        ))}
+      </fieldset>
       {state.message && (
         <p className="banner danger" role="alert">
           <Bi {...state.message} />

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, parseEngineSettings, parseOrderSizes, parsePlanForm, parseRuleForm, parseSecurity, parseTargets, parseTrade } from './validation';
+import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, fractionalShares, parseEngineSettings, parseOrderSizes, parsePlanForm, parseRuleForm, parseSchedule, parseSubscription, parseSecurity, parseTargets, parseTrade } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));
@@ -235,6 +235,12 @@ describe('parseOrderSizes', () => {
     assert.deepEqual(parseOrderSizes({ size_0: '0', size_1: '0' }, orders).sizes, [0, 0]);
   });
 
+  it('takes a fractional US order to its decimals', () => {
+    const fractional = [{ ...orders[0], decimals: 4 }];
+    assert.deepEqual(parseOrderSizes({ size_0: '0.1641' }, fractional), { sizes: [0.1641], errors: {} });
+    assert.deepEqual(parseOrderSizes({ size_0: '0.16411' }, fractional).errors, { size_0: fractionalShares(4) });
+  });
+
   it('refuses fractions, negatives and blanks', () => {
     assert.deepEqual(parseOrderSizes({ size_0: '1.5', size_1: '' }, orders).errors, { size_0: MESSAGES.shares, size_1: MESSAGES.wholeTwd });
     assert.deepEqual(parseOrderSizes({ size_0: '-1', size_1: '10' }, orders).errors, { size_0: MESSAGES.shares });
@@ -267,14 +273,48 @@ describe('parseRuleForm', () => {
 
 describe('parseEngineSettings', () => {
   it('reads the DCA amount and day, blank day allowed, and the expiry', () => {
-    assert.deepEqual(parseEngineSettings({ dcaAmountTwd: '10,000', dcaDay: '6', expiryDays: '14' }), { ok: true, value: { dcaAmountTwd: 10_000, dcaDay: 6, expiryDays: 14 } });
-    const blank = parseEngineSettings({ dcaAmountTwd: '10000', dcaDay: ' ', expiryDays: '14' });
+    assert.deepEqual(parseEngineSettings({ dcaAmountTwd: '10,000', dcaDay: '6', expiryDays: '14', fractionalUs: 'on', shareDecimals: '4' }), {
+      ok: true,
+      value: { dcaAmountTwd: 10_000, dcaDay: 6, expiryDays: 14, fractionalUs: true, fractionalUk: false, shareDecimals: 4 },
+    });
+    const blank = parseEngineSettings({ dcaAmountTwd: '10000', dcaDay: ' ', expiryDays: '14', shareDecimals: '4' });
     assert.ok(blank.ok && blank.value.dcaDay === null);
   });
 
   it('refuses a day outside 1 to 31 and an expiry of 0', () => {
-    const parsed = parseEngineSettings({ dcaAmountTwd: '-1', dcaDay: '32', expiryDays: '0' });
+    const parsed = parseEngineSettings({ dcaAmountTwd: '-1', dcaDay: '32', expiryDays: '0', shareDecimals: '5' });
     assert.ok(!parsed.ok);
-    assert.deepEqual(parsed.errors, { dcaAmountTwd: MESSAGES.nonNegative, dcaDay: MESSAGES.dcaDay, expiryDays: MESSAGES.expiryDays });
+    assert.deepEqual(parsed.errors, { dcaAmountTwd: MESSAGES.nonNegative, dcaDay: MESSAGES.dcaDay, expiryDays: MESSAGES.expiryDays, shareDecimals: MESSAGES.shareDecimals });
+  });
+});
+
+describe('parseSubscription', () => {
+  const browser = { endpoint: 'https://web.push.apple.com/QGuQyavXutnMH', keys: { p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM', auth: 'tBHItJI5svbpez7KI4CCXg' }, deviceName: ' iPhone ' };
+
+  it('keeps an https endpoint with its two keys and a short device name', () => {
+    assert.deepEqual(parseSubscription(browser), { endpoint: browser.endpoint, keys: browser.keys, deviceName: 'iPhone' });
+  });
+
+  it('refuses what is not a push subscription', () => {
+    assert.equal(parseSubscription({ ...browser, endpoint: 'http://push.example.com/1' }), undefined);
+    assert.equal(parseSubscription({ ...browser, keys: { p256dh: 'short', auth: browser.keys.auth } }), undefined);
+    assert.equal(parseSubscription(null), undefined);
+  });
+});
+
+describe('parseSchedule', () => {
+  it('reads the quiet hours and the weekly review time, 24-hour', () => {
+    assert.deepEqual(parseSchedule({ quietStart: '23:00', quietEnd: '8:00', weeklyDay: 'sunday', weeklyTime: '20:00' }), {
+      ok: true,
+      value: { quietStart: '23:00', quietEnd: '08:00', weeklyDay: 'sunday', weeklyTime: '20:00' },
+    });
+  });
+
+  it('refuses a malformed time, the same start and end, and an unknown day', () => {
+    const parsed = parseSchedule({ quietStart: '25:00', quietEnd: '07:00', weeklyDay: 'funday', weeklyTime: '8pm' });
+    assert.ok(!parsed.ok);
+    assert.deepEqual(parsed.errors, { quietStart: MESSAGES.clock, weeklyDay: MESSAGES.weekday, weeklyTime: MESSAGES.clock });
+    const same = parseSchedule({ quietStart: '22:00', quietEnd: '22:00', weeklyDay: 'monday', weeklyTime: '09:00' });
+    assert.ok(!same.ok && same.errors.quietEnd === MESSAGES.quietSame);
   });
 });

@@ -4,7 +4,7 @@ import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { ChangeList, TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadEngineInput, loadRuleChanges, type Proposal, type RuleChange, type RuleRecord } from '@/lib/data';
+import { DataError, loadEngineInput, loadRuleChanges, type OrderSettings, type Proposal, type RuleChange, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { CONDITIONS, evaluate, type Check, type EngineInput } from '@/lib/models/engine';
@@ -27,8 +27,9 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
   let rules: RuleRecord[];
   let proposals: Proposal[];
   let changes: RuleChange[];
+  let orders: OrderSettings;
   try {
-    [{ input, rules, proposals }, changes] = await Promise.all([loadEngineInput(supabase, today, new Date().toISOString()), loadRuleChanges(supabase)]);
+    [{ input, rules, proposals, orders }, changes] = await Promise.all([loadEngineInput(supabase, today, new Date().toISOString()), loadRuleChanges(supabase)]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -68,13 +69,16 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
 
       <section id="settings" className="card form">
         <h2>
-          <Bi en="Monthly DCA and proposals" zh="每月定期定額與提案" />
+          <Bi en="Monthly DCA, proposals and orders" zh="每月定期定額、提案與下單" />
         </h2>
         <SettingsForm
           initial={{
             dcaAmountTwd: input.dca.amountTwd === null ? '' : String(input.dca.amountTwd),
             dcaDay: input.dca.dayOfMonth === null ? '' : String(input.dca.dayOfMonth),
             expiryDays: input.expiryDays === null ? '' : String(input.expiryDays),
+            fractionalUs: orders.fractionalMarkets.includes('US') ? 'on' : '',
+            fractionalUk: orders.fractionalMarkets.includes('UK') ? 'on' : '',
+            shareDecimals: String(orders.shareDecimals || 4),
           }}
         />
       </section>

@@ -41,6 +41,10 @@ export const MESSAGES = {
   cooldown: { en: 'Enter whole days from 0 to 365.', zh: '請輸入 0 到 365 的整數天數。' },
   dcaDay: { en: 'Enter a day of the month from 1 to 31, or leave it blank.', zh: '請輸入 1 到 31 的日期，或留白。' },
   expiryDays: { en: 'Enter whole days from 1 to 365.', zh: '請輸入 1 到 365 的整數天數。' },
+  shareDecimals: { en: 'Enter 1 to 4 decimals.', zh: '請輸入 1 到 4 位小數。' },
+  clock: { en: 'Enter a time as HH:MM, 24-hour, e.g. 23:00.', zh: '請以 24 小時制 HH:MM 輸入時間，例如 23:00。' },
+  quietSame: { en: 'The quiet hours cannot start and end at the same time.', zh: '安靜時段的開始與結束時間不能相同。' },
+  weekday: { en: 'Pick a day of the week.', zh: '請選擇星期幾。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -409,14 +413,21 @@ export function sizeField(index: number): string {
   return `size_${index}`;
 }
 
-/** Each order's new size: whole shares for a trade, whole NT$ for a balance; 0 drops it. */
+/** The message for a fractional order's share count. */
+export function fractionalShares(decimals: number): Bilingual {
+  return { en: `Enter shares, 0 or more, with at most ${decimals} decimals; 0 drops the order.`, zh: `請輸入股數（0 或以上），最多 ${decimals} 位小數；0 代表刪除這筆。` };
+}
+
+/** Each order's new size: shares (whole, or to the order's decimals) for a trade, whole NT$ for a balance; 0 drops it. */
 export function parseOrderSizes(raw: RawForm, orders: readonly DraftOrder[]): { sizes: number[]; errors: FieldErrors<string> } {
   const errors: FieldErrors<string> = {};
   const sizes = orders.map((order, index) => {
     const name = sizeField(index);
     const value = parseNumber(raw[name]);
-    if (value === undefined || value < 0 || !Number.isInteger(value)) {
-      errors[name] = order.kind === 'trade' ? MESSAGES.shares : MESSAGES.wholeTwd;
+    const decimals = order.kind === 'trade' ? (order.decimals ?? 0) : 0;
+    const scaled = value === undefined ? Number.NaN : value * 10 ** decimals;
+    if (value === undefined || value < 0 || Math.abs(scaled - Math.round(scaled)) > 1e-6) {
+      errors[name] = order.kind === 'balance' ? MESSAGES.wholeTwd : decimals > 0 ? fractionalShares(decimals) : MESSAGES.shares;
       return 0;
     }
     return value;
@@ -469,11 +480,15 @@ export interface EngineSettingsInput {
   dcaAmountTwd: number;
   dcaDay: number | null;
   expiryDays: number;
+  /** config orders: US and UK share counts in fractions, and to how many decimals. */
+  fractionalUs: boolean;
+  fractionalUk: boolean;
+  shareDecimals: number;
 }
 
 export type EngineSettingsField = keyof EngineSettingsInput;
 
-/** The monthly DCA (config dca) and how long a proposal stays open (config proposal_expiry_days). */
+/** The monthly DCA (config dca), how long a proposal stays open (config proposal_expiry_days) and how orders round shares (config orders). */
 export function parseEngineSettings(raw: RawForm): Parsed<EngineSettingsInput, EngineSettingsField> {
   const errors: FieldErrors<EngineSettingsField> = {};
   const dcaAmountTwd = parseNumber(raw['dcaAmountTwd']);
@@ -483,5 +498,72 @@ export function parseEngineSettings(raw: RawForm): Parsed<EngineSettingsInput, E
   if (dcaDay === undefined || (dcaDay !== null && (!Number.isInteger(dcaDay) || dcaDay < 1 || dcaDay > 31))) errors.dcaDay = MESSAGES.dcaDay;
   const expiryDays = parseNumber(raw['expiryDays']);
   if (expiryDays === undefined || !Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 365) errors.expiryDays = MESSAGES.expiryDays;
-  return finish(errors, () => ({ dcaAmountTwd: dcaAmountTwd ?? 0, dcaDay: dcaDay ?? null, expiryDays: expiryDays ?? 14 }));
+  const fractionalUs = raw['fractionalUs'] === 'on';
+  const fractionalUk = raw['fractionalUk'] === 'on';
+  const shareDecimals = parseNumber(raw['shareDecimals']);
+  if (shareDecimals === undefined || !Number.isInteger(shareDecimals) || shareDecimals < 1 || shareDecimals > 4) errors.shareDecimals = MESSAGES.shareDecimals;
+  return finish(errors, () => ({ dcaAmountTwd: dcaAmountTwd ?? 0, dcaDay: dcaDay ?? null, expiryDays: expiryDays ?? 14, fractionalUs, fractionalUk, shareDecimals: shareDecimals ?? 4 }));
+}
+
+// ---------------------------------------------------------------------------
+// Web Push: a device's subscription, and when pushes may go (notifications page)
+// ---------------------------------------------------------------------------
+
+export interface SubscriptionInput {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  deviceName: string | null;
+}
+
+/** A browser's push subscription as the page sends it; undefined when it is not one. */
+export function parseSubscription(value: unknown): SubscriptionInput | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const row = value as Record<string, unknown>;
+  const keys = (typeof row['keys'] === 'object' && row['keys'] !== null ? row['keys'] : {}) as Record<string, unknown>;
+  const endpoint = typeof row['endpoint'] === 'string' ? row['endpoint'] : '';
+  const key = (name: string) => (typeof keys[name] === 'string' && /^[A-Za-z0-9_-]{8,200}={0,2}$/.test(keys[name] as string) ? (keys[name] as string) : undefined);
+  const [p256dh, auth] = [key('p256dh'), key('auth')];
+  let url: URL | undefined;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    url = undefined;
+  }
+  if (!url || url.protocol !== 'https:' || endpoint.length > 1000 || !p256dh || !auth) return undefined;
+  const name = typeof row['deviceName'] === 'string' ? row['deviceName'].trim().slice(0, 60) : '';
+  return { endpoint, keys: { p256dh, auth }, deviceName: name || null };
+}
+
+export const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+export interface ScheduleInput {
+  quietStart: string;
+  quietEnd: string;
+  weeklyDay: Weekday;
+  weeklyTime: string;
+}
+
+export type ScheduleField = keyof ScheduleInput;
+
+function clockText(raw: string | undefined): string | undefined {
+  const value = text(raw);
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return undefined;
+  return `${match[1]?.padStart(2, '0')}:${match[2]}`;
+}
+
+/** Quiet hours (config quiet_hours) and the weekly review's day and time (config weekly_review), in Taipei time. */
+export function parseSchedule(raw: RawForm): Parsed<ScheduleInput, ScheduleField> {
+  const errors: FieldErrors<ScheduleField> = {};
+  const quietStart = clockText(raw['quietStart']);
+  if (!quietStart) errors.quietStart = MESSAGES.clock;
+  const quietEnd = clockText(raw['quietEnd']);
+  if (!quietEnd) errors.quietEnd = MESSAGES.clock;
+  else if (quietStart === quietEnd) errors.quietEnd = MESSAGES.quietSame;
+  const weeklyDay = oneOf(raw['weeklyDay'], WEEKDAYS);
+  if (!weeklyDay) errors.weeklyDay = MESSAGES.weekday;
+  const weeklyTime = clockText(raw['weeklyTime']);
+  if (!weeklyTime) errors.weeklyTime = MESSAGES.clock;
+  return finish(errors, () => ({ quietStart: quietStart ?? '', quietEnd: quietEnd ?? '', weeklyDay: weeklyDay ?? 'sunday', weeklyTime: weeklyTime ?? '' }));
 }

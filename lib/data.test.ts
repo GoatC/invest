@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, toTransaction } from './data';
+import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, orderSettings, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -79,5 +79,16 @@ describe('dcaAmount', () => {
     for (const value of [undefined, null, {}, { amount_twd: '10000' }, { amount_twd: -1 }]) {
       assert.equal(dcaAmount(value), null);
     }
+  });
+});
+
+describe('orderSettings', () => {
+  it('reads the markets traded in fractions and the decimals', () => {
+    assert.deepEqual(orderSettings({ fractional_markets: ['US'], share_decimals: 4 }), { fractionalMarkets: ['US'], shareDecimals: 4 });
+  });
+
+  it('falls back to whole shares when the setting is missing or malformed', () => {
+    assert.deepEqual(orderSettings(undefined), { fractionalMarkets: [], shareDecimals: 0 });
+    assert.deepEqual(orderSettings({ fractional_markets: ['US', 'XX', 3], share_decimals: 9 }), { fractionalMarkets: ['US'], shareDecimals: 0 });
   });
 });
