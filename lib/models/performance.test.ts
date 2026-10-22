@@ -316,6 +316,8 @@ describe('buildSeries', () => {
     const last = day(days, '2026-01-02');
     assert.deepEqual(last.value, { all: 51000, regular: 40000, windfall: 11000 });
     assert.deepEqual(last.classValue, { us_global_equity: 30000, strategic_cash: 10000 });
+    // Each holding at the close, both pools, keyed as on the holdings page: what the VaR (N4) reads.
+    assert.deepEqual(last.held, { 'regular:VT': 30000, 'windfall:0050': 11000, 'manual:1': 10000 });
     near(last.ret.windfall, 0.1);
     assert.equal(last.ret.regular, 0);
     near(last.ret.all, 1000 / 50000);
@@ -565,11 +567,34 @@ describe('snapshots', () => {
       value: { all: 51000.004, regular: 30000, windfall: 21000.004 },
       flow: { all: 0, regular: 0, windfall: 0 },
       classValue: { us_global_equity: 20000, strategic_cash: 10000, tw_market_cap: 0 },
+      held: { 'regular:VT': 20000, 'manual:1': 10000, 'windfall:VT': 21000.004 },
       ret: { all: null, regular: null, windfall: null },
       local: { all: null, regular: null, windfall: null },
       benchmark: null,
       estimated: false,
     };
     assert.deepEqual(snapshots([point]), [{ date: '2026-01-02', totalTwd: 51000, weightsByClass: { us_global_equity: 0.666667, strategic_cash: 0.333333 } }]);
+  });
+
+  it("carries each day's VaR when given one, null for a day without", () => {
+    const point = (date: string): DayPoint => ({
+      date,
+      value: { all: 1000, regular: 1000, windfall: 0 },
+      flow: { all: 0, regular: 0, windfall: 0 },
+      classValue: { us_global_equity: 1000 },
+      held: { 'regular:VT': 1000 },
+      ret: { all: null, regular: null, windfall: null },
+      local: { all: null, regular: null, windfall: null },
+      benchmark: null,
+      estimated: false,
+    });
+    const rows = snapshots([point('2026-01-02'), point('2026-01-05')], new Map([['2026-01-02', 32.9]]));
+    assert.deepEqual(
+      rows.map((row) => [row.date, row.valueAtRisk]),
+      [
+        ['2026-01-02', 32.9],
+        ['2026-01-05', null],
+      ],
+    );
   });
 });

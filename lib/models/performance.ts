@@ -59,6 +59,8 @@ export interface DayPoint {
   flow: PerScope;
   /** The regular pool's value per asset class, TWD, for the class weights. */
   classValue: Record<string, number>;
+  /** Each holding's value at the close, TWD, both pools, keyed as on the holdings page ("regular:VT", "manual:3"); the N4 VaR reads it. */
+  held: Record<string, number>;
   /** The day's return in TWD; null when the scope held nothing at the previous close. */
   ret: MaybePerScope;
   /** The same with foreign holdings in their own currency, before the currency's move. */
@@ -275,7 +277,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
     }
     closing = nextClosing;
     manual = nextManual;
-    days.push({ date, value, flow, classValue, ret, local, benchmark: benchmarkReturn, estimated });
+    days.push({ date, value, flow, classValue, held: Object.fromEntries(nextClosing), ret, local, benchmark: benchmarkReturn, estimated });
   }
   return days;
 }
@@ -592,15 +594,20 @@ export interface Snapshot {
   totalTwd: number;
   /** Each asset class's share of the regular pool, the base the SAA targets are measured on. */
   weightsByClass: Record<string, number>;
+  /** The N4 1-week VaR in TWD (var_95_1w), null where it could not be worked out; left out, the saved one stays. */
+  valueAtRisk?: number | null;
 }
 
-export function snapshots(days: readonly DayPoint[]): Snapshot[] {
+/** One snapshot per day; with `valueAtRisk` (lib/models/risk dailyValueAtRisk), each carries that day's VaR. */
+export function snapshots(days: readonly DayPoint[], valueAtRisk?: ReadonlyMap<string, number | null>): Snapshot[] {
   return days.map((day) => {
     const regular = day.value.regular;
     const weightsByClass: Record<string, number> = {};
     for (const [id, amount] of Object.entries(day.classValue)) {
       if (amount > 0 && regular > 0) weightsByClass[id] = Math.round((amount / regular) * 1e6) / 1e6;
     }
-    return { date: day.date, totalTwd: Math.round(day.value.all * 100) / 100, weightsByClass };
+    const snapshot: Snapshot = { date: day.date, totalTwd: Math.round(day.value.all * 100) / 100, weightsByClass };
+    if (valueAtRisk) snapshot.valueAtRisk = valueAtRisk.get(day.date) ?? null;
+    return snapshot;
   });
 }

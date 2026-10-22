@@ -21,7 +21,8 @@ npm run check:supabase
   - `latest_quotes`：「每檔最新價格」與「每個幣別最新匯率」兩個檢視表（view），持倉頁用它們計算市值。
   - `fx_rate_check`：匯率打錯字的警示門檻（預設 20%），存在 `config` 表，之後可以自己改。
   - 之後的步驟若有新的 migration，PR 說明裡會寫出來。第 6 步新增 `allocation_settings`：在 `config` 表加入 `cma`（資本市場假設，一開始是空的）與 `drift_display`（偏離何時轉黃色）兩個設定。
-- `npm run check:supabase`：應該看到 **24 項全部 ✅**（比上次多了 2 個 view，陌生人同樣讀不到；第 4 步之後是 25 項）。如果出現「找不到資料表，請先執行 db push」，代表上一行還沒成功。
+  - 第 7 步新增 `value_at_risk`：一個檢視表 `weekly_prices`（每檔證券每週最後一筆收盤價，風險值卡片用它計算三年的週報酬），並在 `nav_snapshots` 的 `var_95_1w` 欄位加上說明。不會改動任何資料。
+- `npm run check:supabase`：應該看到 **24 項全部 ✅**（比上次多了 2 個 view，陌生人同樣讀不到；第 4 步之後是 25 項，第 7 步之後是 26 項，多的是 `weekly_prices`）。如果出現「找不到資料表，請先執行 db push」，代表上一行還沒成功。
 
 `db push` adds two views for the newest price and FX rate, and the FX typo-check setting; the check then shows 24 passes.
 
@@ -75,8 +76,16 @@ Run `npm run dev`, open http://localhost:3000 and sign in with your Supabase acc
   - **修改目標權重**：按「修改目標權重」。合計必須剛好 100% 才能儲存；每次修改都留下紀錄。衛星目標若不是 20%，記得同時修改 rules 表中 R2 的 `target_weight`。
   - **資本市場假設**：按「修改假設」，替每個核心類別填預期年報酬、年化波動度與來源（例如某機構的長期展望）。之後的複利計算機會用到；還沒決定的可以先留白。
   - **配置圓餅圖**：三個分頁切換產品類別、上市國家、主動與被動；點選區塊或表格列，下方列出其中的持股。預設顯示一般資金池，內圈是 80／20 目標；也可切換到兩個資金池合計或大額資金池。
+- **風險值（VaR）**：持倉頁的「風險值（整個投資組合）」卡片，或上方選單「風險值」。
+  - **它在說什麼**：「95% 一週風險值：NT$X（投資組合的 Y%）」的意思是：每 20 週大約有 1 週，整個投資組合（兩個資金池合計）的損失可能超過 NT$X。它只是提醒你風險有多大的指標，不是保證，也不是上限。
+  - **一週／一個月**：卡片上方可以切換；一個月的數值 ＝ 一週 × √4.33（一個月約 4.33 週）。
+  - **怎麼算的**：每檔持股以所屬資產類別的代理 ETF 衡量（VT、0050、BNDW、GLDM、BIL、VOO，就是「修改目標權重」裡的基準 ETF），用這些 ETF 過去三年、每週五到週五的台幣報酬（含匯率變動）算出彼此的波動與相關性。個股本身的風險刻意不計，所以集中持有的衛星個股看起來會比實際低。
+  - **台幣存款不算風險**：活存、以餘額登錄的貨幣基金以台幣計價不會波動，計入市值但不增加風險值。
+  - **近 52 週走勢線**：每夜排程每天存下當天的風險值，卡片下方的線每週取一點。剛開始只有幾點，會隨時間變長。
+  - **「風險值」頁**：分布圖顯示今天的持股組合在過去三年每週的報酬，以及有幾週損失超過風險值（預期約每 20 週 1 週）；下面列出每檔代理 ETF 的權重、波動度與占風險值的比例，以及代入今天數值的公式。
+  - 卡片寫「代理 ETF 的資料還不夠久」：代表每夜排程還沒載入三年的價格；啟用排程並執行一次後就會出現。信賴水準等數值存在 `config` 表的 `var`，可以在 Table Editor 修改。
 
-Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. The Allocation page shows each class's drift from its target, coloured by the 5/25 rule, lets you edit the targets and the capital market assumptions, and slices the portfolio by product type, listing country and active vs passive. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
+Add trades by hand or import a broker CSV (the column mapping is remembered per broker, cash dividends become cash flows, and entries already saved are skipped). Record contributions, the windfall arriving, dividends and withdrawals as cash flows; dividends count in the performance page's money-weighted return, while contributions and withdrawals are records only, as money counts once it is invested. The Performance page shows the time-weighted return against the SAA benchmark, the money-weighted return (XIRR), the gain and the FX split, per pool and period. The Allocation page shows each class's drift from its target, coloured by the 5/25 rule, lets you edit the targets and the capital market assumptions, and slices the portfolio by product type, listing country and active vs passive. The Value at Risk card (holdings page and its own page) shows how much the whole portfolio could lose in a bad week, 1 week in 20, with a 1-month toggle and a 52-week line; TWD balances add value but no risk. R1 and R2 warn without blocking; a sell larger than the holding is refused. Every entry can be edited or deleted, with its history kept.
 
 ## 補充 Notes
 

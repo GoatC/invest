@@ -53,7 +53,7 @@ describe('parseRunDetail', () => {
       rates: [],
       warnings: ['VT: finmind: HTTP 503', 7],
       errors: 'none',
-      snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21' },
+      snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
     });
     assert.deepEqual(detail, {
       window: { start: '2023-10-07', end: '2026-10-21' },
@@ -61,8 +61,12 @@ describe('parseRunDetail', () => {
       rates: {},
       warnings: ['VT: finmind: HTTP 503'],
       errors: [],
-      snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21' },
+      snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
     });
+  });
+
+  it('reads a run from before the VaR (step 7) as one whose snapshots carry none', () => {
+    assert.deepEqual(parseRunDetail({ snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21' } }).snapshots, { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: null });
   });
 
   it('reads a run from before the NAV snapshots as having saved none', () => {

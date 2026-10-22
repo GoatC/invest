@@ -65,9 +65,32 @@ export function exDividendFactors(rows: readonly Row[]): Adjustment[] {
   });
 }
 
+/** Ratios a split moves a close by in one day: 1 unit into 2, 3, 4, 5, 8 or 10, and back. */
+const SPLIT_RATIOS = [2, 3, 4, 5, 8, 10].flatMap((n) => [1 / n, n]);
+
 /**
- * Dividend-adjusted closes, as a total-return series: each close times the factors of every
- * ex-date after it. The latest close stays as quoted.
+ * Splits, read from the closes themselves: FinMind's ex-dividend results leave them out, and its
+ * split-adjusted prices need a paid level. A Taiwan close moves at most 10% a day, so a day whose
+ * close is within 10% of a split ratio of the one before (once any ex-dividend that day is taken
+ * out) can only be a split: 0050's 1-into-4 split of June 2025 took its close from 188 to 47.
+ */
+export function splitFactors(prices: readonly DailyPrice[], dividends: readonly Adjustment[] = []): Adjustment[] {
+  const exDividend = new Map(dividends.map((event) => [event.date, event.factor]));
+  const sorted = [...prices].sort((a, b) => a.date.localeCompare(b.date));
+  const out: Adjustment[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const [before, after] = [sorted[i - 1], sorted[i]];
+    if (!before || !after) continue;
+    const ratio = after.close / before.close / (exDividend.get(after.date) ?? 1);
+    const split = SPLIT_RATIOS.find((factor) => Math.abs(ratio / factor - 1) <= 0.1);
+    if (split !== undefined) out.push({ date: after.date, factor: split });
+  }
+  return out;
+}
+
+/**
+ * Dividend- and split-adjusted closes, as a total-return series: each close times the factors of
+ * every event after it. The latest close stays as quoted.
  */
 export function adjustForDividends(prices: readonly DailyPrice[], adjustments: readonly Adjustment[]): DailyPrice[] {
   const events = [...adjustments].sort((a, b) => b.date.localeCompare(a.date));

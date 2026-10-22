@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { Bi } from '@/components/bi';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
+import { RiskCard } from '@/components/risk-card';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, orDataError, type CashFlowRecord, type HoldingsData } from '@/lib/data';
+import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, loadRiskData, orDataError, type CashFlowRecord, type HoldingsData, type RiskData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, points, quantity, twd } from '@/lib/format';
 import { FLOW_TYPE, LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
@@ -14,6 +15,7 @@ import { flowTotals } from '@/lib/models/cash-flows';
 import { dataHealth } from '@/lib/models/data-health';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
+import { riskReport, sparkline } from '@/lib/models/risk';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
 import type { Holding } from '@/lib/models/valuation';
 import { breachText } from '@/lib/rule-text';
@@ -72,10 +74,17 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   let data: HoldingsData;
   let flows: CashFlowRecord[];
-  // The job status only adds a note, so a failed read of it does not hide the holdings.
+  // The job status and the VaR only add to the page, so a failed read of them does not hide the holdings.
   let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
+  let risk: RiskData | DataError;
+  const today = taipeiToday();
   try {
-    [data, flows, jobs] = await Promise.all([loadHoldingsData(supabase), loadCashFlows(supabase), orDataError(loadJobRuns(supabase))]);
+    [data, flows, jobs, risk] = await Promise.all([
+      loadHoldingsData(supabase),
+      loadCashFlows(supabase),
+      orDataError(loadJobRuns(supabase)),
+      orDataError(loadRiskData(supabase, today)),
+    ]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
@@ -107,7 +116,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           />
         </p>
       ) : (
-        <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, taipeiToday())} threshold={jobs.threshold} quiet />
+        <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />
       )}
       {portfolio.shortfalls.length > 0 && (
         <div className="banner danger" role="alert">
@@ -156,6 +165,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
         <>
           <RulesStatus data={data} portfolio={portfolio} />
           <ClassWeights portfolio={portfolio} />
+          <Risk risk={risk} portfolio={portfolio} today={today} />
           <ListedHoldings data={data} portfolio={portfolio} />
         </>
       )}
@@ -332,6 +342,22 @@ function ClassWeights({ portfolio }: { portfolio: Portfolio }) {
       </div>
     </section>
   );
+}
+
+/** The N4 VaR card, worked out from the holdings above (PRD Section 5: the dashboard's third card). */
+function Risk({ risk, portfolio, today }: { risk: RiskData | DataError; portfolio: Portfolio; today: string }) {
+  if (risk instanceof DataError) {
+    return (
+      <p className="banner info" role="status">
+        <Bi
+          en={`Could not read the Value at Risk inputs (${risk.table}: ${risk.detail}); if the app was just updated, run npx supabase db push.`}
+          zh={`無法讀取風險值所需資料（${risk.table}：${risk.detail}）；如果剛更新過程式，請執行 npx supabase db push。`}
+        />
+      </p>
+    );
+  }
+  const report = riskReport(portfolio.holdings, risk.input, today);
+  return <RiskCard report={report} line={sparkline(risk.saved, today, report)} details />;
 }
 
 function Estimated({ holding }: { holding: Holding }) {

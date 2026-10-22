@@ -496,6 +496,72 @@ await step('capital market assumptions: a source is required, then they show wit
   check(card.includes('Once every class with a target has an assumption'), 'no target-mix return yet');
 });
 
+/** The VaR figure the card shows, in NT$, and its share of the portfolio in %. */
+async function varFigure(card) {
+  const value = Number((await card.locator('.var-value').innerText()).replace(/[^\d]/g, ''));
+  const share = Number(/\(([\d.]+)% of portfolio\)/.exec(await card.innerText())?.[1]);
+  return { value, share };
+}
+
+await step('risk card on holdings: the 95% 1-week VaR in NT$ and % of the portfolio, the 1-in-20 line, the 1-month toggle', async () => {
+  await page.goto(`${BASE}/holdings`);
+  const card = page.locator('#value-at-risk');
+  await card.waitFor();
+  const text = await card.innerText();
+  check(text.includes('95% 1-week VaR') && text.includes('95% 一週風險值'), 'bilingual label');
+  check(text.includes('In about 1 week in 20, losses could exceed this.') && text.includes('每 20 週約有 1 週，損失可能超過此金額。'), 'the 1-in-20 line');
+  // The seed's three years of weekly demo closes give the proxies their covariance.
+  const week = await varFigure(card);
+  check(week.value > 0 && week.share > 0.2 && week.share < 6, `a plausible weekly VaR, got NT$${week.value} (${week.share}%)`);
+  check(text.includes('Weekly returns from') && text.includes('both pools'), 'the window and the value it is a share of');
+  // No NAV snapshot carries a VaR until the nightly job runs.
+  check(text.includes('The 52-week line fills in'), 'no saved line yet');
+  await card.getByRole('button', { name: /1 month/ }).click();
+  await card.getByText('95% 1-month VaR').waitFor();
+  const month = await varFigure(card);
+  check(Math.abs(month.value - week.value * Math.sqrt(4.33)) <= 2, `1 month = 1 week × √4.33: ${month.value} vs ${week.value}`);
+  check((await card.innerText()).includes('In about 1 month in 20'), 'the month line');
+  await snap('holdings-risk', card, false);
+});
+
+await step('risk page: the histogram with its cutoff, the weeks beyond it, what the VaR is made of, the formula', async () => {
+  await page.goto(`${BASE}/risk`);
+  await page.getByRole('heading', { level: 1, name: /Value at Risk/ }).waitFor();
+  await page.locator('.chart-histogram svg').waitFor();
+  const text = await body();
+  check(text.includes('Where the VaR sits among the last 156 weeks'), 'three years of weekly returns');
+  check(/In \d+ of them \([\d.]+%\) it lost more than the 1-week VaR of [\d.]+%/.test(text), 'the weeks beyond the VaR are counted');
+  const inputs = await page.locator('section', { hasText: 'What the VaR is made of' }).innerText();
+  // Each holding by its class proxy: 00692 and 2330 by 0050, NVDA by VOO; gold by GLDM; TWD balances add no risk.
+  check(/0050\s+(00692, 2330|2330, 00692)/.test(inputs), `0050 measures 00692 and 2330, got ${inputs}`);
+  check(/VOO\s+NVDA/.test(inputs) && /GLDM\s+(GLDM, Gold bar|Gold bar \(demo\)[^,\n]*, GLDM)/.test(inputs), 'NVDA by VOO, the gold bar with GLDM');
+  check(/TWD balances[\s\S]*Money-market fund \(demo\)[\s\S]*High-yield savings/.test(inputs), 'both TWD balances, windfall included, without risk');
+  const figure = await varFigure(page.locator('#value-at-risk'));
+  check(text.includes(`× √1 × NT$`) && text.includes(`= NT$${figure.value.toLocaleString('en-US')}.`), 'the formula ends at the figure shown');
+  check(text.includes('風險值的組成') && text.includes('公式與今天的數值'), 'Chinese labels');
+  await snap('risk');
+  // The README image, from the seed's invented history; a run with the nightly job replaces it with one that has the 52-week line.
+  await page.setViewportSize({ width: 1280, height: 1250 });
+  await docShot('risk', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Hovering a bar names its range and how many weeks fell in it.
+  const chart = page.locator('.chart-histogram');
+  const box = await chart.boundingBox();
+  check(box !== null, 'histogram has a size');
+  // Just above the axis in the middle, where the bins around 0% stand tallest.
+  await chart.hover({ position: { x: Math.round(box.width * 0.55), y: Math.round(box.height * 0.85) } });
+  await page.locator('.chart-tip').first().waitFor();
+  check(/weeks?/.test(await page.locator('.chart-tip').first().innerText()), 'bar tooltip');
+  for (const summary of await page.getByText('Show as a table').all()) await summary.click();
+  await page.getByText('Correlations of the proxies').click();
+  check(/beyond the VaR/.test(await body()), 'the table marks the bins beyond the VaR');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${BASE}/risk`);
+  await page.locator('.chart-histogram svg').waitFor();
+  await snap('risk-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -510,7 +576,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -520,7 +586,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (overflow > 0) wide.push(`${path} by ${overflow}px`);
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
-    if (['/holdings', '/performance', '/allocation', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
+    if (['/holdings', '/performance', '/allocation', '/risk', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -534,6 +601,15 @@ const nightly = (extra = {}) =>
     env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, NODE_USE_ENV_PROXY: '1', ...extra },
   });
 if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
+  await step('before the job: the invented weekly history goes, as a real project has none', async () => {
+    // Its Fridays include market holidays the live feeds have no close for; left in, they would
+    // sit among the real closes.
+    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07']) {
+      const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
+      check(res.ok, `DELETE ${path}: HTTP ${res.status}`);
+    }
+  });
+
   await step('nightly job: loads live prices, rates and gold through the secret key, and records the run', async () => {
     const { stdout } = await nightly();
     console.log(stdout.trim());
@@ -560,6 +636,42 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
     await snap('data-status-after');
     await docShot('data-status', page);
+  });
+
+  await step("after the job: the VaR proxies' weekly closes hold no jump a split or a bad price would leave", async () => {
+    const jumps = [];
+    for (const ticker of ['VT', '0050', 'BNDW', 'GLDM', 'BIL', 'VOO']) {
+      const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/weekly_prices?select=price_date,close,adj_close&ticker=eq.${ticker}&order=price_date`, {
+        headers: { apikey: SECRET_KEY },
+      });
+      check(res.ok, `weekly_prices ${ticker}: HTTP ${res.status}`);
+      const rows = await res.json();
+      check(rows.length > 150, `${ticker}: three years of weeks, got ${rows.length}`);
+      for (let i = 1; i < rows.length; i++) {
+        const [was, now] = [rows[i - 1], rows[i]];
+        const ratio = (now.adj_close ?? now.close) / (was.adj_close ?? was.close);
+        if (ratio < 0.6 || ratio > 1.4) jumps.push(`${ticker} ${was.price_date} → ${now.price_date}: ×${ratio.toFixed(3)}`);
+      }
+    }
+    check(jumps.length === 0, `weekly moves beyond ±40%: ${jumps.join('; ')}`);
+  });
+
+  await step('risk after the job: each day saved with its VaR, the 52-week line drawn from them', async () => {
+    await page.goto(`${BASE}/data`);
+    check(/(Each carries its 1-week VaR|of them carry a 1-week VaR)/.test(await body()), 'the snapshots carry their VaR');
+    await page.goto(`${BASE}/risk`);
+    await page.locator('.sparkline svg').waitFor();
+    const text = await body();
+    check(text.includes('The last 52 weeks, since 2026-05-'), 'the line starts with the first demo trade');
+    const figure = await varFigure(page.locator('#value-at-risk'));
+    check(figure.value > 0 && figure.share > 0.2 && figure.share < 6, `a plausible weekly VaR on live closes, got NT$${figure.value} (${figure.share}%)`);
+    // The README image: the top of the page, the card with its line and the histogram.
+    await page.setViewportSize({ width: 1280, height: 1250 });
+    await docShot('risk', page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByText('The 52-week line as a table').click();
+    check(/2026-05-\d\d\s+NT\$[\d,]+\s+[\d.]+%/.test(await body()), 'the line as a table, from May');
+    await snap('risk-after-job');
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {
