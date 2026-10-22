@@ -830,7 +830,8 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   await page.locator('#fund-VT button[type=submit]').first().click();
   await page.waitForURL('**/costs?saved=fund*');
   check((await row('VT').innerText()).includes('0.66%'), 'VT: 0.06% + 2% × 30%');
-  check((await page.locator('#fund-VT > summary').innerText()).includes(`checked ${taipeiToday}`), 'checked today');
+  // The reloaded page has the settings folded again, so read the text rather than what is drawn.
+  check(((await page.locator('#fund-VT > summary').textContent()) ?? '').includes(`checked ${taipeiToday}`), 'checked today');
 
   await page.goto(`${BASE}/proposals`);
   const monthly = await page.locator('article.proposal').filter({ hasText: 'Monthly contribution' }).innerText();
