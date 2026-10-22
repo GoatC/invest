@@ -402,6 +402,12 @@ describe('proposals (step 9)', () => {
   });
 });
 
+describe('fractional orders (after step 9)', () => {
+  it('size US orders in fractions to four decimals, other markets in whole shares', async () => {
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'orders'`), { fractional_markets: ['US'], share_decimals: 4 });
+  });
+});
+
 describe('latest quote views', () => {
   it('give the newest close per ticker and the newest rate per pair', async () => {
     // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.

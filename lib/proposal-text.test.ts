@@ -33,7 +33,7 @@ describe('proposal text', () => {
       { poolTwd: 97_501, stocks: [{ ticker: 'NVDA', valueTwd: 5_832, weight: 0.0598, trimTwd: 957, soldTwd: 5_832 }], limit: 0.05, cashTwd: 5_832, leftTwd: 0 },
       NAMES,
     );
-    assert.equal(lines[1]?.en, 'In whole shares that is NT$5,832 of NVDA, more than needed, as one share costs more than the trim; edit the order to sell less and stay a little over the cap.');
+    assert.equal(lines[1]?.en, 'In whole shares that is NT$5,832 of NVDA, more than needed, as one share costs more than the trim; edit the order to sell less and stay a little over the cap, or let its market trade in fractions on the Rules page.');
     const close = whyLines({ id: 'R1', condition: 'single_stock_weight_above' }, { poolTwd: 200_000, stocks: [{ ticker: 'AAPL', valueTwd: 11_000, weight: 0.055, trimTwd: 1_000, soldTwd: 1_000 }], limit: 0.05, cashTwd: 1_000, leftTwd: 0 }, NAMES);
     assert.ok(!close.some((line) => line.en.startsWith('In whole shares')));
   });
@@ -46,7 +46,7 @@ describe('proposal text', () => {
     );
     assert.ok(lines[0]?.en.startsWith('The satellite is 25.5% of the regular pool (NT$51,000 of NT$200,000), above the 25% trigger. Trimming about NT$11,000 brings it back to 20%'));
     assert.equal(lines[1]?.en, "R1's proposal already sells NT$1,000 of it, so this one sells the rest.");
-    assert.equal(lines.at(-1)?.en, 'NT$10,000 to invest; NT$40 stays as cash, as orders are in whole shares.');
+    assert.equal(lines.at(-1)?.en, 'NT$10,000 to invest; NT$40 stays as cash, as share counts are rounded.');
   });
 
   it('lists each class past its band, and the value no order can sell', () => {

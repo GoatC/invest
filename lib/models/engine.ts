@@ -19,8 +19,9 @@
  *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
- * Listed orders are in whole shares: sales round up so a cap is met, purchases round down so the
- * cash covers them, and what is left stays as cash. A TWD balance (savings, money-market) is moved
+ * Listed orders are in whole shares, or in fractions to config orders.share_decimals for the
+ * markets in orders.fractional_markets (US shares through 複委託): sales round up so a cap is met,
+ * purchases round down so the cash covers them, and what is left stays as cash. A TWD balance (savings, money-market) is moved
  * as an amount; gold held in grams cannot be ordered and is reported as such.
  *
  * Noise control: a rule fires at most once per cooldown_days unless its state (what it fired on)
@@ -58,6 +59,8 @@ export interface EngineQuote {
   price: number;
   currency: string;
   fxRate: number;
+  /** Decimals an order's share count may have: 0 for whole shares, e.g. 4 for fractional US shares (config orders). */
+  decimals: number;
 }
 
 export type ProposalStatus = 'open' | 'approved' | 'dismissed' | 'filled' | 'expired';
@@ -95,12 +98,14 @@ export interface EngineInput {
   proposals: readonly ProposalRecord[];
 }
 
-/** A listed buy or sell in whole shares. */
+/** A listed buy or sell, in whole shares or, where the broker takes them, fractions. */
 export interface TradeOrder {
   kind: 'trade';
   ticker: string;
   side: Side;
   qty: number;
+  /** Decimals the share count may have; 0 (or absent, in orders saved before fractions) is whole shares. */
+  decimals?: number;
   /** The latest close in the trade currency, and TWD per unit of it. */
   price: number;
   currency: string;
@@ -231,7 +236,26 @@ function unitOf(quote: EngineQuote): number {
 }
 
 function tradeOrder(ticker: string, side: Side, qty: number, quote: EngineQuote, assetClassId: string): TradeOrder {
-  return { kind: 'trade', ticker, side, qty, price: quote.price, currency: quote.currency, fxRate: quote.fxRate, amountTwd: qty * unitOf(quote), assetClassId };
+  return {
+    kind: 'trade',
+    ticker,
+    side,
+    qty,
+    price: quote.price,
+    currency: quote.currency,
+    fxRate: quote.fxRate,
+    amountTwd: qty * unitOf(quote),
+    assetClassId,
+    ...(quote.decimals > 0 ? { decimals: quote.decimals } : {}),
+  };
+}
+
+/** Share counts rounded up, down or to the nearest step of `decimals` places. */
+function roundShares(shares: number, decimals: number, how: 'up' | 'down' | 'nearest'): number {
+  const scale = 10 ** decimals;
+  const scaled = shares * scale;
+  const rounded = how === 'up' ? Math.ceil(scaled - EPS) : how === 'down' ? Math.floor(scaled + EPS) : Math.round(scaled);
+  return rounded / scale;
 }
 
 /** The regular pool's working copy: values change as the drafted orders are applied. */
@@ -255,8 +279,9 @@ class Book {
   }
 
   /**
-   * Sells about `amount` TWD of one holding: whole shares rounded up, at most all of it; a TWD
-   * balance to the dollar. Gold in grams, or a listed holding without a quote, gives no order.
+   * Sells about `amount` TWD of one holding: shares rounded up (whole, or to the quote's decimals),
+   * at most all of it; a TWD balance to the dollar. Gold in grams, or a listed holding without a
+   * quote, gives no order.
    */
   sell(holding: Holding, amount: number): DraftOrder | undefined {
     const held = this.valueOf(holding);
@@ -265,7 +290,7 @@ class Book {
       const quote = this.quotes.get(holding.ticker);
       if (!quote || unitOf(quote) <= 0) return undefined;
       const shares = held / unitOf(quote);
-      const qty = Math.min(Math.ceil(amount / unitOf(quote) - EPS), Math.round(shares));
+      const qty = Math.min(roundShares(amount / unitOf(quote), quote.decimals, 'up'), roundShares(shares, quote.decimals, 'nearest'));
       if (qty <= 0) return undefined;
       const order = tradeOrder(holding.ticker, 'sell', qty, quote, holding.assetClassId);
       this.values.set(holding.key, Math.max(0, held - order.amountTwd));
@@ -338,9 +363,10 @@ interface BuyResult {
 }
 
 /**
- * Buys each class's share of the cash through its fund: whole shares rounded down, then one more
- * share at a time, to the class furthest short of its share, while the cash left covers one; a
- * TWD balance takes the exact amount, and whatever is left at the end.
+ * Buys each class's share of the cash through its fund: shares rounded down (whole, or to the
+ * quote's decimals), then one more whole share at a time, to the class furthest short of its share,
+ * while the cash left covers one; then the rest to a fund bought in fractions, and to a TWD
+ * balance, which takes the exact amount.
  */
 function buy(book: Book, shares: ReadonlyMap<string, number>, classes: ReadonlyMap<string, EngineClass>, cash: number): BuyResult {
   const lines: Array<{ id: string; want: number; ticker?: string; quote?: EngineQuote; balance?: Holding; qty: number; amount: number }> = [];
@@ -356,18 +382,26 @@ function buy(book: Book, shares: ReadonlyMap<string, number>, classes: ReadonlyM
       lines.push({ id, want, balance: vehicle.balance, qty: 0, amount: Math.floor(want) });
       continue;
     }
-    const qty = Math.floor(want / unitOf(vehicle.quote) + EPS);
+    const qty = roundShares(want / unitOf(vehicle.quote), vehicle.quote.decimals, 'down');
     lines.push({ id, want, ticker: vehicle.ticker, quote: vehicle.quote, qty, amount: qty * unitOf(vehicle.quote) });
   }
   let left = cash - lines.reduce((sum, line) => sum + line.amount, 0);
   for (;;) {
-    const fits = lines.filter((line) => line.quote && unitOf(line.quote) <= left + EPS);
+    const fits = lines.filter((line) => line.quote && line.quote.decimals === 0 && unitOf(line.quote) <= left + EPS);
     if (fits.length === 0) break;
     const line = fits.reduce((best, candidate) => (candidate.want - candidate.amount > best.want - best.amount ? candidate : best));
     const unit = unitOf(line.quote as EngineQuote);
     line.qty += 1;
     line.amount += unit;
     left -= unit;
+  }
+  // What whole shares leave goes to the fund bought in fractions furthest short of its share.
+  const fractional = lines.filter((line) => line.quote && line.quote.decimals > 0).sort((a, b) => b.want - b.amount - (a.want - a.amount))[0];
+  if (fractional?.quote && left > EPS) {
+    const extra = roundShares(left / unitOf(fractional.quote), fractional.quote.decimals, 'down');
+    fractional.qty = roundShares(fractional.qty + extra, fractional.quote.decimals, 'nearest');
+    fractional.amount += extra * unitOf(fractional.quote);
+    left -= extra * unitOf(fractional.quote);
   }
   const balanceLine = lines.find((line) => line.balance);
   if (balanceLine && left >= 1) {
@@ -792,7 +826,8 @@ export function readOrders(value: unknown): DraftOrder[] {
       const [qty, price, fxRate] = [finite(row['qty']), finite(row['price']), finite(row['fxRate'])];
       const { ticker, side, currency } = row;
       if (typeof ticker !== 'string' || (side !== 'buy' && side !== 'sell') || typeof currency !== 'string' || qty === undefined || price === undefined || fxRate === undefined) continue;
-      out.push({ kind: 'trade', ticker, side, qty, price, currency, fxRate, amountTwd, assetClassId });
+      const decimals = finite(row['decimals']);
+      out.push({ kind: 'trade', ticker, side, qty, price, currency, fxRate, amountTwd, assetClassId, ...(decimals !== undefined && Number.isInteger(decimals) && decimals > 0 && decimals <= 8 ? { decimals } : {}) });
     } else if (row['kind'] === 'balance') {
       const assetId = finite(row['assetId']);
       const { label, side } = row;

@@ -896,15 +896,32 @@ export async function loadProposal(supabase: SupabaseClient, id: number): Promis
   return row ? toProposal(row) : undefined;
 }
 
-/** The latest close and TWD rate of every security that has both. */
-export function engineQuotes(data: PortfolioData): Map<string, EngineQuote> {
+/** How share counts are rounded in draft orders (config orders): fractions for these markets, to these decimals. */
+export interface OrderSettings {
+  fractionalMarkets: Market[];
+  shareDecimals: number;
+}
+
+/** config orders, read defensively: without it, every order is in whole shares. */
+export function orderSettings(value: unknown): OrderSettings {
+  const markets = setting(value, 'fractional_markets');
+  const decimals = setting(value, 'share_decimals');
+  return {
+    fractionalMarkets: Array.isArray(markets) ? markets.filter((market): market is Market => market === 'US' || market === 'UK' || market === 'TW') : [],
+    shareDecimals: typeof decimals === 'number' && Number.isInteger(decimals) && decimals >= 1 && decimals <= 4 ? decimals : 0,
+  };
+}
+
+/** The latest close and TWD rate of every security that has both, with the decimals its orders may have. */
+export function engineQuotes(data: PortfolioData, orders: OrderSettings = { fractionalMarkets: [], shareDecimals: 0 }): Map<string, EngineQuote> {
   const prices = latestPrices(data.prices, data.trades);
   const fx = latestFx(data.fx, data.trades);
   const out = new Map<string, EngineQuote>();
   for (const security of data.securities) {
     const price = prices.get(security.ticker);
     const rate = fx.get(security.currency);
-    if (price && rate) out.set(security.ticker, { price: price.value, currency: security.currency, fxRate: rate.value });
+    const decimals = orders.fractionalMarkets.includes(security.market) ? orders.shareDecimals : 0;
+    if (price && rate) out.set(security.ticker, { price: price.value, currency: security.currency, fxRate: rate.value, decimals });
   }
   return out;
 }
@@ -915,12 +932,16 @@ function configNumber(value: unknown, key?: string): number | null {
 }
 
 /** Everything the rules engine reads, as of `now`, and the rules for the page. */
-export async function loadEngineInput(supabase: SupabaseClient, today: string, now: string): Promise<{ input: EngineInput; rules: RuleRecord[]; proposals: Proposal[] }> {
+export async function loadEngineInput(
+  supabase: SupabaseClient,
+  today: string,
+  now: string,
+): Promise<{ input: EngineInput; rules: RuleRecord[]; proposals: Proposal[]; orders: OrderSettings }> {
   const [data, classes, rules, config, proposals] = await Promise.all([
     loadHoldingsData(supabase),
     loadAssetClassSettings(supabase),
     loadRules(supabase),
-    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['dca', 'proposal_expiry_days'])),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['dca', 'proposal_expiry_days', 'orders'])),
     loadProposals(supabase, today),
   ]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
@@ -931,13 +952,13 @@ export async function loadEngineInput(supabase: SupabaseClient, today: string, n
     now,
     holdings: buildPortfolio(data).holdings,
     assetClasses: classes,
-    quotes: engineQuotes(data),
+    quotes: engineQuotes(data, orderSettings(value('orders'))),
     rules,
     dca: { amountTwd: dcaAmount(value('dca')), dayOfMonth: day !== null && Number.isInteger(day) && day >= 1 && day <= 31 ? day : null },
     expiryDays: expiry !== null && expiry > 0 ? expiry : null,
     proposals,
   };
-  return { input, rules, proposals };
+  return { input, rules, proposals, orders: orderSettings(value('orders')) };
 }
 
 /** Closes and drafts what the engine decided. Two runs at once cannot draft the same open proposal twice. */

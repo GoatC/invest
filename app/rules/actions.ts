@@ -41,8 +41,8 @@ export interface SettingsFormState {
 }
 
 const MISSING: Bilingual = {
-  en: 'The dca or proposal_expiry_days setting is missing from the database: run npx supabase db push, then try again.',
-  zh: '資料庫中找不到 dca 或 proposal_expiry_days 設定：請先執行 npx supabase db push，再試一次。',
+  en: 'The dca, proposal_expiry_days or orders setting is missing from the database: run npx supabase db push, then try again.',
+  zh: '資料庫中找不到 dca、proposal_expiry_days 或 orders 設定：請先執行 npx supabase db push，再試一次。',
 };
 
 /** Saves the monthly DCA's amount and debit day (config dca) and how long proposals stay open. */
@@ -55,12 +55,17 @@ export async function saveEngineSettings(_previous: SettingsFormState, formData:
   if (!current || current.length === 0) return { errors: {}, message: MISSING };
   // Keep any other entry the dca setting holds.
   const dca = { ...record((current[0] as { value: unknown }).value), amount_twd: parsed.value.dcaAmountTwd, day_of_month: parsed.value.dcaDay };
-  const [first, second] = await Promise.all([
+  const orders = {
+    fractional_markets: [...(parsed.value.fractionalUs ? ['US'] : []), ...(parsed.value.fractionalUk ? ['UK'] : [])],
+    share_decimals: parsed.value.shareDecimals,
+  };
+  const results = await Promise.all([
     supabase.from('config').update({ value: dca }).eq('key', 'dca').select('key'),
     supabase.from('config').update({ value: parsed.value.expiryDays }).eq('key', 'proposal_expiry_days').select('key'),
+    supabase.from('config').update({ value: orders }).eq('key', 'orders').select('key'),
   ]);
-  const error = first.error ?? second.error;
+  const error = results.find((result) => result.error)?.error;
   if (error) return { errors: {}, message: saveFailed(error.message) };
-  if (!first.data?.length || !second.data?.length) return { errors: {}, message: MISSING };
+  if (results.some((result) => !result.data?.length)) return { errors: {}, message: MISSING };
   redirect('/rules?saved=settings#settings');
 }

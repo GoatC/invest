@@ -59,8 +59,8 @@ function cashLines(detail: ProposalDetail, names: Names): Bilingual[] {
     lines.push(
       detail.leftTwd >= 1
         ? {
-            en: `${twd(detail.cashTwd)} to invest; ${twd(detail.leftTwd)} stays as cash, as orders are in whole shares.`,
-            zh: `可投入 ${twd(detail.cashTwd)}；因為以整股下單，${twd(detail.leftTwd)} 留作現金。`,
+            en: `${twd(detail.cashTwd)} to invest; ${twd(detail.leftTwd)} stays as cash, as share counts are rounded.`,
+            zh: `可投入 ${twd(detail.cashTwd)}；因為股數需取整數或到設定的小數位數，${twd(detail.leftTwd)} 留作現金。`,
           }
         : { en: `${twd(detail.cashTwd)} to invest.`, zh: `可投入 ${twd(detail.cashTwd)}。` },
     );
@@ -106,8 +106,8 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         // Whole shares round a sale up, so the cap is met; with a costly share that can be much more.
         if (stock.soldTwd !== undefined && stock.soldTwd > stock.trimTwd * 1.5 + 1) {
           lines.push({
-            en: `In whole shares that is ${twd(stock.soldTwd)} of ${stock.ticker}, more than needed, as one share costs more than the trim; edit the order to sell less and stay a little over the cap.`,
-            zh: `以整股計算需賣出 ${stock.ticker} ${twd(stock.soldTwd)}，多於所需，因為一股的價格高於減碼金額；可修改下單清單少賣一些，但會略高於上限。`,
+            en: `In whole shares that is ${twd(stock.soldTwd)} of ${stock.ticker}, more than needed, as one share costs more than the trim; edit the order to sell less and stay a little over the cap, or let its market trade in fractions on the Rules page.`,
+            zh: `以整股計算需賣出 ${stock.ticker} ${twd(stock.soldTwd)}，多於所需，因為一股的價格高於減碼金額；可修改下單清單少賣一些（會略高於上限），或在「規則」頁讓該市場以零股（小數股）下單。`,
           });
         }
       }
