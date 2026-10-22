@@ -28,10 +28,12 @@ The site is public but the data is not: only your account can sign in, and row-l
 4. **Framework Preset** 應該自動顯示 **Next.js**。Root Directory、Build Command 都不用改。
 5. 展開 **Environment Variables**，新增兩個。值從 Mac 上的 `.env.local` 複製（在 `invest` 資料夾執行 `open -e .env.local` 打開）：
 
-   | Key | Value |
-   | --- | --- |
-   | `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
-   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` |
+   | Key | Value | Type |
+   | --- | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` | Config |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | Config |
+
+   Vercel 要你選 **Type** 時選 **Config**：名稱以 `NEXT_PUBLIC_` 開頭的值會放進網頁，本來就是公開的（publishable key 有資料庫的權限規則保護）。選 Secret 時 Vercel 會提醒你改成 Config。
 
    不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。第 10 步的推播另外需要三個 VAPID 值，設定方式見 [推播通知](web-push.md)。
 6. 如果接著出現 **Optional Integrations**（例如 Supabase 旁邊有 **Add** 按鈕）：**不要按 Add**，直接按 **Deploy**。你已經有自己的 Supabase 專案；這個整合會另外建立或連接一個資料庫，並把 secret key 等金鑰自動放進 Vercel。

@@ -44,13 +44,17 @@ VAPID_PRIVATE_KEY=...（較短的一串）
 ### 2. 放進 Vercel（讓 App 能開啟推播與送測試推播）
 
 1. 打開 <https://vercel.com> → 你的專案 `long-view-invest` → **Settings → Environment Variables**。
-2. 新增三個（Environments 三個都勾：Production、Preview、Development）：
+2. 新增三個（Environments 三個都勾：Production、Preview、Development）。每一個都要選 **Type**（類型）：**Config** 是一般設定，之後還看得到值；**Secret** 是秘密，存了之後就看不到值，只能換新的。
 
-   | Key | Value | 說明 |
-   | --- | --- | --- |
-   | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 第 1 步的 `VAPID_PUBLIC_KEY` 那一串 | 公開金鑰 |
-   | `VAPID_PRIVATE_KEY` | 第 1 步的 `VAPID_PRIVATE_KEY` 那一串 | 私鑰：新增時打開 **Sensitive** |
-   | `VAPID_SUBJECT` | `mailto:你的email` | 聯絡信箱 |
+   | Key | Value | Type | 說明 |
+   | --- | --- | --- | --- |
+   | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 第 1 步的 `VAPID_PUBLIC_KEY` 那一串 | **Config** | 公開金鑰，本來就要放進網頁給手機用 |
+   | `VAPID_PRIVATE_KEY` | 第 1 步的 `VAPID_PRIVATE_KEY` 那一串 | **Secret** | 私鑰 |
+   | `VAPID_SUBJECT` | `mailto:你的email` | **Secret** | 聯絡信箱 |
+
+   - 如果 `NEXT_PUBLIC_VAPID_PUBLIC_KEY` 選成 Secret，Vercel 會提醒「Remove the public framework prefix to keep this value private… change the variable to Config」。意思是：名稱以 `NEXT_PUBLIC_` 開頭的值會放進網頁，任何人都看得到，所以標成秘密沒有意義。這把是**公開金鑰**，公開是安全的：把它的 Type 改成 **Config** 即可，**名稱不要改**（App 靠這個名稱讀它）。
+   - 如果表單是三個一起選同一個 Type，就分兩次新增：先單獨新增 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`（Config），再新增另外兩個（Secret）。
+   - 存成 Secret 之後不能直接改成 Config：要先刪掉那一列，再重新新增。
 
 3. 到 **Deployments** → 最新一筆右邊的「⋯」→ **Redeploy**。公開金鑰是在部署時放進網頁裡的，所以一定要重新部署才會生效。
 
@@ -104,6 +108,7 @@ GitHub 的 **Actions** 分頁會多一個 **Pushes 推播**，每小時自動執
 | 看到的情況 | 原因與處理 |
 | --- | --- |
 | 推播頁寫「iPhone 或 iPad 需要先把 App 加入主畫面」 | 你是在 Safari 分頁打開的。改從主畫面的圖示打開 |
+| Vercel 新增時提醒「Remove the public framework prefix to keep this value private」 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` 選成了 Secret。它是公開金鑰，Type 改選 **Config**，名稱不要改（第 2 步） |
 | 推播頁寫「VAPID 公開金鑰尚未設定」 | Vercel 少了 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`，或加了但還沒 Redeploy |
 | 按測試後寫「App 還不能送出推播：缺少 …」 | Vercel 少了 `VAPID_PRIVATE_KEY` 或 `VAPID_SUBJECT`（要以 `mailto:` 開頭），補上後 Redeploy |
 | 推播頁寫「通知已被封鎖」 | 之前按了「不允許」。iPhone：設定 → 通知 → 長期投資 → 允許通知；Mac Safari：設定 → 網站 → 通知 |
