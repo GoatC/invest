@@ -14,21 +14,29 @@ export function pickRateLimitHeaders(headers: Headers): Record<string, string> {
 export type Redactor = (text: string) => string;
 
 const SECRET_QUERY_PARAM = /([?&](?:api_?key|token|access_token)=)[^&#\s"'<>]+/gi;
+/** A reply that names the key it was sent, such as FinMind's {"token_tail": "...abcd1234"}. */
+const SECRET_FIELD = /("token_(?:tail|head)"\s*:\s*")[^"]*"/gi;
+
+/** The last characters of a long secret, which a service may echo back to say which key it saw. */
+function tails(secret: string): string[] {
+  if (secret.length < 20) return [];
+  return [12, 11, 10, 9, 8, 7, 6].map((length) => secret.slice(-length));
+}
 
 /**
- * Blanks out every secret value, plus any api_key / apikey / token query parameter, so a
- * key can never reach the report or the saved samples. For a User-Agent such as
- * "LongViewInvest me@example.com" the email part is treated as a secret on its own too.
+ * Blanks out every secret value, its tail, and any api_key / apikey / token query parameter, so
+ * a key can never reach the report, the saved samples or the job's run record. For a User-Agent
+ * such as "LongViewInvest me@example.com" the email part is treated as a secret on its own too.
  */
 export function makeRedactor(secrets: ReadonlyArray<string | undefined>): Redactor {
   const values = secrets
-    .flatMap((secret) => (secret ? [secret, ...secret.split(/\s+/).filter((part) => part.includes('@'))] : []))
+    .flatMap((secret) => (secret ? [secret, ...tails(secret), ...secret.split(/\s+/).filter((part) => part.includes('@'))] : []))
     .filter((value) => value.length >= 4)
     .sort((a, b) => b.length - a.length);
   return (text) => {
     let out = text;
     for (const value of values) out = out.split(value).join('***');
-    return out.replace(SECRET_QUERY_PARAM, '$1***');
+    return out.replace(SECRET_QUERY_PARAM, '$1***').replace(SECRET_FIELD, '$1***"');
   };
 }
 
