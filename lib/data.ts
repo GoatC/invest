@@ -5,10 +5,11 @@ import { addDays } from './dates';
 import { failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
-import { readAssumptions, type Assumptions } from './models/cma';
+import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import type { PortfolioData } from './models/portfolio';
+import { readPlanSettings, type PlanSettings } from './models/projection';
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
@@ -729,5 +730,43 @@ export async function loadRiskData(supabase: SupabaseClient, today: string): Pro
   return {
     input,
     saved: saved.map((row) => ({ date: row.snapshot_date, valueAtRisk: Number(row.var_95_1w), totalTwd: Number(row.total_twd) })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// F2 compounding calculator (Phase 1, step 8)
+// ---------------------------------------------------------------------------
+
+/** The monthly contribution the calculator starts from (config dca.amount_twd). */
+export function dcaAmount(value: unknown): number | null {
+  const amount = setting(value, 'amount_twd');
+  return typeof amount === 'number' && Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+/** The saved plan and what the calculator offers without one, and the portfolio's history. */
+export interface PlanData {
+  /** Undefined until the step 8 migration is applied. */
+  settings: PlanSettings | undefined;
+  dcaAmount: number | null;
+  /** The target mix's expected return from the capital market assumptions. */
+  mix: { expectedReturn: number; share: number } | null;
+  /** For the regular pool's month ends. */
+  input: PerformanceInput;
+}
+
+export async function loadPlanData(supabase: SupabaseClient, today: string): Promise<PlanData> {
+  const [config, assetClasses, assumptions, input] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['projection', 'dca'])),
+    loadAssetClasses(supabase),
+    loadAssumptions(supabase),
+    loadPerformanceInput(supabase, today),
+  ]);
+  const value = (key: string) => config.find((row) => row.key === key);
+  const projection = value('projection');
+  return {
+    settings: projection ? readPlanSettings(projection.value) : undefined,
+    dcaAmount: dcaAmount(value('dca')?.value),
+    mix: assumptions ? mixReturn(assetClasses, assumptions.assumptions) : null,
+    input,
   };
 }

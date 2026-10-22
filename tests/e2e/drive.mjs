@@ -562,6 +562,102 @@ await step('risk page: the histogram with its cutoff, the weeks beyond it, what 
   await page.emulateMedia({ colorScheme: 'light' });
 });
 
+/** The figure a stat tile on the calculator shows, in NT$. */
+async function statValue(label, scope = page) {
+  const stat = scope.locator('.stat').filter({ hasText: label }).first();
+  return Number((await stat.locator('.value').innerText()).replace(/[^\d−-]/g, '').replace('−', '-'));
+}
+
+await step('calculator: the target mix and the DCA amount to start from; the PRD case live; the start month fills in PV', async () => {
+  await page.goto(`${BASE}/plan`);
+  await page.getByRole('heading', { level: 1, name: /Calculator/ }).waitFor();
+  await page.locator('.chart svg').first().waitFor();
+  // The assumptions entered above cover the five core classes: (0.28·6.5 + 0.12·6 + 0.22·3.5 + 0.10·4 + 0.08·1.5) ÷ 0.80 = 4.7875%.
+  check((await page.inputValue('input[name=expectedReturn]')) === '4.79', 'the target mix return over the core');
+  check((await body()).includes('over the classes with an assumption (80% of the targets)'), 'the mix says what it covers');
+  check((await page.inputValue('input[name=pmt]')) === '10000', 'dca.amount_twd as the monthly contribution');
+  check(/^\d{4}-\d{2}$/.test(await page.inputValue('input[name=start]')) && Number(await page.inputValue('input[name=pv]')) > 0, 'next month, from today’s regular pool');
+  check((await body()).includes('Save a plan above to compare'), 'no plan saved yet');
+  // Before the first demo trade the pool held nothing; at the end of June it held May's and June's buys.
+  await page.fill('input[name=start]', '2026-05');
+  check((await page.inputValue('input[name=pv]')) === '0', 'PV at the end of April is 0');
+  await page.fill('input[name=start]', '2026-07');
+  const june = Number(await page.inputValue('input[name=pv]'));
+  check(june > 15_000 && june < 25_000 && (await body()).includes('Your regular pool on 2026-06-30'), `PV at the end of June, got ${june}`);
+  // PRD Section 11: PV 0, PMT NT$10,000, 6% a year compounded monthly, 30 years, no step-up ≈ NT$10,045,000.
+  await page.fill('input[name=start]', '2026-05');
+  await page.fill('input[name=pv]', '0');
+  await page.fill('input[name=stepUp]', '0');
+  await page.fill('input[name=expectedReturn]', '6');
+  await page.fill('input[name=inflation]', '2');
+  await page.fill('input[name=years]', '30');
+  check((await statValue('Value after 30 years')) === 10_045_150, `the acceptance value, got ${await statValue('Value after 30 years')}`);
+  check((await statValue('Put in')) === 3_600_000 && (await statValue('Growth')) === 6_445_150, 'put in and growth');
+  // In today's money at 2%: 10,045,150 ÷ 1.02^30.
+  check(Math.abs((await statValue("Value in today's money")) - 10_045_150.42 / 1.02 ** 30) <= 1, 'the real value');
+  check((await body()).includes('3.92%') && (await body()).includes('實質年報酬'), 'real return (1.06 ÷ 1.02 − 1), bilingual');
+  await page.fill('input[name=stepUp]', '3');
+  check((await statValue('Value after 30 years')) > 10_045_150 && (await body()).includes('Stepped up 3.00% a year'), 'a step-up raises the value');
+  check(Math.abs((await statValue('Last monthly contribution')) - 10_000 * 1.03 ** (359 / 12)) <= 1, 'the last contribution after 29 years and 11 months of step-ups');
+  await page.fill('input[name=years]', '0');
+  await page.getByText('Enter a whole number of years from 1 to 60.').waitFor();
+  check((await body()).includes('Fix the highlighted fields to see the projection.'), 'no projection from a bad field');
+  await page.fill('input[name=years]', '30');
+  await page.fill('input[name=stepUp]', '0');
+  // Hovering a bar names its year and the four figures.
+  const chart = page.locator('.chart').first();
+  const box = await chart.boundingBox();
+  check(box !== null, 'chart has a size');
+  await chart.hover({ position: { x: Math.round(box.width * 0.97), y: Math.round(box.height * 0.5) } });
+  await page.locator('.chart-tip').first().waitFor();
+  const tip = await page.locator('.chart-tip').first().innerText();
+  check(tip.includes('year 30') && tip.includes('NT$10,045,150') && tip.includes("Value in today's money"), `year tooltip, got ${tip}`);
+  await page.getByText('Show as a table').first().click();
+  check(/30\s+2056-04\s+NT\$10,045,150\s+NT\$3,600,000/.test(await body()), 'the year table');
+  await snap('calculator');
+});
+
+await step('calculator: saving the plan compares the regular pool with it at each month end, the gap split', async () => {
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/plan?saved=plan');
+  await page.getByText('Plan saved').waitFor();
+  const section = page.locator('#actual-vs-plan');
+  await section.locator('.chart svg').waitFor();
+  const text = await section.innerText();
+  check(text.includes('The plan from 2026-05: NT$0 to start, NT$10,000 a month stepped up 0.00% a year, at 6.00% a year for 30 years.'), `the plan, got ${text}`);
+  // NT$10,000 at each month end, growing 0.5% a month: 10,000, then 20,050.
+  await section.getByText('Show as a table').click();
+  const table = await section.locator('table').innerText();
+  check(/2026-05-31\s+NT\$[\d,]+\s+NT\$10,000\s/.test(table) && /2026-06-30\s+NT\$[\d,]+\s+NT\$20,050\s/.test(table), `planned month ends, got ${table}`);
+  check(/2026-04-30\s+NT\$0\s+NT\$0\s+NT\$0/.test(table), 'the start: nothing held, nothing planned');
+  const total = await statValue(/Ahead of the plan|Behind the plan/, section);
+  const money = await statValue('Of which money put in', section);
+  const growth = await statValue('Of which growth', section);
+  check(Math.abs(total - money - growth) <= 1, `gap = money + growth: ${total} vs ${money} + ${growth}`);
+  check(text.includes('實際與計畫對照') && text.includes('其中：投入金額'), 'Chinese labels');
+  const chart = section.locator('.chart');
+  const box = await chart.boundingBox();
+  check(box !== null, 'chart has a size');
+  await chart.hover({ position: { x: Math.round(box.width * 0.6), y: Math.round(box.height * 0.5) } });
+  await page.locator('.chart-tip').first().waitFor();
+  check(/Actual[\s\S]*Plan/.test(await page.locator('.chart-tip').first().innerText()), 'month-end tooltip');
+  check((await page.inputValue('input[name=start]')) === '2026-05' && (await page.inputValue('input[name=expectedReturn]')) === '6', 'the form shows the saved plan');
+  const history = await page.locator('section', { hasText: 'Edit history of the plan' }).innerText();
+  check(history.includes('Changed') && history.includes('2026-05'), 'the save is logged');
+  await snap('calculator-saved');
+  // The README image: the calculator from the top, its chart and the start of the comparison.
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await page.goto(`${BASE}/plan`);
+  await page.locator('.chart svg').first().waitFor();
+  await docShot('calculator', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${BASE}/plan`);
+  await page.locator('#actual-vs-plan .chart svg').waitFor();
+  await snap('calculator-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -576,7 +672,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -587,7 +683,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
-    if (['/holdings', '/performance', '/allocation', '/risk', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
+    if (['/holdings', '/performance', '/allocation', '/risk', '/plan', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

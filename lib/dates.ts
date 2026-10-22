@@ -18,3 +18,30 @@ export function addDays(date: string, days: number): string {
   day.setUTCDate(day.getUTCDate() + days);
   return day.toISOString().slice(0, 10);
 }
+
+/** True for a month written YYYY-MM. */
+export function isMonth(value: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
+/** The YYYY-MM month `months` after `month` (before it, for a negative count). */
+export function addMonths(month: string, months: number): string {
+  const [year, number] = month.split('-').map(Number) as [number, number];
+  const index = year * 12 + (number - 1) + months;
+  const targetYear = Math.floor(index / 12);
+  return `${String(targetYear).padStart(4, '0')}-${String(index - targetYear * 12 + 1).padStart(2, '0')}`;
+}
+
+/** How many months `to` is after `from`, both YYYY-MM. */
+export function monthsBetween(from: string, to: string): number {
+  const index = (month: string) => {
+    const [year, number] = month.split('-').map(Number) as [number, number];
+    return year * 12 + number - 1;
+  };
+  return index(to) - index(from);
+}
+
+/** The last day of a YYYY-MM month, as YYYY-MM-DD. */
+export function lastDayOf(month: string): string {
+  return addDays(`${addMonths(month, 1)}-01`, -1);
+}

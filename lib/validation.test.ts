@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, parseSecurity, parseTargets, parseTrade } from './validation';
+import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, parsePlanForm, parseSecurity, parseTargets, parseTrade } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));
@@ -188,5 +188,38 @@ describe('parseAssumptionForm', () => {
     assert.ok(!parsed.ok);
     assert.deepEqual(parsed.errors['return_global_bonds'], MESSAGES.expectedReturn);
     assert.deepEqual(parsed.errors['volatility_global_bonds'], MESSAGES.volatility);
+  });
+});
+
+describe('parsePlanForm', () => {
+  const typed = { start: '2026-11', pv: '1,234,567', pmt: '10000', stepUp: '3', expectedReturn: '5.25', inflation: '2', years: '30' };
+
+  it('reads amounts in TWD, rates in percent and whole years', () => {
+    assert.deepEqual(parsePlanForm(typed), {
+      ok: true,
+      value: { start: '2026-11', pv: 1_234_567, pmt: 10_000, stepUp: 0.03, expectedReturn: 0.0525, inflation: 0.02, years: 30 },
+    });
+  });
+
+  it('allows a negative return or inflation and a plan with no contributions', () => {
+    const parsed = parsePlanForm({ ...typed, pmt: '0', expectedReturn: '-1', inflation: '-0.5' });
+    assert.ok(parsed.ok);
+    assert.deepEqual([parsed.value.pmt, parsed.value.expectedReturn, parsed.value.inflation], [0, -0.01, -0.005]);
+  });
+
+  it('reports every problem at once', () => {
+    const parsed = parsePlanForm({ start: '2026-13', pv: '-1', pmt: '', stepUp: '31', expectedReturn: '6.125', inflation: '25', years: '2.5' });
+    assert.ok(!parsed.ok);
+    assert.deepEqual(parsed.errors, {
+      start: MESSAGES.month,
+      pv: MESSAGES.nonNegative,
+      pmt: MESSAGES.nonNegative,
+      stepUp: MESSAGES.stepUp,
+      expectedReturn: MESSAGES.expectedReturn,
+      inflation: MESSAGES.inflation,
+      years: MESSAGES.years,
+    });
+    assert.ok(!parsePlanForm({ ...typed, years: '61' }).ok);
+    assert.ok(!parsePlanForm({ ...typed, years: '0' }).ok);
   });
 });
