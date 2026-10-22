@@ -81,8 +81,18 @@ class MemoryStore implements Store {
   rates: DailyRate[] = [];
   runs: JobRun[] = [];
   snapshots: Snapshot[] = [];
+  /** When the rules were evaluated, and how many snapshots were saved by then. */
+  ruleRuns: Array<{ today: string; now: string; snapshotsSaved: number }> = [];
   constructor(
-    private readonly options: { failRead?: boolean; earliestAggu?: string; failSnapshots?: boolean; proxies?: string[]; riskHistory?: PriceRow[]; failRisk?: boolean } = {},
+    private readonly options: {
+      failRead?: boolean;
+      earliestAggu?: string;
+      failSnapshots?: boolean;
+      proxies?: string[];
+      riskHistory?: PriceRow[];
+      failRisk?: boolean;
+      failRules?: boolean;
+    } = {},
   ) {}
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
@@ -133,6 +143,11 @@ class MemoryStore implements Store {
   }
   async saveSnapshots(rows: readonly Snapshot[]) {
     this.snapshots.push(...rows);
+  }
+  async evaluateRules(today: string, now: string) {
+    if (this.options.failRules) throw new Error('proposals: permission denied');
+    this.ruleRuns.push({ today, now, snapshotsSaved: this.snapshots.length });
+    return { created: 1, closed: 0 };
   }
   async recordRun(run: JobRun) {
     this.runs.push(run);
@@ -256,6 +271,26 @@ describe('runNightly', () => {
     assert.deepEqual(run.detail.errors, ['NAV snapshots: transactions: permission denied']);
     assert.equal(run.detail.snapshots, undefined);
     assert.ok(store.prices.length > 0);
+  });
+
+  it('evaluates the rules once the prices and snapshots are saved, and records what they drafted', async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(store.ruleRuns.length, 1);
+    assert.equal(store.ruleRuns[0]?.today, TODAY);
+    assert.equal(store.ruleRuns[0]?.snapshotsSaved, 2);
+    assert.match(store.ruleRuns[0]?.now ?? '', /^2026-10-20T22:37:\d{2}\.000Z$/);
+    assert.deepEqual(run.detail.rules, { created: 1, closed: 0 });
+    assert.equal(run.status, 'ok');
+  });
+
+  it('keeps everything saved and reports a partial run when the rules fail', async () => {
+    const store = new MemoryStore({ failRules: true });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['Rules: proposals: permission denied']);
+    assert.equal(run.detail.rules, undefined);
+    assert.ok(store.prices.length > 0 && store.snapshots.length === 2);
   });
 
   it('skips the 25 MB fund download once the saved history covers the window', async () => {

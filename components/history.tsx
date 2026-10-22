@@ -45,6 +45,15 @@ const COLUMN: Record<string, Bilingual> = {
   benchmark_ticker: { en: 'Benchmark ETF', zh: '基準 ETF' },
   value: { en: 'Value', zh: '設定值' },
   last_verified: { en: 'Last reviewed', zh: '最後檢視日期' },
+  status: { en: 'Status', zh: '狀態' },
+  orders: { en: 'Orders', zh: '下單清單' },
+  dismiss_reason: { en: 'Reason dismissed', zh: '略過理由' },
+  decided_at: { en: 'Decided', zh: '決定時間' },
+  filled_at: { en: 'Marked filled', zh: '標記成交時間' },
+  closed_reason: { en: 'Why closed', zh: '關閉原因' },
+  threshold: { en: 'Threshold', zh: '門檻' },
+  enabled: { en: 'On', zh: '啟用' },
+  cooldown_days: { en: 'Cooldown, days', zh: '冷卻期（天）' },
 };
 
 function shown(value: unknown): string {

@@ -2,10 +2,11 @@
  * The nightly price and FX job (PRD Phase 1, step 4). It loads daily closes for every security,
  * Bank of Taiwan exchange rates and the gold price into Supabase, with one fallback per feed
  * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5) with its
- * 1-week VaR (N4, step 7), and records the outcome in job_runs. Everything outside this file is
+ * 1-week VaR (N4, step 7), evaluates the rules and drafts their proposals (PRD Section 4, step 9),
+ * and records the outcome in job_runs. Everything outside this file is
  * injected, so the whole run can be tested without a network or a database.
  */
-import { RISK_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
@@ -44,6 +45,8 @@ export interface Store {
   riskInput(from: string, end: string): Promise<RiskInput>;
   /** Saves one NAV snapshot per day and drops any from before the first (left by trades since deleted). */
   saveSnapshots(rows: readonly Snapshot[]): Promise<void>;
+  /** Evaluates every rule as of `now` and saves the proposals it drafts and closes (runRules in lib/data). */
+  evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
   recordRun(run: JobRun): Promise<void>;
 }
 
@@ -59,6 +62,8 @@ export interface RunDetail {
   errors: string[];
   /** The NAV snapshots saved, once anything was bought or recorded, and how many carry a VaR. */
   snapshots?: { days: number; from: string; to: string; valueAtRisk?: number };
+  /** Proposals the rules drafted and closed after the refresh. */
+  rules?: { created: number; closed: number };
 }
 
 export interface JobRun {
@@ -299,6 +304,13 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   } catch (err) {
     detail.errors.push(`${SNAPSHOT_ERROR}: ${message(err)}`);
+  }
+
+  // The data is fresh: evaluate the rules (PRD Section 4, L2 step 1), on the closes just saved.
+  try {
+    detail.rules = await store.evaluateRules(today, deps.now().toISOString());
+  } catch (err) {
+    detail.errors.push(`${RULES_ERROR}: ${message(err)}`);
   }
   const saved = prices.length + fills.length + rates.length;
   return finish(saved === 0 ? 'failed' : detail.errors.length > 0 ? 'partial' : 'ok');

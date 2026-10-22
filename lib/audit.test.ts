@@ -38,4 +38,9 @@ describe('describeRow', () => {
       assert.ok(TABLE_LABELS[table], table);
     }
   });
+
+  it('names a proposal by its number, rule and what it fired on', () => {
+    assert.deepEqual(describeRow('proposals', { id: 3, rule_id: 'R1', state: 'AAPL', status: 'expired' }, '3'), { en: '#3 R1 AAPL', zh: '第 3 號 R1 AAPL' });
+    assert.ok(TABLE_LABELS['proposals']);
+  });
 });

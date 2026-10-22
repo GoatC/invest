@@ -699,3 +699,25 @@ tr.selected td {
   gap: 0.35rem;
   overflow-wrap: anywhere;
 }
+
+/* Proposals (rules engine): each one a bordered block inside its section. */
+
+.proposal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.proposal h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.proposal form.row {
+  align-items: end;
+}
+
+.rule-row {
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}

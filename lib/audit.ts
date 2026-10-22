@@ -11,6 +11,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   cash_flows: { en: 'Cash flow', zh: '現金流' },
   config: { en: 'Setting', zh: '設定' },
   watchlist: { en: 'Watchlist', zh: '觀察清單' },
+  proposals: { en: 'Proposal', zh: '提案' },
 };
 
 function text(value: unknown): string {
@@ -52,6 +53,11 @@ export function describeRow(table: string, row: Record<string, unknown> | null, 
       return same(text(row['name']) || rowKey);
     case 'config':
       return same(text(row['key']) || rowKey);
+    case 'proposals': {
+      // A state lists what fired, "2330,NVDA": spaced so a phone can wrap it.
+      const state = text(row['state']).split(',').join(', ');
+      return { en: `#${rowKey} ${text(row['rule_id'])} ${state}`.trim(), zh: `第 ${rowKey} 號 ${text(row['rule_id'])} ${state}`.trim() };
+    }
     default:
       return same(text(row['ticker']) || rowKey);
   }

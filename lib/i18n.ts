@@ -67,6 +67,8 @@ export const LABELS = {
   allocation: { en: 'Allocation', zh: '資產配置' },
   risk: { en: 'Value at Risk', zh: '風險值' },
   calculator: { en: 'Calculator', zh: '複利計算機' },
+  proposals: { en: 'Proposals', zh: '提案' },
+  rules: { en: 'Rules', zh: '規則' },
   cashFlows: { en: 'Cash flows', zh: '現金流' },
   addCashFlow: { en: 'Add cash flow', zh: '新增現金流' },
   editCashFlow: { en: 'Edit cash flow', zh: '修改現金流' },

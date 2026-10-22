@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, parsePlanForm, parseSecurity, parseTargets, parseTrade } from './validation';
+import { MESSAGES, parseAssumptionForm, parseCashFlow, parseManualAsset, parseNumber, parseEngineSettings, parseOrderSizes, parsePlanForm, parseRuleForm, parseSecurity, parseTargets, parseTrade } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));
@@ -221,5 +221,60 @@ describe('parsePlanForm', () => {
     });
     assert.ok(!parsePlanForm({ ...typed, years: '61' }).ok);
     assert.ok(!parsePlanForm({ ...typed, years: '0' }).ok);
+  });
+});
+
+describe('parseOrderSizes', () => {
+  const orders = [
+    { kind: 'trade', ticker: 'AAPL', side: 'sell', qty: 3, price: 236, currency: 'USD', fxRate: 32.4, amountTwd: 22_939.2, assetClassId: 'us_stocks' },
+    { kind: 'balance', assetId: 5, label: 'Savings', side: 'deposit', amountTwd: 5_000, assetClassId: 'strategic_cash' },
+  ] as const;
+
+  it('reads whole shares and whole NT$, 0 dropping an order', () => {
+    assert.deepEqual(parseOrderSizes({ size_0: '2', size_1: '4,500' }, orders), { sizes: [2, 4_500], errors: {} });
+    assert.deepEqual(parseOrderSizes({ size_0: '0', size_1: '0' }, orders).sizes, [0, 0]);
+  });
+
+  it('refuses fractions, negatives and blanks', () => {
+    assert.deepEqual(parseOrderSizes({ size_0: '1.5', size_1: '' }, orders).errors, { size_0: MESSAGES.shares, size_1: MESSAGES.wholeTwd });
+    assert.deepEqual(parseOrderSizes({ size_0: '-1', size_1: '10' }, orders).errors, { size_0: MESSAGES.shares });
+  });
+});
+
+describe('parseRuleForm', () => {
+  const threshold = { max_weight: 0.05, pool: 'regular' };
+
+  it('reads on or off, the cooldown and each number, keeping the words', () => {
+    assert.deepEqual(parseRuleForm({ enabled: 'on', cooldownDays: '7', threshold_max_weight: '0.06' }, threshold), {
+      ok: true,
+      value: { enabled: true, cooldownDays: 7, threshold: { max_weight: 0.06, pool: 'regular' } },
+    });
+    const off = parseRuleForm({ cooldownDays: '0', threshold_max_weight: '0.05' }, threshold);
+    assert.ok(off.ok && off.value.enabled === false);
+  });
+
+  it('keeps a share between 0 and 1 and a whole number whole', () => {
+    assert.deepEqual((parseRuleForm({ cooldownDays: '7', threshold_max_weight: '5' }, threshold) as { errors: unknown }).errors, { threshold_max_weight: MESSAGES.fraction });
+    const whole = parseRuleForm({ cooldownDays: '400', threshold_max_classes: '2.5' }, { max_classes: 2 });
+    assert.ok(!whole.ok);
+    assert.deepEqual(whole.errors, { cooldownDays: MESSAGES.cooldown, threshold_max_classes: MESSAGES.wholeNumber });
+    // A multiple above 1, such as TRIM_ZONE's 1.25, stays a positive number.
+    const multiple = parseRuleForm({ cooldownDays: '7', threshold_multiple: '1.3' }, { multiple: 1.25 });
+    assert.ok(multiple.ok && multiple.value.threshold['multiple'] === 1.3);
+    assert.ok(!parseRuleForm({ cooldownDays: '7', threshold_multiple: '0' }, { multiple: 1.25 }).ok);
+  });
+});
+
+describe('parseEngineSettings', () => {
+  it('reads the DCA amount and day, blank day allowed, and the expiry', () => {
+    assert.deepEqual(parseEngineSettings({ dcaAmountTwd: '10,000', dcaDay: '6', expiryDays: '14' }), { ok: true, value: { dcaAmountTwd: 10_000, dcaDay: 6, expiryDays: 14 } });
+    const blank = parseEngineSettings({ dcaAmountTwd: '10000', dcaDay: ' ', expiryDays: '14' });
+    assert.ok(blank.ok && blank.value.dcaDay === null);
+  });
+
+  it('refuses a day outside 1 to 31 and an expiry of 0', () => {
+    const parsed = parseEngineSettings({ dcaAmountTwd: '-1', dcaDay: '32', expiryDays: '0' });
+    assert.ok(!parsed.ok);
+    assert.deepEqual(parsed.errors, { dcaAmountTwd: MESSAGES.nonNegative, dcaDay: MESSAGES.dcaDay, expiryDays: MESSAGES.expiryDays });
   });
 });

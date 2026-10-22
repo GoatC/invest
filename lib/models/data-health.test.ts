@@ -54,6 +54,7 @@ describe('parseRunDetail', () => {
       warnings: ['VT: finmind: HTTP 503', 7],
       errors: 'none',
       snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
+      rules: { created: 2, closed: 0 },
     });
     assert.deepEqual(detail, {
       window: { start: '2023-10-07', end: '2026-10-21' },
@@ -62,7 +63,13 @@ describe('parseRunDetail', () => {
       warnings: ['VT: finmind: HTTP 503'],
       errors: [],
       snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
+      rules: { created: 2, closed: 0 },
     });
+  });
+
+  it('reads a run from before the rules engine (step 9) as one that evaluated none', () => {
+    assert.equal(parseRunDetail({}).rules, null);
+    assert.equal(parseRunDetail({ rules: { created: '2' } }).rules, null);
   });
 
   it('reads a run from before the VaR (step 7) as one whose snapshots carry none', () => {
