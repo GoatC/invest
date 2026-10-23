@@ -3,7 +3,8 @@
  * Bank of Taiwan exchange rates and the gold price into Supabase, with one fallback per feed
  * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5) with its
  * 1-week VaR (N4, step 7), evaluates the rules and drafts their proposals (PRD Section 4, step 9),
- * and records the outcome in job_runs. Everything outside this file is
+ * and records the outcome in job_runs. Since Phase 2, step 1 it also loads the monthly market
+ * series the windfall planner reads (F3): CAPE, the S&P 500's price and its dividend yield. Everything outside this file is
  * injected, so the whole run can be tested without a network or a database.
  */
 import { RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
@@ -13,12 +14,16 @@ import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantag
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredRates, fredUrl } from '../feeds/fred.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
+import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
+import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
-import type { DailyPrice, DailyRate, Get } from '../feeds/types.ts';
+import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 
 export const JOB = 'nightly_prices';
 /** Recent days of gold prices to load; valuing gold needs only the latest. */
 const GOLD_DAYS = 7;
+/** The monthly series F3 reads (market_series), each from Shiller's workbook, else multpl. */
+export const MARKET_SERIES = ['us_cape', 'sp500_price', 'sp500_yield'] as const;
 /** Labels of the errors about the database itself rather than a feed (setup problems, no tickers in them). */
 export const DATABASE_ERRORS = ['reading the database', 'saving'] as const;
 
@@ -39,6 +44,8 @@ export interface Store {
   /** fillOnly: add missing days without overwriting saved ones (for feeds without dividend adjustment). */
   savePrices(rows: readonly DailyPrice[], options?: { fillOnly?: boolean }): Promise<void>;
   saveRates(rows: readonly DailyRate[]): Promise<void>;
+  /** Upserts monthly market series (market_series), one row per series and month. */
+  saveSeries(rows: readonly MonthlyPoint[]): Promise<void>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
   performanceInput(end: string): Promise<PerformanceInput>;
   /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data). */
@@ -56,6 +63,8 @@ export interface RunDetail {
   window: { start: string; end: string };
   prices: Record<string, Loaded>;
   rates: Record<string, Loaded>;
+  /** The monthly market series (F3); `latest` is a month, YYYY-MM. */
+  series?: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -76,6 +85,8 @@ export interface JobRun {
 
 export interface Deps {
   get: Get;
+  /** For Shiller's binary workbook; without it the series come from multpl. */
+  getBytes?: GetBytes;
   store: Store;
   finmindToken: string;
   alphaVantageKey?: string;
@@ -156,7 +167,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   const { get, store, today } = deps;
   const finmind = new FinMind(get, deps.finmindToken);
   const avKey = deps.alphaVantageKey;
-  const detail: RunDetail = { window: { start: today, end: today }, prices: {}, rates: {}, warnings: [], errors: [] };
+  const detail: RunDetail = { window: { start: today, end: today }, prices: {}, rates: {}, series: {}, warnings: [], errors: [] };
   const finish = async (status: JobRun['status']): Promise<JobRun> => {
     const run: JobRun = { job: JOB, startedAt, finishedAt: deps.now().toISOString(), status, detail };
     await store.recordRun(run);
@@ -271,10 +282,37 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     else detail.errors.push('XAU/TWD: no USD/TWD rate to convert the gold price');
   }
 
+  // Monthly market series (F3): Shiller's workbook once for all three, else multpl's table for each.
+  const series: MonthlyPoint[] = [];
+  let workbook: Promise<MonthlyPoint[]> | undefined;
+  const shiller = () =>
+    (workbook ??= (async () => {
+      if (!deps.getBytes) throw new FeedError('no binary fetch');
+      const link = shillerLink(await get(SHILLER_PAGE));
+      if (!link) throw new FeedError('no ie_data.xls link on the data page');
+      return shillerSeries(await deps.getBytes(link));
+    })());
+  for (const name of MARKET_SERIES) {
+    const result = await firstWorking(
+      name,
+      [
+        { source: 'shiller', load: async () => (await shiller()).filter((point) => point.series === name) },
+        { source: 'multpl', load: async () => multplMonthly(await get(multplUrl(name)), name) },
+      ],
+      detail,
+    );
+    if (result) {
+      series.push(...result.rows);
+      const newest = result.rows.reduce((max, point) => (point.month > max ? point.month : max), '');
+      (detail.series ??= {})[name] = { source: result.source, rows: result.rows.length, latest: newest };
+    }
+  }
+
   try {
     await store.savePrices(unique(prices, (row) => `${row.ticker}|${row.date}`));
     await store.savePrices(unique(fills, (row) => `${row.ticker}|${row.date}`), { fillOnly: true });
     await store.saveRates(unique(rates, (row) => `${row.pair}|${row.date}`));
+    await store.saveSeries(unique(series, (point) => `${point.series}|${point.month}`));
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');

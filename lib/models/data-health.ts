@@ -29,6 +29,8 @@ export interface RunDetail {
   window: { start: string; end: string } | null;
   prices: Record<string, Loaded>;
   rates: Record<string, Loaded>;
+  /** The monthly market series (F3, Phase 2 step 1); `latest` is a month. Empty before. */
+  series: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -74,6 +76,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     window: typeof window['start'] === 'string' && typeof window['end'] === 'string' ? { start: window['start'], end: window['end'] } : null,
     prices: loadedMap(detail['prices']),
     rates: loadedMap(detail['rates']),
+    series: loadedMap(detail['series']),
     warnings: lines(detail['warnings']),
     errors: lines(detail['errors']),
     snapshots:

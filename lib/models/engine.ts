@@ -19,6 +19,13 @@
  * - us_situs_value_above (US_ESTATE_TAX, step 11): US-situs assets (every US-domiciled holding, both
  *   pools, as the estate counts everything) above the exemption → a suggestion to use Irish-domiciled
  *   equivalents, with no orders: a sale abroad is overseas income, so the swap is the owner's call.
+ * - tranche_due (WINDFALL_TRANCHE_DUE, Phase 2 step 1): a windfall tranche falls due → the cash
+ *   waiting over the tranches left, split by the core targets (F3: never the satellite).
+ * - index_drawdown_tier (WINDFALL_ACCELERATION): ACWI past a tier below its 52-week high → the next
+ *   tranche pulled forward, or a share of the cash waiting, once per tier and drawdown.
+ *   Windfall orders draw on the windfall pool's TWD balance and buy through config windfall.vehicles,
+ *   else the pool's largest holding of the class, else its benchmark; strategic cash's share stays
+ *   in the balance, which is strategic cash already.
  *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
@@ -36,8 +43,9 @@ import { classDrifts, type DriftBands } from './allocation';
 import { daysBetween } from './fx';
 import { classWeights, regularPool, type PoolView } from './rules';
 import { usSitusExposure } from './tax';
-import type { AssetClass, Side } from './types';
+import type { AssetClass, Pool, Side } from './types';
 import type { Holding } from './valuation';
+import { drawdownOf, readAcceleration, tierAmount, tierToFire, type Close } from './windfall';
 
 /** Floating-point sums a hair over a limit are not over it. */
 const EPS = 1e-9;
@@ -104,6 +112,31 @@ export interface EngineInput {
   domiciles?: ReadonlyMap<string, string>;
   /** TWD per USD, the latest rate (US_ESTATE_TAX); without it the rule waits. */
   usdTwd?: number | null;
+  /** The windfall plan (F3); without it the two windfall rules wait. */
+  windfall?: WindfallInput;
+}
+
+export interface WindfallTranche {
+  id: number;
+  dueDate: string;
+  amountTwd: number;
+  status: 'scheduled' | 'accelerated' | 'done';
+}
+
+export interface FiredTier {
+  drawdown: number;
+  /** The 52-week high's date, which names the drawdown. */
+  peakDate: string;
+  firedOn: string;
+}
+
+export interface WindfallInput {
+  /** null until a plan is started on the Windfall page. */
+  plan: { id: number; totalTwd: number; startDate: string; tranches: WindfallTranche[]; tiersFired: FiredTier[] } | null;
+  /** ACWI's daily closes over a little more than the drawdown window. */
+  gauge: Close[];
+  /** config windfall.vehicles: the fund each core class is bought through. */
+  vehicles: Record<string, string>;
 }
 
 /** A listed buy or sell, in whole shares or, where the broker takes them, fractions. */
@@ -120,6 +153,8 @@ export interface TradeOrder {
   fxRate: number;
   amountTwd: number;
   assetClassId: string;
+  /** The pool it is recorded in; absent is the regular pool. */
+  pool?: Pool;
 }
 
 /** Money moved into or out of a TWD balance (savings, money-market fund entered as a balance). */
@@ -130,6 +165,7 @@ export interface BalanceOrder {
   side: 'deposit' | 'withdraw';
   amountTwd: number;
   assetClassId: string;
+  pool?: Pool;
 }
 
 export type DraftOrder = TradeOrder | BalanceOrder;
@@ -174,6 +210,20 @@ export interface ProposalDetail {
   situsUsd?: number;
   limitUsd?: number;
   usdTwd?: number;
+  /** Windfall rules: the cash waiting, the tranches still scheduled, the tranche due, what strategic cash keeps. */
+  waitingTwd?: number;
+  tranchesLeft?: number;
+  trancheId?: number;
+  dueDate?: string;
+  keptTwd?: number;
+  /** WINDFALL_ACCELERATION: the drawdown, its peak and the newest close, the tier, and the tranches it pulls forward. */
+  drawdown?: number;
+  peak?: Close;
+  latest?: Close;
+  tier?: number;
+  /** A tier that deploys a share of the cash waiting: that share. */
+  share?: number;
+  accelerated?: number[];
 }
 
 export interface Draft {
@@ -205,6 +255,8 @@ export interface Outcome {
   checks: Check[];
   create: Array<Draft & { expiresAt: string | null }>;
   close: Array<{ id: number; reason: ClosedReason }>;
+  /** The windfall plan's record of the tiers fired, when a tier fired in this run. */
+  windfall?: { planId: number; tiersFired: FiredTier[]; peakClose: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -756,8 +808,143 @@ function evaluateEstate(rule: EngineRule, context: Context): Result {
   };
 }
 
+/** The windfall pool's TWD balances (savings or a money-market fund): the cash waiting to be deployed. */
+function waitingBalances(holdings: readonly Holding[]): Holding[] {
+  return holdings.filter((holding) => holding.pool === 'windfall' && isBalance(holding) && (holding.valueTwd ?? 0) > 0).sort((a, b) => (b.valueTwd ?? 0) - (a.valueTwd ?? 0));
+}
+
+/**
+ * Orders for `amount` of the windfall's waiting cash, split by the core targets: each class
+ * bought through its windfall vehicle, else the windfall pool's largest holding of it, else its
+ * benchmark ETF, in shares rounded down. Strategic cash's share stays where it is (the waiting
+ * balance is strategic cash). One withdrawal from the largest balance pays for the purchases.
+ */
+function deployWindfall(context: Context, windfall: WindfallInput, amount: number): { orders: DraftOrder[]; boughtTwd: number; keptTwd: number; noFund: string[] } {
+  const holdings = context.input.holdings.filter((holding) => holding.pool === 'windfall');
+  const source = waitingBalances(holdings)[0];
+  const core = context.classes.filter((assetClass) => assetClass.sleeve === 'core' && assetClass.targetWeight > 0);
+  const total = core.reduce((sum, assetClass) => sum + assetClass.targetWeight, 0);
+  const buys: DraftOrder[] = [];
+  const noFund: string[] = [];
+  let keptTwd = 0;
+  for (const assetClass of core) {
+    const want = (amount * assetClass.targetWeight) / total;
+    if (source && assetClass.id === source.assetClassId) {
+      keptTwd += want;
+      continue;
+    }
+    const largest = holdings.filter((holding) => holding.assetClassId === assetClass.id && holding.ticker !== null).sort((a, b) => (b.valueTwd ?? 0) - (a.valueTwd ?? 0))[0];
+    const ticker = [windfall.vehicles[assetClass.id], largest?.ticker, assetClass.benchmarkTicker].find((candidate) => {
+      const quote = candidate ? context.input.quotes.get(candidate) : undefined;
+      return quote !== undefined && unitOf(quote) > 0;
+    });
+    const quote = ticker ? context.input.quotes.get(ticker) : undefined;
+    if (!ticker || !quote) {
+      noFund.push(assetClass.id);
+      continue;
+    }
+    const qty = roundShares(want / unitOf(quote), quote.decimals, 'down');
+    if (qty > 0) buys.push({ ...tradeOrder(ticker, 'buy', qty, quote, assetClass.id), pool: 'windfall' });
+  }
+  const boughtTwd = buys.reduce((sum, order) => sum + order.amountTwd, 0);
+  const orders: DraftOrder[] = [];
+  if (source && boughtTwd > 0) {
+    orders.push({ kind: 'balance', assetId: manualId(source), label: source.label, side: 'withdraw', amountTwd: Math.ceil(boughtTwd), assetClassId: source.assetClassId, pool: 'windfall' });
+  }
+  return { orders: [...orders, ...buys], boughtTwd, keptTwd, noFund };
+}
+
+function windfallState(context: Context) {
+  const windfall = context.input.windfall;
+  const plan = windfall?.plan;
+  if (!windfall || !plan) return undefined;
+  const left = plan.tranches.filter((tranche) => tranche.status === 'scheduled').sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id);
+  const waitingTwd = waitingBalances(context.input.holdings).reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  const poolTwd = context.input.holdings.filter((holding) => holding.pool === 'windfall').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  return { windfall, plan, left, waitingTwd, poolTwd };
+}
+
+function evaluateTranche(rule: EngineRule, context: Context): Result {
+  const state = windfallState(context);
+  if (!state) return { outcome: 'waiting', why: 'plan' };
+  const due = state.left.find((tranche) => tranche.dueDate <= context.input.today);
+  if (!due) return { outcome: 'quiet' };
+  if (state.waitingTwd <= 0) return { outcome: 'waiting', why: 'windfall_cash' };
+  const amount = state.waitingTwd / state.left.length;
+  const deployed = deployWindfall(context, state.windfall, amount);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: `tranche:${due.id}`,
+      orders: deployed.orders,
+      detail: {
+        poolTwd: state.poolTwd,
+        waitingTwd: state.waitingTwd,
+        tranchesLeft: state.left.length,
+        trancheId: due.id,
+        dueDate: due.dueDate,
+        keptTwd: deployed.keptTwd,
+        cashTwd: amount,
+        leftTwd: Math.max(0, amount - deployed.boughtTwd - deployed.keptTwd),
+        ...(deployed.noFund.length ? { noFund: deployed.noFund } : {}),
+      },
+    },
+  };
+}
+
+function evaluateAcceleration(rule: EngineRule, context: Context): Result {
+  const acceleration = readAcceleration(rule.threshold);
+  if (!acceleration) return { outcome: 'unreadable' };
+  const state = windfallState(context);
+  if (!state) return { outcome: 'waiting', why: 'plan' };
+  if (state.left.length === 0 || state.waitingTwd <= 0) return { outcome: 'quiet' };
+  const drawdown = drawdownOf(state.windfall.gauge, context.input.today, acceleration.windowWeeks);
+  if (!drawdown) return { outcome: 'waiting', why: 'gauge' };
+  const fired = state.plan.tiersFired.filter((tier) => tier.peakDate === drawdown.peak.date).map((tier) => tier.drawdown);
+  const tier = tierToFire(acceleration.tiers, drawdown.drawdown, fired);
+  if (!tier) return { outcome: 'quiet' };
+  const amount = Math.min(state.waitingTwd, tierAmount(tier, state.waitingTwd, state.left.length));
+  // The tranche pulled forward is the next one not due yet (else the last); all of them when everything goes in.
+  const next = state.left.find((tranche) => tranche.dueDate > context.input.today) ?? state.left[state.left.length - 1];
+  const accelerated = tier.deploy.kind === 'next_tranche' ? (next ? [next.id] : []) : tier.deploy.share >= 1 ? state.left.map((tranche) => tranche.id) : [];
+  const deployed = deployWindfall(context, state.windfall, amount);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: `tier:${tier.drawdown}:${drawdown.peak.date}`,
+      orders: deployed.orders,
+      detail: {
+        poolTwd: state.poolTwd,
+        waitingTwd: state.waitingTwd,
+        tranchesLeft: state.left.length,
+        drawdown: drawdown.drawdown,
+        peak: drawdown.peak,
+        latest: drawdown.latest,
+        tier: tier.drawdown,
+        ...(tier.deploy.kind === 'share' ? { share: tier.deploy.share } : {}),
+        accelerated,
+        keptTwd: deployed.keptTwd,
+        cashTwd: amount,
+        leftTwd: Math.max(0, amount - deployed.boughtTwd - deployed.keptTwd),
+        ...(deployed.noFund.length ? { noFund: deployed.noFund } : {}),
+      },
+    },
+  };
+}
+
 /** The conditions this engine evaluates, in the order it runs them (R2 counts what R1 sells). */
-export const CONDITIONS = ['single_stock_weight_above', 'satellite_weight_above', 'class_drift_exceeds', 'day_after_dca', 'first_weekend_of_month', 'us_situs_value_above'] as const;
+export const CONDITIONS = [
+  'single_stock_weight_above',
+  'satellite_weight_above',
+  'class_drift_exceeds',
+  'day_after_dca',
+  'first_weekend_of_month',
+  'us_situs_value_above',
+  'tranche_due',
+  'index_drawdown_tier',
+] as const;
 
 /** Conditions that fire once per period: their state is the month or the year. */
 const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month'];
@@ -793,6 +980,7 @@ export function evaluate(input: EngineInput): Outcome {
   const checks: Check[] = [];
   const create: Outcome['create'] = [];
   const close: Outcome['close'] = [];
+  let windfall: Outcome['windfall'];
   const now = Date.parse(input.now);
 
   for (const rule of [...input.rules].sort((a, b) => order(a) - order(b) || a.id.localeCompare(b.id))) {
@@ -805,6 +993,8 @@ export function evaluate(input: EngineInput): Outcome {
     else if (rule.condition === 'class_drift_exceeds') result = evaluateDrift(rule, context);
     else if (rule.condition === 'day_after_dca') result = evaluateMonthly(rule, context);
     else if (rule.condition === 'us_situs_value_above') result = evaluateEstate(rule, context);
+    else if (rule.condition === 'tranche_due') result = evaluateTranche(rule, context);
+    else if (rule.condition === 'index_drawdown_tier') result = evaluateAcceleration(rule, context);
     else result = evaluateAnnual(rule, context, drift);
     const check: Check = { ruleId: rule.id, ...result };
     checks.push(check);
@@ -818,8 +1008,15 @@ export function evaluate(input: EngineInput): Outcome {
     }
     open = open.filter((proposal) => !close.some((closed) => closed.id === proposal.id));
 
+    const created = create.length;
     const live = decide(rule, check, mine, open);
     if (rule.condition === 'single_stock_weight_above') context.r1Trims = live ? context.pendingTrims : new Map();
+    // A tier fires once per drawdown: the plan keeps the record once its proposal is drafted.
+    const plan = input.windfall?.plan;
+    const tier = check.draft?.detail;
+    if (rule.condition === 'index_drawdown_tier' && create.length > created && plan && tier?.tier !== undefined && tier.peak) {
+      windfall = { planId: plan.id, tiersFired: [...plan.tiersFired, { drawdown: tier.tier, peakDate: tier.peak.date, firedOn: input.today }], peakClose: tier.peak.close };
+    }
   }
 
   /** Closes what no longer stands and drafts what is due; true when the rule's proposal is live afterwards. */
@@ -843,7 +1040,7 @@ export function evaluate(input: EngineInput): Outcome {
     create.push({ ...draft, expiresAt });
     return true;
   }
-  return { checks, create, close };
+  return { checks, create, close, ...(windfall ? { windfall } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -868,12 +1065,24 @@ export function readOrders(value: unknown): DraftOrder[] {
       const { ticker, side, currency } = row;
       if (typeof ticker !== 'string' || (side !== 'buy' && side !== 'sell') || typeof currency !== 'string' || qty === undefined || price === undefined || fxRate === undefined) continue;
       const decimals = finite(row['decimals']);
-      out.push({ kind: 'trade', ticker, side, qty, price, currency, fxRate, amountTwd, assetClassId, ...(decimals !== undefined && Number.isInteger(decimals) && decimals > 0 && decimals <= 8 ? { decimals } : {}) });
+      out.push({
+        kind: 'trade',
+        ticker,
+        side,
+        qty,
+        price,
+        currency,
+        fxRate,
+        amountTwd,
+        assetClassId,
+        ...(decimals !== undefined && Number.isInteger(decimals) && decimals > 0 && decimals <= 8 ? { decimals } : {}),
+        ...(row['pool'] === 'windfall' ? { pool: 'windfall' as const } : {}),
+      });
     } else if (row['kind'] === 'balance') {
       const assetId = finite(row['assetId']);
       const { label, side } = row;
       if (assetId === undefined || typeof label !== 'string' || (side !== 'deposit' && side !== 'withdraw')) continue;
-      out.push({ kind: 'balance', assetId, label, side, amountTwd, assetClassId });
+      out.push({ kind: 'balance', assetId, label, side, amountTwd, assetClassId, ...(row['pool'] === 'windfall' ? { pool: 'windfall' as const } : {}) });
     }
   }
   return out;

@@ -12,12 +12,13 @@ const CHECK_FAILED = '23514';
 const KEY_MISSING = '23503';
 
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
-// (step 10), the N5 audit log adds audit_log and the nightly job (Phase 1, step 4) adds job_runs.
+// (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
+// the windfall planner (Phase 2, step 1) adds market_series.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
-  'job_runs', 'notifications',
+  'job_runs', 'notifications', 'market_series',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -37,7 +38,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs and notifications', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications and market_series', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -292,10 +293,10 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, with the Phase 2 rules disabled', async () => {
+  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
     assert.equal(rows.length, 14);
-    for (const row of rows) assert.equal(row.enabled, !['F3', 'F12', 'N3'].includes(row.feature), row.id);
+    for (const row of rows) assert.equal(row.enabled, !['F12', 'N3'].includes(row.feature), row.id);
   });
 
   it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
@@ -457,6 +458,48 @@ describe('fee and tax drag (step 11)', () => {
     await as(db, 'owner', async (tx) => {
       const { rows } = await tx.query(`select old_value ->> 'cooldown_days' as old, new_value ->> 'cooldown_days' as new, changed_by from public.rule_changes where rule_id = 'US_ESTATE_TAX'`);
       assert.deepEqual(rows, [{ old: '7', new: '30', changed_by: null }]);
+    });
+  });
+});
+
+describe('windfall planner (Phase 2, step 1)', () => {
+  it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2026-10-01', 40.8, 'shiller')`)), DENIED);
+    });
+    await db.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2099-10-01', 40.8, 'shiller')`);
+    assert.equal(await errorCode(db.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2099-10-15', 40.8, 'shiller')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select value from public.market_series where series = 'us_cape' and obs_month = '2099-10-01'`), '40.8');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.market_series'), 0);
+    });
+    await db.query(`delete from public.market_series where obs_month = '2099-10-01'`);
+  });
+
+  it('adds ACWI for the drawdown gauge, the planner settings, and turns the F3 rules on', async () => {
+    assert.equal(await scalar(db, `select asset_class_id from public.securities where ticker = 'ACWI'`), 'us_global_equity');
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'windfall'`), { vehicles: {}, cash_return: 0.015, backtest: { from_year: 1900, horizon_months: 60 } });
+    const { rows } = await db.query<{ id: string; enabled: boolean }>(`select id, enabled from public.rules where id like 'WINDFALL%' order by id`);
+    assert.deepEqual(rows, [
+      { id: 'WINDFALL_ACCELERATION', enabled: true },
+      { id: 'WINDFALL_TRANCHE_DUE', enabled: true },
+    ]);
+  });
+
+  it('logs edits to a plan and its tranches, and deletes the tranches with their plan', async () => {
+    await as(db, 'owner', async (tx) => {
+      const id = await scalar<number>(tx, `insert into public.windfall_plan (total_twd, received_on, cape_percentile, tranche_count) values (5500000, '2026-11-02', 75, 24) returning id`);
+      await tx.query(`insert into public.windfall_tranches (plan_id, due_date, amount_twd) values ($1, '2026-11-02', 229167), ($1, '2026-12-02', 229167)`, [id]);
+      await tx.query(`update public.windfall_tranches set status = 'done' where plan_id = $1 and due_date = '2026-11-02'`, [id]);
+      await tx.query('delete from public.windfall_plan where id = $1', [id]);
+      const { rows } = await tx.query<{ table_name: string; action: string }>(`select table_name, action from public.audit_log where table_name in ('windfall_plan', 'windfall_tranches') order by id`);
+      // The plan's delete is logged, then its two tranches as the cascade removes them.
+      assert.deepEqual(
+        rows.map((row) => `${row.table_name} ${row.action}`).sort(),
+        ['windfall_plan delete', 'windfall_tranches delete', 'windfall_tranches delete', 'windfall_tranches update'],
+      );
     });
   });
 });

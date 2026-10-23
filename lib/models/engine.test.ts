@@ -437,6 +437,86 @@ describe('US estate tax', () => {
   });
 });
 
+describe('windfall tranches and their acceleration (F3)', () => {
+  const tranche: EngineRule = { id: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due', threshold: {}, enabled: true, cooldownDays: 7 };
+  const acceleration: EngineRule = {
+    id: 'WINDFALL_ACCELERATION',
+    condition: 'index_drawdown_tier',
+    threshold: {
+      index: 'ACWI',
+      window_weeks: 52,
+      tiers: [
+        { drawdown: 0.15, deploy: 'next_tranche' },
+        { drawdown: 0.25, deploy_share_of_remaining: 0.5 },
+        { drawdown: 0.35, deploy_share_of_remaining: 1 },
+      ],
+    },
+    enabled: true,
+    cooldownDays: 7,
+  };
+  // The windfall waits in a money-market balance: NT$5,500,000 over 24 monthly tranches from 2 October.
+  const cash = holding({ key: 'manual:9', ticker: null, label: 'Money-market fund', pool: 'windfall', assetClassId: 'strategic_cash', productType: 'cash_mmf', market: null, currency: 'TWD', qty: 5_500_000, valueTwd: 5_500_000 });
+  const tranches = Array.from({ length: 24 }, (_, index) => ({ id: index + 1, dueDate: `${2026 + Math.floor((9 + index) / 12)}-${String(((9 + index) % 12) + 1).padStart(2, '0')}-02`, amountTwd: 229_167, status: 'scheduled' as const }));
+  const plan = { id: 7, totalTwd: 5_500_000, startDate: '2026-10-02', tranches, tiersFired: [] as Array<{ drawdown: number; peakDate: string; firedOn: string }> };
+  const gauge = (latest: number) => [
+    { date: '2026-03-02', close: 100 },
+    { date: '2026-10-21', close: latest },
+  ];
+  const run = (overrides: Partial<EngineInput> = {}, latest = 100, fired = plan.tiersFired) =>
+    evaluate(input({ rules: [tranche, acceleration], holdings: [cash], windfall: { plan: { ...plan, tiersFired: fired }, gauge: gauge(latest), vehicles: {} }, ...overrides }));
+
+  it('deploys the due tranche, the cash over the tranches left, by the core targets; strategic cash keeps its share', () => {
+    const draft = draftOf(run(), 'WINDFALL_TRANCHE_DUE');
+    assert.ok(draft);
+    assert.equal(draft.state, 'tranche:1');
+    // NT$229,167 a tranche: VT 35%, 0050 15%, BNDW 27.5%, GLDM 12.5% of the core; strategic cash's 10% stays.
+    assert.deepEqual(trades(draft.orders), [
+      ['buy', 'VT', 802],
+      ['buy', '0050', 343],
+      ['buy', 'BNDW', 630],
+      ['buy', 'GLDM', 286],
+    ]);
+    assert.deepEqual(draft.orders[0], { kind: 'balance', assetId: 9, label: 'Money-market fund', side: 'withdraw', amountTwd: 206_100, assetClassId: 'strategic_cash', pool: 'windfall' });
+    assert.ok(draft.orders.every((order) => order.pool === 'windfall'));
+    assert.ok(Math.abs((draft.detail.keptTwd ?? 0) - 5_500_000 / 24 / 10) < 1e-6);
+    assert.equal(checkOf(run({ today: '2026-10-01' }), 'WINDFALL_TRANCHE_DUE').outcome, 'quiet');
+  });
+
+  it('buys through the windfall vehicle chosen for a class, such as an Irish fund', () => {
+    const quotes = new Map([...QUOTES, ['AGGU', twdQuote(200)]]);
+    const draft = draftOf(evaluate(input({ rules: [tranche], holdings: [cash], quotes, windfall: { plan, gauge: [], vehicles: { global_bonds: 'AGGU' } } })), 'WINDFALL_TRANCHE_DUE');
+    assert.deepEqual(trades(draft?.orders ?? []).find((row) => row[1] === 'AGGU'), ['buy', 'AGGU', 315]);
+  });
+
+  it('PRD acceptance: at −16% pulls the next tranche forward, at −26% half the cash left, each tier once per drawdown', () => {
+    const first = run({}, 84);
+    const merged = draftOf(first, 'WINDFALL_ACCELERATION');
+    assert.ok(merged);
+    assert.equal(merged.state, 'tier:0.15:2026-03-02');
+    assert.deepEqual(merged.detail.accelerated, [2]);
+    assert.ok(Math.abs(merged.detail.cashTwd - 5_500_000 / 24) < 1e-6);
+    assert.deepEqual(first.windfall, { planId: 7, tiersFired: [{ drawdown: 0.15, peakDate: '2026-03-02', firedOn: '2026-10-22' }], peakClose: 100 });
+
+    const deeper = draftOf(run({}, 74, [{ drawdown: 0.15, peakDate: '2026-03-02', firedOn: '2026-10-22' }]), 'WINDFALL_ACCELERATION');
+    assert.equal(deeper?.state, 'tier:0.25:2026-03-02');
+    assert.equal(deeper?.detail.cashTwd, 2_750_000);
+
+    const fired = [
+      { drawdown: 0.15, peakDate: '2026-03-02', firedOn: '2026-10-22' },
+      { drawdown: 0.25, peakDate: '2026-03-02', firedOn: '2026-10-23' },
+    ];
+    assert.equal(checkOf(run({}, 74, fired), 'WINDFALL_ACCELERATION').outcome, 'quiet');
+    assert.equal(checkOf(run({}, 90), 'WINDFALL_ACCELERATION').outcome, 'quiet');
+  });
+
+  it('waits for a plan, and has nothing to deploy without the waiting cash', () => {
+    const none = evaluate(input({ rules: [tranche, acceleration], holdings: [cash] }));
+    assert.equal(checkOf(none, 'WINDFALL_TRANCHE_DUE').why, 'plan');
+    assert.equal(checkOf(none, 'WINDFALL_ACCELERATION').why, 'plan');
+    assert.equal(checkOf(run({ holdings: [] }), 'WINDFALL_TRANCHE_DUE').why, 'windfall_cash');
+  });
+});
+
 describe('deciding what to save', () => {
   const holdings = onTarget(200_000, [listed('AAPL', 'us_stocks', 11_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 29_000, { productType: 'theme_etf' })]);
   const record = (overrides: Partial<ProposalRecord>): ProposalRecord => ({ id: 1, ruleId: 'R1', state: 'AAPL', status: 'open', createdAt: '2026-10-21T01:00:00.000Z', expiresAt: '2026-11-04T01:00:00.000Z', ...overrides });

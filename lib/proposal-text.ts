@@ -20,6 +20,8 @@ const TITLES: Record<string, Bilingual> = {
   day_after_dca: { en: 'Monthly contribution', zh: '每月投入' },
   first_weekend_of_month: { en: 'Annual review', zh: '年度檢查' },
   us_situs_value_above: { en: 'US estate tax', zh: '美國遺產稅' },
+  tranche_due: { en: 'Windfall tranche', zh: '大額資金分批' },
+  index_drawdown_tier: { en: 'Windfall acceleration', zh: '大額資金加速投入' },
 };
 
 /** "R1 · Single-stock trim". */
@@ -80,6 +82,17 @@ function cashLines(detail: ProposalDetail, names: Names): Bilingual[] {
     });
   }
   return lines;
+}
+
+/** Windfall orders: what strategic cash's share leaves in the balance, which is strategic cash already. */
+function keptLine(detail: ProposalDetail): Bilingual[] {
+  if (!detail.keptTwd || detail.keptTwd < 1) return [];
+  return [
+    {
+      en: `Strategic cash's share, ${twd(detail.keptTwd)}, stays in the balance the windfall waits in, which is strategic cash already.`,
+      zh: `戰略現金的部分 ${twd(detail.keptTwd)} 留在大額資金等待中的帳戶，它本身就是戰略現金。`,
+    },
+  ];
 }
 
 function classLine(row: { id: string; weight: number; target: number; band: number | null }, names: Names): Bilingual {
@@ -165,6 +178,38 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       });
       break;
     }
+    case 'tranche_due': {
+      const left = detail.tranchesLeft ?? 0;
+      lines.push({
+        en: `The windfall tranche due on ${detail.dueDate ?? '—'}: ${twd(detail.waitingTwd ?? 0)} waits for ${left} tranche${left === 1 ? '' : 's'}, so this one deploys ${twd(detail.cashTwd)}, split by the core targets; the satellite takes none of the windfall.`,
+        zh: `${detail.dueDate ?? '—'} 到期的大額資金分批：${twd(detail.waitingTwd ?? 0)} 分 ${left} 批投入，本批投入 ${twd(detail.cashTwd)}，依核心目標權重分配；大額資金不投入衛星部位。`,
+      });
+      lines.push(...keptLine(detail));
+      break;
+    }
+    case 'index_drawdown_tier': {
+      const peak = detail.peak;
+      const latest = detail.latest;
+      const fall = percent(detail.drawdown ?? 0);
+      const tier = percent(detail.tier ?? 0, 0);
+      lines.push({
+        en: `ACWI is ${fall} below its 52-week high (${peak ? `${peak.close} on ${peak.date}` : '—'}; ${latest ? `${latest.close} on ${latest.date}` : '—'}), past the ${tier} tier.`,
+        zh: `ACWI 自 52 週高點下跌 ${fall}（高點 ${peak ? `${peak.date} 的 ${peak.close}` : '—'}；最新 ${latest ? `${latest.date} 的 ${latest.close}` : '—'}），已達 ${tier} 級距。`,
+      });
+      lines.push(
+        detail.share === undefined
+          ? {
+              en: `So the next tranche goes in now with the current one: ${twd(detail.cashTwd)} of the ${twd(detail.waitingTwd ?? 0)} waiting, split by the core targets. Each tier fires once in this drawdown.`,
+              zh: `因此下一批提前與本批一起投入：等待中的 ${twd(detail.waitingTwd ?? 0)} 中投入 ${twd(detail.cashTwd)}，依核心目標權重分配。每個級距在這波下跌中只觸發一次。`,
+            }
+          : {
+              en: `So ${percent(detail.share, 0)} of the cash waiting goes in now: ${twd(detail.cashTwd)} of ${twd(detail.waitingTwd ?? 0)}, split by the core targets${detail.share < 1 ? '; the tranches left deploy the rest at the usual pace' : ''}. Each tier fires once in this drawdown.`,
+              zh: `因此等待中資金的 ${percent(detail.share, 0)} 現在投入：${twd(detail.waitingTwd ?? 0)} 中的 ${twd(detail.cashTwd)}，依核心目標權重分配${detail.share < 1 ? '；其餘依原節奏由剩下的批次投入' : ''}。每個級距在這波下跌中只觸發一次。`,
+            },
+      );
+      lines.push(...keptLine(detail));
+      break;
+    }
     default:
       break;
   }
@@ -207,6 +252,9 @@ export function checkText(check: Check, condition?: string): Bilingual {
     case 'waiting':
       if (check.why === 'dca_day') return { en: 'Waiting for the DCA debit day: set it below.', zh: '尚未設定定期定額扣款日：請在下方設定。' };
       if (check.why === 'usd') return { en: 'Waiting for a USD/TWD rate to value US assets in dollars.', zh: '等待美元匯率，才能以美元計算美國資產。' };
+      if (check.why === 'plan') return { en: 'Waiting for a windfall plan: start one on the Windfall page once the money arrives.', zh: '尚無大額資金計畫：資金入帳後，請在「大額資金」頁建立。' };
+      if (check.why === 'windfall_cash') return { en: "Waiting for the windfall's cash: record it as a TWD balance in the windfall pool.", zh: '尚無大額資金的現金：請以台幣餘額登錄在大額資金池。' };
+      if (check.why === 'gauge') return { en: "Waiting for ACWI's closes: the nightly job loads them.", zh: '等待 ACWI 的收盤價：每夜排程會載入。' };
       return { en: 'Nothing in the regular pool to measure yet.', zh: '一般投入資金池尚無可衡量的持股。' };
     case 'unreadable':
       return { en: 'A threshold is missing or malformed; fix it below.', zh: '門檻數值缺漏或格式錯誤：請在下方修正。' };

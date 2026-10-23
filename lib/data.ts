@@ -7,7 +7,23 @@ import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
-import { evaluate, readDetail, readOrders, type ClosedReason, type DraftOrder, type EngineInput, type EngineQuote, type EngineRule, type Outcome, type ProposalDetail, type ProposalRecord, type ProposalStatus } from './models/engine';
+import {
+  evaluate,
+  readDetail,
+  readOrders,
+  type ClosedReason,
+  type DraftOrder,
+  type EngineInput,
+  type EngineQuote,
+  type EngineRule,
+  type FiredTier,
+  type Outcome,
+  type ProposalDetail,
+  type ProposalRecord,
+  type ProposalStatus,
+  type WindfallInput,
+  type WindfallTranche,
+} from './models/engine';
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
@@ -941,12 +957,13 @@ export async function loadEngineInput(
   today: string,
   now: string,
 ): Promise<{ input: EngineInput; rules: RuleRecord[]; proposals: Proposal[]; orders: OrderSettings }> {
-  const [data, classes, rules, config, proposals] = await Promise.all([
+  const [data, classes, rules, config, proposals, windfall] = await Promise.all([
     loadHoldingsData(supabase),
     loadAssetClassSettings(supabase),
     loadRules(supabase),
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['dca', 'proposal_expiry_days', 'orders'])),
     loadProposals(supabase, today),
+    loadWindfallInput(supabase, today),
   ]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const day = configNumber(value('dca'), 'day_of_month');
@@ -964,6 +981,7 @@ export async function loadEngineInput(
     proposals,
     domiciles: new Map(data.securities.map((security) => [security.ticker, security.domicile])),
     usdTwd: usd?.value ?? null,
+    windfall,
   };
   return { input, rules, proposals, orders: orderSettings(value('orders')) };
 }
@@ -977,10 +995,21 @@ export async function saveOutcome(supabase: SupabaseClient, outcome: Outcome): P
     closed += data?.length ?? 0;
   }
   let created = 0;
+  let tierDrafted = false;
   for (const draft of outcome.create) {
     const { error } = await supabase.from('proposals').insert({ rule_id: draft.ruleId, state: draft.state, orders: draft.orders, detail: draft.detail, expires_at: draft.expiresAt });
     if (error && error.code !== '23505') throw new DataError('proposals', error.message);
     if (!error) created += 1;
+    if (!error && draft.state.startsWith('tier:')) tierDrafted = true;
+  }
+  // The plan keeps the record of the tiers fired, once their proposal is in (F3: once per drawdown).
+  if (outcome.windfall && tierDrafted) {
+    const { planId, tiersFired, peakClose } = outcome.windfall;
+    const { error } = await supabase
+      .from('windfall_plan')
+      .update({ tiers_fired: tiersFired.map((tier) => ({ drawdown: tier.drawdown, peak_date: tier.peakDate, fired_on: tier.firedOn })), current_drawdown_peak: peakClose })
+      .eq('id', planId);
+    if (error) throw new DataError('windfall_plan', error.message);
   }
   return { created, closed };
 }
@@ -1274,4 +1303,155 @@ export async function loadCostsData(supabase: SupabaseClient): Promise<CostsData
     dcaAmount: dcaAmount(value('dca')?.value),
     mix: assumptions ? mixReturn(classSettings, assumptions.assumptions) : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// F3 windfall tranche planner (Phase 2, step 1)
+// ---------------------------------------------------------------------------
+
+/** The gauge's window and a little more: 53 weeks of ACWI closes. */
+const GAUGE_DAYS = 380;
+
+export interface WindfallPlanRecord {
+  id: number;
+  totalTwd: number;
+  startDate: string;
+  capePercentile: number | null;
+  trancheCount: number | null;
+  tiersFired: FiredTier[];
+  peakClose: number | null;
+  tranches: Array<WindfallTranche & { proposalId: number | null }>;
+}
+
+function readFired(value: unknown): FiredTier[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const row = typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>) : {};
+    const { drawdown, peak_date: peakDate, fired_on: firedOn } = row;
+    return typeof drawdown === 'number' && typeof peakDate === 'string' ? [{ drawdown, peakDate, firedOn: typeof firedOn === 'string' ? firedOn : '' }] : [];
+  });
+}
+
+/** The newest windfall plan with its tranches; undefined when none has been started. */
+export async function loadWindfallPlan(supabase: SupabaseClient): Promise<WindfallPlanRecord | undefined> {
+  const [plan] = await rows<{ id: number; total_twd: number; received_on: string; cape_percentile: number | null; tranche_count: number | null; tiers_fired: unknown; current_drawdown_peak: number | null }>(
+    'windfall_plan',
+    supabase.from('windfall_plan').select('id, total_twd, received_on, cape_percentile, tranche_count, tiers_fired, current_drawdown_peak').order('id', { ascending: false }).limit(1),
+  );
+  if (!plan) return undefined;
+  const tranches = await rows<{ id: number; due_date: string; amount_twd: number; status: WindfallTranche['status']; proposal_id: number | null }>(
+    'windfall_tranches',
+    supabase.from('windfall_tranches').select('id, due_date, amount_twd, status, proposal_id').eq('plan_id', plan.id).order('due_date').order('id'),
+  );
+  return {
+    id: plan.id,
+    totalTwd: Number(plan.total_twd),
+    startDate: plan.received_on,
+    capePercentile: plan.cape_percentile === null ? null : Number(plan.cape_percentile),
+    trancheCount: plan.tranche_count,
+    tiersFired: readFired(plan.tiers_fired),
+    peakClose: plan.current_drawdown_peak === null ? null : Number(plan.current_drawdown_peak),
+    tranches: tranches.map((row) => ({ id: row.id, dueDate: row.due_date, amountTwd: Number(row.amount_twd), status: row.status, proposalId: row.proposal_id })),
+  };
+}
+
+/** config windfall: the fund each core class is bought through, the waiting cash's return and the backtest's span. */
+export interface WindfallSettings {
+  vehicles: Record<string, string>;
+  cashReturn: number;
+  fromYear: number;
+  horizonMonths: number;
+}
+
+export function readWindfallSettings(value: unknown): WindfallSettings {
+  const vehicles = setting(value, 'vehicles');
+  const backtest = setting(value, 'backtest');
+  const cashReturn = setting(value, 'cash_return');
+  const fromYear = setting(backtest, 'from_year');
+  const horizon = setting(backtest, 'horizon_months');
+  return {
+    vehicles:
+      typeof vehicles === 'object' && vehicles !== null && !Array.isArray(vehicles)
+        ? Object.fromEntries(Object.entries(vehicles).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== ''))
+        : {},
+    cashReturn: typeof cashReturn === 'number' && cashReturn > -0.5 && cashReturn < 0.5 ? cashReturn : 0,
+    fromYear: typeof fromYear === 'number' && Number.isInteger(fromYear) ? fromYear : 1900,
+    horizonMonths: typeof horizon === 'number' && Number.isInteger(horizon) && horizon >= 1 ? horizon : 60,
+  };
+}
+
+export function windfallSettingsValue(settings: WindfallSettings): Record<string, unknown> {
+  return { vehicles: settings.vehicles, cash_return: settings.cashReturn, backtest: { from_year: settings.fromYear, horizon_months: settings.horizonMonths } };
+}
+
+/** ACWI's closes over the gauge's window, the drawdown's measure (F3). */
+export async function loadGauge(supabase: SupabaseClient, today: string): Promise<Array<{ date: string; close: number }>> {
+  const found = await rows<{ price_date: string; close: number }>(
+    'prices',
+    supabase.from('prices').select('price_date, close').eq('ticker', 'ACWI').gte('price_date', addDays(today, -GAUGE_DAYS)).lte('price_date', today).order('price_date'),
+  );
+  return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
+}
+
+/** What the two windfall rules read; the plan is null until one is started (or before the migration). */
+export async function loadWindfallInput(supabase: SupabaseClient, today: string): Promise<WindfallInput | undefined> {
+  const [plan, gauge, settings] = await Promise.all([
+    orDataError(loadWindfallPlan(supabase)),
+    orDataError(loadGauge(supabase, today)),
+    orDataError(rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'windfall'))),
+  ]);
+  if (plan instanceof DataError || gauge instanceof DataError || settings instanceof DataError) return undefined;
+  return {
+    plan: plan ? { id: plan.id, totalTwd: plan.totalTwd, startDate: plan.startDate, tranches: plan.tranches, tiersFired: plan.tiersFired } : null,
+    gauge,
+    vehicles: readWindfallSettings(settings[0]?.value).vehicles,
+  };
+}
+
+export interface SeriesPoint {
+  month: string;
+  value: number;
+}
+
+/** Every month of the market series (market_series), oldest first; a few thousand rows, read in pages. */
+export async function loadMarketSeries(supabase: SupabaseClient): Promise<{ series: Record<string, SeriesPoint[]>; sources: Record<string, string> }> {
+  const found = await allRows<{ series: string; obs_month: string; value: number; source: string }>('market_series', (from, to) =>
+    supabase.from('market_series').select('series, obs_month, value, source').order('series').order('obs_month').range(from, to),
+  );
+  const series: Record<string, SeriesPoint[]> = {};
+  const sources: Record<string, string> = {};
+  for (const row of found) {
+    (series[row.series] ??= []).push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
+    sources[row.series] = row.source;
+  }
+  return { series, sources };
+}
+
+/** Everything the Windfall page reads. */
+export interface WindfallData extends HoldingsData {
+  plan: WindfallPlanRecord | undefined;
+  settings: WindfallSettings;
+  pace: unknown;
+  rules: RuleRecord[];
+  market: { series: Record<string, SeriesPoint[]>; sources: Record<string, string> };
+  gauge: Array<{ date: string; close: number }>;
+  flows: CashFlowRecord[];
+  proposals: Proposal[];
+  classSettings: AssetClassSettings[];
+}
+
+export async function loadWindfallData(supabase: SupabaseClient, today: string): Promise<WindfallData> {
+  const [holdings, plan, config, rules, market, gauge, flows, proposals, classSettings] = await Promise.all([
+    loadHoldingsData(supabase),
+    loadWindfallPlan(supabase),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['windfall', 'windfall_pace'])),
+    loadRules(supabase),
+    loadMarketSeries(supabase),
+    loadGauge(supabase, today),
+    loadCashFlows(supabase),
+    loadProposals(supabase, today),
+    loadAssetClassSettings(supabase),
+  ]);
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  return { ...holdings, plan, settings: readWindfallSettings(value('windfall')), pace: value('windfall_pace'), rules, market, gauge, flows, proposals, classSettings };
 }

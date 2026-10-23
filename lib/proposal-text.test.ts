@@ -51,6 +51,24 @@ describe('proposal text', () => {
     assert.ok(second?.zh.includes('愛爾蘭註冊'));
   });
 
+  it('explains a windfall tranche and an acceleration with their figures', () => {
+    const [tranche, kept] = whyLines(
+      { id: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due' },
+      { poolTwd: 5_500_000, waitingTwd: 5_500_000, tranchesLeft: 24, dueDate: '2026-11-02', keptTwd: 22_917, cashTwd: 229_167, leftTwd: 100 },
+      NAMES,
+    );
+    assert.equal(tranche?.en, 'The windfall tranche due on 2026-11-02: NT$5,500,000 waits for 24 tranches, so this one deploys NT$229,167, split by the core targets; the satellite takes none of the windfall.');
+    assert.ok(kept?.en.startsWith("Strategic cash's share, NT$22,917, stays"));
+    const [fall, deploy] = whyLines(
+      { id: 'WINDFALL_ACCELERATION', condition: 'index_drawdown_tier' },
+      { poolTwd: 1, waitingTwd: 5_000_000, drawdown: 0.26, peak: { date: '2026-03-02', close: 100 }, latest: { date: '2026-10-21', close: 74 }, tier: 0.25, share: 0.5, cashTwd: 2_500_000, leftTwd: 0 },
+      NAMES,
+    );
+    assert.equal(fall?.en, 'ACWI is 26.0% below its 52-week high (100 on 2026-03-02; 74 on 2026-10-21), past the 25% tier.');
+    assert.ok(deploy?.en.startsWith('So 50% of the cash waiting goes in now: NT$2,500,000 of NT$5,000,000'));
+    assert.equal(checkText({ ruleId: 'WINDFALL_TRANCHE_DUE', outcome: 'waiting', why: 'plan' }).zh, '尚無大額資金計畫：資金入帳後，請在「大額資金」頁建立。');
+  });
+
   it('says when a whole share sells much more than the trim', () => {
     const lines = whyLines(
       { id: 'R1', condition: 'single_stock_weight_above' },

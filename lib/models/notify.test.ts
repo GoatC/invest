@@ -119,6 +119,8 @@ describe('messages', () => {
       new Map(),
     );
     assert.equal(estate.title, 'US_ESTATE_TAX · US estate tax 美國遺產稅');
+    const tranche = proposalMessage({ ...r1, id: 10, ruleId: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due', title: { en: 'WINDFALL_TRANCHE_DUE · Windfall tranche', zh: 'WINDFALL_TRANCHE_DUE · 大額資金分批' }, state: 'tranche:1', detail: { poolTwd: 1, cashTwd: 229_167, leftTwd: 0, dueDate: '2026-11-02' } }, new Map());
+    assert.equal(tranche.body, 'Deploy NT$229,167 of the windfall: the tranche due 2026-11-02.\n投入大額資金 NT$229,167：2026-11-02 到期的分批。');
     assert.equal(estate.body, 'US assets 61,000 USD, above the 60,000 USD exemption: consider Irish-domiciled ETFs.\n美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
   });
 
