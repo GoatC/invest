@@ -271,12 +271,17 @@ function Rates({ rates }: { rates: LatestQuote[] }) {
         </div>
       )}
       {gold && (
-        <Info>
-          <Bi
-            en={`Gold per gram: ${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = TWD per troy ounce ÷ ${GRAMS_PER_TROY_OUNCE} grams. TWD per ounce = the international USD price × the Bank of Taiwan USD rate of the day; the bank's own buy-back price is usually a little lower.`}
-            zh={`每克金價：${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = 每盎司台幣價格 ÷ ${GRAMS_PER_TROY_OUNCE} 克。每盎司台幣價格 = 國際美元金價 × 當日臺灣銀行美元匯率；銀行實際回收價通常略低。`}
-          />
-        </Info>
+        <>
+          <p className="muted small">
+            <Bi en={`Gold per gram: ${twd(gold.value / GRAMS_PER_TROY_OUNCE)}`} zh={`每克金價：${twd(gold.value / GRAMS_PER_TROY_OUNCE)}`} />
+          </p>
+          <Info>
+            <Bi
+              en={`Per gram = TWD per troy ounce ÷ ${GRAMS_PER_TROY_OUNCE} grams. TWD per ounce = the international USD price × the Bank of Taiwan USD rate of the day; the bank's own buy-back price is usually a little lower.`}
+              zh={`每克金價 = 每盎司台幣價格 ÷ ${GRAMS_PER_TROY_OUNCE} 克。每盎司台幣價格 = 國際美元金價 × 當日臺灣銀行美元匯率；銀行實際回收價通常略低。`}
+            />
+          </Info>
+        </>
       )}
     </section>
   );
