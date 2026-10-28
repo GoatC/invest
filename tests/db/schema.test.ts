@@ -5,6 +5,7 @@ import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { readCapmSettings } from '../../lib/models/capm.ts';
+import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
@@ -16,12 +17,13 @@ const KEY_MISSING = '23503';
 
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
-// the windfall planner (Phase 2, step 1) adds market_series, and the Regression Lab (step 2) index_prices.
+// the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
+// and the valuation workbench (step 4) fundamentals.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
-  'job_runs', 'notifications', 'market_series', 'index_prices',
+  'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -41,7 +43,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series and index_prices', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices and fundamentals', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -296,10 +298,10 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1)', async () => {
+  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1, F12 since step 4)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
     assert.equal(rows.length, 14);
-    for (const row of rows) assert.equal(row.enabled, !['F12', 'N3'].includes(row.feature), row.id);
+    for (const row of rows) assert.equal(row.enabled, row.feature !== 'N3', row.id);
   });
 
   it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
@@ -520,6 +522,57 @@ describe('Regression Lab (Phase 2, step 2)', () => {
         `insert into public.beta_results (ticker, benchmark, model, freq, window_years, beta, alpha, factor_loadings, r2, std_err, run_date) values ('VT', 'SPX', '1F', 'weekly', 2, 0.98, 0.01, '{"adjusted": 0.9866}', 0.9, 0.03, '2026-11-02')`,
       );
       assert.equal(await scalar(tx, `select count(*) from public.beta_results where ticker = 'VT'`), 1);
+    });
+  });
+});
+
+describe('valuation workbench (Phase 2, step 4)', () => {
+  it('keeps the fundamentals for the owner to read and the job to write, one row per stock and quarter end', async () => {
+    const row = `('AAPL', '2099-06-30', '{"netIncome": 100, "shares": 10}', 'USD', '2099-07-31', 'sec')`;
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.fundamentals (ticker, period_end, figures, currency, filed_on, source) values ${row}`)), DENIED);
+    });
+    await db.query(`insert into public.fundamentals (ticker, period_end, figures, currency, filed_on, source) values ${row}`);
+    assert.equal(await errorCode(db.query(`insert into public.fundamentals (ticker, period_end, figures, currency, source) values ('AAPL', '2099-09-30', '[]', 'USD', 'sec')`)), CHECK_FAILED);
+    assert.equal(await errorCode(db.query(`insert into public.fundamentals (ticker, period_end, figures, currency, source) values ('NOPE', '2099-09-30', '{}', 'USD', 'sec')`)), KEY_MISSING);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select figures ->> 'shares' from public.fundamentals where ticker = 'AAPL' and period_end = '2099-06-30'`), '10');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.fundamentals'), 0);
+    });
+    await db.query(`delete from public.fundamentals where period_end = '2099-06-30'`);
+  });
+
+  it('seeds the defaults the workbench reads, and turns the three F12 rules on', async () => {
+    const settings = readValuationSettings(await scalar(db, `select value from public.config where key = 'valuation'`));
+    assert.ok(settings);
+    assert.equal(settings.model, 'dcf');
+    assert.deepEqual(settings.growth, { bear: 0.02, base: 0.06, bull: 0.1 });
+    assert.deepEqual(settings.terminal, { bear: 0.015, base: 0.025, bull: 0.03 });
+    const { rows } = await db.query<{ id: string; enabled: boolean; threshold: unknown; cooldown_days: number }>(
+      `select id, enabled, threshold, cooldown_days from public.rules where feature = 'F12' order by id`,
+    );
+    assert.deepEqual(rows, [
+      { id: 'BUY_ZONE', enabled: true, threshold: { multiple: 0.75 }, cooldown_days: 7 },
+      { id: 'TRIM_ZONE', enabled: true, threshold: { multiple: 1.25, sell_share: 0.5 }, cooldown_days: 30 },
+      { id: 'VALUATION_UPDATED', enabled: true, threshold: { change: 0.1 }, cooldown_days: 7 },
+    ]);
+  });
+
+  it("logs an edit of a stock's assumptions, which must be an object", async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`update public.watchlist set assumptions = '{"model": "ddm"}' where ticker = 'AAPL'`);
+      const { rows } = await tx.query<{ model: string }>(`select new_row -> 'assumptions' ->> 'model' as model from public.audit_log where table_name = 'watchlist' and row_key = 'AAPL'`);
+      assert.deepEqual(rows, [{ model: 'ddm' }]);
+      assert.equal(await errorCode(tx.query(`update public.watchlist set assumptions = '[]' where ticker = 'AAPL'`)), CHECK_FAILED);
+    });
+  });
+
+  it('keeps each model\'s values a share in order, bear to bull', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.valuations (ticker, valuation_date, model, iv_bear, iv_base, iv_bull, inputs) values ('AAPL', '2099-11-02', 'dcf_fcff', 150, 200, 260, '{"trigger": "edit"}')`);
+      assert.equal(await errorCode(tx.query(`insert into public.valuations (ticker, valuation_date, model, iv_bear, iv_base, iv_bull) values ('AAPL', '2099-11-02', 'ddm', 210, 200, 260)`)), CHECK_FAILED);
     });
   });
 });
