@@ -1,23 +1,18 @@
 # 每夜價格排程 Nightly price job
 
-第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。第 5 步起，排程也會存下每一天的淨值快照；第 7 步起，每個快照另附當天的一週風險值。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
+每晚自動把收盤價、匯率、金價、市場資料與財報寫進你的 Supabase，存下每一天的淨值快照與風險值，再檢查規則。每次執行的結果記在 `job_runs`，App 的「資料狀態」頁看得到。
 
-Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot, since step 7 each snapshot's 1-week Value at Risk, and since step 9 it then checks the rules and drafts their proposals. Since Phase 2, step 1 it also loads the monthly S&P 500 CAPE, price and dividend yield since 1871 for the windfall planner (F3), from Robert Shiller's workbook with multpl.com as the fallback; since step 2 the S&P 500 and TAIEX total return daily closes and the US 3-month bill rate for the Regression Lab (N1), six years of every security's closes, and once a month each holding's β; since step 3 the US and Taiwan 10-year government bond yields and Damodaran's implied equity risk premium for the cost of equity (F11). Each run is recorded in `job_runs` and shown on the app's Data status page.
+Every night GitHub Actions loads closes, FX, gold, the monthly market series, index closes, yields and the single stocks' filings into Supabase, saves each day's NAV snapshot and VaR, re-values watched stocks after a new filing, then checks the rules. Each run is in `job_runs` and on the Data status page.
 
 ## 它怎麼運作 How it works
 
-- **時間**：每晚台北時間約 22:23（GitHub 有時會晚幾分鐘才開始）。這時台股已收盤、臺銀已公布當天匯率，前一個美股交易日的收盤價與 AGGU 的淨值也都已公布。
-- **在哪裡跑**：GitHub Actions，也就是 GitHub 提供的雲端電腦，公開 repo 免費。排程設定在 `.github/workflows/nightly.yml`，程式在 `scripts/nightly.ts`。
-- **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。風險值的代理 ETF（各資產類別的基準 ETF，例如 VT、0050）會再往前多載入：從第一筆交易（或一年前，取較早者）往前 3 年起，讓過去每一天的風險值都有完整的 3 年週報酬。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
-- **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。第 7 步起，每一天也附上當天的一週風險值（`var_95_1w`），風險值卡片的近 52 週走勢線就是取自這裡；風險值的資料讀取失敗時，快照照樣存入，風險值維持上一次的數值。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
-- **檢查規則**（第 9 步）：快照存好之後，排程以剛載入的收盤價評估規則（R1、R2、F8 偏離、每月投入、年度檢查，第 11 步起加上美國遺產稅），觸發時在「提案」頁產生附下單清單的提案，也會關閉已逾期或不再成立的提案。這和提案頁的「立即檢查規則」按鈕是同一段程式。公開的執行紀錄只寫「Rules checked.」，不寫提案內容；規則檢查失敗時，價格與快照照樣保存，資料狀態頁會標示。
-- **每月市場資料**（第二階段第 1 步）：同一個排程也載入大額資金分批（F3）用的三組每月資料：S&P 500 的 CAPE（決定分幾批）、每月平均價格與股息殖利率（回測用），從 1871 年起整段存入 `market_series` 表。主要來源是 Robert Shiller 教授網站上的 Excel 檔（`ie_data.xls`，下載連結每次更新都會變，所以每晚先讀網頁找連結），以 SheetJS（`xlsx` 套件）解析；連不上時改抓 multpl.com 的每月表格（數字同樣來自 Shiller 的資料）。Shiller 的資料每月更新一次、大約落後一個月，所以最新月份通常是上個月。ACWI（下跌加速的指標）是一般證券，和其他代號一樣每晚載入每日收盤價。
-- **回歸分析的資料**（第二階段第 2 步）：同一個排程也載入標普 500（FinMind 的 ^GSPC，失敗時改用 FRED 的 SP500）與加權報酬指數（FinMind，失敗時以證交所每日指數報表補最新一天）的每日收盤，存入 `index_prices` 表；美國 3 個月國庫券月利率（FRED TB3MS）存入 `market_series`。每檔證券的收盤價也改為往前載入 6 年（回歸最長 5 年，加 1 年給滾動 β），所以第一次執行會比平常久一點。每月第一次執行時，再把每檔持股的 β 存入 `beta_results`，資料狀態頁會寫「已存入本月 N 筆 β」。
-- **權益成本的資料**（第二階段第 3 步）：`config` 表有 `capm` 設定後，排程每晚載入最近 13 個月的三組每月資料，存入 `market_series`：美國 10 年期公債殖利率（FRED 的 DGS10，取每月最後一天；失敗時改用美國財政部的每日殖利率曲線）、台灣 10 年期公債殖利率（中央銀行開放資料 EG43M01 的「十年期政府公債次級市場利率」，每月平均，約落後兩個月），以及 Damodaran 教授每月初公布的美股隱含風險溢酬（`ERPbymonth.xlsx`）。後兩者沒有第二個免費來源，載入失敗時 App 使用「權益成本」頁的設定值，並在小卡上標示。
-- **推播**（第 10 步）：排程最後一步送出新提案的推播；另有每小時執行的「Pushes 推播」排程負責每週檢視、安靜時段後補送與資料異常警示。設定見 [推播通知](web-push.md)；還沒設定 VAPID 金鑰時，這一步只會寫「Web Push is not set up yet」，不會讓排程失敗。
-- **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在首頁與持倉頁顯示警示，並推播一次（第 10 步）。
-
-It runs at about 22:23 Taipei time, reloads the last three years of closes each night (dividend adjustments change past adjusted closes), then recomputes every day's NAV snapshot since the first trade and checks the rules (step 9), keeps the last good prices when a night fails, and flags two misses in a row.
+- **時間**：每晚台北時間約 22:23（台股已收盤、臺銀已公布匯率、前一個美股交易日與 AGGU 淨值已公布）。在 GitHub Actions 執行（`.github/workflows/nightly.yml`、`scripts/nightly.ts`），公開 repo 免費。
+- **價格**：每晚整段重抓近 6 年的每日收盤價（除息會改變過去的還原收盤價，整段重抓最正確）；風險值的代理 ETF 再往前多抓，讓每一天都有 3 年週報酬。第一次要下載 AGGU 的 25 MB 基金檔，比較久；之後約 1–2 分鐘。
+- **淨值快照與風險值**：重算第一筆交易到今天每一天的市值、類別權重與一週風險值，存進 `nav_snapshots`。修改過去的交易或晚到的收盤價都會自動更正。
+- **每月與每日市場資料**：大額資金用的 CAPE、S&P 500 價格與殖利率（`market_series`）；回歸分析用的標普 500、加權報酬指數（`index_prices`）與美國 3 個月國庫券；權益成本用的美國與台灣 10 年期公債殖利率、Damodaran 風險溢酬。每月第一次執行另存持股 β。
+- **財報**（第二階段第 4 步，F12）：持有或觀察中的個股與其同業，每晚載入近 7 年的季報（美股 SEC EDGAR、台股 FinMind），存入 `fundamentals`；觀察中的個股有新一季財報時自動重新估值，再檢查規則。**美股需要 `SEC_USER_AGENT` secret**（下面第 3 步），沒有時只略過美股財報。
+- **規則與推播**：最後以剛載入的資料檢查規則、產生提案，並送出推播（[推播通知](web-push.md)）。
+- **失敗時**：App 沿用最後一次成功的資料；連續 2 晚失敗（`DATA_FAILURE`）就顯示警示並推播一次。公開的執行紀錄只寫數量，不寫代號與提案內容。
 
 ### 資料來源 Sources
 
@@ -37,6 +32,8 @@ It runs at about 22:23 Taipei time, reloads the last three years of closes each 
 | 美國 10 年期公債殖利率（每月，第二階段第 3 步） | FRED（DGS10，月底） | 美國財政部每日殖利率曲線 |
 | 台灣 10 年期公債殖利率（每月） | 中央銀行開放資料（EG43M01） | 權益成本的設定值 |
 | 隱含股票風險溢酬（每月） | Damodaran Online（ERPbymonth.xlsx） | 權益成本的設定值 |
+| 美股財報（每季，第二階段第 4 步） | SEC EDGAR company facts（10-K、10-Q） | 估值頁自行輸入的數字 |
+| 台股財報與現金股利（每季） | FinMind 三大報表與除權息結果 | 估值頁自行輸入的數字 |
 
 股票分割（例如 0050 在 2025 年 6 月 1 拆 4）不在 FinMind 的除權息資料裡，所以由收盤價判斷：台股單日漲跌最多 10%，某天收盤價突然變成前一天的 ½、⅓、¼ 等（上下 10% 以內），就是分割，之前的還原收盤價會依比例調整。風險值與績效都用還原收盤價，所以不會把分割誤算成大跌。
 
@@ -48,21 +45,7 @@ It runs at about 22:23 Taipei time, reloads the last three years of closes each 
 
 ### 1. 更新資料庫 Update the database
 
-在 Mac 的 Terminal、`invest` 資料夾執行：
-
-```bash
-git checkout main && git pull
-npm install
-npx supabase db push
-npm run check:supabase
-```
-
-- `npx supabase db push` 會列出 **2 個新的 migration**，輸入 `Y` 套用：
-  - `job_runs`：記錄每晚排程結果的資料表。只有你看得到；只有排程能寫入。
-  - `fx_trade_date_rates`：在 `config` 表的 `fx_rate_check` 加上 `max_age_days`（10 天）。之後新增交易與 CSV 匯入會預設帶入**交易日當天**的匯率；當天沒有（週末、假日）就往前找，最多 10 天。這個修改也會出現在 App 的修改紀錄裡。
-- `npm run check:supabase`：應該看到 **25 項全部 ✅**（多了 `job_runs`，陌生人一樣讀不到）。
-
-`db push` adds the `job_runs` table and the trade-date FX setting; the check then shows 25 passes.
+依 [執行 App](running-the-app.md) 第 1 步執行 `git pull`、`npm install`、`npx supabase db push` 與 `npm run check:supabase`。
 
 ### 2. 複製 Supabase 的 secret key
 
@@ -83,6 +66,7 @@ npm run check:supabase
 | `SUPABASE_SECRET_KEY` | `sb_secret_...` | 第 2 步複製的 |
 | `FINMIND_TOKEN` | FinMind 的 token | `.env.local` 裡同名的那一行（第 1 步資料來源檢查用過） |
 | `ALPHAVANTAGE_API_KEY` | Alpha Vantage 的 key | 選填：只在 FinMind 或 iShares 失敗時當備援 |
+| `SEC_USER_AGENT` | 例如 `LongViewInvest hugo@example.com`（名稱加你的 email） | 美股財報（F12）需要：SEC 要求程式註明聯絡 email，沒有就拒絕連線。只存在 GitHub secrets，不會出現在公開紀錄 |
 
 - 存進去之後 GitHub 不會再顯示內容（只能覆蓋），執行紀錄裡也會自動遮住。
 - repo 是公開的，但 secrets 不公開：只有這個 repo 自己的排程用得到，別人 fork 你的 repo 也拿不到。
@@ -113,7 +97,7 @@ Run it once from the Actions tab, then check the Data status page: every securit
 - **60 天規則**：公開 repo 如果連續 60 天沒有任何新的 commit，GitHub 會自動暫停排程。這時 App 會顯示「已連續 N 晚未成功」；到 **Actions → Nightly prices 每夜價格** 按 **Enable workflow** 就會恢復。
 - **Supabase 不會被暫停**：免費專案約 7 天沒有活動會被暫停；每晚的讀寫就是活動，所以只要排程在跑，專案就不會睡著。
 - **費用**：GitHub Actions 對公開 repo 免費；FinMind 免費額度每小時 600 次，每晚大約用 20 次。
-- **為什麼不用 Supabase Edge Function**：PRD 原本規劃由 GitHub Actions 呼叫 Edge Function，但免費方案的 Edge Function 每次只能用 2 秒 CPU、最長 150 秒，不夠處理 3 年的價格和 AGGU 的 25 MB 檔案。改成直接在 GitHub Actions 執行，每次都有紀錄可查，也和測試用的是同一套程式。代價是 secret key 要存在 GitHub secrets（加密保存）。這個決定記在 PRD 第 6、9 節。
+- **為什麼不用 Supabase Edge Function**：免費方案每次只有 2 秒 CPU、最長 150 秒，不夠用（PRD 第 6、9 節）。
 
 ## 問題排除 Troubleshooting
 
@@ -127,7 +111,9 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | `Rules: proposals: …`，或資料狀態頁寫「無法檢查規則」 | 第 9 步的 `npx supabase db push`（`rules_engine`）還沒執行；執行後到提案頁按「立即檢查規則」 |
 | 資料狀態頁某一檔一直「尚未載入」 | 代號可能和 FinMind 用的不同（例如美股 ETF 已下市）；把資料狀態頁的錯誤訊息貼給 Claude |
 | 資料狀態頁「每月市場資料」的來源是 multpl.com，或「主要來源失敗」列出 `us_cape: shiller …` | Shiller 的網站暫時連不上（測試時雲端主機的連線曾被重設），已自動改用備援，數值相近，不需處理 |
-| 「大額資金」頁寫「尚未載入該月份的 CAPE」 | 排程還沒載入每月市場資料：第二階段第 1 步的 `npx supabase db push` 之後，手動執行一次排程（上面第 4 步） |
+| 「大額資金」頁寫「尚未載入該月份的 CAPE」 | 排程還沒載入每月市場資料：`npx supabase db push` 之後手動執行一次排程（上面第 4 步） |
+| `US filings: SEC_USER_AGENT is not set` | 第 3 步加上 `SEC_USER_AGENT`；台股財報不受影響 |
+| `AAPL filings: sec: HTTP 403 …` | `SEC_USER_AGENT` 沒有 email，或格式不對：改成「名稱 空格 email」 |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 
