@@ -781,3 +781,55 @@ details > form {
 .chart.chart-backtest {
   height: 320px;
 }
+
+/* Regression Lab (N1): the two benchmarks side by side on a wide screen, stacked on a phone. */
+.grid-two {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .grid-two {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.grid-two > *,
+.grid-two .card > * {
+  margin: 0;
+  min-width: 0;
+}
+
+.chart.chart-scatter {
+  height: 300px;
+}
+
+.chart.chart-range {
+  height: 240px;
+}
+
+table.figures th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+fieldset.checks {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.equation {
+  margin: 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}

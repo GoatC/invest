@@ -1001,6 +1001,59 @@ await step('windfall: the demo put back for the steps that follow; the edit hist
   check((await body()).includes('Waiting as cash in the windfall pool: NT$50,000 of NT$50,000.'), 'the pool as it was');
 });
 
+/** A Regression panel's figures, in order: β ± SE, the 95% interval, Blume's β, α a year, R², the periods and their dates. */
+const figures = (panel) => page.locator(`${panel} table.figures td`).allInnerTexts();
+
+await step('regression: VT against the S&P 500 and TAIEX side by side, β with its interval, Blume and R², the rolling line', async () => {
+  await page.goto(`${BASE}/regression`);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  await page.locator('#vs-TAIEX .chart-scatter svg').waitFor();
+  await page.locator('#rolling svg').waitFor();
+  // Seed: VT's weekly demo closes against the demo S&P 500 (VOO's) and TAIEX (0050's), two years to 23 October 2026.
+  const spx = await figures('#vs-SPX');
+  check(spx.join(' | ') === '0.93 ± 0.05 | 0.84 … 1.02 | 0.95 | −6.8% | 81% | 105 | 2024-10-25 → 2026-10-23', `VT against the S&P 500, got ${spx.join(' | ')}`);
+  const taiex = await figures('#vs-TAIEX');
+  check(taiex[0] === '0.69 ± 0.05' && taiex[4] === '61%', `VT against TAIEX, got ${taiex.join(' | ')}`);
+  check(/R\s*i\s*− R\s*f\s*= α \+ β \(R\s*m\s*− R\s*f\s*\) \+ ε/.test(await page.locator('.equation').innerText()), `the formula, got ${await page.locator('.equation').innerText()}`);
+  await snap('regression');
+  await page.setViewportSize({ width: 1280, height: 1350 });
+  await docShot('regression', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // In TWD the dollar's moves come in; monthly returns give 24 periods.
+  await page.locator('.segmented', { hasText: 'Currency' }).getByRole('link', { name: /^TWD/ }).click();
+  await page.waitForURL(/c=TWD/);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  check((await figures('#vs-SPX'))[0] === '0.90 ± 0.05', `in TWD, got ${(await figures('#vs-SPX'))[0]}`);
+  await page.goto(`${BASE}/regression?t=VT&f=monthly&y=2&c=local`);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  check((await figures('#vs-SPX'))[5] === '24', `monthly periods, got ${(await figures('#vs-SPX'))[5]}`);
+});
+
+await step('regression: compare up to five against one index, each β with its 95% interval; the settings are logged', async () => {
+  await page.goto(`${BASE}/regression?t=VT`);
+  const form = page.locator('#compare form');
+  for (const ticker of ['0050', 'BNDW', 'GLDM']) await form.getByLabel(ticker, { exact: true }).check();
+  await form.locator('select[name=b]').selectOption('SPX');
+  await form.getByRole('button', { name: /Compare/ }).click();
+  await page.waitForURL(/vs=/);
+  await page.locator('#compare .chart-range svg').waitFor();
+  const rows = await page.locator('#compare tbody tr').allInnerTexts();
+  const betas = Object.fromEntries(rows.map((row) => row.split('\t').map((cell) => cell.trim())).map(([ticker, beta]) => [ticker, beta]));
+  check(betas['VT'] === '0.93' && betas['0050'] === '0.85' && betas['BNDW'] === '0.02' && betas['GLDM'] === '0.24', `the four β, got ${JSON.stringify(betas)}`);
+
+  await page.locator('#settings summary').click();
+  await page.fill('#settings input[name=rfTWD]', '1.8');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/regression?saved=settings**');
+  await page.locator('#settings summary').click();
+  const method = await page.locator('#settings').innerText();
+  check(method.includes('Settings saved.') && method.includes(`TWD 1.80% (setting, checked ${taipeiToday})`), `the rate saved and checked, got ${method.slice(0, 600)}`);
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*regression/.test(await body()), 'the settings change in the edit history');
+});
+
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
 // job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
 const pushes = [];
@@ -1169,14 +1222,29 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
       await page.getByText('already saved').first().waitFor();
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    if (overflow > 0) wide.push(`${path} by ${overflow}px`);
+    if (overflow > 0) {
+      // Name the innermost elements that reach past the screen, so the fix is easy to find.
+      const culprits = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        return [...document.querySelectorAll('main *')]
+          .filter((el) => el.getBoundingClientRect().right > width + 1 && ![...el.children].some((child) => child.getBoundingClientRect().right > width + 1))
+          .slice(0, 3)
+          .map((el) => {
+            const name = (node) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.className && typeof node.className === 'string' ? `.${node.className.split(' ').join('.')}` : ''}`;
+            const chain = [];
+            for (let node = el; node && node.tagName !== 'MAIN'; node = node.parentElement) chain.push(`${name(node)}:${Math.round(node.getBoundingClientRect().width)}`);
+            return chain.join(' < ');
+          });
+      });
+      wide.push(`${path} by ${overflow}px (${culprits.join(', ')})`);
+    }
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
@@ -1184,7 +1252,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/') await page.locator('.chart-donut svg').waitFor();
     if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1201,7 +1270,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
   await step('before the job: the invented weekly history goes, as a real project has none', async () => {
     // Its Fridays include market holidays the live feeds have no close for; left in, they would
     // sit among the real closes.
-    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07']) {
+    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo']) {
       const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
       check(res.ok, `DELETE ${path}: HTTP ${res.status}`);
     }
@@ -1213,6 +1282,8 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     check(/^Nightly prices: (ok|partial)/m.test(stdout), 'run ok or partial');
     check(/VT\s+finmind\s+\d+ rows/.test(stdout) && /0050\s+finmind\s+\d+ rows/.test(stdout), 'VT and 0050 from FinMind');
     check(/USD\/TWD\s+finmind/.test(stdout) && /XAU\/TWD\s+finmind/.test(stdout), 'Bank of Taiwan USD rate and gold in TWD');
+    // The Regression Lab's indices, and the holdings' β on the month's first run (the second run skips them).
+    check(/SPX\s+finmind/.test(stdout) && /TAIEX\s+finmind/.test(stdout) && /Betas β: \d+ saved for the month/.test(stdout), 'the indices and the monthly β');
   });
 
   await step('nightly job on GitHub Actions: the public log names no ticker, and a second run only updates', async () => {
@@ -1231,6 +1302,9 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
     check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
+    // The Regression Lab's indices (N1) from FinMind, and the holdings' β saved for the month.
+    const indices = await page.locator('#indices').innerText();
+    check(/SPX[\s\S]*FinMind[\s\S]*TAIEX[\s\S]*FinMind/.test(indices), `the indices loaded live, got ${indices.replace(/\s+/g, ' ')}`);
     // The monthly market series from Shiller's workbook, or multpl.com when it cannot be reached.
     const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
     check(/\d{4}-\d{2}\s+[\d.]+\s+(Shiller's data|multpl\.com)/.test(cape) && !cape.includes('Demo data'), `CAPE loaded live, got ${cape.replace(/\s+/g, ' ')}`);
@@ -1274,6 +1348,16 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     await page.getByText('The 52-week line as a table').click();
     check(/2026-05-\d\d\s+NT\$[\d,]+\s+[\d.]+%/.test(await body()), 'the line as a table, from May');
     await snap('risk-after-job');
+  });
+
+  await step('regression after the job: the holdings\' β saved for the month, against both indices, on live closes', async () => {
+    await page.goto(`${BASE}/regression`);
+    await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+    const saved = await page.locator('#saved').innerText();
+    check(/VT\s+\d\.\d\d\s+\d\.\d\d\s+\d{4}-\d{2}-\d{2}/.test(saved), `VT's β saved, got ${saved.replace(/\s+/g, ' ')}`);
+    const spx = await figures('#vs-SPX');
+    const value = Number((spx[0] ?? '').split(' ')[0]);
+    check(value > 0.6 && value < 1.3, `a plausible β for VT against the S&P 500 on live closes, got ${spx[0]}`);
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {

@@ -187,4 +187,16 @@ cross join lateral (values
 ) as v (series, value, shown)
 where shown;
 
+-- The Regression Lab's indices (N1): the demo S&P 500 follows VOO's demo closes and TAIEX's total
+-- return index 0050's, on the same days, at the indices' own levels; the US 3-month bill rate
+-- eases from 4.52% to 3.94% a year over the months the weekly closes span.
+insert into public.index_prices (index_id, price_date, close, source)
+select case ticker when 'VOO' then 'SPX' else 'TAIEX' end, price_date, round(adj_close * case ticker when 'VOO' then 10.93 else 1003.2 end, 2), 'demo'
+from public.prices
+where ticker in ('VOO', '0050');
+
+insert into public.market_series (series, obs_month, value, source)
+select 'us_tbill_3m', (date '2023-01-01' + make_interval(months => i))::date, round((0.0452 - 0.0058 * i / 44.0)::numeric, 4), 'demo'
+from generate_series(0, 44) as i;
+
 insert into public.watchlist (ticker, added_on) values ('AAPL', '2026-10-08');

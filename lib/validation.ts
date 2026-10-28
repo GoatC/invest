@@ -56,6 +56,8 @@ export const MESSAGES = {
   trackingDifference: { en: 'Enter a percentage from −10 to 10, with at most four decimals.', zh: '請輸入 −10 到 10 的百分比，最多四位小數。' },
   positiveWholeTwd: { en: 'Enter whole NT$ above 0.', zh: '請輸入大於 0 的整數台幣金額。' },
   cashReturn: { en: 'Enter a yearly return from −10% to 20%.', zh: '請輸入 −10% 到 20% 的年報酬。' },
+  riskFree: { en: 'Enter a yearly rate from −5% to 30%.', zh: '請輸入 −5% 到 30% 的年利率。' },
+  blume: { en: 'Enter a weight from 0 to 1.', zh: '請輸入 0 到 1 之間的權重。' },
   fromYear: { en: 'Enter a year from 1871 on.', zh: '請輸入 1871 年以後的年份。' },
   horizonMonths: { en: 'Enter whole months from 12 to 240.', zh: '請輸入 12 到 240 的整數月數。' },
   percentile: { en: 'Enter a percentile from 0 to 100.', zh: '請輸入 0 到 100 的百分位。' },
@@ -884,5 +886,48 @@ export function parsePaceForm(raw: RawForm): Parsed<PaceInput, PaceField> {
     cutoffs: [cutLow, cutHigh],
     tranches,
     tiers: [{ drawdown: tier1 }, { drawdown: tier2, share: tier2Share }, { drawdown: tier3, share: tier3Share }],
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// N1 Regression Lab (Phase 2, step 2)
+// ---------------------------------------------------------------------------
+
+export const REGRESSION_FIELDS = ['freq', 'windowYears', 'currency', 'blumeWeight', 'rfTWD', 'rfUSD'] as const;
+export type RegressionField = (typeof REGRESSION_FIELDS)[number];
+
+export interface RegressionSettingsInput {
+  freq: 'daily' | 'weekly' | 'monthly';
+  windowYears: number;
+  currency: 'local' | 'TWD';
+  blumeWeight: number;
+  /** Yearly risk-free rates as fractions. */
+  riskFree: { TWD: number; USD: number };
+  /** Today when "checked today" is ticked, else the date it was checked before. */
+  checked: string | null;
+}
+
+/** The lab's defaults (the monthly β use them), Blume's weight, and the risk-free rates in percent. */
+export function parseRegressionForm(raw: RawForm, windows: readonly number[], today: string): Parsed<RegressionSettingsInput, RegressionField> {
+  const errors: FieldErrors<RegressionField> = {};
+  const freq = oneOf(raw['freq'], ['daily', 'weekly', 'monthly'] as const);
+  if (!freq) errors.freq = MESSAGES.choice;
+  const windowYears = parseNumber(raw['windowYears']);
+  if (windowYears === undefined || !windows.includes(windowYears)) errors.windowYears = MESSAGES.choice;
+  const currency = oneOf(raw['currency'], ['local', 'TWD'] as const);
+  if (!currency) errors.currency = MESSAGES.choice;
+  const blumeWeight = parseNumber(raw['blumeWeight']);
+  if (blumeWeight === undefined || blumeWeight < 0 || blumeWeight > 1) errors.blumeWeight = MESSAGES.blume;
+  const twd = ratePercent(raw['rfTWD'], -5, 30);
+  if (twd === undefined) errors.rfTWD = MESSAGES.riskFree;
+  const usd = ratePercent(raw['rfUSD'], -5, 30);
+  if (usd === undefined) errors.rfUSD = MESSAGES.riskFree;
+  return finish(errors, () => ({
+    freq: freq ?? 'weekly',
+    windowYears: windowYears ?? 2,
+    currency: currency ?? 'local',
+    blumeWeight: blumeWeight ?? 0.67,
+    riskFree: { TWD: twd ?? 0, USD: usd ?? 0 },
+    checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
 }

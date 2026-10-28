@@ -56,17 +56,27 @@ describe('parseRunDetail', () => {
       errors: 'none',
       snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
       rules: { created: 2, closed: 0 },
+      indices: { TAIEX: { source: 'finmind', rows: 1249, latest: '2026-10-27' } },
+      betas: { saved: 8, runDate: '2026-11-02' },
     });
     assert.deepEqual(detail, {
       window: { start: '2023-10-07', end: '2026-10-21' },
       prices: { VT: { source: 'finmind', rows: 752, latest: '2026-10-20' } },
       rates: {},
       series: { us_cape: { source: 'shiller', rows: 1869, latest: '2026-10' } },
+      indices: { TAIEX: { source: 'finmind', rows: 1249, latest: '2026-10-27' } },
       warnings: ['VT: finmind: HTTP 503'],
       errors: [],
       snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
       rules: { created: 2, closed: 0 },
+      betas: { saved: 8, runDate: '2026-11-02' },
     });
+  });
+
+  it('reads a run from before the Regression Lab (Phase 2, step 2) as one with no indices or β', () => {
+    const detail = parseRunDetail({});
+    assert.deepEqual(detail.indices, {});
+    assert.equal(detail.betas, null);
   });
 
   it('reads a run from before the rules engine (step 9) as one that evaluated none', () => {

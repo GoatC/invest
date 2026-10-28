@@ -15,6 +15,8 @@ export const SNAPSHOT_ERROR = 'NAV snapshots';
 export const RISK_ERROR = 'VaR';
 /** …and when the rules could not be evaluated after the refresh (step 9). */
 export const RULES_ERROR = 'Rules';
+/** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
+export const BETAS_ERROR = 'Betas';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -31,6 +33,8 @@ export interface RunDetail {
   rates: Record<string, Loaded>;
   /** The monthly market series (F3, Phase 2 step 1); `latest` is a month. Empty before. */
   series: Record<string, Loaded>;
+  /** The daily index closes (N1, Phase 2 step 2). Empty before. */
+  indices: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -39,6 +43,8 @@ export interface RunDetail {
   snapshots: { days: number; from: string; to: string; valueAtRisk: number | null } | null;
   /** The rules evaluated after the refresh: proposals drafted and closed (step 9); null before. */
   rules: { created: number; closed: number } | null;
+  /** The holdings' β saved for the month (N1), on the month's first run; null otherwise. */
+  betas: { saved: number; runDate: string } | null;
 }
 
 export interface JobRun {
@@ -72,11 +78,13 @@ export function parseRunDetail(value: unknown): RunDetail {
   const window = record(detail['window']);
   const { days, from, to, valueAtRisk } = record(detail['snapshots']);
   const { created, closed } = record(detail['rules']);
+  const { saved, runDate } = record(detail['betas']);
   return {
     window: typeof window['start'] === 'string' && typeof window['end'] === 'string' ? { start: window['start'], end: window['end'] } : null,
     prices: loadedMap(detail['prices']),
     rates: loadedMap(detail['rates']),
     series: loadedMap(detail['series']),
+    indices: loadedMap(detail['indices']),
     warnings: lines(detail['warnings']),
     errors: lines(detail['errors']),
     snapshots:
@@ -84,6 +92,7 @@ export function parseRunDetail(value: unknown): RunDetail {
         ? { days, from, to, valueAtRisk: typeof valueAtRisk === 'number' ? valueAtRisk : null }
         : null,
     rules: typeof created === 'number' && typeof closed === 'number' ? { created, closed } : null,
+    betas: typeof saved === 'number' && typeof runDate === 'string' ? { saved, runDate } : null,
   };
 }
 

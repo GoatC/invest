@@ -53,6 +53,7 @@ export default async function DataStatusPage() {
       <Prices status={status} />
       <Rates rates={status.rates} />
       <MarketSeries series={status.series} lastRun={status.runs[0]?.detail.series ?? {}} />
+      <Indices indices={status.indices} lastRun={status.runs[0]?.detail.indices ?? {}} />
       {status.runs.length > 0 && <Runs runs={status.runs} />}
     </>
   );
@@ -108,6 +109,14 @@ function LatestRun({ run }: { run: JobRun }) {
           />{' '}
           <Link href="/proposals">
             <Bi en="Proposals" zh="提案" />
+          </Link>
+        </p>
+      )}
+      {detail.betas && (
+        <p className="muted small">
+          <Bi en={`Saved ${detail.betas.saved} β for the month.`} zh={`已存入本月 ${detail.betas.saved} 筆 β。`} />{' '}
+          <Link href="/regression">
+            <Bi {...LABELS.regression} />
           </Link>
         </p>
       )}
@@ -276,7 +285,71 @@ const SERIES_NAMES: Record<string, Bilingual> = {
   us_cape: { en: "S&P 500 CAPE (Shiller's P/E 10)", zh: 'S&P 500 週期調整本益比（CAPE）' },
   sp500_price: { en: 'S&P 500, monthly average close', zh: 'S&P 500 每月平均收盤' },
   sp500_yield: { en: 'S&P 500 dividend yield', zh: 'S&P 500 股息殖利率' },
+  us_tbill_3m: { en: 'US 3-month T-bill, a year', zh: '美國 3 個月國庫券年利率' },
 };
+
+const INDEX_NAMES: Record<string, Bilingual> = {
+  SPX: { en: 'S&P 500', zh: '標普 500' },
+  TAIEX: { en: 'TAIEX total return', zh: '加權報酬指數' },
+};
+
+/** The indices the Regression Lab regresses on (N1). */
+function Indices({ indices, lastRun }: { indices: LatestQuote[]; lastRun: JobRun['detail']['indices'] }) {
+  return (
+    <section className="card form" id="indices">
+      <h2>
+        <Bi en="Indices" zh="指數" />
+      </h2>
+      {indices.length === 0 ? (
+        <p className="muted">
+          <Bi en="Not loaded yet." zh="尚未載入。" />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>
+                  <Bi en="Index" zh="指數" />
+                </th>
+                <th>
+                  <Bi en="Close date" zh="收盤日" />
+                </th>
+                <th className="num">
+                  <Bi en="Close" zh="收盤" />
+                </th>
+                <th>
+                  <Bi {...LABELS.source} />
+                </th>
+                <th className="num">
+                  <Bi en="Days loaded last run" zh="上次載入天數" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {indices.map((index) => (
+                <tr key={index.key}>
+                  <td>
+                    <strong>{index.key}</strong>
+                    <div className="muted small">
+                      <Bi {...(INDEX_NAMES[index.key] ?? { en: index.key, zh: index.key })} />
+                    </div>
+                  </td>
+                  <td className="nowrap">{index.date}</td>
+                  <td className="num">{quantity(index.value)}</td>
+                  <td className="nowrap">
+                    <Bi {...feedLabel(index.source)} />
+                  </td>
+                  <td className="num">{lastRun[index.key]?.rows ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** The monthly series the windfall planner reads (F3): the valuation gauge and the backtest's market. */
 function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: JobRun['detail']['series'] }) {
@@ -321,7 +394,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
                     </div>
                   </td>
                   <td className="nowrap">{point.date}</td>
-                  <td className="num">{point.key === 'sp500_yield' ? percent(point.value, 2) : quantity(point.value)}</td>
+                  <td className="num">{point.key === 'sp500_yield' || point.key === 'us_tbill_3m' ? percent(point.value, 2) : quantity(point.value)}</td>
                   <td className="nowrap">
                     <Bi {...feedLabel(point.source)} />
                   </td>

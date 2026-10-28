@@ -1,10 +1,12 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadPerformanceInput, loadRiskInput, runRules } from '../../../lib/data.ts';
+import { loadPerformanceInput, loadRiskInput, refreshBetas, runRules } from '../../../lib/data.ts';
+import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
+import type { IndexClose } from '../feeds/indices.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
 import type { JobRun, Security, Store } from './job.ts';
 
@@ -82,6 +84,24 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('market_series', error);
       }
     },
+    async regressionYears() {
+      const { data, error } = await client.from('config').select('value').eq('key', 'regression');
+      check('config', error);
+      const row = data?.[0] as { value?: unknown } | undefined;
+      if (!row) return undefined;
+      const settings = readRegressionSettings(row.value);
+      if (!settings) throw new Error('config regression is malformed');
+      return Math.max(...settings.windows) + 1;
+    },
+    async saveIndexPrices(rows: readonly IndexClose[], options: { fillOnly?: boolean } = {}) {
+      for (const batch of batches(rows)) {
+        const { error } = await client
+          .from('index_prices')
+          .upsert(batch.map((row) => ({ index_id: row.index, price_date: row.date, close: row.close, source: row.source })), { onConflict: 'index_id,price_date', ignoreDuplicates: options.fillOnly ?? false });
+        check('index_prices', error);
+      }
+    },
+    refreshBetas: (today) => refreshBetas(client, today),
     performanceInput: (end) => loadPerformanceInput(client, end),
     riskInput: (from, end) => loadRiskInput(client, from, end),
     async saveSnapshots(rows: readonly Snapshot[]) {

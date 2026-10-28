@@ -69,6 +69,7 @@ export const LABELS = {
   calculator: { en: 'Calculator', zh: '複利計算機' },
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
+  regression: { en: 'Regression', zh: '回歸分析' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
@@ -91,6 +92,7 @@ export const SIDE = {
 export const POOL = {
   regular: { en: 'Regular', zh: '一般' },
   windfall: { en: 'Windfall', zh: '大額資金' },
+  regression: { en: 'Regression', zh: '回歸分析' },
 } as const satisfies Record<string, Bilingual>;
 
 export const SLEEVE = {

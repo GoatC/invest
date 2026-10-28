@@ -66,7 +66,7 @@ The spec is written so Claude Code can implement each phase without further desi
 
 ## 3. Feature Specs 功能規格
 
-Nineteen features ship across three phases; IDs keep the numbering from the original 20-feature list, and N1–N6 are new. 共 19 個功能，分三個階段上線；編號沿用原本 20 項清單，N1–N6 為新增功能。
+Twenty features ship across three phases; IDs keep the numbering from the original 20-feature list, and N1–N7 are new (N7 added during Phase 2). 共 20 個功能，分三個階段上線；編號沿用原本 20 項清單，N1–N7 為新增功能（N7 於第二階段加入）。
 
 | ID | Feature 功能 | Module 模組 | Phase 階段 | Automation 自動化 |
 | --- | --- | --- | --- | --- |
@@ -84,6 +84,7 @@ Nineteen features ship across three phases; IDs keep the numbering from the orig
 | N1 | Regression Lab: Beta, then Fama–French 5-factor 回歸分析區 | C Analysis | 2 (5-factor: 3) | Monthly refresh for holdings 持股每月更新 |
 | N3 | Red-flag indicator (ESG + financial) 紅旗指標 | C Analysis | 2 | Weekly scan 每週掃描 |
 | F14 | Combined look-through (core + satellite) 核心與衛星合併透視 | C Analysis | 2 | Monthly holdings refresh 每月更新成分股 |
+| N7 | Sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | C Analysis | 2 | Nightly sector closes 每夜更新類股價格 |
 | F1 | 30-year life timeline (tab) 30 年人生財務時間軸（分頁） | A Planning | 3 | Weekly overlay of actuals 每週疊加實際值 |
 | F5 | Monte Carlo simulation (shares F2 engine) 蒙地卡羅模擬（與 F2 共用引擎） | A Planning | 3 | Monthly re-run 每月重跑 |
 | F7 | Efficient frontier & CML (reference only) 效率前緣與資本市場線（僅供參考） | B Allocation | 3 | On demand 手動執行 |
@@ -233,6 +234,17 @@ Each company gets a red / amber / green light plus the list of indicators that f
 
 Limitation 限制: no free source gives full ESG scores, so ESG coverage is partial and the light shows a coverage % beside it. 沒有免費來源提供完整 ESG 評分，因此 ESG 覆蓋不完整，燈號旁會標示資料覆蓋率。
 
+**N7 Sector heatmap 產業熱圖** (added in Phase 2 第二階段加入)
+
+A tab of its own (the menu's "Sectors 產業熱圖"), next to the Regression Lab, that shows at a glance which sectors are moving and how much of the portfolio sits in each, in three charts switched by tabs like N6's lenses. Display only: no rule, no push (design principle 2: decisions, not prices). 獨立分頁（選單「產業熱圖」），以三張可切換的圖表一眼看出哪些產業在動、投資組合在各產業放了多少；只做顯示，不設規則、不推播（設計原則 2：推播決策而非價格）。
+
+- Sectors 產業: the 11 GICS sectors. US sectors are priced by the Select Sector SPDR ETFs (XLK, XLF, XLV, XLY, XLP, XLE, XLI, XLB, XLU, XLRE, XLC); Taiwan's by the TWSE industry indices (半導體業、電子零組件業、金融保險業 …), each mapped to a GICS sector in config `sectors` (editable), so the two markets share one list and can also be shown apart. 以 GICS 11 個產業為準：美國產業以 Select Sector SPDR ETF 計價；台灣以證交所類股指數計價，並在 config `sectors` 中對應到 GICS 產業（可修改），兩個市場共用一份清單，也可分開檢視。
+- Heatmap 熱力圖: rows are sectors, columns are periods (1 week, 1 month, 3 months, year to date, 1 year); each cell's colour is the return on a diverging scale, with the % written in the cell. The colour convention is a setting: Taiwan's red-up, green-down by default (紅漲綠跌), or the US's green-up. 列為產業、欄為期間（1 週、1 月、3 月、今年以來、1 年），格子顏色為報酬（雙向色階），格內寫出百分比；配色為設定值，預設台灣慣例紅漲綠跌，可改為美國慣例綠漲。
+- Treemap 板塊圖: one tile per sector, its area the portfolio's exposure in TWD through F14's look-through (the ETFs' holdings plus the stocks held directly, both pools or one), its colour the chosen period's return; tapping a tile opens the companies inside it. 每個產業一個方塊，面積為依 F14 穿透計算的台幣曝險（ETF 成分股加直接持股，可選資金池），顏色為所選期間的報酬；點選方塊展開其中的公司。
+- Bubble chart 泡泡圖: one bubble per sector, x = its 1-year return, y = its annualised volatility (weekly returns, 1 year), size = the portfolio's exposure, colour = market (US / Taiwan); the portfolio's own exposure-weighted point is marked. 每個產業一顆泡泡：X 軸為 1 年報酬、Y 軸為年化波動度（1 年週報酬）、大小為投資組合曝險、顏色為市場（美國／台灣），並標出投資組合依曝險加權的位置。
+- Each chart has its table underneath, and a sector lists the holdings behind it (directly and through each ETF), as N6's slices do. 每張圖下方都有表格；點選產業即列出背後的持股（直接持有與透過各 ETF），與 N6 相同。
+- Data 資料: the sector proxies' daily closes, loaded by the nightly job into index\_prices (step 2's table) with one fallback each; exposure from F14. 類股代理的每日收盤價由每夜排程載入 index\_prices（第 2 步的資料表），各有一個備援；曝險取自 F14。
+
 ### Module D — Cost & Performance 成本與績效
 
 **F15 Fee & tax drag 費用與稅務拖累（含美國遺產稅檢查）**
@@ -330,6 +342,9 @@ Every analysis page opens with a chart and puts its table underneath; charts use
 | F10 Stress test | Underwater chart 回撤圖 | Month 月份 | Drawdown % 回撤 | Depth and recovery time 深度與回本時間 |
 | F18 Performance | Line + stacked bar 折線與堆疊長條 | Date 日期 | Cumulative return; FX split 累積報酬、匯率拆解 | Portfolio vs benchmark; local vs currency return 組合與基準、當地與匯率報酬 |
 | F14 Look-through | Treemap 矩形樹狀圖 | — | — | Single-company exposure across core + satellite 核心與衛星的單一公司曝險 |
+| N7 Sectors | Heatmap 熱力圖 | Period 期間 | Sector 產業 | Which sectors move, over which horizon 哪些產業在動、在哪個期間 |
+| N7 Sectors | Treemap 板塊圖 | — | — | Portfolio exposure per sector, coloured by return 各產業曝險，依報酬上色 |
+| N7 Sectors | Bubble 泡泡圖 | 1-year return 一年報酬 | Volatility 波動度 | Return against risk, sized by exposure 報酬對風險，大小為曝險 |
 
 ## 4. Rules Engine, L2 Automation & Push 規則引擎、自動化與推播
 
@@ -407,7 +422,9 @@ Nightly jobs pull free data into Postgres; the rules engine turns fired rules in
 | US filings 美股財報與 8-K | SEC EDGAR | F12, N3 |
 | US stock, ETF and index prices 美股、ETF 與指數價格 | FinMind US prices as primary (daily, with adjusted close); Alpha Vantage free key as backup (25 requests/day; fills missing days only). LSE-listed AGGU: iShares daily NAV, with Alpha Vantage AGGU.LON weekly as backup (step 4) 主要用 FinMind（每日、含還原收盤價），Alpha Vantage 備援；倫敦掛牌的 AGGU 用 iShares 每日淨值，Alpha Vantage 週線備援（第 4 步） | All |
 | TWD/USD 台幣匯率 | Bank of Taiwan daily rates through FinMind, the middle of spot buy and sell; FRED (weekly) as backup 臺灣銀行每日牌告（經 FinMind，取即期買賣中間值），FRED 週資料備援 | F18, N2, N5 |
-| US rates 美國利率 | FRED | F11 |
+| US rates 美國利率 | FRED; the 3-month bill (TB3MS, monthly) as N1's risk-free rate since Phase 2, step 2 自第二階段第 2 步起以 3 個月國庫券（TB3MS，每月）作為 N1 的無風險利率 | F11, N1 |
+| S&P 500 and TAIEX daily 標普 500 與加權報酬指數每日收盤 | FinMind (^GSPC; TAIEX total return index 發行量加權股價報酬指數); FRED SP500 and TWSE's daily index report as fallbacks (Phase 2, step 2) FinMind 為主，FRED 與證交所每日指數報表為備援（第二階段第 2 步） | N1 |
+| Sector closes 類股價格 | Select Sector SPDR ETFs (FinMind US prices); TWSE industry indices (to be confirmed by a source check before N7) Select Sector SPDR ETF（FinMind 美股價格）；證交所類股指數（建置 N7 前以資料來源檢查確認） | N7 |
 | Taiwan 10-year yield 台灣 10 年期公債殖利率 | Central Bank of the ROC 中央銀行 | F11 |
 | US CAPE 週期調整本益比 | Robert Shiller's online data (ie_data.xls, monthly since 1871, with the S&P 500 price and dividends); multpl.com's monthly tables as fallback (Phase 2, step 1) Shiller 教授的線上資料（ie_data.xls，1871 年起每月，含 S&P 500 價格與股利）；multpl.com 每月表格為備援（第二階段第 1 步） | F3 |
 | MSCI ACWI drawdown 全球股市跌幅 | The iShares MSCI ACWI ETF's daily closes, loaded like the other US ETFs (FinMind; Alpha Vantage fills gaps) ACWI ETF 每日收盤價，與其他美國 ETF 相同方式載入 | F3 |
@@ -449,7 +466,7 @@ A 20th table, push\_subscriptions (endpoint, keys, device name), is added in Pha
 
 Two bookkeeping tables join them in Phase 1: audit\_log (table, row, old and new values, who and when) for N5's edit history (step 2), and job\_runs (job, start, finish, status, per-feed detail) for the nightly job's outcomes and the data-failure alert (step 4). 第一階段另有兩張紀錄用資料表：audit\_log（資料表、資料列、修改前後內容、修改者與時間），供 N5 的修改紀錄使用（第 2 步）；job\_runs（工作、開始與結束時間、狀態、各資料來源明細），記錄每夜排程結果並供資料異常警示使用（第 4 步）。
 
-Phase 2 adds market\_series (series, obs\_month, value, source): the monthly S&P 500 CAPE, price and dividend yield the windfall planner reads, written by the nightly job only (step 1). 第二階段新增 market\_series（資料名稱、月份、數值、來源）：大額資金分批使用的每月 S&P 500 CAPE、價格與股息殖利率，只有每夜排程能寫入（第 1 步）。
+Phase 2 adds market\_series (series, obs\_month, value, source): the monthly S&P 500 CAPE, price and dividend yield the windfall planner reads, and since step 2 the US 3-month bill rate, written by the nightly job only (step 1); and index\_prices (index\_id, price\_date, close, source): the daily closes of the indices N1 regresses on, S&P 500 and TAIEX, and later N7's sector proxies, also written by the job only (step 2). beta\_results gets each holding's β once a month. 第二階段新增 market\_series（資料名稱、月份、數值、來源）：大額資金分批使用的每月 S&P 500 CAPE、價格與股息殖利率，第 2 步起另有美國 3 個月國庫券利率，只有每夜排程能寫入（第 1 步）；以及 index\_prices（指數代號、日期、收盤、來源）：N1 回歸使用的標普 500 與加權報酬指數每日收盤，之後也存放 N7 的類股代理，同樣只有排程能寫入（第 2 步）。beta\_results 每月存入各持股的 β。
 
 ## 8. Roadmap 開發路線圖
 
@@ -483,6 +500,8 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 
 - [x] Satellite cap: 20% target, trim above 25%, regular-contribution pool, windfall excluded (decided) 衛星部位上限：一般投入資金池的 20%，超過 25% 減碼，大額資金不計入（已決定）
 - [ ] SAA target weights decided (Investment Principles); CMA per asset class still open, to be entered on the Allocation page (step 6) 目標權重已定（見投資原則），各類別資本市場假設待定，可在「資產配置」頁輸入（第 6 步）
+- [ ] (Raised in Phase 2, step 2) The TWD risk-free rate N1 subtracts is a setting, 1.7% a year to start (about the Bank of Taiwan's one-year time deposit), as no free monthly Taiwan short rate was found (FinMind's interest-rate data needs a paid level); check it on the Regression page （第二階段第 2 步提出）N1 使用的台幣無風險利率為設定值，起始 1.7%（約為臺灣銀行一年期定存），因為找不到免費的台灣每月短期利率（FinMind 的利率資料需付費等級）；請在「回歸分析」頁確認
+- [ ] (Raised in Phase 2, step 2) N7's Taiwan sector prices: TWSE's daily index report lists the industry indices for the last trading day only; a history needs a source (FinMind or TWSE's monthly reports) confirmed by a source check before N7 is built, and the GICS mapping of Taiwan's industries needs Hugo's look （第二階段第 2 步提出）N7 的台灣類股價格：證交所每日指數報表只有最新一天的類股指數；歷史資料需在建置 N7 前以資料來源檢查確認來源（FinMind 或證交所月報），台灣產業對應 GICS 的方式也請 Hugo 檢視
 - [ ] Confirm F3 acceleration tiers: 15% / 25% / 35%. Since Phase 2, step 1 they are editable on the Windfall page, whose backtest on Shiller's data shows what the tiers did against the pace alone and a lump sum since 1900; decide there once the nightly job has loaded the real series 確認 F3 加速級距：15%／25%／35%。第二階段第 1 步起可在「大額資金」頁修改，頁面上的回測以 Shiller 的資料比較 1900 年以來加速級距、只依節奏與一次投入的結果；每夜排程載入真實資料後，在該頁決定
 - [ ] Confirm valuation trim threshold: 1.25 × intrinsic value (single-stock cap now 5%, Investment Principles) 確認估值減碼門檻：內在價值 125%（單一個股上限已定為 5%）
 - [ ] Weekly review day and time; Sunday 20:00 Taipei until chosen, set on the Notifications page since step 10 每週檢視的星期與時間；決定前為台北時間週日 20:00，第 10 步起可在「推播」頁設定
@@ -576,6 +595,15 @@ Decided in Phase 2, step 1 (2026-10-28) 第二階段第 1 步決定:
 - [x] The backtest of lump sum vs this rule runs on Shiller's monthly S&P 500, since no long ACWI history is free: from every start month from config `windfall.backtest.from_year` (1900) with ten years of CAPE behind it and the whole horizon (`horizon_months`, 60) after it, it compares 1 invested at once, at the pace that start's CAPE percentile sets, and at that pace with acceleration. Invested money earns the month's price change plus a twelfth of the dividend yield; the cash waiting earns `windfall.cash_return` (1.5%, a TWD money-market fund); the gauge uses only the CAPE months up to each start; the drawdown is the S&P 500's fall from its trailing 12-month high. As Shiller's prices are monthly averages, falls look shallower than day by day, so tiers fire later and less often than they would live. The page shows, for rule vs lump sum, the pace vs lump sum and rule vs the pace, the share of starts where the first did better, the median, the 10th to 90th percentile, the worst and the best 一次投入與本規則的回測以 Shiller 的每月 S&P 500 計算（沒有免費的長期 ACWI 資料）：從 config `windfall.backtest.from_year`（1900）起、前面有十年 CAPE、後面有完整比較期間（`horizon_months`，60 個月）的每個起始月，比較一次投入、依該月 CAPE 百分位的節奏，以及節奏加上加速。已投入的資金賺取當月價格變動加十二分之一的股息殖利率；等待的現金賺取 `windfall.cash_return`（1.5%，台幣貨幣基金）；估值指標只用到起始月為止的 CAPE；跌幅為 S&P 500 自近 12 個月高點的下跌。Shiller 的價格為月平均，跌幅看起來比逐日淺，因此級距觸發得比實際更晚、更少。頁面列出本規則 vs 一次投入、只依節奏 vs 一次投入、本規則 vs 只依節奏三組比較的勝出比例、中位數、第 10 至 90 百分位、最差與最好
 - [x] The weekly dashboard's windfall part now shows the plan (tranches done, on schedule or accelerated, the next date) and links to the Windfall page, and its coming week lists the tranches due; the Data status page shows each market series' newest month, value and source. The acceleration tiers stay an open question above 每週儀表板的大額資金區塊改為顯示計畫（已完成批數、依排程或已加速、下一批日期）並連到「大額資金」頁，下週事件列出到期的分批；資料狀態頁列出每組市場資料的最新月份、數值與來源。加速級距仍列在上方待決問題
 
+Decided in Phase 2, step 2 (2026-10-28) 第二階段第 2 步決定:
+
+- [x] The benchmarks are the S&P 500 (FinMind's ^GSPC, FRED's SP500 as fallback) and TAIEX's total return index 發行量加權股價報酬指數 (FinMind, TWSE's daily index report as fallback), so Taiwan's dividends are in the index as they are in the stocks' adjusted closes. Indices are not securities, so their daily closes go into a new table, `index_prices` (Section 7). Every security's closes now reach back over N1's longest window (5 years) plus a year for the rolling β 基準為標普 500（FinMind ^GSPC，FRED SP500 備援）與加權報酬指數（FinMind，證交所每日指數報表備援），讓台股股息與個股的還原收盤價一樣計入。指數不是證券，因此每日收盤存入新資料表 `index_prices`（第 7 節）。每檔證券的收盤價改為往前載入 N1 最長期間（5 年）再加一年（滾動 β 用）
+- [x] Returns come from adjusted closes: daily, weekly (the last close on or before each Friday) or monthly (each month's last), a market shut all period keeping its last close. Local currency by default, each series in its own; the TWD toggle converts each at the day's Bank of Taiwan rate. R\_f is each currency's yearly rate for the period's month ÷ the periods in a year (252, 52, 12): USD from FRED's TB3MS once loaded (the setting before), TWD from the setting (open question above) 報酬以還原收盤價計算：日、週（每週五或之前最後一筆）或月（每月最後一筆），整期休市則沿用最後收盤價。預設各自使用當地幣別；切換台幣時以當日臺銀匯率換算。R\_f 為該期所在月份的年利率 ÷ 每年期數（252、52、12）：美元在載入 FRED TB3MS 後使用之（之前用設定值），台幣用設定值（見上方待決問題）
+- [x] The time-zone fix applies to daily returns across markets that close more than eight hours apart: a Taiwan series against the S&P 500 adds the index's day before (as Section 3 says), and a US or London series against TAIEX adds TAIEX's day after, since TAIEX reacts the next morning; β is the sum of the two slopes (Dimson) with the standard error of the sum, √(Var b₀ + Var b₁ + 2 Cov). Weekly and monthly returns need no fix 時差修正適用於收盤時間相差超過 8 小時的跨市場日報酬：台股對標普 500 加入指數前一日（如第 3 節），美股或倫敦掛牌對加權指數則加入加權指數後一日（台股隔天早上才反應）；β 為兩個係數之和（Dimson），標準誤為和的標準誤 √(Var b₀ ＋ Var b₁ ＋ 2 Cov)。週與月報酬不需修正
+- [x] Outputs: β ± its standard error; the 95% interval from Student's t with n − k degrees of freedom; α per period × periods a year as "α a year"; R²; Blume's 0.67 β + 0.33 (weight and prior in config `regression`); the rolling β, each point over the 52 weeks before it, reaching before the window so the line spans it; compare mode of up to 5 tickers against one index, as rolling lines and as β dots with their interval as whiskers (the "bars with 95% CI" of Section 3's catalogue). The window counts back from the newest period both series have 輸出：β ± 標準誤；以自由度 n − k 的 t 分配計算 95% 信賴區間；年化 α ＝ 每期 α × 每年期數；R²；Blume 調整 0.67 β ＋ 0.33（權重與先驗值存在 config `regression`）；滾動 β 每一點都取其前 52 週，可往期間開始前取資料，讓整段期間都有線；比較模式最多 5 檔對同一指數，以滾動線與「β 點加信賴區間」呈現（第 3 節圖表目錄的「信賴區間長條」）。期間自兩者都有資料的最新一期往回計算
+- [x] "Monthly refresh for holdings": on its first run each month the nightly job saves, in `beta_results`, every holding's β (both pools) against both indices at config `regression`'s defaults (weekly, 2 years, local currency), with the annualised α, R², the standard error and in `factor_loadings` the adjusted β, the interval, n and the Dimson slopes, for F11 to read. The Regression page computes on request for any ticker with closes; a ticker not yet held is added as a security and loaded by the next nightly run 「持股每月更新」：每月第一次執行時，每夜排程以 config `regression` 的預設（週報酬、2 年、當地幣別）把每檔持股（兩個資金池）對兩個指數的 β 存入 `beta_results`，連同年化 α、R²、標準誤，並在 `factor_loadings` 存調整後 β、信賴區間、觀察值數與 Dimson 係數，供 F11 使用。「回歸分析」頁對任何有收盤價的代號即時計算；尚未持有的代號先新增為證券，下一次每夜排程就會載入
+- [x] Phase 2 gains a seventh step, N7 Sector heatmap (Section 3, asked for on 2026-10-28): a tab with a heatmap, a treemap 板塊圖 and a bubble chart. It comes after F14, whose look-through gives each sector's exposure 第二階段新增第 7 步 N7 產業熱圖（第 3 節，2026-10-28 提出）：包含熱力圖、板塊圖與泡泡圖的分頁。排在 F14 之後，因為各產業的曝險取自 F14 的穿透計算
+
 ## 10. Glossary 雙語術語表
 
 - **SAA (Strategic Asset Allocation)** – long-term target weights across asset classes, held through market cycles; Chinese translation: 策略性資產配置：長期維持的各資產類別目標權重，不隨市場短期波動而改變。
@@ -654,6 +682,7 @@ Rules:
 4. F12 valuation workbench, buy-zone and trim alerts, discounting at F11's cost of equity. 估值工作台與買入／減碼警報（以 F11 的權益成本折現）。
 5. N3 red-flag indicator, beside F12's watchlist. 紅旗指標（與 F12 的觀察清單並列）。
 6. F14 combined look-through. 核心與衛星合併透視。
+7. N7 sector heatmap tab: heatmap, treemap, bubble chart, on F14's exposure (added 2026-10-28). 產業熱圖分頁：熱力圖、板塊圖、泡泡圖，曝險取自 F14（2026-10-28 加入）。
 
 **Acceptance tests 驗收測試** (computed for this check; each becomes a unit test 每項皆轉為單元測試)
 
@@ -668,6 +697,9 @@ Rules:
 | F3 pace | NT$5.5M, CAPE percentile 75 | 24 tranches of ≈ NT$229,000 |
 | F3 acceleration | ACWI −16%, then −26% | Next tranche merged; then 50% of remaining deployed; each tier fires once |
 | Pool tagging | A windfall buy of a satellite-sleeve ticker | Excluded from R1 / R2 maths |
+| N1 OLS (added in Phase 2, step 2) | x = 1, 2, 3, 4, 5; y = 2, 4, 5, 4, 5 | β 0.6, α 2.2, R² 0.6, SE 0.283, 95% CI −0.300 to 1.500 (t₀.₉₇₅,₃ = 3.182) |
+| N1 Blume | Raw β 1.2 | Adjusted 0.67 × 1.2 + 0.33 = 1.134 |
+| N1 Dimson | Daily Taiwan series = 0.7 × S&P 500 that day + 0.5 × the day before | Slopes 0.7 and 0.5, summed β 1.2 |
 
 **First prompt for Claude Code 第一個指令**
 
