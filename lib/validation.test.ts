@@ -15,7 +15,9 @@ import {
   fractionalShares,
   parseEngineSettings,
   parseOrderSizes,
+  parsePaceForm,
   parsePlanForm,
+  parsePlanStart,
   parseRuleForm,
   parseSchedule,
   parseSubscription,
@@ -23,6 +25,8 @@ import {
   parseTargets,
   parseTaxForm,
   parseTrade,
+  parseWindfallSettingsForm,
+  vehicleField,
   withholdingField,
 } from './validation';
 
@@ -399,5 +403,34 @@ describe('cost settings (F15)', () => {
     assert.deepEqual([parsed.value.ticker, parsed.value.domicile, parsed.value.ter, parsed.value.yield, parsed.value.withholding, parsed.value.trackingDifference, parsed.value.checked], ['VWRA', 'IE', 0.0019, 0.018, 0.09, null, null]);
     const bad = parseFundForm({ ...raw, ticker: 'VT', market: 'JP', ter: '-1' }, ['VT'], null, new Set(['us_global_equity']), '2026-10-22');
     assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['market', 'ter', 'ticker']);
+  });
+});
+
+describe('windfall planner (F3)', () => {
+  it('reads the windfall in whole NT$ and the first tranche date', () => {
+    assert.deepEqual(parsePlanStart({ totalTwd: '5,500,000', startDate: '2026-11-02' }), { ok: true, value: { totalTwd: 5_500_000, startDate: '2026-11-02' } });
+    const bad = parsePlanStart({ totalTwd: '0', startDate: '2026-02-30' });
+    assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['startDate', 'totalTwd']);
+  });
+
+  it("reads each class's vehicle from its own securities, blank for the benchmark", () => {
+    const classes = new Map([
+      ['global_bonds', ['BNDW', 'AGGU']],
+      ['us_global_equity', ['VT', 'VOO']],
+    ]);
+    const parsed = parseWindfallSettingsForm({ [vehicleField('global_bonds')]: 'AGGU', [vehicleField('us_global_equity')]: '', cashReturn: '1.5', fromYear: '1900', horizonMonths: '60' }, classes);
+    assert.deepEqual(parsed, { ok: true, value: { vehicles: { global_bonds: 'AGGU' }, cashReturn: 0.015, fromYear: 1900, horizonMonths: 60 } });
+    const bad = parseWindfallSettingsForm({ [vehicleField('global_bonds')]: 'VT', cashReturn: '50', fromYear: '1800', horizonMonths: '6' }, classes);
+    assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['cashReturn', 'fromYear', 'horizonMonths', vehicleField('global_bonds')]);
+  });
+
+  it('reads the pace and the tiers in percent, each tier deeper than the one before', () => {
+    const raw = { cutLow: '30', cutHigh: '70', tranchesLow: '6', tranchesMid: '12', tranchesHigh: '24', tier1: '15', tier2: '25', tier2Share: '50', tier3: '35', tier3Share: '100' };
+    assert.deepEqual(parsePaceForm(raw), {
+      ok: true,
+      value: { cutoffs: [30, 70], tranches: [6, 12, 24], tiers: [{ drawdown: 0.15 }, { drawdown: 0.25, share: 0.5 }, { drawdown: 0.35, share: 1 }] },
+    });
+    const bad = parsePaceForm({ ...raw, cutHigh: '20', tier2: '10', tranchesHigh: '2.5', tier3Share: '0' });
+    assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['cutHigh', 'tier2', 'tier3Share', 'tranchesHigh']);
   });
 });

@@ -54,6 +54,15 @@ export const MESSAGES = {
   brokerId: { en: 'Use lowercase letters, digits or "_", up to 20 characters.', zh: '請用小寫英文字母、數字或「_」，最多 20 個字元。' },
   idTaken: { en: 'This id is already used.', zh: '這個代號已經使用過。' },
   trackingDifference: { en: 'Enter a percentage from −10 to 10, with at most four decimals.', zh: '請輸入 −10 到 10 的百分比，最多四位小數。' },
+  positiveWholeTwd: { en: 'Enter whole NT$ above 0.', zh: '請輸入大於 0 的整數台幣金額。' },
+  cashReturn: { en: 'Enter a yearly return from −10% to 20%.', zh: '請輸入 −10% 到 20% 的年報酬。' },
+  fromYear: { en: 'Enter a year from 1871 on.', zh: '請輸入 1871 年以後的年份。' },
+  horizonMonths: { en: 'Enter whole months from 12 to 240.', zh: '請輸入 12 到 240 的整數月數。' },
+  percentile: { en: 'Enter a percentile from 0 to 100.', zh: '請輸入 0 到 100 的百分位。' },
+  trancheCount: { en: 'Enter a whole number of tranches from 1 to 120.', zh: '請輸入 1 到 120 的整數批數。' },
+  share: { en: 'Enter a percentage above 0, up to 100.', zh: '請輸入大於 0、最多 100 的百分比。' },
+  drawdown: { en: 'Enter a fall in percent, above 0 and up to 99.', zh: '請輸入大於 0、最多 99 的跌幅百分比。' },
+  ascending: { en: 'Must be above the one before it.', zh: '必須大於前一個數值。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -779,5 +788,101 @@ export function parseFundForm(raw: RawForm, takenTickers: readonly string[], edi
     ...notes,
     source,
     checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// F3 windfall planner (Windfall page): the plan's start, its settings, the pace and the tiers
+// ---------------------------------------------------------------------------
+
+export interface PlanStartInput {
+  totalTwd: number;
+  startDate: string;
+}
+
+/** The windfall to deploy, in whole NT$, and the day the first tranche falls due. */
+export function parsePlanStart(raw: RawForm): Parsed<PlanStartInput, 'totalTwd' | 'startDate'> {
+  const errors: FieldErrors<'totalTwd' | 'startDate'> = {};
+  const totalTwd = parseNumber(raw['totalTwd']);
+  if (totalTwd === undefined || !Number.isInteger(totalTwd) || totalTwd <= 0) errors.totalTwd = MESSAGES.positiveWholeTwd;
+  const startDate = text(raw['startDate']);
+  if (!isIsoDate(startDate)) errors.startDate = MESSAGES.date;
+  return finish(errors, () => ({ totalTwd: totalTwd ?? 0, startDate }));
+}
+
+/** Field name of a core class's windfall vehicle. */
+export function vehicleField(classId: string): string {
+  return `vehicle_${classId}`;
+}
+
+export interface WindfallSettingsInput {
+  vehicles: Record<string, string>;
+  cashReturn: number;
+  fromYear: number;
+  horizonMonths: number;
+}
+
+/** Each core class's windfall vehicle (blank: its benchmark; else one of its securities), and the backtest's settings. */
+export function parseWindfallSettingsForm(raw: RawForm, classes: ReadonlyMap<string, readonly string[]>): Parsed<WindfallSettingsInput, string> {
+  const errors: FieldErrors<string> = {};
+  const vehicles: Record<string, string> = {};
+  for (const [classId, tickers] of classes) {
+    const ticker = text(raw[vehicleField(classId)]);
+    if (ticker === '') continue;
+    if (!tickers.includes(ticker)) errors[vehicleField(classId)] = MESSAGES.choice;
+    else vehicles[classId] = ticker;
+  }
+  const cashReturn = ratePercent(raw['cashReturn'], -10, 20);
+  if (cashReturn === undefined) errors['cashReturn'] = MESSAGES.cashReturn;
+  const fromYear = parseNumber(raw['fromYear']);
+  if (fromYear === undefined || !Number.isInteger(fromYear) || fromYear < 1871 || fromYear > 2100) errors['fromYear'] = MESSAGES.fromYear;
+  const horizonMonths = parseNumber(raw['horizonMonths']);
+  if (horizonMonths === undefined || !Number.isInteger(horizonMonths) || horizonMonths < 12 || horizonMonths > 240) errors['horizonMonths'] = MESSAGES.horizonMonths;
+  return finish(errors, () => ({ vehicles, cashReturn: cashReturn ?? 0, fromYear: fromYear ?? 1900, horizonMonths: horizonMonths ?? 60 }));
+}
+
+export const PACE_FIELDS = ['cutLow', 'cutHigh', 'tranchesLow', 'tranchesMid', 'tranchesHigh', 'tier1', 'tier2', 'tier2Share', 'tier3', 'tier3Share'] as const;
+export type PaceField = (typeof PACE_FIELDS)[number];
+
+export interface PaceInput {
+  cutoffs: [number, number];
+  tranches: [number, number, number];
+  /** Three tiers, shallowest first: the first pulls the next tranche forward, the others deploy a share of the cash waiting. */
+  tiers: [{ drawdown: number }, { drawdown: number; share: number }, { drawdown: number; share: number }];
+}
+
+/** The pace's CAPE cutoffs (percentiles) and tranche counts, and the three acceleration tiers in percent. */
+export function parsePaceForm(raw: RawForm): Parsed<PaceInput, PaceField> {
+  const errors: FieldErrors<PaceField> = {};
+  const percentile = (name: PaceField) => {
+    const value = parseNumber(raw[name]);
+    if (value === undefined || value < 0 || value > 100) errors[name] = MESSAGES.percentile;
+    return value ?? 0;
+  };
+  const count = (name: PaceField) => {
+    const value = parseNumber(raw[name]);
+    if (value === undefined || !Number.isInteger(value) || value < 1 || value > 120) errors[name] = MESSAGES.trancheCount;
+    return value ?? 1;
+  };
+  const share = (name: PaceField, max: number) => {
+    const value = ratePercent(raw[name], 0, max);
+    if (value === undefined || value <= 0) errors[name] = max < 100 ? MESSAGES.drawdown : MESSAGES.share;
+    return value ?? 0;
+  };
+  const cutLow = percentile('cutLow');
+  const cutHigh = percentile('cutHigh');
+  if (!errors.cutLow && !errors.cutHigh && cutHigh < cutLow) errors.cutHigh = MESSAGES.ascending;
+  const tranches: [number, number, number] = [count('tranchesLow'), count('tranchesMid'), count('tranchesHigh')];
+  const tier1 = share('tier1', 99);
+  const tier2 = share('tier2', 99);
+  const tier3 = share('tier3', 99);
+  if (!errors.tier1 && !errors.tier2 && tier2 <= tier1) errors.tier2 = MESSAGES.ascending;
+  if (!errors.tier2 && !errors.tier3 && tier3 <= tier2) errors.tier3 = MESSAGES.ascending;
+  const tier2Share = share('tier2Share', 100);
+  const tier3Share = share('tier3Share', 100);
+  return finish(errors, () => ({
+    cutoffs: [cutLow, cutHigh],
+    tranches,
+    tiers: [{ drawdown: tier1 }, { drawdown: tier2, share: tier2Share }, { drawdown: tier3, share: tier3Share }],
   }));
 }

@@ -349,10 +349,10 @@ function nextMonth(month: string): string {
 
 /**
  * What falls in the next seven days, today included: the DCA debit (config dca.day_of_month) and
- * the monthly-contribution proposal the day after it, the weekly review, and January's review.
- * Tranche dates (F3) and earnings dates come with Phase 2.
+ * the monthly-contribution proposal the day after it, the weekly review, January's review, and
+ * the windfall tranches still scheduled (F3, Phase 2 step 1). Earnings dates come with F12.
  */
-export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyReview | null, annualMonth: number | null): WeekEvent[] {
+export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyReview | null, annualMonth: number | null, tranches: ReadonlyArray<{ dueDate: string; status: string }> = []): WeekEvent[] {
   const last = addDays(today, 6);
   const inWeek = (date: string) => date >= today && date <= last;
   const events: WeekEvent[] = [];
@@ -375,6 +375,9 @@ export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyR
       const review = firstSaturday(`${year}-${String(annualMonth).padStart(2, '0')}`);
       if (inWeek(review)) events.push({ date: review, what: { en: 'Annual review proposal', zh: '年度檢查提案' } });
     }
+  }
+  for (const tranche of tranches) {
+    if (tranche.status === 'scheduled' && inWeek(tranche.dueDate)) events.push({ date: tranche.dueDate, what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } });
   }
   return events.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
 }

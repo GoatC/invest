@@ -190,6 +190,15 @@ describe('comingWeek', () => {
     ]);
   });
 
+  it("lists a windfall tranche still scheduled in the week, not one already done", () => {
+    const tranches = [
+      { dueDate: '2026-10-24', status: 'scheduled' },
+      { dueDate: '2026-10-23', status: 'done' },
+      { dueDate: '2026-11-24', status: 'scheduled' },
+    ];
+    assert.deepEqual(comingWeek('2026-10-22', null, null, null, tranches), [{ date: '2026-10-24', what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } }]);
+  });
+
   it('crosses into the next month and the new year, and leaves out what is not set', () => {
     const events = comingWeek('2026-12-29', 2, null, 1);
     assert.deepEqual(
