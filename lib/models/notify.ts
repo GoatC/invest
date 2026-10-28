@@ -175,6 +175,13 @@ function proposalAction(condition: string, state: string, detail: ProposalDetail
       };
     case 'first_weekend_of_month':
       return { en: 'The yearly review: rebalance the core to its targets and look over the rules.', zh: '年度檢查：核心類別回到目標，並檢視規則。' };
+    case 'tranche_due':
+      return { en: `Deploy ${twd(detail.cashTwd)} of the windfall: the tranche due ${detail.dueDate ?? '—'}.`, zh: `投入大額資金 ${twd(detail.cashTwd)}：${detail.dueDate ?? '—'} 到期的分批。` };
+    case 'index_drawdown_tier':
+      return {
+        en: `ACWI ${percent(detail.drawdown ?? 0)} below its high: deploy ${twd(detail.cashTwd)} more of the windfall now.`,
+        zh: `ACWI 自高點下跌 ${percent(detail.drawdown ?? 0)}：現在多投入大額資金 ${twd(detail.cashTwd)}。`,
+      };
     case 'us_situs_value_above': {
       const total = money(detail.situsUsd ?? 0, 'USD', 0);
       const limit = money(detail.limitUsd ?? 0, 'USD', 0);
@@ -342,10 +349,10 @@ function nextMonth(month: string): string {
 
 /**
  * What falls in the next seven days, today included: the DCA debit (config dca.day_of_month) and
- * the monthly-contribution proposal the day after it, the weekly review, and January's review.
- * Tranche dates (F3) and earnings dates come with Phase 2.
+ * the monthly-contribution proposal the day after it, the weekly review, January's review, and
+ * the windfall tranches still scheduled (F3, Phase 2 step 1). Earnings dates come with F12.
  */
-export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyReview | null, annualMonth: number | null): WeekEvent[] {
+export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyReview | null, annualMonth: number | null, tranches: ReadonlyArray<{ dueDate: string; status: string }> = []): WeekEvent[] {
   const last = addDays(today, 6);
   const inWeek = (date: string) => date >= today && date <= last;
   const events: WeekEvent[] = [];
@@ -368,6 +375,9 @@ export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyR
       const review = firstSaturday(`${year}-${String(annualMonth).padStart(2, '0')}`);
       if (inWeek(review)) events.push({ date: review, what: { en: 'Annual review proposal', zh: '年度檢查提案' } });
     }
+  }
+  for (const tranche of tranches) {
+    if (tranche.status === 'scheduled' && inWeek(tranche.dueDate)) events.push({ date: tranche.dueDate, what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } });
   }
   return events.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
 }

@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
+import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
 // SQLSTATE codes. 42501 covers both a missing privilege and a row-level security refusal.
@@ -12,12 +13,13 @@ const CHECK_FAILED = '23514';
 const KEY_MISSING = '23503';
 
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
-// (step 10), the N5 audit log adds audit_log and the nightly job (Phase 1, step 4) adds job_runs.
+// (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
+// the windfall planner (Phase 2, step 1) adds market_series.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
-  'job_runs', 'notifications',
+  'job_runs', 'notifications', 'market_series',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -37,7 +39,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs and notifications', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications and market_series', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -292,10 +294,10 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, with the Phase 2 rules disabled', async () => {
+  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
     assert.equal(rows.length, 14);
-    for (const row of rows) assert.equal(row.enabled, !['F3', 'F12', 'N3'].includes(row.feature), row.id);
+    for (const row of rows) assert.equal(row.enabled, !['F12', 'N3'].includes(row.feature), row.id);
   });
 
   it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
@@ -461,6 +463,48 @@ describe('fee and tax drag (step 11)', () => {
   });
 });
 
+describe('windfall planner (Phase 2, step 1)', () => {
+  it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2026-10-01', 40.8, 'shiller')`)), DENIED);
+    });
+    await db.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2099-10-01', 40.8, 'shiller')`);
+    assert.equal(await errorCode(db.query(`insert into public.market_series (series, obs_month, value, source) values ('us_cape', '2099-10-15', 40.8, 'shiller')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select value from public.market_series where series = 'us_cape' and obs_month = '2099-10-01'`), '40.8');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.market_series'), 0);
+    });
+    await db.query(`delete from public.market_series where obs_month = '2099-10-01'`);
+  });
+
+  it('adds ACWI for the drawdown gauge, the planner settings, and turns the F3 rules on', async () => {
+    assert.equal(await scalar(db, `select asset_class_id from public.securities where ticker = 'ACWI'`), 'us_global_equity');
+    assert.deepEqual(await scalar(db, `select value from public.config where key = 'windfall'`), { vehicles: {}, cash_return: 0.015, backtest: { from_year: 1900, horizon_months: 60 } });
+    const { rows } = await db.query<{ id: string; enabled: boolean }>(`select id, enabled from public.rules where id like 'WINDFALL%' order by id`);
+    assert.deepEqual(rows, [
+      { id: 'WINDFALL_ACCELERATION', enabled: true },
+      { id: 'WINDFALL_TRANCHE_DUE', enabled: true },
+    ]);
+  });
+
+  it('logs edits to a plan and its tranches, and deletes the tranches with their plan', async () => {
+    await as(db, 'owner', async (tx) => {
+      const id = await scalar<number>(tx, `insert into public.windfall_plan (total_twd, received_on, cape_percentile, tranche_count) values (5500000, '2026-11-02', 75, 24) returning id`);
+      await tx.query(`insert into public.windfall_tranches (plan_id, due_date, amount_twd) values ($1, '2026-11-02', 229167), ($1, '2026-12-02', 229167)`, [id]);
+      await tx.query(`update public.windfall_tranches set status = 'done' where plan_id = $1 and due_date = '2026-11-02'`, [id]);
+      await tx.query('delete from public.windfall_plan where id = $1', [id]);
+      const { rows } = await tx.query<{ table_name: string; action: string }>(`select table_name, action from public.audit_log where table_name in ('windfall_plan', 'windfall_tranches') order by id`);
+      // The plan's delete is logged, then its two tranches as the cascade removes them.
+      assert.deepEqual(
+        rows.map((row) => `${row.table_name} ${row.action}`).sort(),
+        ['windfall_plan delete', 'windfall_tranches delete', 'windfall_tranches delete', 'windfall_tranches update'],
+      );
+    });
+  });
+});
+
 describe('latest quote views', () => {
   it('give the newest close per ticker and the newest rate per pair', async () => {
     // The demo seed holds VT at 157.80 and USD/TWD at 32.40, both on 2026-10-20.
@@ -511,14 +555,14 @@ describe('weekly prices for the VaR (step 7)', () => {
     assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query('select 1 from public.weekly_prices'))), DENIED);
   });
 
-  it('come with three years of invented weekly closes for every proxy and the dollar in the demo seed, ending at the first demo trade', async () => {
+  it('come with three years of invented weekly closes for every proxy, ACWI and the dollar in the demo seed, ending at the first demo trade', async () => {
     const { rows } = await db.query<{ ticker: string; weeks: string; first: Date; last: Date }>(
       `select ticker, count(*) as weeks, min(price_date) as first, max(price_date) as last
        from public.prices where price_date < '2026-05-07' group by ticker order by ticker`,
     );
     assert.deepEqual(
       rows.map((row) => [row.ticker, Number(row.weeks), row.first.toISOString().slice(0, 10), row.last.toISOString().slice(0, 10)]),
-      ['0050', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
+      ['0050', 'ACWI', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
     );
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where pair = 'USD/TWD' and rate_date < '2026-05-07'`), 174);
     // A walk that lands on the first demo trade's close, a week away, with weekly moves of shares-like size.
@@ -533,9 +577,37 @@ describe('weekly prices for the VaR (step 7)', () => {
 });
 
 describe('demo seed', () => {
-  it('marks every price and FX rate as demo data', async () => {
+  it('marks every price, FX rate and market series month as demo data', async () => {
     assert.equal(await scalar(db, `select count(*) from public.prices where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
+  });
+
+  it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09", async () => {
+    const { rows } = await db.query<{ series: string; months: string; first: Date; last: Date }>(
+      `select series, count(*) as months, min(obs_month) as first, max(obs_month) as last from public.market_series group by series order by series`,
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.series, Number(row.months), row.first.toISOString().slice(0, 7), row.last.toISOString().slice(0, 7)]),
+      [
+        ['sp500_price', 1869, '1871-01', '2026-09'],
+        ['sp500_yield', 1869, '1871-01', '2026-09'],
+        ['us_cape', 1749, '1881-01', '2026-09'],
+      ],
+    );
+    // CAPE ends above its 70th percentile, so a demo plan takes 24 tranches.
+    const { rows: capes } = await db.query<{ month: string; value: string }>(`select to_char(obs_month, 'YYYY-MM') as month, value from public.market_series where series = 'us_cape' order by obs_month`);
+    const gauge = capePercentile(capes.map((row) => ({ month: row.month, value: Number(row.value) })));
+    assert.equal(gauge?.cape, 24.04);
+    assert.equal(Math.round(gauge?.percentile ?? 0), 74);
+  });
+
+  it("gives ACWI daily closes to the newest demo date, ending short of the first acceleration tier (F3)", async () => {
+    const { rows } = await db.query<{ date: string; close: string }>(`select price_date::text as date, close from public.prices where ticker = 'ACWI' order by price_date`);
+    const drawdown = drawdownOf(rows.map((row) => ({ date: row.date, close: Number(row.close) })), '2026-10-28', 52);
+    assert.deepEqual(drawdown?.peak, { date: '2026-09-17', close: 137.95 });
+    assert.deepEqual(drawdown?.latest, { date: '2026-10-20', close: 130.28 });
+    assert.ok(Math.abs((drawdown?.drawdown ?? 0) - 0.0556) < 0.0001);
   });
 
   it('holds no windfall money (CLAUDE.md: no windfall figures in git)', async () => {

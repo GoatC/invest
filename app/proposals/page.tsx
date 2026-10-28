@@ -177,7 +177,7 @@ const ACTION: Record<DraftOrder['side'], Bilingual> = {
 /** Where to record an order once traded: the trade form filled in (with the estimated fee and tax), or the balance's edit page. */
 function recordLink(order: DraftOrder, proposalId: number, cost: OrderCost | undefined): string {
   if (order.kind === 'balance') return `/assets/${order.assetId}`;
-  const query = new URLSearchParams({ ticker: order.ticker, side: order.side, qty: String(order.qty), pool: 'regular', proposal: String(proposalId) });
+  const query = new URLSearchParams({ ticker: order.ticker, side: order.side, qty: String(order.qty), pool: order.pool ?? 'regular', proposal: String(proposalId) });
   if (cost?.known) {
     query.set('fee', String(cost.fee));
     if (cost.tax > 0) query.set('tax', String(cost.tax));

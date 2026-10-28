@@ -119,6 +119,8 @@ describe('messages', () => {
       new Map(),
     );
     assert.equal(estate.title, 'US_ESTATE_TAX · US estate tax 美國遺產稅');
+    const tranche = proposalMessage({ ...r1, id: 10, ruleId: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due', title: { en: 'WINDFALL_TRANCHE_DUE · Windfall tranche', zh: 'WINDFALL_TRANCHE_DUE · 大額資金分批' }, state: 'tranche:1', detail: { poolTwd: 1, cashTwd: 229_167, leftTwd: 0, dueDate: '2026-11-02' } }, new Map());
+    assert.equal(tranche.body, 'Deploy NT$229,167 of the windfall: the tranche due 2026-11-02.\n投入大額資金 NT$229,167：2026-11-02 到期的分批。');
     assert.equal(estate.body, 'US assets 61,000 USD, above the 60,000 USD exemption: consider Irish-domiciled ETFs.\n美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
   });
 
@@ -186,6 +188,15 @@ describe('comingWeek', () => {
       { date: '2026-10-26', what: { en: 'DCA debit', zh: '定期定額扣款' } },
       { date: '2026-10-27', what: { en: 'Monthly-contribution proposal', zh: '每月投入提案' } },
     ]);
+  });
+
+  it("lists a windfall tranche still scheduled in the week, not one already done", () => {
+    const tranches = [
+      { dueDate: '2026-10-24', status: 'scheduled' },
+      { dueDate: '2026-10-23', status: 'done' },
+      { dueDate: '2026-11-24', status: 'scheduled' },
+    ];
+    assert.deepEqual(comingWeek('2026-10-22', null, null, null, tranches), [{ date: '2026-10-24', what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } }]);
   });
 
   it('crosses into the next month and the new year, and leaves out what is not set', () => {

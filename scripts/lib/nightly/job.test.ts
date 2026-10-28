@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import * as XLSX from 'xlsx';
+
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
-import { FeedError, type DailyPrice, type DailyRate, type Get } from '../feeds/types.ts';
+import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 import { goldInTwd, riskWindowStart, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
@@ -43,10 +45,13 @@ const REPLIES: Record<string, string> = {
   STOCK_DAY_ALL: JSON.stringify([{ Date: '1151021', Code: '0050', ClosingPrice: '108.15' }]),
   fredgraph: 'observation_date,DEXTAUS\n2026-10-16,32.34\n',
   alphavantage: JSON.stringify({ 'Time Series (Daily)': { '2026-10-20': { '4. close': '157.80' } } }),
+  'shillerdata.com': '<a href="https://img1.wsimg.com/blobby/go/x/downloads/ie_data.xls?ver=1">ie_data.xls</a>',
+  // One by-month table answers for each series: for the yield, 40.81% and 40.42%.
+  'multpl.com': '<table id="datatable"><tr><td>Oct 1, 2026</td><td>40.81</td></tr><tr><td>Sep 1, 2026</td><td>40.42</td></tr></table>',
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'fredgraph', 'alphavantage']);
+const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -64,6 +69,18 @@ function fakeGet(fail: (key: string) => boolean = () => false): { get: Get; urls
   return { get, urls };
 }
 
+/** Shiller's workbook with two months: its Data sheet's header row, then September and October 2026. */
+function shillerWorkbook(): Uint8Array {
+  const book = XLSX.utils.book_new();
+  const rows = [['Date', 'P', 'D', 'E', 'CPI', 'Fraction', 'Rate GS10', 'Price', 'Dividend', 'Price', 'Earnings', 'Earnings', 'CAPE'], [2026.09, 7669.41, 82, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40.42], [2026.1, 7766.95, 82.4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40.81]];
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'Data');
+  return new Uint8Array(XLSX.write(book, { bookType: 'xls', type: 'array' }) as ArrayBuffer);
+}
+const getBytes: GetBytes = async () => shillerWorkbook();
+const bytesDown: GetBytes = async () => {
+  throw new FeedError('HTTP 403 from img1.wsimg.com');
+};
+
 /** Weekly 0050 closes to 16 October 2026, three years of them, moving ±a so their sample σ is exactly 2%. */
 function weeklyHistory(): PriceRow[] {
   const grid = fridays(gridStart('2026-10-16', 156), '2026-10-16');
@@ -79,6 +96,7 @@ class MemoryStore implements Store {
   prices: DailyPrice[] = [];
   fills: DailyPrice[] = [];
   rates: DailyRate[] = [];
+  series: MonthlyPoint[] = [];
   runs: JobRun[] = [];
   snapshots: Snapshot[] = [];
   /** When the rules were evaluated, and how many snapshots were saved by then. */
@@ -127,6 +145,9 @@ class MemoryStore implements Store {
   async saveRates(rows: readonly DailyRate[]) {
     this.rates.push(...rows);
   }
+  async saveSeries(rows: readonly MonthlyPoint[]) {
+    this.series.push(...rows);
+  }
   /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
   async performanceInput(end: string): Promise<PerformanceInput> {
     if (this.options.failSnapshots) throw new Error('transactions: permission denied');
@@ -155,8 +176,9 @@ class MemoryStore implements Store {
 }
 
 let clock = 0;
-const deps = (get: Get, store: Store, alphaVantageKey?: string) => ({
+const deps = (get: Get, store: Store, alphaVantageKey?: string, bytes: GetBytes = getBytes) => ({
   get,
+  getBytes: bytes,
   store,
   finmindToken: 'token',
   alphaVantageKey,
@@ -320,12 +342,31 @@ describe('runNightly', () => {
     );
   });
 
+  it("loads CAPE, the S&P 500's price and its yield from Shiller's workbook, else from multpl", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(run.detail.series?.['us_cape'], { source: 'shiller', rows: 2, latest: '2026-10' });
+    assert.deepEqual(
+      store.series.filter((point) => point.month === '2026-10').map((point) => [point.series, Math.round(point.value * 1e4) / 1e4]),
+      [
+        ['us_cape', 40.81],
+        ['sp500_price', 7766.95],
+        ['sp500_yield', 0.0106],
+      ],
+    );
+    const fallback = new MemoryStore();
+    const second = await runNightly(deps(fakeGet().get, fallback, undefined, bytesDown));
+    assert.equal(second.status, 'ok');
+    assert.deepEqual(second.detail.series?.['sp500_price'], { source: 'multpl', rows: 2, latest: '2026-10' });
+    assert.match(second.detail.warnings.join('\n'), /us_cape: shiller: HTTP 403/);
+  });
+
   it('records a failed run when nothing could be loaded', async () => {
     const store = new MemoryStore();
     const run = await runNightly(deps(fakeGet(() => true).get, store));
     assert.equal(run.status, 'failed');
     assert.equal(store.runs.length, 1);
-    assert.deepEqual([...new Set(run.detail.errors.map((line) => line.split(':')[0]))], ['0050', 'VT', 'AGGU', 'USD/TWD', 'XAU/USD']);
+    assert.deepEqual([...new Set(run.detail.errors.map((line) => line.split(':')[0]))], ['0050', 'VT', 'AGGU', 'USD/TWD', 'XAU/USD', 'us_cape', 'sp500_price', 'sp500_yield']);
   });
 
   it('records a failed run when the database cannot be read', async () => {

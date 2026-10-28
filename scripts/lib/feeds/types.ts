@@ -29,3 +29,14 @@ export function positive(value: unknown): number | undefined {
   const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
   return Number.isFinite(number) && number > 0 ? number : undefined;
 }
+
+/** One month of a market-level series (F3): CAPE, the S&P 500's price and its dividend yield. month is YYYY-MM. */
+export interface MonthlyPoint {
+  series: string;
+  month: string;
+  value: number;
+  source: string;
+}
+
+/** Fetches a URL as bytes (a binary spreadsheet), throwing FeedError on a failure. */
+export type GetBytes = (url: string, headers?: Record<string, string>) => Promise<Uint8Array>;

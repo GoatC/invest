@@ -870,6 +870,137 @@ await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; 
   await page.waitForURL('**/holdings?saved=deleted');
 });
 
+/** The same day `months` later, or that month's last day: when F3's monthly tranches fall due. */
+function monthsLater(date, months) {
+  const [year, month, day] = date.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  target.setUTCDate(Math.min(day, new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()));
+  return target.toISOString().slice(0, 10);
+}
+
+await step("windfall: CAPE's percentile sets the pace, ACWI's fall from its high, and the backtest against a lump sum", async () => {
+  await page.goto(`${BASE}/windfall`);
+  await page.locator('.chart-backtest svg').waitFor();
+  const text = await body();
+  // Seed: CAPE 24.04 in 2026-09, the 74th percentile of its 1,749 months since 1881: above the 70th, so 24 tranches.
+  check(text.includes('Valuation now: CAPE 24.0 in 2026-09, the 74th percentile of 1,749 months: a plan started now would take 24 monthly tranches.'), `the gauge, got ${text.slice(0, 1500)}`);
+  check(text.includes('目前估值：2026-09 的 CAPE 為 24.0，在 1,749 個月中位於第 74 百分位'), 'the gauge in Chinese');
+  // ACWI's demo closes peak at 137.95 on 2026-09-17 and end at 130.28 on 2026-10-20: 5.6% below, short of the 15% tier.
+  check(text.includes('ACWI is 5.6% below its 52-week high (137.95 on 2026-09-17); the next tier is at 15%.'), 'the drawdown gauge');
+  check(text.includes('No plan yet.') && text.includes('Waiting as cash in the windfall pool: NT$50,000 of NT$50,000.'), 'no plan; the money-market fund added above waits');
+  const backtest = await page.locator('#backtest').innerText();
+  check(backtest.includes('Every start month from 1900-01 to 2021-09 (1,461 of them)') && backtest.includes('(Demo data)'), `the start months, got ${backtest.slice(0, 400)}`);
+  // Of the 1,461 starts the rule beat a lump sum in 38%, by −2.2% at the median: it costs in rising markets and saves after falls.
+  const cells = async (label) => (await page.locator('#backtest tbody tr', { hasText: label }).locator('td').allInnerTexts()).slice(1).join(' | ');
+  check((await cells('This rule vs lump sum')) === '38% | −2.2% | −11.7% … +9.5% | −25.3% | +34.4%', `the rule against a lump sum, got ${await cells('This rule vs lump sum')}`);
+  check((await cells('This rule vs the pace alone')).startsWith('28% | 0.0% |'), `acceleration against the pace alone, got ${await cells('This rule vs the pace alone')}`);
+  await snap('windfall');
+});
+
+let windfallFlowId;
+let depositId;
+let trancheProposal;
+await step('windfall: the money arrives as a cash flow and a TWD balance; the plan splits it into the tranches CAPE sets', async () => {
+  await page.goto(`${BASE}/cash-flows/new`);
+  await page.selectOption('select[name=type]', 'windfall');
+  await page.fill('input[name=amount]', '1200000');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=flow-added**');
+  await page.locator('#cash-flows tbody tr', { hasText: 'Windfall arrives' }).getByRole('link').click();
+  await page.waitForURL(/\/cash-flows\/\d+$/);
+  windfallFlowId = page.url().split('/').pop();
+  // Kept in a TWD time deposit until it is deployed; with the money-market fund, NT$1,200,000 waits.
+  await page.goto(`${BASE}/assets/new`);
+  await page.fill('input[name=name]', 'Time deposit (demo) 定存（示範）');
+  await page.selectOption('select[name=productType]', 'cash_mmf');
+  await page.fill('input[name=quantity]', '1150000');
+  await page.selectOption('select[name=pool]', 'windfall');
+  await page.click('main button[type=submit]');
+  await page.waitForURL('**/holdings?saved=asset-added');
+  await page.locator('tr', { hasText: 'Time deposit (demo)' }).getByRole('link', { name: /Edit/ }).click();
+  await page.waitForURL(/\/assets\/\d+$/);
+  depositId = page.url().split('/').pop();
+
+  await page.goto(`${BASE}/windfall`);
+  const form = page.locator('#plan form').first();
+  check((await form.locator('input[name=totalTwd]').inputValue()) === '1200000', 'the amount from the windfall recorded');
+  check((await form.locator('input[name=startDate]').inputValue()) === taipeiToday, 'the first tranche on the day it arrived');
+  const preview = await form.locator('[role=status]').innerText();
+  check(preview.includes(`24 monthly tranches of about NT$50,000, ${taipeiToday} to ${monthsLater(taipeiToday, 23)}.`), `the pace as typed, got ${preview}`);
+  await form.getByRole('button', { name: /Start the plan/ }).click();
+  await page.waitForURL('**/windfall?saved=plan**');
+  const text = await body();
+  check(text.includes('Plan saved: each tranche is proposed when it falls due.'), 'saved');
+  check(text.includes(`Plan: NT$1,200,000 from ${taipeiToday} in 24 monthly tranches (CAPE percentile 74 then); 0 done or pulled forward, 24 to go, the next due ${taipeiToday}.`), `the plan in a line, got ${text.slice(0, 1200)}`);
+  const rows = await page.locator('#plan tbody tr').allInnerTexts();
+  check(rows.length === 24 && /^1\s+\S+\s+NT\$50,000\s+Scheduled/.test(rows[0]) && rows[23].includes(monthsLater(taipeiToday, 23)), `24 tranches of NT$50,000, got ${rows[0]} … ${rows[23]}`);
+
+  // The dashboard has the tranche in its coming week, and the plan under the windfall's progress.
+  await page.goto(`${BASE}/`);
+  const home = await body();
+  check(home.includes(`Plan: 0 of 24 tranches done, on schedule; 1 due now, see Proposals; next due ${monthsLater(taipeiToday, 1)}.`), `the plan on the dashboard, got ${home}`);
+  check(/Coming week[\s\S]*Windfall tranche due/.test(home), 'the tranche in the coming week');
+});
+
+await step('windfall: the tranche due drafts its proposal in the windfall pool, core classes only; filled, the tranche is done', async () => {
+  await page.goto(`${BASE}/proposals`);
+  await page.getByRole('button', { name: /Check the rules now/ }).click();
+  await page.waitForURL('**/proposals?saved=checked*');
+  check(/Rules checked: 1 new proposals?, 0 closed\./.test(await body()), 'only the tranche: ACWI is 5.6% down, no tier');
+  const proposal = page.locator('article.proposal').filter({ hasText: 'Windfall tranche' });
+  trancheProposal = (await proposal.getAttribute('id'))?.replace('proposal-', '');
+  const text = await proposal.innerText();
+  check(text.includes('WINDFALL_TRANCHE_DUE · Windfall tranche'), 'its rule and title');
+  check(text.includes(`The windfall tranche due on ${taipeiToday}: NT$1,200,000 waits for 24 tranches, so this one deploys NT$50,000, split by the core targets; the satellite takes none of the windfall.`), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  // Strategic cash's 8 of the core's 80 stays in the deposit, which is strategic cash already.
+  check(text.includes("Strategic cash's share, NT$5,000, stays in the balance the windfall waits in"), 'strategic cash stays');
+  const orders = await proposal.locator('tbody tr').allInnerTexts();
+  const tickers = orders.map((row) => row.split('\t')[1]?.trim());
+  check(/^Take out/.test(orders[0] ?? '') && (orders[0] ?? '').includes('Time deposit (demo)'), `paid from the largest windfall balance, got ${orders[0]}`);
+  check(['VT', '0050', 'BNDW', 'GLDM'].every((ticker) => tickers.includes(ticker)) && !tickers.some((ticker) => ['AAPL', '2330', 'VOO', 'NVDA'].includes(ticker)), `the core benchmarks, no satellite, got ${tickers}`);
+  await proposal.getByRole('button', { name: /^Approve/ }).click();
+  await page.waitForURL('**/proposals?saved=approved*');
+  // The checklist records each trade in the windfall pool, so R1 and R2 never count it.
+  await page.locator(`#proposal-${trancheProposal}`).getByRole('link', { name: /Record the trade/ }).first().click();
+  await page.waitForURL(/\/holdings\/new\?/);
+  check(page.url().includes('pool=windfall') && (await page.inputValue('select[name=pool]')) === 'windfall', 'the trade form in the windfall pool');
+  await page.goto(`${BASE}/proposals`);
+  await page.locator(`#proposal-${trancheProposal}`).getByRole('button', { name: /Mark filled/ }).click();
+  await page.waitForURL('**/proposals?saved=filled*');
+
+  await page.goto(`${BASE}/windfall`);
+  await page.locator('.chart-backtest svg').waitFor();
+  const first = await page.locator('#plan tbody tr').first().innerText();
+  check(first.includes('Done') && first.includes(`#${trancheProposal}`), `the first tranche done, with its proposal, got ${first}`);
+  check((await body()).includes(`1 done or pulled forward, 23 to go, the next due ${monthsLater(taipeiToday, 1)}.`), 'the plan moves on');
+  await snap('windfall-plan');
+  await page.setViewportSize({ width: 1280, height: 1400 });
+  await docShot('windfall', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/`);
+  check((await body()).includes(`Plan: 1 of 24 tranches done, on schedule; next due ${monthsLater(taipeiToday, 1)}.`), 'the dashboard follows');
+});
+
+await step('windfall: the demo put back for the steps that follow; the edit history keeps the plan', async () => {
+  // The plan, the deposit and the cash flow go: the push and dashboard steps expect one proposal waiting and NT$50,000 in the pool.
+  await page.goto(`${BASE}/windfall`);
+  await page.locator('#plan details > summary').click();
+  await page.locator('#plan').getByRole('button', { name: /^Delete/ }).click();
+  await page.waitForURL('**/windfall?saved=deleted**');
+  check((await body()).includes('No plan yet.'), 'the plan is gone');
+  await page.goto(`${BASE}/assets/${depositId}`);
+  await page.getByRole('button', { name: /^Delete/ }).click();
+  await page.waitForURL('**/holdings?saved=asset-deleted');
+  await page.goto(`${BASE}/cash-flows/${windfallFlowId}`);
+  await page.getByRole('button', { name: /^Delete/ }).click();
+  await page.waitForURL('**/holdings?saved=flow-deleted**');
+  await page.goto(`${BASE}/history`);
+  const history = await body();
+  check(history.includes('Windfall plan') && history.includes(`NT$1,200,000 from ${taipeiToday}`) && history.includes('Windfall tranche'), 'the plan and its tranches in the edit history');
+  await page.goto(`${BASE}/windfall`);
+  check((await body()).includes('Waiting as cash in the windfall pool: NT$50,000 of NT$50,000.'), 'the pool as it was');
+});
+
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
 // job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
 const pushes = [];
@@ -1000,6 +1131,7 @@ await step('dashboard: the three lines, then proposals, drift, VaR, donut, windf
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
   check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
   check(/Deployed NT\$[\d,]+ \([\d.]+%\); waiting as cash NT\$[\d,]+\./.test(text), 'windfall deployed and waiting');
+  check(text.includes('No tranche plan yet: start one on the Windfall page'), 'no windfall plan, since the demo was put back');
   check(text.includes('Weekly review push'), 'the coming week lists the review');
   check((await page.locator('#dashboard-proposals').innerText()).includes('Monthly contribution'), 'the open proposal first, with approve and dismiss');
   await snap('dashboard');
@@ -1026,6 +1158,10 @@ await step('data status: demo prices listed with their dates, the job not run ye
   check(text.includes('The nightly price job has not run yet'), 'not run yet');
   check(/VT[\s\S]*2026-10-20[\s\S]*157\.8 USD[\s\S]*Demo data/.test(text), 'VT demo close with its date');
   check(/AGGU[\s\S]*Not loaded yet/.test(text), 'AGGU not loaded yet');
+  // The windfall planner's monthly series: the seed's invented history to 2026-09.
+  const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
+  check(/2026-09\s+24\.04\s+Demo data/.test(cape), `the newest CAPE, got ${cape}`);
+  check(/2026-09\s+2\.03%/.test(await page.locator('#market-series tr', { hasText: 'sp500_yield' }).innerText()), 'the dividend yield as a percentage');
   check(text.includes('資料狀態') && text.includes('匯率與金價'), 'Chinese labels');
   await snap('data-status-before');
 });
@@ -1033,7 +1169,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1047,7 +1183,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
     if (path === '/') await page.locator('.chart-donut svg').waitFor();
     if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1094,6 +1231,9 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
     check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
+    // The monthly market series from Shiller's workbook, or multpl.com when it cannot be reached.
+    const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
+    check(/\d{4}-\d{2}\s+[\d.]+\s+(Shiller's data|multpl\.com)/.test(cape) && !cape.includes('Demo data'), `CAPE loaded live, got ${cape.replace(/\s+/g, ' ')}`);
     // After the refresh the job checks the rules, with the secret key, as the owner's Check now does.
     check(/Checked the rules: \d+ new proposals?, \d+ closed\./.test(text), 'the rules checked after the refresh');
     await snap('data-status-after');

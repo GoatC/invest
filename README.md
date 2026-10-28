@@ -45,13 +45,22 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phase 1 is built; Phase 2 starts once its gate passes. 第一階段已完成建置；通過關卡後才開始第二階段。
+Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一階段已完成並通過關卡；第二階段依 PRD 第 11 節的順序進行中。
 
-Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), the windfall planner, Monte Carlo, the efficient frontier, stress tests and Brinson attribution. 第二、三階段加入證券分析、大額資金分批、蒙地卡羅、效率前緣、壓力測試與 Brinson 歸因。
+| Phase 2 step 第二階段步驟 | State 狀態 |
+| --- | --- |
+| 1. F3 windfall tranche planner 大額資金分批部署 | ✅ |
+| 2. N1 Regression Lab, single-factor β 回歸分析區（單因子 β） | |
+| 3. F11 CAPM cost of equity CAPM 權益成本 | |
+| 4. F12 valuation workbench and alerts 估值工作台與警報 | |
+| 5. N3 red-flag indicator 紅旗指標 | |
+| 6. F14 combined look-through 核心與衛星合併透視 | |
+
+Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress tests, Brinson attribution and the Fama–French five factors. 第三階段加入蒙地卡羅、人生時間軸、效率前緣、壓力測試、Brinson 歸因與 Fama–French 五因子。
 
 ## What works today 目前的功能
 
-- **Weekly dashboard 每週儀表板** (home 首頁): this week's three lines (rules, largest drift, value and its weekly change), then open proposals to approve or dismiss, drift bars, the VaR card, the allocation donut, windfall progress, the coming week and actual vs plan. 本週三行摘要（規則、最大偏離、市值與週變化），接著是待處理提案（可核准或略過）、偏離長條、風險值卡片、配置圓餅圖、大額資金進度、下週事件與實際對計畫。
+- **Weekly dashboard 每週儀表板** (home 首頁): this week's three lines (rules, largest drift, value and its weekly change), then open proposals to approve or dismiss, drift bars, the VaR card, the allocation donut, windfall progress with its tranche plan, the coming week (tranche dates included) and actual vs plan. 本週三行摘要（規則、最大偏離、市值與週變化），接著是待處理提案（可核准或略過）、偏離長條、風險值卡片、配置圓餅圖、大額資金進度與分批計畫、下週事件（含分批到期日）與實際對計畫。
 - **Web Push 推播**: a push only when a decision is due (a new proposal, the weekly review, a data failure), never for a price move; quiet hours 23:00–08:00 hold them; each device is turned on from the app, iPhone from the Home Screen. 只在需要決定時推播（新提案、每週檢視、資料異常），不推播價格波動；安靜時段 23:00–08:00 暫停；每台裝置在 App 內開啟，iPhone 需從主畫面打開。
 - **Holdings 持倉總覽**: regular and windfall pools, R1 / R2 status with the trim each needs, actual vs target weight per asset class, and every position at weighted-average cost with its TWD value and unrealised gain. The R1 / R2 figures expand to show their formulas and inputs, and the other figures are defined under their tables. 一般與大額資金池、R1／R2 狀態與所需減碼金額、各資產類別的實際與目標權重、每檔持股的平均成本、台幣市值與未實現損益；R1／R2 的數字可展開查看公式與輸入值，其他數字的定義寫在表格下方。
 - **Trade entry 交易登錄**: currency filled in from the security and the FX rate from the trade date's Bank of Taiwan rate, a live R1 / R2 preview that warns without blocking, and a refusal when a sell exceeds the holding. 依證券自動帶入幣別、依交易日帶入臺灣銀行匯率，即時預覽 R1／R2（只提醒不阻擋），賣出超過持有數量時拒絕儲存。
@@ -61,10 +70,11 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 - **Value at Risk 風險值**: how much the whole portfolio could lose in a bad week, as "95% 1-week VaR: NT$X (Y% of portfolio)" with a 1-month toggle and a 52-week line, on the dashboard, the holdings page and its own page. Parametric VaR from three years of weekly returns in TWD of each class's proxy ETF; the page shows where it sits among those weeks, what it is made of, and the formula with today's numbers. 整個投資組合在不利的一週可能損失多少：「95% 一週風險值：NT$X（投資組合的 Y%）」，可切換一個月，並附近 52 週走勢線，顯示在持倉頁與獨立頁面。以各類別代理 ETF 過去三年的台幣週報酬計算參數法風險值；頁面列出它在這些週報酬中的位置、組成，以及代入今天數值的公式。
 - **Costs and tax 費用與稅務**: what the holdings cost a year (TER plus the tax withheld on what each fund pays out, and custody), what each fund (US-domiciled or Irish) and each 複委託 broker would cost over the plan, compounded as the calculator does, and three tax checks: US-situs assets against the US$60,000 estate-tax exemption (a rule that suggests Irish-domiciled ETFs when over it), overseas income against the minimum tax's NT$1,000,000 floor, and the 2.11% supplementary premium on Taiwan dividend payments of NT$20,000 or more. Choosing your broker prices every draft order. Each threshold is a setting with the date it was checked. 持股每年的成本（總費用率加上配息被預扣的稅與保管費）、各基金（美國註冊或愛爾蘭註冊）與各家複委託券商在計畫期間的成本（與複利計算機相同的方式計算），以及三項稅務檢查：美國資產與 6 萬美元遺產稅免稅額（超過時由規則建議改用愛爾蘭註冊 ETF）、海外所得與最低稅負制 100 萬門檻、單筆 2 萬元以上台股股利的 2.11% 二代健保補充保費。選定券商後，每份建議下單清單都會估算手續費。每項門檻都是可修改的設定，並註明確認日期。
 - **Rules engine and proposals 規則引擎與提案**: after every nightly update, or on request, the written rules are evaluated: R1 single-stock cap, R2 satellite trigger, F8's 5/25 drift band, the monthly contribution and the January review. A rule that fires drafts a proposal with an order list in shares (US shares in fractions) and says why, figures included; you approve, edit or dismiss it, trade at your broker, record the trades from its checklist and mark it filled (L2: the app never trades). Each rule fires at most once a week unless what it fired on changes, and every threshold and its edit history is on the Rules page. 每晚資料更新後（或手動）評估書面規則：R1 單一個股上限、R2 衛星觸發、F8 的 5/25 偏離門檻、每月投入與 1 月的年度檢查。規則觸發時產生附下單清單的提案（美股以零股計），並寫明原因與數字；由你核准、修改或略過，到券商下單，再從執行清單登錄交易並標記成交（L2：App 從不下單）。除非觸發狀態改變，同一規則每週最多觸發一次；所有門檻與修改紀錄都在「規則」頁。
+- **Windfall planner 大額資金分批** (F3, Phase 2): the windfall goes into the core classes only, in monthly tranches whose number follows the S&P 500's CAPE percentile since 1881 (6 below the 30th, 12 up to the 70th, 24 above), and sooner when ACWI falls 15%, 25% or 35% from its 52-week high, each tier once per drawdown. Each tranche is a proposal that deploys the cash still waiting over the tranches left, split by the core targets and recorded in the windfall pool; a backtest since 1900 compares lump sum, the pace alone and the pace with acceleration. 大額資金只投入核心類別，每月分批：批數依 S&P 500 CAPE 在 1881 年以來的百分位決定（低於第 30 百分位 6 批、到第 70 百分位 12 批、以上 24 批）；ACWI 自 52 週高點下跌 15%、25%、35% 時提前投入，每個級距在同一波下跌只觸發一次。每一批都是一份提案，以「等待中的現金 ÷ 剩餘批數」依核心目標權重分配，記錄在大額資金池；並以 1900 年起的回測比較一次投入、只依節奏與節奏加上加速。
 - **Compounding calculator 複利計算機**: where monthly investing could take the regular pool, worked out live as the inputs change: start month, starting value, monthly contribution with a yearly step-up, expected return (from the capital market assumptions' target mix) and inflation. It shows the value year by year in nominal TWD and in today's money, what was put in against what it grew, and, once a plan is saved, the regular pool against it at every month end with the gap split into money put in and growth. 一般投入資金池透過每月投入可能成長到多少，輸入即時計算：起始月份、起始金額、每月投入與每年調升比例、預期報酬（依資本市場假設的目標配置）與通膨率。顯示逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長；儲存計畫後，每個月底把資金池與計畫對照，差距拆成投入金額與成長。
 - **Cash flows 現金流**: contributions, the windfall arriving, dividends and withdrawals, each in its own currency at its day's rate; dividends count in the money-weighted return. 投入資金、大額資金入帳、股利與提領，各以原幣別加當日匯率記錄；股利計入資金加權報酬。
 - **Non-listed assets 非上市資產**: physical gold in grams, valued nightly at the gold price in TWD, and savings and money-market balances in TWD. 實體黃金以克數記錄、每夜以台幣金價估值；活存與貨幣基金以台幣餘額記錄。
-- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (adjusted for dividends and splits), Bank of Taiwan exchange rates and the gold price, with one fallback feed each, then saves every day's NAV snapshot with its 1-week VaR; the Data status page shows every run and the newest close per security, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息與分割還原）、臺灣銀行匯率與金價，每種資料都有備援來源，再存入每一天的淨值快照與一週風險值；「資料狀態」頁列出每次執行與各證券最新收盤價，連續兩晚失敗即顯示警示。
+- **Nightly prices 每夜價格**: a GitHub Actions job loads daily closes (adjusted for dividends and splits), Bank of Taiwan exchange rates and the gold price, with one fallback feed each, and Shiller's monthly CAPE, S&P 500 price and dividend yield (multpl.com as fallback), then saves every day's NAV snapshot with its 1-week VaR; the Data status page shows every run, the newest close per security and the newest month per series, and two missed nights in a row raise an alert. GitHub Actions 每夜載入每日收盤價（含除息與分割還原）、臺灣銀行匯率、金價，以及 Shiller 的每月 CAPE、S&P 500 價格與股息殖利率（multpl.com 為備援），每種資料都有備援來源，再存入每一天的淨值快照與一週風險值；「資料狀態」頁列出每次執行、各證券最新收盤價與各組資料的最新月份，連續兩晚失敗即顯示警示。
 - **Securities and edit history 證券與修改紀錄**: every entry can be edited or deleted, and the database logs each change, deleted entries included. 每筆資料都能修改或刪除，資料庫會記錄每次變更，包含已刪除的資料。
 
 ![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
@@ -78,6 +88,8 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 ![Proposals with demo data: the monthly contribution and a drift rebalance, each explained, with whole-share orders](docs/images/proposals.png)
 
 ![Costs and tax with demo data: what each 複委託 broker would cost over the plan, a US$35 minimum fee weighing on a NT$5,000 order](docs/images/costs.png)
+
+![Windfall planner with demo data: CAPE's percentile sets 24 tranches, ACWI's fall from its high, and the backtest of lump sum vs the rule since 1900](docs/images/windfall.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 
@@ -114,7 +126,7 @@ Phases 2 and 3 add security analysis (CAPM, valuation, regression, red flags), t
 | Path 路徑 | Contents 內容 |
 | --- | --- |
 | `app/` | Pages and server actions 頁面與伺服器動作 |
-| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, the capital market assumptions, and the Value at Risk, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設、風險值，皆為純函式 |
+| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, the capital market assumptions, the Value at Risk, the projection engine, the rules engine, costs and tax, and the windfall planner, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設、風險值、預測引擎、規則引擎、費用與稅務、大額資金分批，皆為純函式 |
 | `lib/csv/` | Statement reading, column mapping and the import plan 對帳單讀取、欄位對應與匯入計畫 |
 | `supabase/migrations/` | Schema, row-level security, reference data and change logs 資料庫結構、權限、參考資料與變更紀錄 |
 | `supabase/seed.sql` | Demo data for local use only 僅供本機使用的示範資料 |

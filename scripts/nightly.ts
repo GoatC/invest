@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 
 import { createClient } from '@supabase/supabase-js';
 
-import { makeGet } from './lib/feeds/get.ts';
+import { makeGet, makeGetBytes } from './lib/feeds/get.ts';
 import { makeRedactor } from './lib/http.ts';
 import { runNightly } from './lib/nightly/job.ts';
 import { supabaseStore } from './lib/nightly/store.ts';
@@ -36,6 +36,7 @@ async function main(): Promise<number> {
   try {
     const run = await runNightly({
       get: makeGet({ userAgent: USER_AGENT, timeoutMs: 90_000, retryAfterMs: 5_000, redact }),
+      getBytes: makeGetBytes({ userAgent: USER_AGENT, timeoutMs: 90_000, retryAfterMs: 5_000, redact }),
       store: supabaseStore(createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } })),
       finmindToken,
       alphaVantageKey: env['ALPHAVANTAGE_API_KEY'] || undefined,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { money, percent, points, quantity, signedPercent, signedTwd, taipeiDateTime, twd } from './format';
+import { money, ordinal, percent, points, quantity, signedPercent, signedTwd, taipeiDateTime, twd } from './format';
 
 describe('format', () => {
   it('writes TWD rounded to the dollar, with a dash for unknown values', () => {
@@ -18,6 +18,10 @@ describe('format', () => {
     assert.equal(points(0.032), '+3.2 pp');
     assert.equal(points(-0.0049), '−0.5 pp');
     assert.equal(points(0.00001), '0.0 pp');
+  });
+
+  it('writes English ordinals, the teens with th', () => {
+    assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 72.4, 100, 101].map(ordinal), ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '72nd', '100th', '101st']);
   });
 
   it('writes returns with their sign, and none on a return that rounds to zero', () => {

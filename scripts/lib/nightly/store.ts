@@ -5,7 +5,7 @@ import { loadPerformanceInput, loadRiskInput, runRules } from '../../../lib/data
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
-import type { DailyPrice, DailyRate } from '../feeds/types.ts';
+import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
 import type { JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
@@ -72,6 +72,14 @@ export function supabaseStore(client: SupabaseClient): Store {
           .from('fx_rates')
           .upsert(batch.map((row) => ({ pair: row.pair, rate_date: row.date, rate: row.rate, source: row.source })), { onConflict: 'pair,rate_date' });
         check('fx_rates', error);
+      }
+    },
+    async saveSeries(rows: readonly MonthlyPoint[]) {
+      for (const batch of batches(rows)) {
+        const { error } = await client
+          .from('market_series')
+          .upsert(batch.map((row) => ({ series: row.series, obs_month: `${row.month}-01`, value: row.value, source: row.source })), { onConflict: 'series,obs_month' });
+        check('market_series', error);
       }
     },
     performanceInput: (end) => loadPerformanceInput(client, end),

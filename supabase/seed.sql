@@ -71,11 +71,11 @@ from (values
   ('VOO', '2026-09-30', 588.00)
 ) as demo (ticker, price_date, close);
 
--- Three years of weekly demo closes before the first demo trade for the VaR proxies (N4) and the
--- dollar, so the VaR card has a covariance to read. Invented by a fixed recipe: a random walk
--- backwards from each 2026-05-07 close, every Friday; each week's move is the proxy's drift, plus
--- a shared market shock times its beta, plus a shock of its own, both drawn from an md5 hash of
--- the date (Box–Muller), so every load gives the same numbers.
+-- Three years of weekly demo closes before the first demo trade for the VaR proxies (N4), ACWI
+-- (the F3 drawdown gauge) and the dollar, so the VaR card has a covariance to read. Invented by a
+-- fixed recipe: a random walk backwards from each 2026-05-07 close, every Friday; each week's move
+-- is the proxy's drift, plus a shared market shock times its beta, plus a shock of its own, both
+-- drawn from an md5 hash of the date (Box–Muller), so every load gives the same numbers.
 with fridays as (
   select day::date as friday from generate_series(date '2023-01-06', date '2026-05-01', interval '7 days') as day
 ),
@@ -85,7 +85,7 @@ shocks as (
            * cos(2 * pi() * (('x' || substr(h.hash, 9, 8))::bit(32)::bigint + 0.5) / 4294967296.0) as z
   from fridays f
   cross join lateral (
-    select name, md5(name || f.friday::text) as hash from unnest(array['market', 'VT', 'VOO', '0050', 'BNDW', 'GLDM', 'BIL', 'USD']) as name
+    select name, md5(name || f.friday::text) as hash from unnest(array['market', 'VT', 'VOO', '0050', 'BNDW', 'GLDM', 'BIL', 'ACWI', 'USD']) as name
   ) as h
 ),
 walks (name, anchor, weekly_vol, beta, drift) as (values
@@ -95,6 +95,7 @@ walks (name, anchor, weekly_vol, beta, drift) as (values
   ('BNDW', 67.60, 0.008, 0.20, 0.0004),
   ('GLDM', 84.00, 0.020, 0.10, 0.0025),
   ('BIL', 91.40, 0.0003, 0.00, 0.0008),
+  ('ACWI', 128.40, 0.021, 0.97, 0.0015),
   -- TWD per dollar: the dollar tends to rise against TWD when shares fall.
   ('USD', 31.80, 0.006, -0.35, 0.0000)
 ),
@@ -120,5 +121,70 @@ insert into public.fx_rates (pair, rate_date, rate, source) values
   ('USD/TWD', '2026-09-15', 32.20, 'demo'),
   ('USD/TWD', '2026-10-08', 32.30, 'demo'),
   ('USD/TWD', '2026-10-20', 32.40, 'demo');
+
+-- ACWI's daily closes from 2026-05-07 to the newest demo date, so the windfall planner's 52-week
+-- drawdown gauge (F3) has days to read: a walk forward from the 2026-05-07 close on every weekday,
+-- the same hashed shocks. It peaks at 137.95 on 2026-09-17 and ends 5.6% below it, short of the
+-- first acceleration tier (15%).
+with days as (
+  select day::date as day from generate_series(date '2026-05-07', date '2026-10-20', interval '1 day') as day
+  where extract(isodow from day) < 6
+),
+shocks as (
+  select d.day,
+         sqrt(-2 * ln((('x' || substr(h.hash, 1, 8))::bit(32)::bigint + 0.5) / 4294967296.0))
+           * cos(2 * pi() * (('x' || substr(h.hash, 9, 8))::bit(32)::bigint + 0.5) / 4294967296.0) as z
+  from days d
+  cross join lateral (select md5('ACWI close' || d.day::text) as hash) as h
+),
+walked as (
+  select day, round((128.40 * exp(sum(case when day = date '2026-05-07' then 0 else 0.0003 + 0.007 * z end) over (order by day)))::numeric, 2) as close
+  from shocks
+)
+insert into public.prices (ticker, price_date, close, adj_close, source)
+select 'ACWI', day, close, close, 'demo' from walked;
+
+-- The monthly market series of the windfall planner (F3), as Shiller's data has them: the S&P
+-- 500's price and dividend yield from 1871, its CAPE from 1881, to 2026-09. Invented by a fixed
+-- recipe, like the weekly closes: earnings grow 0.33% a month with a business cycle; CAPE swings
+-- around a level that drifts from 13 to 24 over the years; the price is CAPE × the ten-year
+-- average of earnings, and the yield the share of earnings paid out (65% falling to 38%) over the
+-- price. The cycle and the swing are AR(1) in logs, written in closed form, x(m) = φ^m · Σ φ^−k ·
+-- σ · z(k), with z from an md5 hash of the month. CAPE ends at 24.04, the 74th percentile of its
+-- 1,749 months, so a plan started now takes 24 tranches.
+with months as (
+  select m, (date '1861-01-01' + make_interval(months => m))::date as month
+  from generate_series(0, 1988) as m
+),
+shocks as (
+  select mo.m, h.name,
+         sqrt(-2 * ln((('x' || substr(h.hash, 1, 8))::bit(32)::bigint + 0.5) / 4294967296.0))
+           * cos(2 * pi() * (('x' || substr(h.hash, 9, 8))::bit(32)::bigint + 0.5) / 4294967296.0) as z
+  from months mo
+  cross join lateral (select name, md5(name || mo.month::text) as hash from unnest(array['earnings', 'valuation']) as name) as h
+),
+paths as (
+  select mo.m, mo.month,
+         ln(0.30) + 0.0033 * mo.m + power(0.97, mo.m) * sum(power(0.97, -mo.m) * 0.03 * e.z) over (order by mo.m) as log_earnings,
+         ln(13) + ln(24.0 / 13) * mo.m / 1988.0 + power(0.99, mo.m) * sum(power(0.99, -mo.m) * 0.04 * v.z) over (order by mo.m) as log_cape
+  from months mo
+  join shocks e on e.m = mo.m and e.name = 'earnings'
+  join shocks v on v.m = mo.m and v.name = 'valuation'
+),
+priced as (
+  select m, month, exp(log_cape) as cape, exp(log_earnings) as earnings,
+         exp(log_cape) * avg(exp(log_earnings)) over (order by m rows between 119 preceding and current row) as price,
+         0.65 - 0.27 * m / 1988.0 as payout
+  from paths
+)
+insert into public.market_series (series, obs_month, value, source)
+select series, month, value, 'demo'
+from priced
+cross join lateral (values
+  ('sp500_price', round(price::numeric, 2), m >= 120),
+  ('sp500_yield', round((payout * earnings / price)::numeric, 5), m >= 120),
+  ('us_cape', round(cape::numeric, 2), m >= 240)
+) as v (series, value, shown)
+where shown;
 
 insert into public.watchlist (ticker, added_on) values ('AAPL', '2026-10-08');

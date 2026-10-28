@@ -41,7 +41,29 @@ async function decide(formData: FormData, to: 'approved' | 'dismissed' | 'filled
       : { status: to, decided_at: now, ...(to === 'dismissed' ? { dismiss_reason: reason || null } : {}) };
   const { data, error } = await supabase.from('proposals').update(change).eq('id', id).in('status', from).select('id');
   if (error) redirect(`/proposals?failed=${encodeURIComponent(error.message)}#proposal-${id}`);
+  if (to === 'filled' && data && data.length > 0) {
+    const failed = await settleTranches(supabase, id);
+    if (failed) redirect(`/proposals?failed=${encodeURIComponent(failed)}#proposal-${id}`);
+  }
   back(data && data.length > 0 ? to : 'stale', id);
+}
+
+/**
+ * A windfall proposal filled moves its tranches on (F3): the tranche it deployed is done, those an
+ * acceleration pulled forward are accelerated. Returns an error message, if any.
+ */
+async function settleTranches(supabase: Awaited<ReturnType<typeof requireSession>>['supabase'], id: number): Promise<string | undefined> {
+  const proposal = await orDataError(loadProposal(supabase, id));
+  if (proposal instanceof DataError) return proposal.message;
+  const { trancheId, accelerated } = proposal?.detail ?? {};
+  const moves: Array<{ ids: number[]; status: 'done' | 'accelerated' }> = [];
+  if (typeof trancheId === 'number') moves.push({ ids: [trancheId], status: 'done' });
+  if (Array.isArray(accelerated) && accelerated.length > 0) moves.push({ ids: accelerated, status: 'accelerated' });
+  for (const move of moves) {
+    const { error } = await supabase.from('windfall_tranches').update({ status: move.status, proposal_id: id }).in('id', move.ids).eq('status', 'scheduled');
+    if (error) return error.message;
+  }
+  return undefined;
 }
 
 export async function approveProposal(formData: FormData): Promise<void> {
