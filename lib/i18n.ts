@@ -133,7 +133,16 @@ export const FEED: Record<string, Bilingual> = {
   ishares_nav: { en: 'iShares NAV', zh: 'iShares 淨值' },
   alphavantage: { en: 'Alpha Vantage', zh: 'Alpha Vantage' },
   fred: { en: 'FRED', zh: 'FRED' },
+  shiller: { en: "Shiller's data", zh: 'Shiller 的資料' },
+  multpl: { en: 'multpl.com', zh: 'multpl.com' },
   demo: { en: 'Demo data', zh: '示範資料' },
+};
+
+/** A windfall tranche's status (F3). */
+export const TRANCHE_STATUS: Record<string, Bilingual> = {
+  scheduled: { en: 'Scheduled', zh: '排定' },
+  accelerated: { en: 'Pulled forward', zh: '已提前投入' },
+  done: { en: 'Done', zh: '已完成' },
 };
 
 export function feedLabel(source: string): Bilingual {

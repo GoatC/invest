@@ -23,6 +23,9 @@
  */
 import { addDays } from '../dates';
 
+/** The monthly series F3 reads (market_series), each from Shiller's workbook, else multpl. */
+export const MARKET_SERIES = ['us_cape', 'sp500_price', 'sp500_yield'] as const;
+
 export interface MonthValue {
   /** YYYY-MM. */
   month: string;

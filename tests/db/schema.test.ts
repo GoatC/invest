@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
+import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
 // SQLSTATE codes. 42501 covers both a missing privilege and a row-level security refusal.
@@ -554,14 +555,14 @@ describe('weekly prices for the VaR (step 7)', () => {
     assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query('select 1 from public.weekly_prices'))), DENIED);
   });
 
-  it('come with three years of invented weekly closes for every proxy and the dollar in the demo seed, ending at the first demo trade', async () => {
+  it('come with three years of invented weekly closes for every proxy, ACWI and the dollar in the demo seed, ending at the first demo trade', async () => {
     const { rows } = await db.query<{ ticker: string; weeks: string; first: Date; last: Date }>(
       `select ticker, count(*) as weeks, min(price_date) as first, max(price_date) as last
        from public.prices where price_date < '2026-05-07' group by ticker order by ticker`,
     );
     assert.deepEqual(
       rows.map((row) => [row.ticker, Number(row.weeks), row.first.toISOString().slice(0, 10), row.last.toISOString().slice(0, 10)]),
-      ['0050', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
+      ['0050', 'ACWI', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
     );
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where pair = 'USD/TWD' and rate_date < '2026-05-07'`), 174);
     // A walk that lands on the first demo trade's close, a week away, with weekly moves of shares-like size.
@@ -576,9 +577,37 @@ describe('weekly prices for the VaR (step 7)', () => {
 });
 
 describe('demo seed', () => {
-  it('marks every price and FX rate as demo data', async () => {
+  it('marks every price, FX rate and market series month as demo data', async () => {
     assert.equal(await scalar(db, `select count(*) from public.prices where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
+  });
+
+  it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09", async () => {
+    const { rows } = await db.query<{ series: string; months: string; first: Date; last: Date }>(
+      `select series, count(*) as months, min(obs_month) as first, max(obs_month) as last from public.market_series group by series order by series`,
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.series, Number(row.months), row.first.toISOString().slice(0, 7), row.last.toISOString().slice(0, 7)]),
+      [
+        ['sp500_price', 1869, '1871-01', '2026-09'],
+        ['sp500_yield', 1869, '1871-01', '2026-09'],
+        ['us_cape', 1749, '1881-01', '2026-09'],
+      ],
+    );
+    // CAPE ends above its 70th percentile, so a demo plan takes 24 tranches.
+    const { rows: capes } = await db.query<{ month: string; value: string }>(`select to_char(obs_month, 'YYYY-MM') as month, value from public.market_series where series = 'us_cape' order by obs_month`);
+    const gauge = capePercentile(capes.map((row) => ({ month: row.month, value: Number(row.value) })));
+    assert.equal(gauge?.cape, 24.04);
+    assert.equal(Math.round(gauge?.percentile ?? 0), 74);
+  });
+
+  it("gives ACWI daily closes to the newest demo date, ending short of the first acceleration tier (F3)", async () => {
+    const { rows } = await db.query<{ date: string; close: string }>(`select price_date::text as date, close from public.prices where ticker = 'ACWI' order by price_date`);
+    const drawdown = drawdownOf(rows.map((row) => ({ date: row.date, close: Number(row.close) })), '2026-10-28', 52);
+    assert.deepEqual(drawdown?.peak, { date: '2026-09-17', close: 137.95 });
+    assert.deepEqual(drawdown?.latest, { date: '2026-10-20', close: 130.28 });
+    assert.ok(Math.abs((drawdown?.drawdown ?? 0) - 0.0556) < 0.0001);
   });
 
   it('holds no windfall money (CLAUDE.md: no windfall figures in git)', async () => {

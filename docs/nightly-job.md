@@ -2,7 +2,7 @@
 
 第一階段第 4 步（PRD 第 11 節）：每晚自動把收盤價、臺灣銀行匯率和金價寫進你的 Supabase，App 用它們計算市值。第 5 步起，排程也會存下每一天的淨值快照；第 7 步起，每個快照另附當天的一週風險值。每次執行的結果記在 `job_runs` 資料表，App 的「資料狀態」頁看得到。
 
-Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot, since step 7 each snapshot's 1-week Value at Risk, and since step 9 it then checks the rules and drafts their proposals. Each run is recorded in `job_runs` and shown on the app's Data status page.
+Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan exchange rates and the gold price into Supabase; since step 5 it also saves each day's NAV snapshot, since step 7 each snapshot's 1-week Value at Risk, and since step 9 it then checks the rules and drafts their proposals. Since Phase 2, step 1 it also loads the monthly S&P 500 CAPE, price and dividend yield since 1871 for the windfall planner (F3), from Robert Shiller's workbook with multpl.com as the fallback. Each run is recorded in `job_runs` and shown on the app's Data status page.
 
 ## 它怎麼運作 How it works
 
@@ -11,6 +11,7 @@ Phase 1, step 4: every night GitHub Actions loads daily closes, Bank of Taiwan e
 - **抓多久的資料**：每晚重新載入最近 3 年（`config` 表 `var` 的 `lookback_years`，風險值卡片要用）的每日收盤價。風險值的代理 ETF（各資產類別的基準 ETF，例如 VT、0050）會再往前多載入：從第一筆交易（或一年前，取較早者）往前 3 年起，讓過去每一天的風險值都有完整的 3 年週報酬。因為每次除息後，過去的「還原收盤價」會整段改變，整段重抓最簡單也最正確。第一次執行要下載 AGGU 的 25 MB 基金檔案取得歷史淨值，會比較久；之後每晚約 1–2 分鐘。
 - **淨值快照**（第 5 步）：價格存好之後，排程會重算從第一筆交易到今天**每一天**的總市值與一般資金池各類別的權重，存進 `nav_snapshots` 表，供之後的功能使用。第 7 步起，每一天也附上當天的一週風險值（`var_95_1w`），風險值卡片的近 52 週走勢線就是取自這裡；風險值的資料讀取失敗時，快照照樣存入，風險值維持上一次的數值。每晚整段重算，所以修改過去的交易、或晚一天才到的美股收盤價，都會自動更正。績效頁不靠快照，開啟時直接由交易計算。快照存失敗時，價格照樣保存，資料狀態頁會另外標示。
 - **檢查規則**（第 9 步）：快照存好之後，排程以剛載入的收盤價評估規則（R1、R2、F8 偏離、每月投入、年度檢查，第 11 步起加上美國遺產稅），觸發時在「提案」頁產生附下單清單的提案，也會關閉已逾期或不再成立的提案。這和提案頁的「立即檢查規則」按鈕是同一段程式。公開的執行紀錄只寫「Rules checked.」，不寫提案內容；規則檢查失敗時，價格與快照照樣保存，資料狀態頁會標示。
+- **每月市場資料**（第二階段第 1 步）：同一個排程也載入大額資金分批（F3）用的三組每月資料：S&P 500 的 CAPE（決定分幾批）、每月平均價格與股息殖利率（回測用），從 1871 年起整段存入 `market_series` 表。主要來源是 Robert Shiller 教授網站上的 Excel 檔（`ie_data.xls`，下載連結每次更新都會變，所以每晚先讀網頁找連結），以 SheetJS（`xlsx` 套件）解析；連不上時改抓 multpl.com 的每月表格（數字同樣來自 Shiller 的資料）。Shiller 的資料每月更新一次、大約落後一個月，所以最新月份通常是上個月。ACWI（下跌加速的指標）是一般證券，和其他代號一樣每晚載入每日收盤價。
 - **推播**（第 10 步）：排程最後一步送出新提案的推播；另有每小時執行的「Pushes 推播」排程負責每週檢視、安靜時段後補送與資料異常警示。設定見 [推播通知](web-push.md)；還沒設定 VAPID 金鑰時，這一步只會寫「Web Push is not set up yet」，不會讓排程失敗。
 - **失敗時**：App 沿用最後一次成功載入的價格；連續 2 晚失敗（`rules` 表 `DATA_FAILURE` 的門檻）就在首頁與持倉頁顯示警示，並推播一次（第 10 步）。
 
@@ -27,6 +28,7 @@ It runs at about 22:23 Taipei time, reloads the last three years of closes each 
 | AGGU（倫敦） | iShares 官網的每日淨值 | Alpha Vantage AGGU.LON 週線（選填） |
 | 美元匯率 USD/TWD | 臺灣銀行牌告（經 FinMind），即期買入與賣出的中間值 | FRED（每週公布、晚幾天） |
 | 黃金（台幣） | 國際金價（FinMind，每盎司美元）× 當天臺銀美元匯率 | 你在 App 手動輸入的估值 |
+| S&P 500 CAPE、價格、股息殖利率（每月，第二階段） | Shiller 教授的 `ie_data.xls`（shillerdata.com） | multpl.com 的每月表格 |
 
 股票分割（例如 0050 在 2025 年 6 月 1 拆 4）不在 FinMind 的除權息資料裡，所以由收盤價判斷：台股單日漲跌最多 10%，某天收盤價突然變成前一天的 ½、⅓、¼ 等（上下 10% 以內），就是分割，之前的還原收盤價會依比例調整。風險值與績效都用還原收盤價，所以不會把分割誤算成大跌。
 
@@ -116,6 +118,8 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | `FinMind …: Your level is register …`、額度用完 | FinMind token 錯了，或這一小時的額度用完；隔天會自動重試 |
 | `Rules: proposals: …`，或資料狀態頁寫「無法檢查規則」 | 第 9 步的 `npx supabase db push`（`rules_engine`）還沒執行；執行後到提案頁按「立即檢查規則」 |
 | 資料狀態頁某一檔一直「尚未載入」 | 代號可能和 FinMind 用的不同（例如美股 ETF 已下市）；把資料狀態頁的錯誤訊息貼給 Claude |
+| 資料狀態頁「每月市場資料」的來源是 multpl.com，或「主要來源失敗」列出 `us_cape: shiller …` | Shiller 的網站暫時連不上（測試時雲端主機的連線曾被重設），已自動改用備援，數值相近，不需處理 |
+| 「大額資金」頁寫「尚未載入該月份的 CAPE」 | 排程還沒載入每月市場資料：第二階段第 1 步的 `npx supabase db push` 之後，手動執行一次排程（上面第 4 步） |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 

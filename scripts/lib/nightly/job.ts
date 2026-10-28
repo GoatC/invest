@@ -10,6 +10,7 @@
 import { RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
+import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredRates, fredUrl } from '../feeds/fred.ts';
@@ -22,8 +23,6 @@ import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, ty
 export const JOB = 'nightly_prices';
 /** Recent days of gold prices to load; valuing gold needs only the latest. */
 const GOLD_DAYS = 7;
-/** The monthly series F3 reads (market_series), each from Shiller's workbook, else multpl. */
-export const MARKET_SERIES = ['us_cape', 'sp500_price', 'sp500_yield'] as const;
 /** Labels of the errors about the database itself rather than a feed (setup problems, no tickers in them). */
 export const DATABASE_ERRORS = ['reading the database', 'saving'] as const;
 

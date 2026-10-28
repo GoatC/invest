@@ -16,12 +16,14 @@ import {
   loadRiskData,
   loadRules,
   loadValueWeek,
+  loadWindfallPlan,
   orDataError,
   type AllocationData,
   type PlanData,
   type Proposal,
   type RiskData,
   type RuleRecord,
+  type WindfallPlanRecord,
 } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { percent, points, signedTwd, twd } from '@/lib/format';
@@ -53,7 +55,7 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings] = await Promise.all([
+  const [risk, proposals, value, plan, jobs, settings, windfall] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -66,6 +68,7 @@ export default async function Dashboard() {
         return (rows ?? []) as Array<{ key: string; value: unknown }>;
       })(),
     ),
+    orDataError(loadWindfallPlan(supabase)),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -100,19 +103,19 @@ export default async function Dashboard() {
       <Drift data={data} portfolio={portfolio} />
       {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
       <Donut data={data} portfolio={portfolio} />
-      <Windfall portfolio={portfolio} />
+      <Windfall portfolio={portfolio} plan={windfall} today={today} />
       <section className="card form">
         <h2>
           <Bi en="Watchlist" zh="觀察清單" />
         </h2>
         <p className="muted">
           <Bi
-            en="Distance to the buy and trim zones and each company's red-flag light arrive with security analysis in Phase 2 (F12, N3)."
-            zh="距離買入區與減碼區的幅度，以及各公司的紅旗燈號，將在第二階段的證券分析（F12、N3）加入。"
+            en="Distance to the buy and trim zones and each company's red-flag light arrive with the valuation workbench (F12) and the red-flag indicator (N3), Phase 2 steps 4 and 5."
+            zh="距離買入區與減碼區的幅度，以及各公司的紅旗燈號，將隨估值工作台（F12）與紅旗指標（N3）加入（第二階段第 4、5 步）。"
           />
         </p>
       </section>
-      <ComingWeek today={today} settings={settings} rules={rules} />
+      <ComingWeek today={today} settings={settings} rules={rules} tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])} />
       {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
     </>
   );
@@ -294,17 +297,22 @@ function Donut({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
   );
 }
 
-/** 5. The windfall: what is invested and what still waits as cash; the tranche plan (F3) comes in Phase 2. */
-function Windfall({ portfolio }: { portfolio: Portfolio }) {
+/** 5. The windfall: what is invested, what still waits as cash, and where the tranche plan stands (F3). */
+function Windfall({ portfolio, plan, today }: { portfolio: Portfolio; plan: WindfallPlanRecord | undefined | DataError; today: string }) {
   const windfall = portfolio.holdings.filter((holding) => holding.pool === 'windfall' && holding.valueTwd !== null);
   const waiting = windfall.filter((holding) => holding.ticker === null && holding.productType === 'cash_mmf').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
   const total = windfall.reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
   const deployed = total - waiting;
   return (
     <section className="card form">
-      <h2>
-        <Bi en="Windfall progress" zh="大額資金進度" />
-      </h2>
+      <div className="row spread">
+        <h2>
+          <Bi en="Windfall progress" zh="大額資金進度" />
+        </h2>
+        <Link href="/windfall">
+          <Bi {...LABELS.windfall} />
+        </Link>
+      </div>
       {total <= 0 ? (
         <p className="muted">
           <Bi en="No windfall money yet." zh="尚無大額資金。" />
@@ -322,21 +330,61 @@ function Windfall({ portfolio }: { portfolio: Portfolio }) {
           </p>
         </>
       )}
-      <p className="muted small">
-        <Bi en="The tranche schedule and its acceleration (F3) arrive in Phase 2." zh="分批排程與加速投入（F3）將在第二階段加入。" />
-      </p>
+      {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} waiting={waiting} />}
     </section>
   );
 }
 
+/** The tranche plan in one line: how far along, on schedule or accelerated, and the next date. */
+function PlanStatus({ plan, today, waiting }: { plan: WindfallPlanRecord | undefined; today: string; waiting: number }) {
+  if (!plan) {
+    return (
+      <p className="muted small">
+        <Bi
+          en={waiting > 0 ? 'No tranche plan yet: start one on the Windfall page, and each tranche becomes a proposal when it falls due.' : 'No tranche plan yet: once the windfall arrives, record it and start the plan on the Windfall page.'}
+          zh={waiting > 0 ? '尚無分批計畫：請在「大額資金」頁建立，每一批到期時都會產生提案。' : '尚無分批計畫：大額資金入帳並登錄後，請在「大額資金」頁建立計畫。'}
+        />
+      </p>
+    );
+  }
+  const left = plan.tranches.filter((tranche) => tranche.status === 'scheduled');
+  const pulled = plan.tranches.filter((tranche) => tranche.status === 'accelerated').length;
+  const overdue = left.filter((tranche) => tranche.dueDate <= today).length;
+  const next = left.find((tranche) => tranche.dueDate > today);
+  const pace: Bilingual =
+    left.length === 0
+      ? { en: 'every tranche is in', zh: '所有批次都已投入' }
+      : pulled > 0 || plan.tiersFired.length > 0
+        ? { en: `accelerated${pulled > 0 ? ` (${pulled} pulled forward)` : ''}`, zh: `已加速${pulled > 0 ? `（${pulled} 批提前投入）` : ''}` }
+        : { en: 'on schedule', zh: '依排程進行' };
+  return (
+    <p className="small">
+      <Bi
+        en={`Plan: ${plan.tranches.length - left.length} of ${plan.tranches.length} tranches done, ${pace.en}${overdue > 0 ? `; ${overdue} due now, see Proposals` : ''}${next ? `; next due ${next.dueDate}` : ''}.`}
+        zh={`計畫：${plan.tranches.length} 批中已完成 ${plan.tranches.length - left.length} 批，${pace.zh}${overdue > 0 ? `；${overdue} 批已到期，請見「提案」` : ''}${next ? `；下一批 ${next.dueDate} 到期` : ''}。`}
+      />
+    </p>
+  );
+}
+
 /** 7. What falls in the coming seven days. */
-function ComingWeek({ today, settings, rules }: { today: string; settings: Array<{ key: string; value: unknown }> | DataError; rules: readonly RuleRecord[] }) {
+function ComingWeek({
+  today,
+  settings,
+  rules,
+  tranches,
+}: {
+  today: string;
+  settings: Array<{ key: string; value: unknown }> | DataError;
+  rules: readonly RuleRecord[];
+  tranches: ReadonlyArray<{ dueDate: string; status: string }>;
+}) {
   const rows = settings instanceof DataError ? [] : settings;
   const dca = rows.find((row) => row.key === 'dca')?.value as Record<string, unknown> | undefined;
   const day = typeof dca?.['day_of_month'] === 'number' ? dca['day_of_month'] : null;
   const annual = rules.find((rule) => rule.condition === 'first_weekend_of_month' && rule.enabled);
   const month = annual ? (annual.threshold as Record<string, unknown> | null)?.['month'] : undefined;
-  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null);
+  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches);
   return (
     <section className="card form">
       <h2>
@@ -368,7 +416,7 @@ function ComingWeek({ today, settings, rules }: { today: string; settings: Array
         </p>
       )}
       <p className="muted small">
-        <Bi en="Tranche dates (F3) and the holdings' earnings dates arrive in Phase 2." zh="分批日期（F3）與持股財報日將在第二階段加入。" />
+        <Bi en="The holdings' earnings dates arrive with the valuation workbench (F12)." zh="持股財報日將隨估值工作台（F12）加入。" />
       </p>
     </section>
   );

@@ -34,6 +34,7 @@ import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type 
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
+import { MARKET_SERIES } from './models/windfall';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 
 /** A query failed; the table name tells which part of the database to look at. */
@@ -381,21 +382,33 @@ export interface LatestQuote {
   source: string;
 }
 
-/** What the data status page shows: the runs, and the newest close of every security and rate of every pair. */
+/**
+ * What the data status page shows: the runs, the newest close of every security and rate of every
+ * pair, and the newest month of each market series (F3; `date` is YYYY-MM, empty before Phase 2).
+ */
 export interface DataStatus {
   runs: JobRun[];
   threshold: number | null;
   securities: SecurityRecord[];
   prices: LatestQuote[];
   rates: LatestQuote[];
+  series: LatestQuote[];
 }
 
 export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStatus> {
-  const [{ runs, threshold }, securities, prices, rates] = await Promise.all([
+  const [{ runs, threshold }, securities, prices, rates, series] = await Promise.all([
     loadJobRuns(supabase),
     loadSecurities(supabase),
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
     rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
+    Promise.all(
+      MARKET_SERIES.map((name) =>
+        rows<{ series: string; obs_month: string; value: number; source: string }>(
+          'market_series',
+          supabase.from('market_series').select('series, obs_month, value, source').eq('series', name).order('obs_month', { ascending: false }).limit(1),
+        ),
+      ),
+    ),
   ]);
   return {
     runs,
@@ -403,6 +416,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     securities,
     prices: prices.map((row) => ({ key: row.ticker, date: row.price_date, value: Number(row.close), source: row.source })),
     rates: rates.map((row) => ({ key: row.pair, date: row.rate_date, value: Number(row.rate), source: row.source })),
+    series: series.flat().map((row) => ({ key: row.series, date: row.obs_month.slice(0, 7), value: Number(row.value), source: row.source })),
   };
 }
 

@@ -776,3 +776,8 @@ details > .form,
 details > form {
   margin-top: 0.75rem;
 }
+
+/* Windfall page (F3): the backtest has a point per start month over 150 years, so it runs taller. */
+.chart.chart-backtest {
+  height: 320px;
+}

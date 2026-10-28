@@ -7,7 +7,7 @@ import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadDataStatus, type DataStatus, type LatestQuote } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { quantity, twd } from '@/lib/format';
+import { percent, quantity, twd } from '@/lib/format';
 import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
 import { dataHealth, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, type JobRun } from '@/lib/models/data-health';
 import { GOLD } from '@/lib/models/fx';
@@ -43,8 +43,8 @@ export default async function DataStatusPage() {
         </h1>
         <p className="muted">
           <Bi
-            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates and the gold price, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
-            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率與金價，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
+            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates, the gold price and the monthly market series of the windfall planner, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
+            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率、金價與大額資金分批所用的每月市場資料，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
           />
         </p>
         <DataHealthBanner health={health} threshold={status.threshold} />
@@ -52,6 +52,7 @@ export default async function DataStatusPage() {
       {health.latest && <LatestRun run={health.latest} />}
       <Prices status={status} />
       <Rates rates={status.rates} />
+      <MarketSeries series={status.series} lastRun={status.runs[0]?.detail.series ?? {}} />
       {status.runs.length > 0 && <Runs runs={status.runs} />}
     </>
   );
@@ -267,6 +268,79 @@ function Rates({ rates }: { rates: LatestQuote[] }) {
           />
         </p>
       )}
+    </section>
+  );
+}
+
+const SERIES_NAMES: Record<string, Bilingual> = {
+  us_cape: { en: "S&P 500 CAPE (Shiller's P/E 10)", zh: 'S&P 500 週期調整本益比（CAPE）' },
+  sp500_price: { en: 'S&P 500, monthly average close', zh: 'S&P 500 每月平均收盤' },
+  sp500_yield: { en: 'S&P 500 dividend yield', zh: 'S&P 500 股息殖利率' },
+};
+
+/** The monthly series the windfall planner reads (F3): the valuation gauge and the backtest's market. */
+function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: JobRun['detail']['series'] }) {
+  return (
+    <section className="card form" id="market-series">
+      <h2>
+        <Bi en="Monthly market series" zh="每月市場資料" />
+      </h2>
+      {series.length === 0 ? (
+        <p className="muted">
+          <Bi en="Not loaded yet: the nightly job loads them from Shiller's data, else multpl.com." zh="尚未載入：每夜排程會從 Shiller 的資料載入，失敗時改用 multpl.com。" />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  <Bi en="Series" zh="資料" />
+                </th>
+                <th>
+                  <Bi en="Newest month" zh="最新月份" />
+                </th>
+                <th className="num">
+                  <Bi en="Value" zh="數值" />
+                </th>
+                <th>
+                  <Bi {...LABELS.source} />
+                </th>
+                <th className="num">
+                  <Bi en="Months loaded last run" zh="上次載入月數" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {series.map((point) => (
+                <tr key={point.key}>
+                  <td>
+                    <strong>{point.key}</strong>
+                    <div className="muted small">
+                      <Bi {...(SERIES_NAMES[point.key] ?? { en: point.key, zh: point.key })} />
+                    </div>
+                  </td>
+                  <td className="nowrap">{point.date}</td>
+                  <td className="num">{point.key === 'sp500_yield' ? percent(point.value, 2) : quantity(point.value)}</td>
+                  <td className="nowrap">
+                    <Bi {...feedLabel(point.source)} />
+                  </td>
+                  <td className="num">{lastRun[point.key]?.rows ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small">
+        <Bi
+          en="Shiller's data is monthly and a few weeks behind; the Windfall page reads CAPE's percentile over its whole history and backtests on all three."
+          zh="Shiller 的資料為每月更新，約落後數週；「大額資金」頁以 CAPE 在整段歷史中的百分位作為估值指標，並以三項資料進行回測。"
+        />{' '}
+        <Link href="/windfall">
+          <Bi {...LABELS.windfall} />
+        </Link>
+      </p>
     </section>
   );
 }

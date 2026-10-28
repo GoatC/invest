@@ -31,6 +31,14 @@ export function quantity(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 
+/** An English ordinal, rounded to a whole number: 1 → "1st", 72.4 → "72nd", 11 → "11th". */
+export function ordinal(value: number): string {
+  const n = Math.round(value);
+  const tens = Math.abs(n) % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][Math.abs(n) % 10] ?? 'th');
+  return `${n}${suffix}`;
+}
+
 /** A fraction as a percentage: 0.055 → "5.5%". */
 export function percent(value: number | null | undefined, digits = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return DASH;

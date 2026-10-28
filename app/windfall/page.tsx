@@ -7,8 +7,8 @@ import { BacktestChart, type BacktestPoint } from '@/components/windfall-charts'
 import { requireSession } from '@/lib/auth';
 import { DataError, loadWindfallData, type WindfallData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { percent, signedPercent, twd } from '@/lib/format';
-import { LABELS, type Bilingual } from '@/lib/i18n';
+import { ordinal, percent, signedPercent, twd } from '@/lib/format';
+import { feedLabel, LABELS, TRANCHE_STATUS, type Bilingual } from '@/lib/i18n';
 import { buildPortfolio } from '@/lib/models/portfolio';
 import { backtest, capePercentile, drawdownOf, readAcceleration, readPace, trancheCount, type Acceleration, type Backtest, type MarketMonth, type Pace, type Spread } from '@/lib/models/windfall';
 import { proposalTitle, STATUS } from '@/lib/proposal-text';
@@ -18,12 +18,6 @@ import { deletePlan } from './actions';
 import { PlanForm, WindfallForm, type FieldSpec } from './forms';
 
 type Params = Record<string, string | string[] | undefined>;
-
-const TRANCHE_STATUS: Record<string, Bilingual> = {
-  scheduled: { en: 'Scheduled', zh: '排定' },
-  accelerated: { en: 'Pulled forward', zh: '已提前投入' },
-  done: { en: 'Done', zh: '已完成' },
-};
 
 function savedMessage(saved: unknown): Bilingual | undefined {
   switch (saved) {
@@ -105,7 +99,7 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
   });
   if (gauge && pace) {
     lines.push({
-      en: `Valuation now: CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${Math.round(gauge.percentile)}th percentile of ${gauge.months.toLocaleString('en-US')} months: a plan started now would take ${trancheCount(gauge.percentile, pace)} monthly tranches.`,
+      en: `Valuation now: CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${ordinal(gauge.percentile)} percentile of ${gauge.months.toLocaleString('en-US')} months: a plan started now would take ${trancheCount(gauge.percentile, pace)} monthly tranches.`,
       zh: `目前估值：${gauge.month} 的 CAPE 為 ${gauge.cape.toFixed(1)}，在 ${gauge.months.toLocaleString('en-US')} 個月中位於第 ${Math.round(gauge.percentile)} 百分位：現在建立的計畫會分 ${trancheCount(gauge.percentile, pace)} 個月投入。`,
     });
   }
@@ -327,8 +321,8 @@ function Results({ result, horizon, acceleration, source }: { result: Backtest; 
     <>
       <p className="muted">
         <Bi
-          en={`Every start month from ${result.first} to ${result.last} (${result.rows.length.toLocaleString('en-US')} of them), each with ten years of CAPE behind it: what the tranches ended at ${horizon} months later against putting it all in at once, on the S&P 500 with dividends${source ? ` (${source === 'shiller' ? "Shiller's data" : 'multpl.com'})` : ''}.`}
-          zh={`從 ${result.first} 到 ${result.last} 的每個起始月（共 ${result.rows.length.toLocaleString('en-US')} 個，每個都有十年的 CAPE 歷史）：分批投入在 ${horizon} 個月後與一次投入相比的結果，以 S&P 500 含股息計算${source ? `（${source === 'shiller' ? 'Shiller 的資料' : 'multpl.com'}）` : ''}。`}
+          en={`Every start month from ${result.first} to ${result.last} (${result.rows.length.toLocaleString('en-US')} of them), each with ten years of CAPE behind it: what the tranches ended at ${horizon} months later against putting it all in at once, on the S&P 500 with dividends${source ? ` (${feedLabel(source).en})` : ''}.`}
+          zh={`從 ${result.first} 到 ${result.last} 的每個起始月（共 ${result.rows.length.toLocaleString('en-US')} 個，每個都有十年的 CAPE 歷史）：分批投入在 ${horizon} 個月後與一次投入相比的結果，以 S&P 500 含股息計算${source ? `（${feedLabel(source).zh}）` : ''}。`}
         />
       </p>
       <BacktestChart points={points} label={{ en: 'Tranches against a lump sum, by start month', zh: '分批與一次投入的比較（依起始月）' }} />

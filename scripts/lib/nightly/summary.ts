@@ -10,7 +10,7 @@ export function fullSummary(run: JobRun): string[] {
   const { detail } = run;
   const lines = [`Nightly prices: ${run.status} 每夜價格：${run.status}`, `Window 期間: ${detail.window.start} → ${detail.window.end}`];
   for (const [key, loaded] of Object.entries({ ...detail.prices, ...detail.rates, ...detail.series })) {
-    lines.push(`  ${key.padEnd(8)} ${loaded.source.padEnd(12)} ${String(loaded.rows).padStart(5)} rows, latest ${loaded.latest}`);
+    lines.push(`  ${key.padEnd(11)} ${loaded.source.padEnd(12)} ${String(loaded.rows).padStart(5)} rows, latest ${loaded.latest}`);
   }
   if (detail.snapshots) {
     const risk = detail.snapshots.valueAtRisk;

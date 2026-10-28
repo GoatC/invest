@@ -43,4 +43,10 @@ describe('describeRow', () => {
     assert.deepEqual(describeRow('proposals', { id: 3, rule_id: 'R1', state: 'AAPL', status: 'expired' }, '3'), { en: '#3 R1 AAPL', zh: '第 3 號 R1 AAPL' });
     assert.ok(TABLE_LABELS['proposals']);
   });
+
+  it('names a windfall plan by its amount and start, and a tranche by its date, amount and status (F3)', () => {
+    assert.deepEqual(describeRow('windfall_plan', { total_twd: 1200000, received_on: '2026-10-28' }, '1'), { en: 'NT$1,200,000 from 2026-10-28', zh: 'NT$1,200,000，自 2026-10-28 起' });
+    assert.deepEqual(describeRow('windfall_tranches', { due_date: '2026-11-28', amount_twd: 50000, status: 'done' }, '2'), { en: '2026-11-28 NT$50,000 done', zh: '2026-11-28 NT$50,000 已完成' });
+    assert.ok(TABLE_LABELS['windfall_plan'] && TABLE_LABELS['windfall_tranches']);
+  });
 });

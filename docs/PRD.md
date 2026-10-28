@@ -409,7 +409,8 @@ Nightly jobs pull free data into Postgres; the rules engine turns fired rules in
 | TWD/USD 台幣匯率 | Bank of Taiwan daily rates through FinMind, the middle of spot buy and sell; FRED (weekly) as backup 臺灣銀行每日牌告（經 FinMind，取即期買賣中間值），FRED 週資料備援 | F18, N2, N5 |
 | US rates 美國利率 | FRED | F11 |
 | Taiwan 10-year yield 台灣 10 年期公債殖利率 | Central Bank of the ROC 中央銀行 | F11 |
-| US CAPE 週期調整本益比 | Robert Shiller's online data | F3 |
+| US CAPE 週期調整本益比 | Robert Shiller's online data (ie_data.xls, monthly since 1871, with the S&P 500 price and dividends); multpl.com's monthly tables as fallback (Phase 2, step 1) Shiller 教授的線上資料（ie_data.xls，1871 年起每月，含 S&P 500 價格與股利）；multpl.com 每月表格為備援（第二階段第 1 步） | F3 |
+| MSCI ACWI drawdown 全球股市跌幅 | The iShares MSCI ACWI ETF's daily closes, loaded like the other US ETFs (FinMind; Alpha Vantage fills gaps) ACWI ETF 每日收盤價，與其他美國 ETF 相同方式載入 | F3 |
 | Factor returns 因子報酬 | Kenneth French Data Library | N1 |
 | Equity risk premium 股票風險溢酬 | Damodaran Online | F11 |
 | Governance and penalties 公司治理與裁罰 | TWSE 公司治理評鑑, EPA ECHO, 環境部 | N3 |
@@ -448,6 +449,8 @@ A 20th table, push\_subscriptions (endpoint, keys, device name), is added in Pha
 
 Two bookkeeping tables join them in Phase 1: audit\_log (table, row, old and new values, who and when) for N5's edit history (step 2), and job\_runs (job, start, finish, status, per-feed detail) for the nightly job's outcomes and the data-failure alert (step 4). 第一階段另有兩張紀錄用資料表：audit\_log（資料表、資料列、修改前後內容、修改者與時間），供 N5 的修改紀錄使用（第 2 步）；job\_runs（工作、開始與結束時間、狀態、各資料來源明細），記錄每夜排程結果並供資料異常警示使用（第 4 步）。
 
+Phase 2 adds market\_series (series, obs\_month, value, source): the monthly S&P 500 CAPE, price and dividend yield the windfall planner reads, written by the nightly job only (step 1). 第二階段新增 market\_series（資料名稱、月份、數值、來源）：大額資金分批使用的每月 S&P 500 CAPE、價格與股息殖利率，只有每夜排程能寫入（第 1 步）。
+
 ## 8. Roadmap 開發路線圖
 
 Phase 1 comes first because every alert, proposal and weekly summary depends on the nightly data job and working push. 第一階段優先，因為所有警報、提案與週報都依賴每夜資料排程與可用的推播。
@@ -480,7 +483,7 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 
 - [x] Satellite cap: 20% target, trim above 25%, regular-contribution pool, windfall excluded (decided) 衛星部位上限：一般投入資金池的 20%，超過 25% 減碼，大額資金不計入（已決定）
 - [ ] SAA target weights decided (Investment Principles); CMA per asset class still open, to be entered on the Allocation page (step 6) 目標權重已定（見投資原則），各類別資本市場假設待定，可在「資產配置」頁輸入（第 6 步）
-- [ ] Confirm F3 acceleration tiers: 15% / 25% / 35% 確認 F3 加速級距
+- [ ] Confirm F3 acceleration tiers: 15% / 25% / 35%. Since Phase 2, step 1 they are editable on the Windfall page, whose backtest on Shiller's data shows what the tiers did against the pace alone and a lump sum since 1900; decide there once the nightly job has loaded the real series 確認 F3 加速級距：15%／25%／35%。第二階段第 1 步起可在「大額資金」頁修改，頁面上的回測以 Shiller 的資料比較 1900 年以來加速級距、只依節奏與一次投入的結果；每夜排程載入真實資料後，在該頁決定
 - [ ] Confirm valuation trim threshold: 1.25 × intrinsic value (single-stock cap now 5%, Investment Principles) 確認估值減碼門檻：內在價值 125%（單一個股上限已定為 5%）
 - [ ] Weekly review day and time; Sunday 20:00 Taipei until chosen, set on the Notifications page since step 10 每週檢視的星期與時間；決定前為台北時間週日 20:00，第 10 步起可在「推播」頁設定
 - [x] 複委託 only, in principle (decided); pick the broker after F15 comparison 原則上僅使用複委託，依 F15 比較結果選定券商
@@ -563,6 +566,16 @@ Decided in Phase 1, step 11 (2026-10-22) 第一階段第 11 步決定:
 - [x] US_ESTATE_TAX is evaluated from this step: every US-domiciled holding, US shares and US ETFs, both pools, at the latest USD rate, against the US$60,000 exemption. It drafts a suggestion with no orders (a sale abroad is overseas income, so the swap is Hugo's call), pushed like any proposal, and fires at most once a month while it holds (cooldown 30 days, not 7). The Costs page names the Irish-domiciled equivalents of each class held 自本步起評估 US_ESTATE_TAX：所有美國註冊的持股（美股個股與美國 ETF，兩個資金池合計）以最新美元匯率計算，與 6 萬美元免稅額比較。觸發時產生不含下單清單的建議（在海外賣出屬海外所得，是否轉換由 Hugo 決定），與其他提案一樣推播；狀態持續時每月最多觸發一次（冷卻期 30 天而非 7 天）。「費用與稅務」頁列出各持有類別的愛爾蘭註冊同類 ETF
 - [x] The Taiwan checks, per calendar year: overseas income = gains and losses on sales of securities listed abroad, netted (a net loss counts as 0), plus the dividends recorded from them; under the floor it is left out of the basic income, from it all of it counts, and the minimum tax applies only to a household's basic income above the exemption, which the app cannot see whole. The supplementary premium is the rate on each recorded Taiwan dividend payment that reaches the threshold, up to the cap; for an ETF only its dividend-income part is liable, so the figure is an upper bound 台灣稅務檢查以曆年計：海外所得 ＝ 海外上市證券賣出的損益淨額（淨損失以 0 計）加上已登錄的股利；未達門檻不計入基本所得額，達到則全數計入，最低稅負只適用於申報戶基本所得額超過免稅額的部分（App 無法得知全部所得）。補充保費為每筆達門檻的已登錄台股股利乘以費率（每筆有上限）；ETF 只有股利所得部分需扣，因此為上限值
 
+Decided in Phase 2, step 1 (2026-10-28) 第二階段第 1 步決定:
+
+- [x] The valuation gauge's data is a new table, `market_series` (Section 7): `us_cape`, `sp500_price` (the month's average close) and `sp500_yield` (the year's dividends over that price), one row per month, loaded each night with the prices. The source is Robert Shiller's workbook, ie_data.xls, whose link is read from his data page each night as it changes with every update, parsed with SheetJS (the `xlsx` package, a development dependency installed from SheetJS's own site, 0.20.3, as the npm registry's copy stopped at 0.18.5 with known flaws); multpl.com's by-month tables, built from the same data, are the fallback, per series. In testing shillerdata.com reset the connection from the cloud session while multpl answered, which the fallback covers. CAPE starts in 1881, as it needs ten years of earnings; price and yield in 1871 估值指標的資料存入新資料表 `market_series`（第 7 節）：`us_cape`、`sp500_price`（當月平均收盤）與 `sp500_yield`（全年股利 ÷ 該價格），每月一列，每晚與價格一起載入。來源為 Shiller 教授的 ie_data.xls，下載連結每次更新都會變，所以每晚先讀資料網頁取得連結，再以 SheetJS（`xlsx` 套件，開發用套件，從 SheetJS 官網安裝 0.20.3，因為 npm 上的版本停在有已知漏洞的 0.18.5）解析；multpl.com 依同一份資料製作的每月表格為各組資料的備援。測試時 shillerdata.com 會重設雲端環境的連線，multpl 可以連上，由備援處理。CAPE 需要十年盈餘，所以自 1881 年起；價格與殖利率自 1871 年起
+- [x] The gauge is CAPE's percentile among every month since 1881 up to the plan's start month (the newest month on or before it, as Shiller's data runs about a month behind): the share of months with a CAPE at or below it. It is fixed when the plan starts, with the tranche count config `windfall_pace` gives it (30 / 70 → 6, 12, 24); tranches fall due on the start date's day each month, or the month's last day 估值指標為 1881 年至計畫起始月（取該月或之前最新的一個月，因為 Shiller 的資料約落後一個月）之間，CAPE 小於或等於當月數值的月份比例。建立計畫時即固定，批數依 config `windfall_pace`（30／70 → 6、12、24 批）；每月在起始日的同一天到期（月份較短時為月底）
+- [x] MSCI ACWI is measured on the iShares MSCI ACWI ETF (`ACWI`), added as a security so the nightly job loads its closes, as there is no free index feed. The drawdown is 1 − the newest close ÷ the highest close of the 52 weeks before it (rule `WINDFALL_ACCELERATION`'s `window_weeks`); a drawdown is named by its peak's date, a new 52-week high starts a new one, and a deeper tier counts the shallower ones as fired. The plan keeps `tiers_fired` as {drawdown, peak_date, fired_on}, written once a tier's proposal is drafted, with the peak's close in `current_drawdown_peak` MSCI ACWI 以 iShares MSCI ACWI ETF（`ACWI`）衡量：加入為證券，由每夜排程載入收盤價，因為沒有免費的指數資料。跌幅 ＝ 1 − 最新收盤價 ÷ 前 52 週最高收盤價（`WINDFALL_ACCELERATION` 規則的 `window_weeks`）；一波下跌以高點日期命名，創 52 週新高即為新的一波，較深的級距觸發時，較淺的級距也視為已觸發。計畫的 `tiers_fired` 記錄 {跌幅、高點日期、觸發日}，在該級距的提案產生後寫入，高點收盤價存在 `current_drawdown_peak`
+- [x] A tranche's amount is set when it falls due, not at the start: the cash waiting ÷ the tranches still scheduled, so a tranche pulled forward, a late one, or interest earned evens out over the rest. `amount_twd` keeps the start's even split as the record. The cash waiting is the windfall pool's TWD balances (a money-market fund or time deposit, Section 3 F3); each proposal takes out of the largest. The next tranche pulled forward is the next one not yet due; a tier that deploys everything marks every tranche left. Marking the proposal filled sets its tranche to done and those it pulled forward to accelerated 每批金額在到期時才決定，而非建立計畫時：等待中的現金 ÷ 仍排定的批數，因此提前投入、延後投入或累積的利息都會平均分攤到其餘批次。`amount_twd` 保留建立時的平均金額作為紀錄。等待中的現金為大額資金池的台幣餘額（貨幣基金或定存，第 3 節 F3），每份提案從最大的一筆轉出。提前的「下一批」為下一個尚未到期的批次；全數投入的級距會標記所有剩餘批次。提案標記成交時，該批改為已完成，提前的批次改為已提前投入
+- [x] Each tranche is split by the core targets alone (re-weighted to 100% of the core; the satellite never), every order tagged `pool = windfall`. A class is bought through the fund chosen for it on the Windfall page (config `windfall.vehicles`, so an Irish-domiciled fund such as AGGU keeps the windfall out of US estate tax, F15), else the windfall pool's largest holding of it, else its benchmark ETF, in shares rounded down (US shares in fractions). Strategic cash's share stays in the balance the windfall waits in, which is strategic cash already; the proposal says so 每批只依核心目標權重分配（重新加權為核心的 100%，從不買衛星），每筆下單都標記 `pool = windfall`。各類別以在「大額資金」頁選定的基金買進（config `windfall.vehicles`，例如愛爾蘭註冊的 AGGU，可避開美國遺產稅，見 F15），沒有則用大額資金池已持有最多的那檔，再沒有則用基準 ETF，股數無條件捨去（美股以零股計）。戰略現金的部分留在等待中的帳戶，因為它本身就是戰略現金；提案會註明
+- [x] The backtest of lump sum vs this rule runs on Shiller's monthly S&P 500, since no long ACWI history is free: from every start month from config `windfall.backtest.from_year` (1900) with ten years of CAPE behind it and the whole horizon (`horizon_months`, 60) after it, it compares 1 invested at once, at the pace that start's CAPE percentile sets, and at that pace with acceleration. Invested money earns the month's price change plus a twelfth of the dividend yield; the cash waiting earns `windfall.cash_return` (1.5%, a TWD money-market fund); the gauge uses only the CAPE months up to each start; the drawdown is the S&P 500's fall from its trailing 12-month high. As Shiller's prices are monthly averages, falls look shallower than day by day, so tiers fire later and less often than they would live. The page shows, for rule vs lump sum, the pace vs lump sum and rule vs the pace, the share of starts where the first did better, the median, the 10th to 90th percentile, the worst and the best 一次投入與本規則的回測以 Shiller 的每月 S&P 500 計算（沒有免費的長期 ACWI 資料）：從 config `windfall.backtest.from_year`（1900）起、前面有十年 CAPE、後面有完整比較期間（`horizon_months`，60 個月）的每個起始月，比較一次投入、依該月 CAPE 百分位的節奏，以及節奏加上加速。已投入的資金賺取當月價格變動加十二分之一的股息殖利率；等待的現金賺取 `windfall.cash_return`（1.5%，台幣貨幣基金）；估值指標只用到起始月為止的 CAPE；跌幅為 S&P 500 自近 12 個月高點的下跌。Shiller 的價格為月平均，跌幅看起來比逐日淺，因此級距觸發得比實際更晚、更少。頁面列出本規則 vs 一次投入、只依節奏 vs 一次投入、本規則 vs 只依節奏三組比較的勝出比例、中位數、第 10 至 90 百分位、最差與最好
+- [x] The weekly dashboard's windfall part now shows the plan (tranches done, on schedule or accelerated, the next date) and links to the Windfall page, and its coming week lists the tranches due; the Data status page shows each market series' newest month, value and source. The acceleration tiers stay an open question above 每週儀表板的大額資金區塊改為顯示計畫（已完成批數、依排程或已加速、下一批日期）並連到「大額資金」頁，下週事件列出到期的分批；資料狀態頁列出每組市場資料的最新月份、數值與來源。加速級距仍列在上方待決問題
+
 ## 10. Glossary 雙語術語表
 
 - **SAA (Strategic Asset Allocation)** – long-term target weights across asset classes, held through market cycles; Chinese translation: 策略性資產配置：長期維持的各資產類別目標權重，不隨市場短期波動而改變。
@@ -632,6 +645,15 @@ Rules:
 9. Rules engine: R1, R2, F8 drift, proposals. 規則引擎與提案。
 10. Web Push and the weekly dashboard as home. 推播與每週儀表板首頁。
 11. F15 fee and tax drag. 費用與稅務拖累。
+
+**Phase 2 build order 第二階段建置順序** (set when Phase 1's gate passed 第一階段通過關卡時訂定)
+
+1. F3 windfall tranche planner: it needs no other Phase 2 feature, and the windfall can arrive at any time. 大額資金分批部署：不需要其他第二階段功能，且大額資金隨時可能入帳。
+2. N1 Regression Lab, single-factor β (Fama–French 5-factor mode in Phase 3). 回歸分析區（單因子 β；五因子模式在第三階段）。
+3. F11 CAPM cost of equity, from N1's β. CAPM 權益成本（取 N1 的 β）。
+4. F12 valuation workbench, buy-zone and trim alerts, discounting at F11's cost of equity. 估值工作台與買入／減碼警報（以 F11 的權益成本折現）。
+5. N3 red-flag indicator, beside F12's watchlist. 紅旗指標（與 F12 的觀察清單並列）。
+6. F14 combined look-through. 核心與衛星合併透視。
 
 **Acceptance tests 驗收測試** (computed for this check; each becomes a unit test 每項皆轉為單元測試)
 

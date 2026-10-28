@@ -26,14 +26,20 @@ dashboard as home (its three lines and the Section 5 order, approving from it, d
 costs page (the yearly drag, each fund and broker over the plan with the demo figures, choosing a
 broker so proposals estimate their fees, a fund's costs edited and checked, the Taiwan tax checks),
 the US estate-tax rule (a windfall buy past US$60,000 drafts a suggestion with no orders, then is
-undone), the data status page, a phone-width check of every page,
+undone), the windfall planner (CAPE's percentile from the seed's invented series since 1871 setting
+24 tranches, ACWI's fall from its 52-week high, the backtest of lump sum vs the rule; the windfall
+recorded as a cash flow and a TWD balance, the plan started from them, the tranche due drafted as a
+proposal in the windfall pool with core classes only, its trade form in the windfall pool, the
+tranche done once filled, the dashboard's plan line and coming week; then the plan, balance and
+cash flow removed so the steps after it still see one proposal waiting), the data status page (the
+market series' newest month included), a phone-width check of every page,
 and sign-out. With a `FINMIND_TOKEN` in the environment it then removes the invented weekly
 history, runs the real nightly job (`scripts/nightly.ts`, live feeds) against the stand-in
 twice, the second time as on GitHub Actions, checks that the VaR proxies' live weekly closes hold
-no split-sized jump, and checks what the app shows, the NAV snapshots, their VaR and the 52-week
-line included, and the rules checked after the refresh; `E2E_NIGHTLY=0` skips that part.
+no split-sized jump, and checks what the app shows, the NAV snapshots, their VaR, the 52-week
+line and the live monthly market series included, and the rules checked after the refresh; `E2E_NIGHTLY=0` skips that part.
 
-`npm run test:e2e` 會建置 App，連到載入資料庫遷移與示範資料的本機 Supabase 替身，並以 Chromium 實際操作一遍：App 安裝設定檔、圖示與安全標頭、登入、持倉總覽與 R1／R2 數字、新增／修改／刪除交易、拒絕超賣、黃金與現金餘額、現金流（美元股利、大額資金入帳、修改與刪除）、新增證券、Big5 券商對帳單匯入（含股利列、未知代號與重複匯入）、交易日匯率、績效頁（時間加權報酬與 SAA 基準、XIRR、每月與各持股的匯率拆解、圖表提示框、只看大額資金池、深色模式）、資產配置頁（依 5/25 規則上色的偏離、三種分法的圓餅圖與區塊持股、合計須為 100% 且留下紀錄的目標權重、資本市場假設）、風險值卡片與頁面（以示範資料三年週收盤價計算的一週風險值與比例、× √4.33 的一個月切換、含門檻線的分布圖、台幣餘額不計風險、公式、深色模式）、複利計算機（畫面上的 PRD 驗收案例、以目標配置報酬與定期定額金額為預設值、起始月份自動帶入起始金額、儲存計畫後與示範資料月底值對照並拆解差距、深色模式）、規則引擎（規則頁各規則的狀態、扣款日設定與門檻修改紀錄、立即檢查規則產生 R1、F8 與每月投入提案並寫明原因與整股下單清單且不重複、修改下單清單、核准、從執行清單登錄交易、標記成交、附理由略過與之後的冷卻期）、推播（不需登入即可載入的 service worker、送到本機 HTTPS 推播替身並以替身裝置金鑰解密的測試推播、移除已取消的裝置、推播排程每週檢視與待處理提案各只送一次）、每週儀表板首頁（三行摘要與第 5 節順序、從首頁核准、深色模式）、資料狀態頁，以及手機寬度檢查與登出。環境變數有 `FINMIND_TOKEN` 時，接著刪除虛構的週資料，以真實資料對替身執行兩次每夜排程（第二次模擬 GitHub Actions），檢查代理 ETF 的真實週收盤價沒有分割造成的跳動，並檢查 App 顯示的結果（含淨值快照、其風險值與近 52 週走勢線）；設 `E2E_NIGHTLY=0` 可略過。
+`npm run test:e2e` 會建置 App，連到載入資料庫遷移與示範資料的本機 Supabase 替身，並以 Chromium 實際操作一遍：App 安裝設定檔、圖示與安全標頭、登入、持倉總覽與 R1／R2 數字、新增／修改／刪除交易、拒絕超賣、黃金與現金餘額、現金流（美元股利、大額資金入帳、修改與刪除）、新增證券、Big5 券商對帳單匯入（含股利列、未知代號與重複匯入）、交易日匯率、績效頁（時間加權報酬與 SAA 基準、XIRR、每月與各持股的匯率拆解、圖表提示框、只看大額資金池、深色模式）、資產配置頁（依 5/25 規則上色的偏離、三種分法的圓餅圖與區塊持股、合計須為 100% 且留下紀錄的目標權重、資本市場假設）、風險值卡片與頁面（以示範資料三年週收盤價計算的一週風險值與比例、× √4.33 的一個月切換、含門檻線的分布圖、台幣餘額不計風險、公式、深色模式）、複利計算機（畫面上的 PRD 驗收案例、以目標配置報酬與定期定額金額為預設值、起始月份自動帶入起始金額、儲存計畫後與示範資料月底值對照並拆解差距、深色模式）、規則引擎（規則頁各規則的狀態、扣款日設定與門檻修改紀錄、立即檢查規則產生 R1、F8 與每月投入提案並寫明原因與整股下單清單且不重複、修改下單清單、核准、從執行清單登錄交易、標記成交、附理由略過與之後的冷卻期）、推播（不需登入即可載入的 service worker、送到本機 HTTPS 推播替身並以替身裝置金鑰解密的測試推播、移除已取消的裝置、推播排程每週檢視與待處理提案各只送一次）、每週儀表板首頁（三行摘要與第 5 節順序、從首頁核准、深色模式）、大額資金分批（以示範資料 1871 年起虛構的 CAPE 百分位決定分 24 批、ACWI 自 52 週高點的跌幅、一次投入與本規則的回測；以現金流與台幣餘額登錄大額資金後建立計畫，到期的分批產生大額資金池、只含核心類別的提案，交易表單自動選大額資金池，標記成交後該批變成已完成，儀表板顯示計畫進度與下週分批日；最後刪除計畫、餘額與現金流，讓之後的步驟仍是 1 份待處理提案）、資料狀態頁（含每月市場資料的最新月份），以及手機寬度檢查與登出。環境變數有 `FINMIND_TOKEN` 時，接著刪除虛構的週資料，以真實資料對替身執行兩次每夜排程（第二次模擬 GitHub Actions），檢查代理 ETF 的真實週收盤價沒有分割造成的跳動，並檢查 App 顯示的結果（含淨值快照、其風險值、近 52 週走勢線與真實的每月市場資料）；設 `E2E_NIGHTLY=0` 可略過。
 
 ## What the stand-in is 替身的組成
 

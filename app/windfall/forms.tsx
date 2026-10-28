@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
-import { percent, twd } from '@/lib/format';
+import { ordinal, twd } from '@/lib/format';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
 import { capePercentile, schedule, trancheCount, type MonthValue, type Pace } from '@/lib/models/windfall';
 import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm, type FieldErrors } from '@/lib/validation';
@@ -69,7 +69,7 @@ export function PlanForm({ capes, pace, initial, replacing }: { capes: readonly 
       <p className="muted" role="status">
         {gauge && count && first[0] ? (
           <Bi
-            en={`CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${percent(gauge.percentile / 100, 0)} percentile of ${gauge.months.toLocaleString('en-US')} months: ${count} monthly tranches of about ${twd(first[0].amountTwd)}, ${first[0].dueDate} to ${first[first.length - 1]?.dueDate ?? ''}.`}
+            en={`CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${ordinal(gauge.percentile)} percentile of ${gauge.months.toLocaleString('en-US')} months: ${count} monthly tranches of about ${twd(first[0].amountTwd)}, ${first[0].dueDate} to ${first[first.length - 1]?.dueDate ?? ''}.`}
             zh={`${gauge.month} 的 CAPE 為 ${gauge.cape.toFixed(1)}，在 ${gauge.months.toLocaleString('en-US')} 個月中位於第 ${Math.round(gauge.percentile)} 百分位：分 ${count} 個月，每批約 ${twd(first[0].amountTwd)}，${first[0].dueDate} 至 ${first[first.length - 1]?.dueDate ?? ''}。`}
           />
         ) : !pace ? (
