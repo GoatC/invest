@@ -16,6 +16,7 @@ import {
   parseEngineSettings,
   parseOrderSizes,
   parsePaceForm,
+  parseRegressionForm,
   parsePlanForm,
   parsePlanStart,
   parseRuleForm,
@@ -432,5 +433,23 @@ describe('windfall planner (F3)', () => {
     });
     const bad = parsePaceForm({ ...raw, cutHigh: '20', tier2: '10', tranchesHigh: '2.5', tier3Share: '0' });
     assert.deepEqual(Object.keys(bad.ok ? {} : bad.errors).sort(), ['cutHigh', 'tier2', 'tier3Share', 'tranchesHigh']);
+  });
+});
+
+describe('parseRegressionForm (N1)', () => {
+  const form = { freq: 'weekly', windowYears: '2', currency: 'local', blumeWeight: '0.67', rfTWD: '1.7', rfUSD: '4' };
+
+  it('reads the defaults, Blume weight and the rates in percent, stamping today when ticked', () => {
+    const parsed = parseRegressionForm({ ...form, checked: 'on' }, [1, 2, 3, 5], '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value, { freq: 'weekly', windowYears: 2, currency: 'local', blumeWeight: 0.67, riskFree: { TWD: 0.017, USD: 0.04 }, checked: '2026-10-28' });
+  });
+
+  it('keeps the date it was checked before, and refuses a window not offered or a weight past 1', () => {
+    const kept = parseRegressionForm({ ...form, checkedOn: '2026-10-01' }, [1, 2, 3, 5], '2026-10-28');
+    assert.ok(kept.ok && kept.value.checked === '2026-10-01');
+    const bad = parseRegressionForm({ ...form, windowYears: '4', blumeWeight: '1.2', rfTWD: '' }, [1, 2, 3, 5], '2026-10-28');
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['blumeWeight', 'rfTWD', 'windowYears']);
   });
 });

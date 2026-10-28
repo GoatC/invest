@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
 import { Stat } from '@/components/stat';
@@ -112,12 +113,12 @@ function Header({ scope, range }: { scope: Scope; range: Period }) {
       <h1>
         <Bi {...LABELS.performance} />
       </h1>
-      <p className="muted">
+      <Info>
         <Bi
           en="Two measures, both in TWD. The time-weighted return (TWR) is how the holdings did, whenever money went in or out, and is set against the SAA benchmark. The money-weighted return (XIRR) is what your own timing earned."
           zh="兩種衡量方式，皆以台幣計算。時間加權報酬（TWR）衡量持股本身的表現，不受資金進出時點影響，並與 SAA 基準比較；資金加權報酬（XIRR）則反映你自己投入時點的實際成果。"
         />
-      </p>
+      </Info>
       <div className="filters">
         <div className="segmented" role="group" aria-label="Pool 資金池">
           <span className="label">
@@ -202,12 +203,12 @@ function Report({ input, days, scope, range, end }: { input: PerformanceInput; d
           <h2>
             <Bi en="Each month’s return: local currency, currency and cross term" zh="每月報酬：當地幣別、匯率與交叉項" />
           </h2>
-          <p className="muted small">
+          <Info>
             <Bi
               en="Bars show where each month’s TWD return came from: the holdings in their own currency, the currencies against TWD, and the small cross term between them. The dot is the month’s TWD return."
               zh="長條顯示每月台幣報酬的來源：持股以其本身幣別計算的報酬、外幣對台幣的匯率變動，以及兩者之間很小的交叉項。圓點為當月台幣報酬。"
             />
-          </p>
+          </Info>
           <MonthlyChart
             months={months}
             label={{
@@ -237,8 +238,8 @@ function Headline({ result, from }: { result: PeriodReturn; from: string }) {
     <section className="card form">
       <p className="muted small">
         <Bi
-          en={`From the close of ${result.from}${sinceFirstBuy ? ' (the first purchase)' : ''} to ${result.to}: ${result.days} days.`}
-          zh={`自 ${result.from}${sinceFirstBuy ? '（第一筆買進）' : ''}收盤起至 ${result.to}，共 ${result.days} 天。`}
+          en={`${result.from}${sinceFirstBuy ? ' (first purchase)' : ''} → ${result.to} · ${result.days} days`}
+          zh={`${result.from}${sinceFirstBuy ? '（第一筆買進）' : ''} → ${result.to} · ${result.days} 天`}
         />
       </p>
       <div className="grid-cards">
@@ -270,8 +271,8 @@ function Headline({ result, from }: { result: PeriodReturn; from: string }) {
       {result.estimated && (
         <p className="banner info">
           <Bi
-            en="Part of this period is valued at a trade price or a hand-entered value, as the nightly job had no close or gold price for it yet."
-            zh="這段期間部分數值以交易價格或手動估值計算，因為每夜排程當時尚無收盤價或金價。"
+            en="* Partly valued at trade prices or hand-entered values."
+            zh="＊部分以交易價格或手動估值計算。"
           />
         </p>
       )}
@@ -350,9 +351,9 @@ function Periods({ days, scope, end }: { days: readonly DayPoint[]; scope: Scope
       <h2>
         <Bi en="Returns by period" zh="各期間報酬" />
       </h2>
-      <p className="muted small">
+      <Info>
         <Bi en="A period of a year or more is shown per year; a shorter one as it was." zh="一年以上的期間以年化表示，未滿一年則為期間報酬。" />
-      </p>
+      </Info>
       <div className="table-wrap">
         <table>
           <thead>
@@ -415,12 +416,12 @@ function Splits({ splits }: { splits: readonly HoldingSplit[] }) {
       <h2>
         <Bi en="FX split per foreign holding" zh="外幣持股的匯率拆解" />
       </h2>
-      <p className="muted small">
+      <Info>
         <Bi
           en="Each foreign security’s own return from the close shown under it (the period’s start, or its first purchase if later): TWD return = local-currency return + currency return + cross term."
           zh="各外幣證券自代號下方日期收盤起（期間起點，或較晚的第一筆買進日）本身的報酬：台幣報酬＝當地幣別報酬＋匯率報酬＋交叉項。"
         />
-      </p>
+      </Info>
       {splits.length === 0 ? (
         <p className="muted">
           <Bi en="No foreign security is held in this pool." zh="這個資金池沒有持有外幣證券。" />

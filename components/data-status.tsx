@@ -33,8 +33,8 @@ export function DataHealthBanner({ health, threshold, quiet = false }: { health:
     return (
       <p className="banner info" role="status">
         <Bi
-          en="The nightly price job has not run yet, so values marked * use trade prices and rates. Setting it up: docs/nightly-job.md."
-          zh="每夜價格排程尚未執行，標示＊的數值暫以交易價格與匯率計算。設定方式見 docs/nightly-job.md。"
+          en="The nightly price job has not run yet: * = trade price."
+          zh="每夜價格排程尚未執行：＊＝交易價格。"
         />
         {quiet && link}
       </p>

@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
+import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -14,12 +15,12 @@ const KEY_MISSING = '23503';
 
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
-// the windfall planner (Phase 2, step 1) adds market_series.
+// the windfall planner (Phase 2, step 1) adds market_series, and the Regression Lab (step 2) index_prices.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
-  'job_runs', 'notifications', 'market_series',
+  'job_runs', 'notifications', 'market_series', 'index_prices',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -39,7 +40,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications and market_series', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series and index_prices', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -463,6 +464,45 @@ describe('fee and tax drag (step 11)', () => {
   });
 });
 
+describe('Regression Lab (Phase 2, step 2)', () => {
+  it('keeps the index closes for the owner to read and the job to write, one row per index and day', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.index_prices (index_id, price_date, close, source) values ('SPX', '2099-10-27', 7722.6, 'finmind')`)), DENIED);
+    });
+    await db.query(`insert into public.index_prices (index_id, price_date, close, source) values ('SPX', '2099-10-27', 7722.6, 'finmind')`);
+    assert.equal(await errorCode(db.query(`insert into public.index_prices (index_id, price_date, close, source) values ('spx', '2099-10-28', 7722.6, 'finmind')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select close from public.index_prices where index_id = 'SPX' and price_date = '2099-10-27'`), '7722.6');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.index_prices'), 0);
+    });
+    await db.query(`delete from public.index_prices where price_date = '2099-10-27'`);
+  });
+
+  it('seeds settings the app reads: both benchmarks, weekly over two years in local currency, Blume 0.67', async () => {
+    const settings = readRegressionSettings(await scalar(db, `select value from public.config where key = 'regression'`));
+    assert.ok(settings);
+    assert.deepEqual(settings.benchmarks.map((benchmark) => [benchmark.id, benchmark.market, benchmark.currency]), [
+      ['SPX', 'US', 'USD'],
+      ['TAIEX', 'TW', 'TWD'],
+    ]);
+    assert.deepEqual(settings.defaults, { freq: 'weekly', years: 2, currency: 'local' });
+    assert.deepEqual(settings.windows, [1, 2, 3, 5]);
+    assert.deepEqual(settings.blume, { weight: 0.67, prior: 1 });
+    assert.equal(settings.riskFreeChecked, null);
+  });
+
+  it('lets the owner keep β results, which the monthly refresh writes', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(
+        `insert into public.beta_results (ticker, benchmark, model, freq, window_years, beta, alpha, factor_loadings, r2, std_err, run_date) values ('VT', 'SPX', '1F', 'weekly', 2, 0.98, 0.01, '{"adjusted": 0.9866}', 0.9, 0.03, '2026-11-02')`,
+      );
+      assert.equal(await scalar(tx, `select count(*) from public.beta_results where ticker = 'VT'`), 1);
+    });
+  });
+});
+
 describe('windfall planner (Phase 2, step 1)', () => {
   it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
     await as(db, 'owner', async (tx) => {
@@ -581,6 +621,7 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.prices where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.index_prices where source <> 'demo'`), 0);
   });
 
   it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09", async () => {
@@ -593,6 +634,7 @@ describe('demo seed', () => {
         ['sp500_price', 1869, '1871-01', '2026-09'],
         ['sp500_yield', 1869, '1871-01', '2026-09'],
         ['us_cape', 1749, '1881-01', '2026-09'],
+        ['us_tbill_3m', 45, '2023-01', '2026-09'],
       ],
     );
     // CAPE ends above its 70th percentile, so a demo plan takes 24 tranches.

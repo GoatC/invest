@@ -4,6 +4,7 @@ import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocat
 import { Bi } from '@/components/bi';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
+import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { RiskCard } from '@/components/risk-card';
 import { requireSession } from '@/lib/auth';
@@ -36,7 +37,7 @@ import { buildSeries } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
-import { proposalTitle, whyLines } from '@/lib/proposal-text';
+import { proposalTitle } from '@/lib/proposal-text';
 
 import { approveProposal, dismissProposal } from './proposals/actions';
 
@@ -99,7 +100,7 @@ export default async function Dashboard() {
           ))}
         </ul>
       </section>
-      {proposals instanceof DataError ? <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} /> : <Proposals list={list} rules={rules} names={names(data)} />}
+      {proposals instanceof DataError ? <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} /> : <Proposals list={list} rules={rules} />}
       <Drift data={data} portfolio={portfolio} />
       {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
       <Donut data={data} portfolio={portfolio} />
@@ -109,20 +110,13 @@ export default async function Dashboard() {
           <Bi en="Watchlist" zh="觀察清單" />
         </h2>
         <p className="muted">
-          <Bi
-            en="Distance to the buy and trim zones and each company's red-flag light arrive with the valuation workbench (F12) and the red-flag indicator (N3), Phase 2 steps 4 and 5."
-            zh="距離買入區與減碼區的幅度，以及各公司的紅旗燈號，將隨估值工作台（F12）與紅旗指標（N3）加入（第二階段第 4、5 步）。"
-          />
+          <Bi en="Coming with F12 and N3." zh="將隨 F12、N3 加入。" />
         </p>
       </section>
       <ComingWeek today={today} settings={settings} rules={rules} tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])} />
       {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
     </>
   );
-}
-
-function names(data: AllocationData): Map<string, Bilingual> {
-  return new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]));
 }
 
 function Unavailable({ what, error }: { what: Bilingual; error: DataError }) {
@@ -137,7 +131,7 @@ function Unavailable({ what, error }: { what: Bilingual; error: DataError }) {
 }
 
 /** 1. Open proposals, with approve and dismiss (a reason can be given on the proposals page). */
-function Proposals({ list, rules, names }: { list: readonly Proposal[]; rules: readonly RuleRecord[]; names: ReadonlyMap<string, Bilingual> }) {
+function Proposals({ list, rules }: { list: readonly Proposal[]; rules: readonly RuleRecord[] }) {
   const open = list.filter((proposal) => proposal.status === 'open');
   const approved = list.filter((proposal) => proposal.status === 'approved');
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -153,34 +147,28 @@ function Proposals({ list, rules, names }: { list: readonly Proposal[]; rules: r
       </div>
       {open.length === 0 && (
         <p className="muted">
-          <Bi en="Nothing to decide: every rule is on track." zh="沒有需要決定的事：所有規則都正常。" />
+          <Bi en="Nothing to decide." zh="沒有需要決定的事。" />
         </p>
       )}
       {open.map((proposal) => {
         const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
-        const [first] = whyLines(rule, proposal.detail, names);
         const { sold, bought } = orderTotals(proposal.orders);
         return (
           <article key={proposal.id} className="proposal form">
             <h3>
               <Bi {...proposalTitle(rule)} />
             </h3>
-            {first && (
-              <p className="small">
-                <Bi {...first} />
-              </p>
-            )}
             <p className="muted small">
               {proposal.orders.length === 0 ? (
-                <Bi en="No orders: a decision to make, nothing to trade yet." zh="沒有下單清單：需要做決定，尚無需交易。" />
+                <Bi en="No orders" zh="無下單" />
               ) : (
                 <Bi
-                  en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'}: ${twd(sold)} out, ${twd(bought)} in.`}
-                  zh={`${proposal.orders.length} 筆下單：賣出／轉出 ${twd(sold)}，買進／存入 ${twd(bought)}。`}
+                  en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'} · out ${twd(sold)} · in ${twd(bought)}`}
+                  zh={`${proposal.orders.length} 筆 · 轉出 ${twd(sold)} · 買進 ${twd(bought)}`}
                 />
               )}{' '}
               <Link href={`/proposals#proposal-${proposal.id}`}>
-                <Bi en="Details and edit" zh="詳細內容與修改" />
+                <Bi en="Details" zh="詳細" />
               </Link>
             </p>
             <div className="row">
@@ -315,19 +303,19 @@ function Windfall({ portfolio, plan, today }: { portfolio: Portfolio; plan: Wind
       </div>
       {total <= 0 ? (
         <p className="muted">
-          <Bi en="No windfall money yet." zh="尚無大額資金。" />
+          <Bi en="None yet." zh="尚無。" />
         </p>
       ) : (
         <>
           <div className="meter" role="img" aria-label={`Deployed ${percent(deployed / total)} 已投入 ${percent(deployed / total)}`}>
             <span style={{ width: `${Math.max(0, Math.min(100, (deployed / total) * 100))}%` }} />
           </div>
-          <p>
-            <Bi
-              en={`Deployed ${twd(deployed)} (${percent(deployed / total)}); waiting as cash ${twd(waiting)}.`}
-              zh={`已投入 ${twd(deployed)}（${percent(deployed / total)}）；以現金等待中 ${twd(waiting)}。`}
-            />
-          </p>
+          <Facts
+            facts={[
+              { label: { en: 'Deployed', zh: '已投入' }, value: twd(deployed), note: { en: percent(deployed / total), zh: percent(deployed / total) } },
+              { label: { en: 'Waiting as cash', zh: '等待中的現金' }, value: twd(waiting) },
+            ]}
+          />
         </>
       )}
       {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} waiting={waiting} />}
@@ -340,10 +328,7 @@ function PlanStatus({ plan, today, waiting }: { plan: WindfallPlanRecord | undef
   if (!plan) {
     return (
       <p className="muted small">
-        <Bi
-          en={waiting > 0 ? 'No tranche plan yet: start one on the Windfall page, and each tranche becomes a proposal when it falls due.' : 'No tranche plan yet: once the windfall arrives, record it and start the plan on the Windfall page.'}
-          zh={waiting > 0 ? '尚無分批計畫：請在「大額資金」頁建立，每一批到期時都會產生提案。' : '尚無分批計畫：大額資金入帳並登錄後，請在「大額資金」頁建立計畫。'}
-        />
+        <Bi en="No tranche plan yet." zh="尚無分批計畫。" />
       </p>
     );
   }
@@ -360,8 +345,8 @@ function PlanStatus({ plan, today, waiting }: { plan: WindfallPlanRecord | undef
   return (
     <p className="small">
       <Bi
-        en={`Plan: ${plan.tranches.length - left.length} of ${plan.tranches.length} tranches done, ${pace.en}${overdue > 0 ? `; ${overdue} due now, see Proposals` : ''}${next ? `; next due ${next.dueDate}` : ''}.`}
-        zh={`計畫：${plan.tranches.length} 批中已完成 ${plan.tranches.length - left.length} 批，${pace.zh}${overdue > 0 ? `；${overdue} 批已到期，請見「提案」` : ''}${next ? `；下一批 ${next.dueDate} 到期` : ''}。`}
+        en={`Plan ${plan.tranches.length - left.length}/${plan.tranches.length} · ${pace.en}${overdue > 0 ? ` · ${overdue} due now` : ''}${next ? ` · next ${next.dueDate}` : ''}`}
+        zh={`計畫 ${plan.tranches.length - left.length}/${plan.tranches.length} · ${pace.zh}${overdue > 0 ? ` · ${overdue} 批到期` : ''}${next ? ` · 下一批 ${next.dueDate}` : ''}`}
       />
     </p>
   );
@@ -409,15 +394,12 @@ function ComingWeek({
       )}
       {day === null && (
         <p className="muted small">
-          <Bi en="Set the DCA debit day on the Rules page to see it here." zh="在「規則」頁設定定期定額扣款日後，會顯示在這裡。" />{' '}
+          <Bi en="DCA day not set." zh="未設定扣款日。" />{' '}
           <Link href="/rules#settings">
             <Bi {...LABELS.rules} />
           </Link>
         </p>
       )}
-      <p className="muted small">
-        <Bi en="The holdings' earnings dates arrive with the valuation workbench (F12)." zh="持股財報日將隨估值工作台（F12）加入。" />
-      </p>
     </section>
   );
 }
@@ -439,20 +421,26 @@ function AgainstPlan({ plan: data }: { plan: PlanData }) {
       </div>
       {!plan ? (
         <p className="muted">
-          <Bi en="Save a plan on the calculator to follow the regular pool against it." zh="在複利計算機儲存計畫後，即可對照一般資金池與計畫。" />
+          <Bi en="No plan saved yet." zh="尚未儲存計畫。" />
         </p>
       ) : !latest || latest.index === 0 ? (
         <p className="muted">
-          <Bi en="The comparison starts once the plan's first month has ended." zh="計畫的第一個月結束後開始對照。" />
+          <Bi en="Starts after the plan's first month." zh="計畫第一個月結束後開始。" />
         </p>
       ) : (
         <>
-          <p>
-            <Bi
-              en={`${latest.date}: ${twd(latest.actual)} against ${twd(latest.planned)} planned, ${signedTwd(gap(latest).total)} (money put in ${signedTwd(gap(latest).contributed)}, growth ${signedTwd(gap(latest).growth)}).`}
-              zh={`${latest.date}：實際 ${twd(latest.actual)}，計畫 ${twd(latest.planned)}，差距 ${signedTwd(gap(latest).total)}（投入金額 ${signedTwd(gap(latest).contributed)}，成長 ${signedTwd(gap(latest).growth)}）。`}
-            />
-          </p>
+          <Facts
+            facts={[
+              { label: { en: `Actual ${latest.date}`, zh: `實際 ${latest.date}` }, value: twd(latest.actual) },
+              { label: { en: 'Plan', zh: '計畫' }, value: twd(latest.planned) },
+              {
+                label: { en: 'Gap', zh: '差距' },
+                value: signedTwd(gap(latest).total),
+                note: { en: `put in ${signedTwd(gap(latest).contributed)} · growth ${signedTwd(gap(latest).growth)}`, zh: `投入 ${signedTwd(gap(latest).contributed)} · 成長 ${signedTwd(gap(latest).growth)}` },
+                tone: gap(latest).total >= 0 ? 'ok' : 'watch',
+              },
+            ]}
+          />
           <AgainstPlanChart rows={rows} label={{ en: `${PLAN_SERIES.actual.en} and ${PLAN_SERIES.planned.en.toLowerCase()} at each month end; the calculator page lists every month.`, zh: `每個月底的${PLAN_SERIES.actual.zh}與${PLAN_SERIES.planned.zh}；複利計算機頁列出每個月。` }} />
         </>
       )}

@@ -4,14 +4,14 @@
 // stand-in and check what it loaded (E2E_NIGHTLY=0 skips them).
 import { execFile } from 'node:child_process';
 import { createDecipheriv, createECDH, createHmac, randomBytes } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 import { promisify } from 'node:util';
 
 import { chromium } from 'playwright-core';
 
 // DOCS_SHOTS, when set, also saves the README screenshots there (npm run test:e2e with DOCS_SHOTS=$PWD/docs/images).
-const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS, GATEWAY_PORT, SECRET_KEY, FINMIND_TOKEN, E2E_NIGHTLY, REPO, PUSH_PORT, PUSH_KEY, PUSH_CERT, VAPID_PUBLIC_KEY } =
+const { APP_PORT, SHOTS, CSV, CHROMIUM, OWNER_EMAIL, OWNER_PASSWORD, DOCS_SHOTS, TEXT_REPORT, GATEWAY_PORT, SECRET_KEY, FINMIND_TOKEN, E2E_NIGHTLY, REPO, PUSH_PORT, PUSH_KEY, PUSH_CERT, VAPID_PUBLIC_KEY } =
   process.env;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 
@@ -48,6 +48,8 @@ function check(condition, message) {
   if (!condition) throw new Error(message);
 }
 const body = (target = page) => target.locator('body').innerText();
+/** A summary tile (components/facts.tsx) as one line: its icon, label, figure and note. */
+const fact = async (label) => (await page.locator('.fact', { hasText: label }).first().innerText()).replace(/\s+/g, ' ');
 
 await step('installable: manifest, icons and robots.txt load without a session; pages send the security headers', async () => {
   const manifest = await page.request.get(`${BASE}/manifest.webmanifest`, { maxRedirects: 0 });
@@ -102,8 +104,8 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
   const text = await body();
   // Seed: seven ETFs and stocks at the demo closes and USD/TWD 32.40, plus NT$20,000 savings.
   check(text.includes('NT$79,203'), 'regular pool NT$79,203');
-  check(text.includes('R1: AAPL is 9.7% of the regular pool') && text.includes('Selling about NT$3,686'), 'R1 AAPL with trim');
-  check(text.includes('R1: 2330 is 9.1%') && text.includes('NT$3,255'), 'R1 2330 with trim');
+  check((await fact('R1 AAPL')).includes('9.7% > 5% sell ≈ NT$3,686'), `R1 AAPL with trim, got ${await fact('R1 AAPL')}`);
+  check((await fact('R1 2330')).includes('9.1% > 5% sell ≈ NT$3,255'), `R1 2330 with trim, got ${await fact('R1 2330')}`);
   check(text.includes('18.8%'), 'satellite share 18.8%');
   check(text.includes('Not valued yet') && text.includes('Gold bar (demo)'), 'gold bar listed as not valued');
   check(text.includes('The nightly price job has not run yet'), 'no nightly run yet');
@@ -241,7 +243,7 @@ await step("cash flows: the seed's contributions and dividend are listed, with t
   const section = page.locator('#cash-flows');
   const text = await section.innerText();
   // Six NT$10,000 contributions and 0.62 USD of VT dividends at 32.20.
-  check(text.includes('contributions NT$60,000') && text.includes('dividends NT$20'), 'totals per type');
+  check(/Contribution[\s\S]*?NT\$60,000/.test(text) && /Dividend[\s\S]*?NT\$20\b/.test(text), `totals per type, got ${text.slice(0, 300)}`);
   check(text.includes('投入資金') && text.includes('股利'), 'Chinese type labels');
 });
 
@@ -378,7 +380,7 @@ await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split a
   await page.locator('.chart svg').nth(1).waitFor();
   const text = await body();
   // The seed's first trade is the VT buy of 2026-05-07; its demo closes run from that day.
-  check(text.includes('From the close of 2026-05-07 (the first purchase)'), 'measured from the first demo purchase');
+  check(text.includes('2026-05-07 (first purchase) →'), 'measured from the first demo purchase');
   // A tile reads: the label in English and Chinese on one line, then the figure.
   const tile = (label) => new RegExp(`${label}[^\\n]*\\n\\s*[+−]?\\d+\\.\\d%`).test(text);
   check(tile('Time-weighted return \\(TWR\\)'), 'TWR tile');
@@ -475,7 +477,7 @@ await step('targets: must add up to 100%, are saved together and logged', async 
   await page.waitForURL('**/allocation?saved=targets');
   check((await page.locator('table').first().locator('tbody tr', { hasText: 'Taiwan market-cap' }).innerText()).includes('13.0%'), 'new Taiwan target shown');
   await page.goto(`${BASE}/allocation/targets`);
-  const log = await body();
+  const log = (await page.locator('section', { hasText: 'Edit history' }).textContent()) ?? '';
   check(/Changed[\s\S]*US \/ global equity[\s\S]*Target\s*目標: 0\.28 → 0\.27/.test(log), 'edit history shows 0.28 → 0.27');
   await snap('targets');
   // Back to the Investment Principles, for the steps that follow.
@@ -500,9 +502,11 @@ await step('capital market assumptions: a source is required, then they show wit
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=assumptions');
   const card = await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
-  check(card.includes('6.5%') && card.includes('16.0%') && card.includes('Last reviewed on'), `assumptions shown, got ${card}`);
+  // What is folded behind ⓘ is read from the page's text rather than what is drawn.
+  const folded = (await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).textContent()) ?? '';
+  check(card.includes('6.5%') && card.includes('16.0%') && folded.includes('Last reviewed on'), `assumptions shown, got ${card}`);
   // The satellite classes have targets but no assumptions yet.
-  check(card.includes('Once every class with a target has an assumption'), 'no target-mix return yet');
+  check(folded.includes('Expected return: once every class has an assumption'), 'no target-mix return yet');
 });
 
 /** The VaR figure the card shows, in NT$, and its share of the portfolio in %. */
@@ -522,7 +526,8 @@ await step('risk card on holdings: the 95% 1-week VaR in NT$ and % of the portfo
   // The seed's three years of weekly demo closes give the proxies their covariance.
   const week = await varFigure(card);
   check(week.value > 0 && week.share > 0.2 && week.share < 6, `a plausible weekly VaR, got NT$${week.value} (${week.share}%)`);
-  check(text.includes('Weekly returns from') && text.includes('both pools'), 'the window and the value it is a share of');
+  const folded = (await card.textContent()) ?? '';
+  check(folded.includes('Weekly returns from') && folded.includes('both pools'), 'the window and the value it is a share of, behind ⓘ');
   // No NAV snapshot carries a VaR until the nightly job runs.
   check(text.includes('The 52-week line fills in'), 'no saved line yet');
   await card.getByRole('button', { name: /1 month/ }).click();
@@ -539,14 +544,15 @@ await step('risk page: the histogram with its cutoff, the weeks beyond it, what 
   await page.locator('.chart-histogram svg').waitFor();
   const text = await body();
   check(text.includes('Where the VaR sits among the last 156 weeks'), 'three years of weekly returns');
-  check(/In \d+ of them \([\d.]+%\) it lost more than the 1-week VaR of [\d.]+%/.test(text), 'the weeks beyond the VaR are counted');
+  check(/Weeks beyond the VaR[\s\S]*?\d+ \/ 156[\s\S]*?≈ [\d.]+ expected/.test(text), `the weeks beyond the VaR are counted, got ${text.slice(0, 800)}`);
   const inputs = await page.locator('section', { hasText: 'What the VaR is made of' }).innerText();
   // Each holding by its class proxy: 00692 and 2330 by 0050, NVDA by VOO; gold by GLDM; TWD balances add no risk.
   check(/0050\s+(00692, 2330|2330, 00692)/.test(inputs), `0050 measures 00692 and 2330, got ${inputs}`);
   check(/VOO\s+NVDA/.test(inputs) && /GLDM\s+(GLDM, Gold bar|Gold bar \(demo\)[^,\n]*, GLDM)/.test(inputs), 'NVDA by VOO, the gold bar with GLDM');
   check(/TWD balances[\s\S]*Money-market fund \(demo\)[\s\S]*High-yield savings/.test(inputs), 'both TWD balances, windfall included, without risk');
   const figure = await varFigure(page.locator('#value-at-risk'));
-  check(text.includes(`× √1 × NT$`) && text.includes(`= NT$${figure.value.toLocaleString('en-US')}.`), 'the formula ends at the figure shown');
+  const formula = (await page.locator('#formula').textContent()) ?? '';
+  check(formula.includes(`× √1 × NT$`) && formula.includes(`= NT$${figure.value.toLocaleString('en-US')}.`), 'the formula, behind ⓘ, ends at the figure shown');
   check(text.includes('風險值的組成') && text.includes('公式與今天的數值'), 'Chinese labels');
   await snap('risk');
   // The README image, from the seed's invented history; a run with the nightly job replaces it with one that has the 52-week line.
@@ -583,7 +589,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   await page.locator('.chart svg').first().waitFor();
   // The assumptions entered above cover the five core classes: (0.28·6.5 + 0.12·6 + 0.22·3.5 + 0.10·4 + 0.08·1.5) ÷ 0.80 = 4.7875%.
   check((await page.inputValue('input[name=expectedReturn]')) === '4.79', 'the target mix return over the core');
-  check((await body()).includes('over the classes with an assumption (80% of the targets)'), 'the mix says what it covers');
+  check((await body()).includes('Target mix: 4.79% (80% of targets assumed)'), 'the mix says what it covers');
   check((await page.inputValue('input[name=pmt]')) === '10000', 'dca.amount_twd as the monthly contribution');
   check(/^\d{4}-\d{2}$/.test(await page.inputValue('input[name=start]')) && Number(await page.inputValue('input[name=pv]')) > 0, 'next month, from today’s regular pool');
   check((await body()).includes('Save a plan above to compare'), 'no plan saved yet');
@@ -592,7 +598,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   check((await page.inputValue('input[name=pv]')) === '0', 'PV at the end of April is 0');
   await page.fill('input[name=start]', '2026-07');
   const june = Number(await page.inputValue('input[name=pv]'));
-  check(june > 15_000 && june < 25_000 && (await body()).includes('Your regular pool on 2026-06-30'), `PV at the end of June, got ${june}`);
+  check(june > 15_000 && june < 25_000 && (await body()).includes('Regular pool 2026-06-30'), `PV at the end of June, got ${june}`);
   // PRD Section 11: PV 0, PMT NT$10,000, 6% a year compounded monthly, 30 years, no step-up ≈ NT$10,045,000.
   await page.fill('input[name=start]', '2026-05');
   await page.fill('input[name=pv]', '0');
@@ -651,7 +657,7 @@ await step('calculator: saving the plan compares the regular pool with it at eac
   await page.locator('.chart-tip').first().waitFor();
   check(/Actual[\s\S]*Plan/.test(await page.locator('.chart-tip').first().innerText()), 'month-end tooltip');
   check((await page.inputValue('input[name=start]')) === '2026-05' && (await page.inputValue('input[name=expectedReturn]')) === '6', 'the form shows the saved plan');
-  const history = await page.locator('section', { hasText: 'Edit history of the plan' }).innerText();
+  const history = (await page.locator('section', { hasText: 'Edit history of the plan' }).textContent()) ?? '';
   check(history.includes('Changed') && history.includes('2026-05'), 'the save is logged');
   await snap('calculator-saved');
   // The README image: the calculator from the top, its chart and the start of the comparison.
@@ -676,12 +682,12 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await page.getByRole('heading', { level: 1, name: /^Rules/ }).waitFor();
   const monthly = await page.locator('#rule-MONTHLY_CONTRIBUTION').innerText();
   check(monthly.includes('Waiting for the DCA debit day'), `monthly waits, got ${monthly}`);
-  // "Fires:" or "Fires, but" is the engine's finding; the cooldown hint says "Fires at most once".
-  const fires = async (id) => /Fires[:,]/.test(await page.locator(`#rule-${id}`).innerText());
+  // The engine's finding sits in the rule's status line.
+  const fires = async (id) => /^\S*\s*Fires/.test(await page.locator(`#rule-${id} .rule-check`).innerText());
   check(await fires('R1'), 'R1 fires on the demo holdings');
   check((await page.locator('#rule-R2').innerText()).includes('Not firing'), 'R2 quiet at the demo satellite share');
   check((await page.locator('#rule-BUY_ZONE').innerText()).includes('a later step'), 'Phase 2 rules wait for their feature');
-  check((await body()).includes('可執行版本的投資政策聲明'), 'Chinese text');
+  check((await page.locator('#rule-R1').textContent())?.includes('單一個股'), 'Chinese text');
   await page.fill('input[name=dcaDay]', '32');
   await page.getByText('Enter a day of the month from 1 to 31').waitFor();
   await page.fill('input[name=dcaDay]', String(Number(taipeiYesterday.slice(8))));
@@ -689,18 +695,18 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await page.waitForURL('**/rules?saved=settings*');
   check(await fires('MONTHLY_CONTRIBUTION'), 'the monthly rule fires the day after the debit');
   // A threshold edit is logged with its old and new value, then put back.
-  await page.locator('#rule-R1 summary').click();
+  await page.locator('#rule-R1 summary', { hasText: 'Thresholds' }).click();
   await page.fill('#rule-R1 input[name=threshold_max_weight]', '0.5');
   await page.locator('#rule-R1 input[name=threshold_max_weight]').blur();
   check((await page.locator('#rule-R1').innerText()).includes('= 50.00%'), 'the share shown as a percentage');
   await page.locator('#rule-R1 button[type=submit]').click();
   await page.waitForURL('**/rules?saved=R1*');
   check((await page.locator('#rule-R1').innerText()).includes('Not firing'), 'with a 50% cap R1 stops firing');
-  const log = await page.locator('section', { hasText: 'Edit history of the rules' }).innerText();
+  const log = (await page.locator('section', { hasText: 'Edit history of the rules' }).textContent()) ?? '';
   check(/R1[\s\S]*max_weight[\s\S]*0\.05[\s\S]*0\.5/.test(log), `the edit is logged, got ${log}`);
   // From a fresh address, so the redirect after saving is a new one to wait for.
   await page.goto(`${BASE}/rules`);
-  await page.locator('#rule-R1 summary').click();
+  await page.locator('#rule-R1 summary', { hasText: 'Thresholds' }).click();
   await page.fill('#rule-R1 input[name=threshold_max_weight]', '0.05');
   await page.locator('#rule-R1 button[type=submit]').click();
   await page.waitForURL('**/rules?saved=R1*');
@@ -721,13 +727,13 @@ await step('proposals: checking the rules drafts R1, F8 and the monthly contribu
   check(titles.some((title) => title.startsWith('MONTHLY_CONTRIBUTION · Monthly contribution')), 'monthly drafted');
   const r1 = open.filter({ hasText: 'Single-stock trim' });
   const r1Text = await r1.innerText();
-  check(/is [\d.]+% of the regular pool \(NT\$[\d,]+ of NT\$[\d,]+\), above the 5% single-stock cap/.test(r1Text), `R1 explained, got ${r1Text}`);
+  check(/: [\d.]+% of the regular pool \(NT\$[\d,]+ of NT\$[\d,]+\) > 5% cap · sell ≈ NT\$[\d,]+/.test(r1Text) && !r1Text.includes('Trim = '), `R1 explained, the method folded, got ${r1Text}`);
   check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order with its shares, bilingual');
   // The demo savings (NT$20,000) put strategic cash far over its 8%: money out of the balance funds the buys.
   const f8Text = await open.filter({ hasText: 'Drift rebalance' }).innerText();
-  check(/Strategic cash: [\d.]+% against a 8% target/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
+  check(/Strategic cash: [\d.]+% \/ 8% target/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
   const monthlyText = await open.filter({ hasText: 'Monthly contribution' }).innerText();
-  check(monthlyText.includes(`The NT$10,000 debited on ${taipeiYesterday}`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
+  check(monthlyText.includes(`NT$10,000 debited on ${taipeiYesterday} → the core classes furthest below target`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
   await snap('proposals');
   await page.setViewportSize({ width: 1280, height: 1300 });
   await docShot('proposals', page);
@@ -799,12 +805,14 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   await page.goto(`${BASE}/costs`);
   await page.locator('#fund-choices .chart svg').waitFor();
   const text = await body();
-  check(/Holding costs: [\d.]+% a year, about NT\$[\d,]+ on NT\$[\d,]+/.test(text), `the yearly drag, got ${text.slice(0, 600)}`);
-  check(/US estate tax: US-situs assets [\d,]+ USD of the 60,000 USD exemption \(\d+%\)\./.test(text), 'the estate-tax line');
+  // The summary tiles: each a label, its figure and, where it is a check, ✓ or !.
+  const tile = fact;
+  check(/Holding costs a year [^\n]*[\d.]+% · NT\$[\d,]+/.test(await tile('Holding costs a year')), `the yearly drag, got ${await tile('Holding costs a year')}`);
+  check(/✓ ?US estate tax [^\n]*[\d,]+ USD \/ 60,000 USD/.test(await tile('US estate tax')), `the estate-tax tile, got ${await tile('US estate tax')}`);
   // The VT dividends recorded and the gain on the AAPL sale: far under the floor.
-  check(/Minimum tax: overseas income this year NT\$[\d,]+, under the NT\$1,000,000 floor/.test(text), 'overseas income');
-  check(text.includes('Supplementary premium: no Taiwan dividend this year reached NT$20,000 in one payment.'), 'the supplementary premium');
-  check(text.includes('Order fees: choose your 複委託 broker below'), 'no broker chosen yet');
+  check(/✓ ?Overseas income \(minimum tax\)[^\n]*NT\$[\d,]+ \/ NT\$1,000,000/.test(await tile('Overseas income (minimum tax)')), 'overseas income');
+  check((await tile('Supplementary premium')).includes('NT$0'), 'no supplementary premium');
+  check(/! ?Order fees[\s\S]*choose your broker below/.test(await tile('Order fees')), 'no broker chosen yet');
   const row = (ticker) => page.locator('#fund-choices tbody tr').filter({ has: page.locator('strong', { hasText: new RegExp(`^${ticker}$`) }) });
   // VT: TER 0.06% + 1.8% × 30% withheld; VWRA: TER 0.19% + 1.8% × 9% inside the fund.
   check((await row('VT').innerText()).includes('0.6%') && (await row('VWRA').innerText()).includes('0.352%'), `the drags, got ${await row('VT').innerText()} / ${await row('VWRA').innerText()}`);
@@ -813,7 +821,7 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   await page.selectOption('#fee-settings + form select[name=broker]', 'cathay');
   await page.locator('#fee-settings + form button[type=submit]').click();
   await page.waitForURL('**/costs?saved=fees*');
-  check((await body()).includes('Order fees: estimated with the prices of Cathay Securities.'), 'the broker chosen');
+  check((await page.locator('.fact', { hasText: 'Order fees priced with' }).innerText()).includes('Cathay Securities'), 'the broker chosen');
   // A typical order is NT$5,000 (NT$10,000 over two classes): US$3 at 32.4 plus 0.1% FX is 2.044% of it.
   check((await row('VT').innerText()).includes('2.044%'), `VT's order cost, got ${await row('VT').innerText()}`);
   const brokers = await page.locator('#brokers table').innerText();
@@ -835,7 +843,7 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
 
   await page.goto(`${BASE}/proposals`);
   const monthly = await page.locator('article.proposal').filter({ hasText: 'Monthly contribution' }).innerText();
-  check(monthly.includes('3.00 USD') && /Estimated fees and tax: about NT\$[\d,]+, with the prices of Cathay Securities abroad/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
+  check(monthly.includes('3.00 USD') && /Est\. fees and tax ≈ NT\$[\d,]+ \(Cathay Securities\)/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
 });
 
 await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; the rule suggests Irish ETFs, with no orders', async () => {
@@ -851,7 +859,7 @@ await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; 
   await page.waitForURL('**/proposals?saved=checked*');
   const estate = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
   const text = await estate.innerText();
-  check(/US-situs assets, US shares and US-domiciled ETFs in both pools, come to 6\d,\d{3} USD/.test(text) && text.includes('Irish-domiciled equivalents') && text.includes('No orders'), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  check(/US-situs assets: 6\d,\d{3} USD > 60,000 USD exempt/.test(text) && text.includes('Irish-domiciled equivalents') && text.includes('No orders'), `explained, got ${text.replace(/\s+/g, ' ')}`);
   await page.goto(`${BASE}/costs#estate-tax`);
   const section = await page.locator('#estate-tax').innerText();
   check(section.includes('VWRA') && section.includes('AGGU') && (await page.locator('#estate-tax .meter.over').count()) === 1, `over the exemption, alternatives named, got ${section}`);
@@ -883,12 +891,12 @@ await step("windfall: CAPE's percentile sets the pace, ACWI's fall from its high
   await page.locator('.chart-backtest svg').waitFor();
   const text = await body();
   // Seed: CAPE 24.04 in 2026-09, the 74th percentile of its 1,749 months since 1881: above the 70th, so 24 tranches.
-  check(text.includes('Valuation now: CAPE 24.0 in 2026-09, the 74th percentile of 1,749 months: a plan started now would take 24 monthly tranches.'), `the gauge, got ${text.slice(0, 1500)}`);
-  check(text.includes('目前估值：2026-09 的 CAPE 為 24.0，在 1,749 個月中位於第 74 百分位'), 'the gauge in Chinese');
+  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 24 tranches → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
   // ACWI's demo closes peak at 137.95 on 2026-09-17 and end at 130.28 on 2026-10-20: 5.6% below, short of the 15% tier.
-  check(text.includes('ACWI is 5.6% below its 52-week high (137.95 on 2026-09-17); the next tier is at 15%.'), 'the drawdown gauge');
-  check(text.includes('No plan yet.') && text.includes('Waiting as cash in the windfall pool: NT$50,000 of NT$50,000.'), 'no plan; the money-market fund added above waits');
-  const backtest = await page.locator('#backtest').innerText();
+  check((await fact('ACWI below 52-week high')).includes('−5.6% high 137.95 · 2026-09-17 · next tier 15%'), `the drawdown gauge, got ${await fact('ACWI below 52-week high')}`);
+  check((await fact('Plan')).includes('— start one below') && (await fact('Waiting as cash')).includes('NT$50,000 of NT$50,000'), 'no plan; the money-market fund added above waits');
+  check(!text.includes('The windfall goes into the core classes only'), 'the explanation folded away');
+  const backtest = await page.locator('#backtest').textContent();
   check(backtest.includes('Every start month from 1900-01 to 2021-09 (1,461 of them)') && backtest.includes('(Demo data)'), `the start months, got ${backtest.slice(0, 400)}`);
   // Of the 1,461 starts the rule beat a lump sum in 38%, by −2.2% at the median: it costs in rising markets and saves after falls.
   const cells = async (label) => (await page.locator('#backtest tbody tr', { hasText: label }).locator('td').allInnerTexts()).slice(1).join(' | ');
@@ -926,19 +934,19 @@ await step('windfall: the money arrives as a cash flow and a TWD balance; the pl
   check((await form.locator('input[name=totalTwd]').inputValue()) === '1200000', 'the amount from the windfall recorded');
   check((await form.locator('input[name=startDate]').inputValue()) === taipeiToday, 'the first tranche on the day it arrived');
   const preview = await form.locator('[role=status]').innerText();
-  check(preview.includes(`24 monthly tranches of about NT$50,000, ${taipeiToday} to ${monthsLater(taipeiToday, 23)}.`), `the pace as typed, got ${preview}`);
+  check(preview.includes(`24 × ≈ NT$50,000 · ${taipeiToday} → ${monthsLater(taipeiToday, 23)} (CAPE 24.0, 74th percentile)`), `the pace as typed, got ${preview}`);
   await form.getByRole('button', { name: /Start the plan/ }).click();
   await page.waitForURL('**/windfall?saved=plan**');
   const text = await body();
   check(text.includes('Plan saved: each tranche is proposed when it falls due.'), 'saved');
-  check(text.includes(`Plan: NT$1,200,000 from ${taipeiToday} in 24 monthly tranches (CAPE percentile 74 then); 0 done or pulled forward, 24 to go, the next due ${taipeiToday}.`), `the plan in a line, got ${text.slice(0, 1200)}`);
+  check((await fact('Plan')).includes(`0 / 24 NT$1,200,000 · next ${taipeiToday}`), `the plan in a tile, got ${await fact('Plan')}`);
   const rows = await page.locator('#plan tbody tr').allInnerTexts();
   check(rows.length === 24 && /^1\s+\S+\s+NT\$50,000\s+Scheduled/.test(rows[0]) && rows[23].includes(monthsLater(taipeiToday, 23)), `24 tranches of NT$50,000, got ${rows[0]} … ${rows[23]}`);
 
   // The dashboard has the tranche in its coming week, and the plan under the windfall's progress.
   await page.goto(`${BASE}/`);
   const home = await body();
-  check(home.includes(`Plan: 0 of 24 tranches done, on schedule; 1 due now, see Proposals; next due ${monthsLater(taipeiToday, 1)}.`), `the plan on the dashboard, got ${home}`);
+  check(home.includes(`Plan 0/24 · on schedule · 1 due now · next ${monthsLater(taipeiToday, 1)}`), `the plan on the dashboard, got ${home}`);
   check(/Coming week[\s\S]*Windfall tranche due/.test(home), 'the tranche in the coming week');
 });
 
@@ -951,9 +959,9 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
   trancheProposal = (await proposal.getAttribute('id'))?.replace('proposal-', '');
   const text = await proposal.innerText();
   check(text.includes('WINDFALL_TRANCHE_DUE · Windfall tranche'), 'its rule and title');
-  check(text.includes(`The windfall tranche due on ${taipeiToday}: NT$1,200,000 waits for 24 tranches, so this one deploys NT$50,000, split by the core targets; the satellite takes none of the windfall.`), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  check(text.includes(`Tranche due ${taipeiToday}: NT$1,200,000 ÷ 24 tranches = NT$50,000, by the core targets`), `explained, got ${text.replace(/\s+/g, ' ')}`);
   // Strategic cash's 8 of the core's 80 stays in the deposit, which is strategic cash already.
-  check(text.includes("Strategic cash's share, NT$5,000, stays in the balance the windfall waits in"), 'strategic cash stays');
+  check(text.includes("Strategic cash's share, NT$5,000, stays in the balance"), 'strategic cash stays');
   const orders = await proposal.locator('tbody tr').allInnerTexts();
   const tickers = orders.map((row) => row.split('\t')[1]?.trim());
   check(/^Take out/.test(orders[0] ?? '') && (orders[0] ?? '').includes('Time deposit (demo)'), `paid from the largest windfall balance, got ${orders[0]}`);
@@ -972,22 +980,22 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
   await page.locator('.chart-backtest svg').waitFor();
   const first = await page.locator('#plan tbody tr').first().innerText();
   check(first.includes('Done') && first.includes(`#${trancheProposal}`), `the first tranche done, with its proposal, got ${first}`);
-  check((await body()).includes(`1 done or pulled forward, 23 to go, the next due ${monthsLater(taipeiToday, 1)}.`), 'the plan moves on');
+  check((await fact('Plan')).includes(`1 / 24 NT$1,200,000 · next ${monthsLater(taipeiToday, 1)}`), `the plan moves on, got ${await fact('Plan')}`);
   await snap('windfall-plan');
   await page.setViewportSize({ width: 1280, height: 1400 });
   await docShot('windfall', page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/`);
-  check((await body()).includes(`Plan: 1 of 24 tranches done, on schedule; next due ${monthsLater(taipeiToday, 1)}.`), 'the dashboard follows');
+  check((await body()).includes(`Plan 1/24 · on schedule · next ${monthsLater(taipeiToday, 1)}`), 'the dashboard follows');
 });
 
 await step('windfall: the demo put back for the steps that follow; the edit history keeps the plan', async () => {
   // The plan, the deposit and the cash flow go: the push and dashboard steps expect one proposal waiting and NT$50,000 in the pool.
   await page.goto(`${BASE}/windfall`);
-  await page.locator('#plan details > summary').click();
+  await page.locator('#plan details > summary', { hasText: 'Replace or delete the plan' }).click();
   await page.locator('#plan').getByRole('button', { name: /^Delete/ }).click();
   await page.waitForURL('**/windfall?saved=deleted**');
-  check((await body()).includes('No plan yet.'), 'the plan is gone');
+  check((await fact('Plan')).includes('start one below'), 'the plan is gone');
   await page.goto(`${BASE}/assets/${depositId}`);
   await page.getByRole('button', { name: /^Delete/ }).click();
   await page.waitForURL('**/holdings?saved=asset-deleted');
@@ -998,7 +1006,60 @@ await step('windfall: the demo put back for the steps that follow; the edit hist
   const history = await body();
   check(history.includes('Windfall plan') && history.includes(`NT$1,200,000 from ${taipeiToday}`) && history.includes('Windfall tranche'), 'the plan and its tranches in the edit history');
   await page.goto(`${BASE}/windfall`);
-  check((await body()).includes('Waiting as cash in the windfall pool: NT$50,000 of NT$50,000.'), 'the pool as it was');
+  check((await fact('Waiting as cash')).includes('NT$50,000 of NT$50,000'), 'the pool as it was');
+});
+
+/** A Regression panel's figures, in order: β ± SE, the 95% interval, Blume's β, α a year, R², the periods and their dates. */
+const figures = (panel) => page.locator(`${panel} table.figures td`).allInnerTexts();
+
+await step('regression: VT against the S&P 500 and TAIEX side by side, β with its interval, Blume and R², the rolling line', async () => {
+  await page.goto(`${BASE}/regression`);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  await page.locator('#vs-TAIEX .chart-scatter svg').waitFor();
+  await page.locator('#rolling svg').waitFor();
+  // Seed: VT's weekly demo closes against the demo S&P 500 (VOO's) and TAIEX (0050's), two years to 23 October 2026.
+  const spx = await figures('#vs-SPX');
+  check(spx.join(' | ') === '0.93 ± 0.05 | 0.84 … 1.02 | 0.95 | −6.8% | 81% | 105 | 2024-10-25 → 2026-10-23', `VT against the S&P 500, got ${spx.join(' | ')}`);
+  const taiex = await figures('#vs-TAIEX');
+  check(taiex[0] === '0.69 ± 0.05' && taiex[4] === '61%', `VT against TAIEX, got ${taiex.join(' | ')}`);
+  check(/R\s*i\s*− R\s*f\s*= α \+ β \(R\s*m\s*− R\s*f\s*\) \+ ε/.test(await page.locator('.equation').innerText()), `the formula, got ${await page.locator('.equation').innerText()}`);
+  await snap('regression');
+  await page.setViewportSize({ width: 1280, height: 1350 });
+  await docShot('regression', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // In TWD the dollar's moves come in; monthly returns give 24 periods.
+  await page.locator('.segmented', { hasText: 'Currency' }).getByRole('link', { name: /^TWD/ }).click();
+  await page.waitForURL(/c=TWD/);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  check((await figures('#vs-SPX'))[0] === '0.90 ± 0.05', `in TWD, got ${(await figures('#vs-SPX'))[0]}`);
+  await page.goto(`${BASE}/regression?t=VT&f=monthly&y=2&c=local`);
+  await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+  check((await figures('#vs-SPX'))[5] === '24', `monthly periods, got ${(await figures('#vs-SPX'))[5]}`);
+});
+
+await step('regression: compare up to five against one index, each β with its 95% interval; the settings are logged', async () => {
+  await page.goto(`${BASE}/regression?t=VT`);
+  const form = page.locator('#compare form');
+  for (const ticker of ['0050', 'BNDW', 'GLDM']) await form.getByLabel(ticker, { exact: true }).check();
+  await form.locator('select[name=b]').selectOption('SPX');
+  await form.getByRole('button', { name: /Compare/ }).click();
+  await page.waitForURL(/vs=/);
+  await page.locator('#compare .chart-range svg').waitFor();
+  const rows = await page.locator('#compare tbody tr').allInnerTexts();
+  const betas = Object.fromEntries(rows.map((row) => row.split('\t').map((cell) => cell.trim())).map(([ticker, beta]) => [ticker, beta]));
+  check(betas['VT'] === '0.93' && betas['0050'] === '0.85' && betas['BNDW'] === '0.02' && betas['GLDM'] === '0.24', `the four β, got ${JSON.stringify(betas)}`);
+
+  await page.locator('#settings summary').click();
+  await page.fill('#settings input[name=rfTWD]', '1.8');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/regression?saved=settings**');
+  await page.locator('#settings summary').click();
+  const method = await page.locator('#settings').innerText();
+  check(method.includes('Settings saved.') && method.includes(`TWD 1.80% (setting, checked ${taipeiToday})`), `the rate saved and checked, got ${method.slice(0, 600)}`);
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*regression/.test(await body()), 'the settings change in the edit history');
 });
 
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
@@ -1130,8 +1191,8 @@ await step('dashboard: the three lines, then proposals, drift, VaR, donut, windf
   const order = ['Open proposals (1)', 'Drift from the targets', 'Value at Risk', 'Allocation, regular pool', 'Windfall progress', 'Watchlist', 'Coming week', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
   check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
-  check(/Deployed NT\$[\d,]+ \([\d.]+%\); waiting as cash NT\$[\d,]+\./.test(text), 'windfall deployed and waiting');
-  check(text.includes('No tranche plan yet: start one on the Windfall page'), 'no windfall plan, since the demo was put back');
+  check(/Deployed [^\n]*NT\$[\d,]+ [\d.]+%/.test(await fact('Deployed')) && /NT\$[\d,]+/.test(await fact('Waiting as cash')), `windfall deployed and waiting, got ${await fact('Deployed')} / ${await fact('Waiting as cash')}`);
+  check(text.includes('No tranche plan yet.'), 'no windfall plan, since the demo was put back');
   check(text.includes('Weekly review push'), 'the coming week lists the review');
   check((await page.locator('#dashboard-proposals').innerText()).includes('Monthly contribution'), 'the open proposal first, with approve and dismiss');
   await snap('dashboard');
@@ -1166,17 +1227,60 @@ await step('data status: demo prices listed with their dates, the job not run ye
   await snap('data-status-before');
 });
 
+// TEXT_REPORT, when set, is a file to write each page's visible text length to: what a person reads
+// on arriving, the text folded inside <details> left out (innerText skips what is not rendered).
+if (TEXT_REPORT) {
+  await step('text report: the visible text on each page', async () => {
+    const report = {};
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+      await page.goto(`${BASE}${path}`);
+      await page.waitForLoadState('networkidle');
+      report[path] = await page.evaluate(() => {
+        const main = document.querySelector('main');
+        const count = (text) => text.replace(/\s+/g, '').length;
+        // Prose: visible paragraphs, list items, hints and banners outside tables, legends and summary tiles, each counted once.
+        const prose = [...(main?.querySelectorAll('p, li, .hint, .banner') ?? [])].filter(
+          (el) => el.checkVisibility() && !el.closest('table, .chart-legend, .facts') && !el.parentElement?.closest('p, li, .hint, .banner'),
+        );
+        const tiles = [...(main?.querySelectorAll('.fact') ?? [])].filter((el) => el.checkVisibility());
+        return {
+          total: count(main?.innerText ?? ''),
+          prose: prose.reduce((sum, el) => sum + count(el.innerText), 0),
+          tiles: tiles.reduce((sum, el) => sum + count(el.innerText), 0),
+          lines: prose.map((el) => el.innerText.replace(/\s+/g, ' ')),
+        };
+      });
+    }
+    writeFileSync(TEXT_REPORT, JSON.stringify(report, null, 2));
+  });
+}
+
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
       await page.getByText('already saved').first().waitFor();
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    if (overflow > 0) wide.push(`${path} by ${overflow}px`);
+    if (overflow > 0) {
+      // Name the innermost elements that reach past the screen, so the fix is easy to find.
+      const culprits = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        return [...document.querySelectorAll('main *')]
+          .filter((el) => el.getBoundingClientRect().right > width + 1 && ![...el.children].some((child) => child.getBoundingClientRect().right > width + 1))
+          .slice(0, 3)
+          .map((el) => {
+            const name = (node) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.className && typeof node.className === 'string' ? `.${node.className.split(' ').join('.')}` : ''}`;
+            const chain = [];
+            for (let node = el; node && node.tagName !== 'MAIN'; node = node.parentElement) chain.push(`${name(node)}:${Math.round(node.getBoundingClientRect().width)}`);
+            return chain.join(' < ');
+          });
+      });
+      wide.push(`${path} by ${overflow}px (${culprits.join(', ')})`);
+    }
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/risk') await page.locator('.chart-histogram svg').waitFor();
@@ -1184,7 +1288,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/') await page.locator('.chart-donut svg').waitFor();
     if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1201,7 +1306,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
   await step('before the job: the invented weekly history goes, as a real project has none', async () => {
     // Its Fridays include market holidays the live feeds have no close for; left in, they would
     // sit among the real closes.
-    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07']) {
+    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo']) {
       const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
       check(res.ok, `DELETE ${path}: HTTP ${res.status}`);
     }
@@ -1213,6 +1318,8 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     check(/^Nightly prices: (ok|partial)/m.test(stdout), 'run ok or partial');
     check(/VT\s+finmind\s+\d+ rows/.test(stdout) && /0050\s+finmind\s+\d+ rows/.test(stdout), 'VT and 0050 from FinMind');
     check(/USD\/TWD\s+finmind/.test(stdout) && /XAU\/TWD\s+finmind/.test(stdout), 'Bank of Taiwan USD rate and gold in TWD');
+    // The Regression Lab's indices, and the holdings' β on the month's first run (the second run skips them).
+    check(/SPX\s+finmind/.test(stdout) && /TAIEX\s+finmind/.test(stdout) && /Betas β: \d+ saved for the month/.test(stdout), 'the indices and the monthly β');
   });
 
   await step('nightly job on GitHub Actions: the public log names no ticker, and a second run only updates', async () => {
@@ -1231,6 +1338,9 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
     check(text.includes('XAU/TWD') && text.includes('Gold per gram'), 'gold in TWD per gram');
+    // The Regression Lab's indices (N1) from FinMind, and the holdings' β saved for the month.
+    const indices = await page.locator('#indices').innerText();
+    check(/SPX[\s\S]*FinMind[\s\S]*TAIEX[\s\S]*FinMind/.test(indices), `the indices loaded live, got ${indices.replace(/\s+/g, ' ')}`);
     // The monthly market series from Shiller's workbook, or multpl.com when it cannot be reached.
     const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
     check(/\d{4}-\d{2}\s+[\d.]+\s+(Shiller's data|multpl\.com)/.test(cape) && !cape.includes('Demo data'), `CAPE loaded live, got ${cape.replace(/\s+/g, ' ')}`);
@@ -1274,6 +1384,16 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     await page.getByText('The 52-week line as a table').click();
     check(/2026-05-\d\d\s+NT\$[\d,]+\s+[\d.]+%/.test(await body()), 'the line as a table, from May');
     await snap('risk-after-job');
+  });
+
+  await step('regression after the job: the holdings\' β saved for the month, against both indices, on live closes', async () => {
+    await page.goto(`${BASE}/regression`);
+    await page.locator('#vs-SPX .chart-scatter svg').waitFor();
+    const saved = await page.locator('#saved').innerText();
+    check(/VT\s+\d\.\d\d\s+\d\.\d\d\s+\d{4}-\d{2}-\d{2}/.test(saved), `VT's β saved, got ${saved.replace(/\s+/g, ' ')}`);
+    const spx = await figures('#vs-SPX');
+    const value = Number((spx[0] ?? '').split(' ')[0]);
+    check(value > 0.6 && value < 1.3, `a plausible β for VT against the S&P 500 on live closes, got ${spx[0]}`);
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {

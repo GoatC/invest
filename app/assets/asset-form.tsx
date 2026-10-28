@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useMemo, useState } from 'react';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { Field } from '@/components/field';
 import { twd } from '@/lib/format';
 import { bi, LABELS, POOL, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
@@ -128,7 +129,7 @@ export function AssetForm({
             <Field
               label={LABELS.lastValue}
               error={error('lastValueTwd')}
-              hint={<Bi en="Grams × price per gram; used while no gold price is loaded" zh="克數 × 每克金價；尚未載入金價時使用" />}
+              hint={<Bi en="Until a gold price loads" zh="金價載入前使用" />}
             >
               <input name="lastValueTwd" inputMode="decimal" value={values.lastValueTwd} onChange={(e) => change('lastValueTwd', e.target.value)} />
             </Field>
@@ -149,12 +150,12 @@ export function AssetForm({
         </Field>
       </div>
       {isGold && (
-        <p className="muted small">
+        <Info>
           <Bi
             en="The holdings page values gold every night at grams × the international gold price in TWD (the US dollar price at the Bank of Taiwan rate); the value entered here counts only until the nightly job has loaded a gold price."
             zh="持倉頁每夜以「克數 × 國際金價換算台幣」（美元金價乘以臺灣銀行匯率）計算黃金市值；這裡輸入的估值只在每夜排程尚未載入金價時使用。"
           />
-        </p>
+        </Info>
       )}
       {state.message && (
         <p className="banner danger" role="alert">

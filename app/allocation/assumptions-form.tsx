@@ -6,7 +6,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import type { AssetClassSettings } from '@/lib/data';
-import { LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { bi, LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
 import type { Assumptions } from '@/lib/models/cma';
 import { assumptionFields, parseAssumptionForm } from '@/lib/validation';
 
@@ -83,8 +83,8 @@ export function AssumptionsForm({ classes, assumptions }: { classes: AssetClassS
                   <Field label={{ en: 'Volatility % a year', zh: '年化波動度 %' }} error={error(names.volatility, row)}>
                     <input name={names.volatility} inputMode="decimal" autoComplete="off" value={values[names.volatility] ?? ''} onChange={(e) => change(names.volatility, e.target.value)} />
                   </Field>
-                  <Field label={{ en: 'Source', zh: '來源' }} error={error(names.source, row)} hint={<Bi en="e.g. a published long-term outlook and its year" zh="例如：某機構公布的長期展望與年份" />}>
-                    <input name={names.source} maxLength={200} autoComplete="off" value={values[names.source] ?? ''} onChange={(e) => change(names.source, e.target.value)} />
+                  <Field label={{ en: 'Source', zh: '來源' }} error={error(names.source, row)}>
+                    <input name={names.source} placeholder={bi({ en: 'e.g. an outlook, 2026', zh: '例如：展望報告 2026' })} maxLength={200} autoComplete="off" value={values[names.source] ?? ''} onChange={(e) => change(names.source, e.target.value)} />
                   </Field>
                 </div>
               );

@@ -1,8 +1,9 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
-import { History } from '@/components/history';
+import { History, HistorySection } from '@/components/history';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
@@ -45,12 +46,12 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         <h1>
           <Bi {...LABELS.calculator} />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="Where monthly investing could take the regular pool (F2): the value year by year in nominal TWD and in today's money, what you put in against what it grows, and how the pool is doing against the plan you save. A projection at one steady return, not a forecast: real returns swing, and the Monte Carlo in Phase 3 will show how widely."
             zh="每月定期投入可以讓一般投入資金池成長到多少（F2）：逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長，以及資金池與已儲存計畫的對照。這是以固定報酬計算的預測，不是預言：實際報酬會起伏，第三階段的蒙地卡羅模擬會顯示起伏的範圍。"
           />
-        </p>
+        </Info>
         {params['saved'] === 'plan' && (
           <p className="banner ok" role="status">
             <Bi en="Plan saved; the comparison below now uses it, and the edit history keeps the old one." zh="已儲存計畫；下方的對照改用此計畫，修改紀錄中保留舊的計畫。" />
@@ -66,12 +67,9 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       </section>
       {data.settings && <AgainstPlan plan={plan} ends={ends} />}
       <Method />
-      <section className="card">
-        <h2>
-          <Bi en="Edit history of the plan" zh="計畫的修改紀錄" />
-        </h2>
+      <HistorySection title={{ en: 'Edit history of the plan', zh: '計畫的修改紀錄' }} count={history.length}>
         <History entries={history} />
-      </section>
+      </HistorySection>
     </>
   );
 }
@@ -116,19 +114,16 @@ function initialValues(data: PlanData, plan: SavedPlan | null, ends: readonly Mo
 function hints(data: PlanData): Partial<Record<PlanField, Bilingual>> {
   const mix = data.mix;
   const expectedReturn: Bilingual = !mix
-    ? { en: 'No capital market assumptions yet: type one, or set them on the Allocation page.', zh: '尚未設定資本市場假設：請直接輸入，或到「資產配置」頁設定。' }
+    ? { en: 'No assumptions yet: type one.', zh: '尚無資本市場假設：請直接輸入。' }
     : mix.share < 1 - 1e-9
       ? {
-          en: `The target mix's expected return is ${percent(mix.expectedReturn, 2)}, over the classes with an assumption (${percent(mix.share, 0)} of the targets).`,
-          zh: `目標配置的預期報酬為 ${percent(mix.expectedReturn, 2)}（僅計有假設的類別，占目標的 ${percent(mix.share, 0)}）。`,
+          en: `Target mix: ${percent(mix.expectedReturn, 2)} (${percent(mix.share, 0)} of targets assumed)`,
+          zh: `目標配置：${percent(mix.expectedReturn, 2)}（${percent(mix.share, 0)} 的目標有假設）`,
         }
-      : { en: `The target mix's expected return: ${percent(mix.expectedReturn, 2)}.`, zh: `目標配置的預期報酬：${percent(mix.expectedReturn, 2)}。` };
+      : { en: `Target mix: ${percent(mix.expectedReturn, 2)}`, zh: `目標配置：${percent(mix.expectedReturn, 2)}` };
   return {
-    start: { en: 'Contributions are paid at the end of each month from this one.', zh: '自這個月起，每月月底投入。' },
-    pmt: data.dcaAmount === null ? undefined : { en: `Your monthly DCA: ${twd(data.dcaAmount)}.`, zh: `每月定期定額：${twd(data.dcaAmount)}。` },
-    stepUp: { en: 'How much more you put in each year, e.g. with a raise.', zh: '每年多投入的比例，例如隨加薪調升。' },
+    pmt: data.dcaAmount === null ? undefined : { en: `DCA: ${twd(data.dcaAmount)}`, zh: `定期定額：${twd(data.dcaAmount)}` },
     expectedReturn,
-    inflation: { en: "For the value in today's money.", zh: '用於換算今天的幣值。' },
   };
 }
 

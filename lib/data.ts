@@ -34,6 +34,7 @@ import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type 
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
+import { INDICES, loadFrom, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type RegressionSettings } from './models/regression';
 import { MARKET_SERIES } from './models/windfall';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 
@@ -393,19 +394,29 @@ export interface DataStatus {
   prices: LatestQuote[];
   rates: LatestQuote[];
   series: LatestQuote[];
+  /** Each index's newest close (N1, Phase 2 step 2). */
+  indices: LatestQuote[];
 }
 
 export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStatus> {
-  const [{ runs, threshold }, securities, prices, rates, series] = await Promise.all([
+  const [{ runs, threshold }, securities, prices, rates, series, indices] = await Promise.all([
     loadJobRuns(supabase),
     loadSecurities(supabase),
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
     rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
     Promise.all(
-      MARKET_SERIES.map((name) =>
+      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES)].map((name) =>
         rows<{ series: string; obs_month: string; value: number; source: string }>(
           'market_series',
           supabase.from('market_series').select('series, obs_month, value, source').eq('series', name).order('obs_month', { ascending: false }).limit(1),
+        ),
+      ),
+    ),
+    Promise.all(
+      INDICES.map((index) =>
+        rows<{ index_id: string; price_date: string; close: number; source: string }>(
+          'index_prices',
+          supabase.from('index_prices').select('index_id, price_date, close, source').eq('index_id', index).order('price_date', { ascending: false }).limit(1),
         ),
       ),
     ),
@@ -417,6 +428,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     prices: prices.map((row) => ({ key: row.ticker, date: row.price_date, value: Number(row.close), source: row.source })),
     rates: rates.map((row) => ({ key: row.pair, date: row.rate_date, value: Number(row.rate), source: row.source })),
     series: series.flat().map((row) => ({ key: row.series, date: row.obs_month.slice(0, 7), value: Number(row.value), source: row.source })),
+    indices: indices.flat().map((row) => ({ key: row.index_id, date: row.price_date, value: Number(row.close), source: row.source })),
   };
 }
 
@@ -1468,4 +1480,150 @@ export async function loadWindfallData(supabase: SupabaseClient, today: string):
   ]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   return { ...holdings, plan, settings: readWindfallSettings(value('windfall')), pace: value('windfall_pace'), rules, market, gauge, flows, proposals, classSettings };
+}
+
+// ---------------------------------------------------------------------------
+// N1 Regression Lab (Phase 2, step 2)
+// ---------------------------------------------------------------------------
+
+export interface RegressionSetup {
+  /** config regression; undefined when missing or malformed (before the migration, say). */
+  settings: RegressionSettings | undefined;
+  securities: SecurityRecord[];
+  /** Every ticker with a close, and its newest close's date. */
+  priced: Map<string, string>;
+}
+
+export interface RegressionData extends RegressionSetup {
+  closes: Map<string, SeriesClose[]>;
+  indices: Map<string, SeriesClose[]>;
+  fx: Map<string, SeriesClose[]>;
+  riskFree: Map<string, Map<string, number>>;
+}
+
+/** config regression's raw value; undefined when the row is missing. */
+async function regressionConfig(supabase: SupabaseClient): Promise<unknown> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'regression'));
+  return found[0]?.value;
+}
+
+/** The settings, the securities and which of them have closes. */
+export async function loadRegressionSetup(supabase: SupabaseClient): Promise<RegressionSetup> {
+  const [config, securities, latest] = await Promise.all([
+    regressionConfig(supabase),
+    loadSecurities(supabase),
+    rows<{ ticker: string; price_date: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date')),
+  ]);
+  return { settings: readRegressionSettings(config), securities, priced: new Map(latest.map((row) => [row.ticker, row.price_date])) };
+}
+
+/** The tickers' adjusted closes, the indices', the TWD rates and the bill rate from `from` on. */
+export async function loadRegressionData(supabase: SupabaseClient, tickers: readonly string[], from: string, setup?: RegressionSetup): Promise<RegressionData> {
+  const base = setup ?? (await loadRegressionSetup(supabase));
+  const { settings, securities } = base;
+  const known = new Map(securities.map((security) => [security.ticker, security]));
+  const wanted = [...new Set(tickers)].filter((ticker) => known.has(ticker));
+  const currencies = [...new Set([...wanted.map((ticker) => known.get(ticker)?.currency ?? 'TWD'), ...(settings?.benchmarks.map((benchmark) => benchmark.currency) ?? [])])].filter((currency) => currency !== 'TWD');
+  const [closeRows, indexRows, rateRows, billRows] = await Promise.all([
+    Promise.all(
+      wanted.map((ticker) =>
+        allRows<{ price_date: string; close: number; adj_close: number | null }>('prices', (start, end) =>
+          supabase.from('prices').select('price_date, close, adj_close').eq('ticker', ticker).gte('price_date', from).order('price_date').range(start, end),
+        ),
+      ),
+    ),
+    settings
+      ? allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (start, end) =>
+          supabase.from('index_prices').select('index_id, price_date, close').gte('price_date', from).order('index_id').order('price_date').range(start, end),
+        )
+      : Promise.resolve([]),
+    Promise.all(
+      currencies.map((currency) =>
+        allRows<{ rate_date: string; rate: number }>('fx_rates', (start, end) =>
+          supabase.from('fx_rates').select('rate_date, rate').eq('pair', `${currency}/TWD`).gte('rate_date', addDays(from, -14)).order('rate_date').range(start, end),
+        ),
+      ),
+    ),
+    rows<{ series: string; obs_month: string; value: number }>(
+      'market_series',
+      supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(RISK_FREE_SERIES)).gte('obs_month', `${from.slice(0, 7)}-01`).order('obs_month'),
+    ),
+  ]);
+  const indices = new Map<string, SeriesClose[]>();
+  for (const row of indexRows) {
+    const list = indices.get(row.index_id) ?? [];
+    list.push({ date: row.price_date, close: Number(row.close) });
+    indices.set(row.index_id, list);
+  }
+  const riskFree = new Map<string, Map<string, number>>();
+  for (const [currency, series] of Object.entries(RISK_FREE_SERIES)) {
+    riskFree.set(currency, new Map(billRows.filter((row) => row.series === series).map((row) => [row.obs_month.slice(0, 7), Number(row.value)])));
+  }
+  return {
+    ...base,
+    closes: new Map(wanted.map((ticker, i) => [ticker, (closeRows[i] ?? []).map((row) => ({ date: row.price_date, close: Number(row.adj_close ?? row.close) }))])),
+    indices,
+    fx: new Map(currencies.map((currency, i) => [currency, (rateRows[i] ?? []).map((row) => ({ date: row.rate_date, close: Number(row.rate) }))])),
+    riskFree,
+  };
+}
+
+/**
+ * Each holding's β against every benchmark at config regression's defaults, saved in beta_results
+ * once a month for F11 (N1's monthly refresh); undefined when this month's are saved already.
+ */
+export async function refreshBetas(supabase: SupabaseClient, today: string): Promise<{ saved: number; runDate: string } | undefined> {
+  const [latest] = await rows<{ run_date: string }>('beta_results', supabase.from('beta_results').select('run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(1));
+  if (latest && latest.run_date.slice(0, 7) === today.slice(0, 7)) return undefined;
+  const settings = readRegressionSettings(await regressionConfig(supabase));
+  if (!settings) throw new DataError('config', 'regression is missing or malformed');
+  const portfolio = buildPortfolio(await loadHoldingsData(supabase));
+  const tickers = [...new Set(portfolio.holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])))].sort();
+  const { defaults } = settings;
+  const data = await loadRegressionData(supabase, tickers, loadFrom(today, defaults.years, settings.rollingWeeks));
+  const securities = new Map(data.securities.map((security) => [security.ticker, security]));
+  const out: Array<Record<string, unknown>> = [];
+  for (const ticker of tickers) {
+    const security = securities.get(ticker);
+    if (!security) continue;
+    for (const benchmark of settings.benchmarks) {
+      const outcome = regressTicker(data, security, benchmark, { freq: defaults.freq, years: defaults.years, basis: defaults.currency }, settings);
+      if (!outcome.ok) continue;
+      const { result } = outcome;
+      out.push({
+        ticker,
+        benchmark: benchmark.id,
+        model: '1F',
+        freq: defaults.freq,
+        window_years: defaults.years,
+        currency_basis: defaults.currency,
+        beta: result.beta,
+        alpha: result.alphaAnnual,
+        factor_loadings: { adjusted: result.adjusted, ci_low: result.ci[0], ci_high: result.ci[1], n: result.n, adjacent: result.adjacent, slopes: result.slopes, from: result.from, to: result.to },
+        r2: Math.min(1, Math.max(0, result.r2)),
+        std_err: result.stdErr,
+        run_date: today,
+      });
+    }
+  }
+  if (out.length > 0) {
+    const { error } = await supabase.from('beta_results').upsert(out, { onConflict: 'ticker,benchmark,model,freq,window_years,currency_basis,run_date' });
+    if (error) throw new DataError('beta_results', error.message);
+  }
+  return { saved: out.length, runDate: today };
+}
+
+/** The newest β saved for each ticker and benchmark (the monthly refresh), for the Regression page. */
+export async function loadSavedBetas(supabase: SupabaseClient): Promise<Array<{ ticker: string; benchmark: string; beta: number; runDate: string }>> {
+  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; run_date: string }>(
+    'beta_results',
+    supabase.from('beta_results').select('ticker, benchmark, beta, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(200),
+  );
+  const seen = new Set<string>();
+  return found.flatMap((row) => {
+    const key = `${row.ticker}|${row.benchmark}`;
+    if (seen.has(key) || row.beta === null) return [];
+    seen.add(key);
+    return [{ ticker: row.ticker, benchmark: row.benchmark, beta: Number(row.beta), runDate: row.run_date }];
+  });
 }

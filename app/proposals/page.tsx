@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
@@ -10,7 +11,7 @@ import { money, quantity, twd } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { orderCost, type OrderCost } from '@/lib/models/costs';
 import { orderTotals, type DraftOrder } from '@/lib/models/engine';
-import { CLOSED, orderLine, proposalTitle, stateText, STATUS, whyLines, type RuleLike } from '@/lib/proposal-text';
+import { CLOSED, howLines, orderLine, proposalTitle, stateText, STATUS, whyLines, type RuleLike } from '@/lib/proposal-text';
 
 import { approveProposal, checkRules, dismissProposal, markFilled } from './actions';
 
@@ -80,12 +81,12 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
         <h1>
           <Bi {...LABELS.proposals} />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="When a rule fires, the app drafts a proposal with an order list and stops there (L2): you approve, edit or dismiss it, place the orders at your broker yourself, then record the trades and mark it filled. The rules are checked after every nightly price update, or now with the button."
             zh="規則觸發時，App 會產生附建議下單清單的提案，然後停下來（L2）：由你核准、修改或略過，自己到券商下單，再登錄交易並標記為已成交。每晚價格更新後會檢查規則，也可以按下方按鈕立即檢查。"
           />
-        </p>
+        </Info>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...saved} />
@@ -114,7 +115,7 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
         </h2>
         {open.length === 0 ? (
           <p className="muted">
-            <Bi en="No open proposals: no rule needs a decision now." zh="沒有待處理的提案：目前沒有需要決定的事。" />
+            <Bi en="No open proposals." zh="沒有待處理的提案。" />
           </p>
         ) : (
           open.map((proposal) => <OpenProposal key={proposal.id} proposal={proposal} rule={ruleOf(proposal)} names={names} fees={fees} />)
@@ -156,14 +157,26 @@ function Heading({ proposal, rule }: { proposal: Proposal; rule: RuleLike }) {
 }
 
 function Why({ proposal, rule, names }: { proposal: Proposal; rule: RuleLike; names: ReadonlyMap<string, Bilingual> }) {
+  const how = howLines(rule, proposal.detail);
   return (
-    <ul className="formula">
-      {whyLines(rule, proposal.detail, names).map((line) => (
-        <li key={line.en}>
-          <Bi {...line} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="formula">
+        {whyLines(rule, proposal.detail, names).map((line) => (
+          <li key={line.en}>
+            <Bi {...line} />
+          </li>
+        ))}
+      </ul>
+      {how.length > 0 && (
+        <Info>
+          {how.map((line) => (
+            <p key={line.en}>
+              <Bi {...line} />
+            </p>
+          ))}
+        </Info>
+      )}
+    </>
   );
 }
 
@@ -210,8 +223,8 @@ function FeeNote({ proposal, fees }: { proposal: Proposal; fees: FeeContext | un
   return (
     <p className="muted small">
       <Bi
-        en={`Estimated fees and tax: about ${twd(totalTwd)}${broker ? `, with the prices of ${broker.nameEn} abroad` : ''} and the Taiwan commission, paid from the cash left.${unknown > 0 ? ` ${unknown} order${unknown === 1 ? ' is' : 's are'} not estimated: choose your 複委託 broker, or enter its London prices, on the Costs page.` : ''}`}
-        zh={`預估手續費與稅：約 ${twd(totalTwd)}${broker ? `（海外依${broker.nameZh}的費率）` : ''}，含台股手續費，由剩餘現金支付。${unknown > 0 ? `有 ${unknown} 筆未估算：請在「費用與稅務」頁選擇你的複委託券商，或填入其英股費率。` : ''}`}
+        en={`Est. fees and tax ≈ ${twd(totalTwd)}${broker ? ` (${broker.nameEn})` : ''}${unknown > 0 ? ` · ${unknown} not estimated` : ''}`}
+        zh={`預估費用與稅 ≈ ${twd(totalTwd)}${broker ? `（${broker.nameZh}）` : ''}${unknown > 0 ? ` · ${unknown} 筆未估算` : ''}`}
       />{' '}
       <Link href="/costs#brokers">
         <Bi en="Costs" zh="費用與稅務" />
@@ -351,8 +364,8 @@ function ApprovedProposal({ proposal, rule, names, fees }: { proposal: Proposal;
       <Heading proposal={proposal} rule={rule} />
       <p>
         <Bi
-          en="Execution checklist: place each order at your broker, then record it here, or import the broker's statement CSV. Mark the proposal filled once they are in."
-          zh="執行清單：到券商逐筆下單，再在此登錄，或匯入券商對帳單 CSV。全部登錄後，把提案標記為已成交。"
+          en="Execution checklist: order at your broker → record or import → Mark filled."
+          zh="執行清單：到券商下單 → 登錄或匯入 → 標記為已成交。"
         />
       </p>
       <Orders proposal={proposal} checklist fees={fees} />

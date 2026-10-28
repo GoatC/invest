@@ -4,16 +4,20 @@
  * (PRD Section 9, "free data breaks"), then saves each day's NAV snapshot (F18, step 5) with its
  * 1-week VaR (N4, step 7), evaluates the rules and drafts their proposals (PRD Section 4, step 9),
  * and records the outcome in job_runs. Since Phase 2, step 1 it also loads the monthly market
- * series the windfall planner reads (F3): CAPE, the S&P 500's price and its dividend yield. Everything outside this file is
- * injected, so the whole run can be tested without a network or a database.
+ * series the windfall planner reads (F3): CAPE, the S&P 500's price and its dividend yield. Since
+ * step 2 it loads the Regression Lab's (N1) index closes and the US 3-month bill rate, reaches
+ * back over its longest window, and saves the holdings' β once a month. Everything outside this
+ * file is injected, so the whole run can be tested without a network or a database.
  */
-import { RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
+import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
 import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
-import { FRED_SERIES, fredRates, fredUrl } from '../feeds/fred.ts';
+import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
+import { INDICES, indexAttempts, type IndexClose } from '../feeds/indices.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
 import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
 import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
@@ -45,6 +49,12 @@ export interface Store {
   saveRates(rows: readonly DailyRate[]): Promise<void>;
   /** Upserts monthly market series (market_series), one row per series and month. */
   saveSeries(rows: readonly MonthlyPoint[]): Promise<void>;
+  /** The Regression Lab's longest window in years (config regression); undefined before its migration. */
+  regressionYears(): Promise<number | undefined>;
+  /** Upserts daily index closes (index_prices); fillOnly adds missing days only. */
+  saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
+  /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
+  refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
   performanceInput(end: string): Promise<PerformanceInput>;
   /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data). */
@@ -64,6 +74,8 @@ export interface RunDetail {
   rates: Record<string, Loaded>;
   /** The monthly market series (F3); `latest` is a month, YYYY-MM. */
   series?: Record<string, Loaded>;
+  /** The daily index closes (N1). */
+  indices?: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -72,6 +84,8 @@ export interface RunDetail {
   snapshots?: { days: number; from: string; to: string; valueAtRisk?: number };
   /** Proposals the rules drafted and closed after the refresh. */
   rules?: { created: number; closed: number };
+  /** The holdings' β saved for the month (N1), on the month's first run. */
+  betas?: { saved: number; runDate: string };
 }
 
 export interface JobRun {
@@ -177,10 +191,19 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let start: string;
   let riskStart: string;
   let proxies: Set<string>;
+  let regressionYears: number | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies] = await Promise.all([store.securities(), store.lookbackYears(), store.earliestTradeDate(), store.riskProxies()]);
+    const [found, years, earliestTrade, riskProxies, regression] = await Promise.all([
+      store.securities(),
+      store.lookbackYears(),
+      store.earliestTradeDate(),
+      store.riskProxies(),
+      store.regressionYears(),
+    ]);
     securities = found;
-    start = windowStart(today, years, earliestTrade);
+    regressionYears = regression;
+    // Every security reaches back over the VaR's years or the Regression Lab's longest window (N1).
+    start = windowStart(today, Math.max(years, regression ?? 0), earliestTrade);
     riskStart = riskWindowStart(today, lookbackWeeks({ lookbackYears: years }), earliestTrade);
     proxies = new Set(riskProxies);
   } catch (err) {
@@ -307,11 +330,33 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   }
 
+  // The Regression Lab (N1): the index closes over its window, and the US bill rate behind R_f.
+  const indexRows: IndexClose[] = [];
+  const indexFills: IndexClose[] = [];
+  if (regressionYears !== undefined) {
+    for (const index of INDICES) {
+      const result = await firstWorking(index, indexAttempts(index, finmind, get, range), detail);
+      const rows = unique(result?.rows.filter(inWindow) ?? [], (row) => row.date);
+      if (result && rows.length > 0) {
+        (result.fillOnly ? indexFills : indexRows).push(...rows);
+        (detail.indices ??= {})[index] = { source: result.source, rows: rows.length, latest: latest(rows) };
+      }
+    }
+    const name = RISK_FREE_SERIES['USD'] as string;
+    const bill = await firstWorking(name, [{ source: 'fred', load: async () => fredMonthly(await get(fredUrl('TB3MS', `${earliest.slice(0, 7)}-01`)), name) }], detail);
+    if (bill) {
+      series.push(...bill.rows);
+      (detail.series ??= {})[name] = { source: bill.source, rows: bill.rows.length, latest: bill.rows.reduce((max, point) => (point.month > max ? point.month : max), '') };
+    }
+  }
+
   try {
     await store.savePrices(unique(prices, (row) => `${row.ticker}|${row.date}`));
     await store.savePrices(unique(fills, (row) => `${row.ticker}|${row.date}`), { fillOnly: true });
     await store.saveRates(unique(rates, (row) => `${row.pair}|${row.date}`));
     await store.saveSeries(unique(series, (point) => `${point.series}|${point.month}`));
+    if (indexRows.length > 0) await store.saveIndexPrices(unique(indexRows, (row) => `${row.index}|${row.date}`));
+    if (indexFills.length > 0) await store.saveIndexPrices(unique(indexFills, (row) => `${row.index}|${row.date}`), { fillOnly: true });
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
@@ -348,6 +393,15 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     detail.rules = await store.evaluateRules(today, deps.now().toISOString());
   } catch (err) {
     detail.errors.push(`${RULES_ERROR}: ${message(err)}`);
+  }
+  // Each holding's β at the default settings, once a month, for F11 (N1's monthly refresh).
+  if (regressionYears !== undefined) {
+    try {
+      const betas = await store.refreshBetas(today);
+      if (betas) detail.betas = betas;
+    } catch (err) {
+      detail.errors.push(`${BETAS_ERROR}: ${message(err)}`);
+    }
   }
   const saved = prices.length + fills.length + rates.length;
   return finish(saved === 0 ? 'failed' : detail.errors.length > 0 ? 'partial' : 'ok');

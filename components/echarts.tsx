@@ -4,7 +4,18 @@
  * and on resizing, a tooltip built from text nodes, and the plain-HTML legend. Imported only by
  * client components.
  */
-import { BarChart, LineChart, PieChart, ScatterChart, type BarSeriesOption, type LineSeriesOption, type PieSeriesOption, type ScatterSeriesOption } from 'echarts/charts';
+import {
+  BarChart,
+  CustomChart,
+  LineChart,
+  PieChart,
+  ScatterChart,
+  type BarSeriesOption,
+  type CustomSeriesOption,
+  type LineSeriesOption,
+  type PieSeriesOption,
+  type ScatterSeriesOption,
+} from 'echarts/charts';
 import { GridComponent, MarkLineComponent, TooltipComponent, type GridComponentOption, type MarkLineComponentOption, type TooltipComponentOption } from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { SVGRenderer } from 'echarts/renderers';
@@ -13,10 +24,10 @@ import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-echarts.use([BarChart, LineChart, PieChart, ScatterChart, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 export type Option = echarts.ComposeOption<
-  BarSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption
+  BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption
 >;
 export type Chart = echarts.ECharts;
 

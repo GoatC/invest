@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
+import type { IndexClose } from '../feeds/indices.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 import { goldInTwd, riskWindowStart, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
 
@@ -43,6 +44,21 @@ const REPLIES: Record<string, string> = {
     <ss:Row><ss:Cell><ss:Data>21/Nov/2017</ss:Data></ss:Cell><ss:Cell><ss:Data>5.00</ss:Data></ss:Cell></ss:Row>
   </ss:Table></ss:Worksheet>`,
   STOCK_DAY_ALL: JSON.stringify([{ Date: '1151021', Code: '0050', ClosingPrice: '108.15' }]),
+  // The Regression Lab's indices (N1): the S&P 500, TAIEX's total return index, and the bill rate.
+  'USStockPrice ^GSPC': ok([
+    { date: '2026-10-19', Close: 7690.73 },
+    { date: '2026-10-20', Close: 7712.57 },
+  ]),
+  'TaiwanStockTotalReturnIndex TAIEX': ok([
+    { date: '2026-10-20', price: 107046.57 },
+    { date: '2026-10-21', price: 108422.07 },
+  ]),
+  'id=SP500': 'observation_date,SP500\n2026-10-19,7690.73\n2026-10-20,.\n',
+  MI_INDEX: JSON.stringify([
+    { 日期: '1151021', 指數: '發行量加權股價指數', 收盤指數: '46096.23' },
+    { 日期: '1151021', 指數: '發行量加權股價報酬指數', 收盤指數: '108,422.07' },
+  ]),
+  'id=TB3MS': 'observation_date,TB3MS\n2026-08-01,3.72\n2026-09-01,3.94\n',
   fredgraph: 'observation_date,DEXTAUS\n2026-10-16,32.34\n',
   alphavantage: JSON.stringify({ 'Time Series (Daily)': { '2026-10-20': { '4. close': '157.80' } } }),
   'shillerdata.com': '<a href="https://img1.wsimg.com/blobby/go/x/downloads/ie_data.xls?ver=1">ie_data.xls</a>',
@@ -51,7 +67,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -97,6 +113,9 @@ class MemoryStore implements Store {
   fills: DailyPrice[] = [];
   rates: DailyRate[] = [];
   series: MonthlyPoint[] = [];
+  indices: IndexClose[] = [];
+  indexFills: IndexClose[] = [];
+  betaRuns: string[] = [];
   runs: JobRun[] = [];
   snapshots: Snapshot[] = [];
   /** When the rules were evaluated, and how many snapshots were saved by then. */
@@ -110,6 +129,9 @@ class MemoryStore implements Store {
       riskHistory?: PriceRow[];
       failRisk?: boolean;
       failRules?: boolean;
+      /** config regression's longest window plus a year (N1); undefined before its migration. */
+      regressionYears?: number;
+      failBetas?: boolean;
     } = {},
   ) {}
   async securities() {
@@ -147,6 +169,17 @@ class MemoryStore implements Store {
   }
   async saveSeries(rows: readonly MonthlyPoint[]) {
     this.series.push(...rows);
+  }
+  async regressionYears() {
+    return this.options.regressionYears;
+  }
+  async saveIndexPrices(rows: readonly IndexClose[], options: { fillOnly?: boolean } = {}) {
+    (options.fillOnly ? this.indexFills : this.indices).push(...rows);
+  }
+  async refreshBetas(today: string) {
+    if (this.options.failBetas) throw new Error('beta_results: permission denied');
+    this.betaRuns.push(today);
+    return { saved: 4, runDate: today };
   }
   /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
   async performanceInput(end: string): Promise<PerformanceInput> {
@@ -359,6 +392,53 @@ describe('runNightly', () => {
     assert.equal(second.status, 'ok');
     assert.deepEqual(second.detail.series?.['sp500_price'], { source: 'multpl', rows: 2, latest: '2026-10' });
     assert.match(second.detail.warnings.join('\n'), /us_cape: shiller: HTTP 403/);
+  });
+
+  it('loads the indices and the bill rate over the Regression Lab window, then saves the month\'s β (N1)', async () => {
+    const store = new MemoryStore({ regressionYears: 6 });
+    const { get, urls } = fakeGet();
+    const run = await runNightly(deps(get, store));
+    assert.equal(run.status, 'ok', JSON.stringify(run.detail));
+    // Six years back with two weeks to spare reaches before the VaR proxies' window.
+    assert.deepEqual(run.detail.window, { start: '2020-10-07', end: TODAY });
+    assert.equal(new URL(urls.find((url) => url.includes('USStockPrice') && url.includes('VT')) ?? 'http://none').searchParams.get('start_date'), '2020-10-07');
+    assert.deepEqual(
+      store.indices.map((row) => `${row.index} ${row.date} ${row.close} ${row.source}`),
+      ['SPX 2026-10-19 7690.73 finmind', 'SPX 2026-10-20 7712.57 finmind', 'TAIEX 2026-10-20 107046.57 finmind', 'TAIEX 2026-10-21 108422.07 finmind'],
+    );
+    assert.deepEqual(run.detail.indices?.['TAIEX'], { source: 'finmind', rows: 2, latest: '2026-10-21' });
+    assert.deepEqual(
+      store.series.filter((point) => point.series === 'us_tbill_3m').map((point) => [point.month, point.value]),
+      [
+        ['2026-08', 0.0372],
+        ['2026-09', 0.0394],
+      ],
+    );
+    assert.deepEqual(store.betaRuns, [TODAY]);
+    assert.deepEqual(run.detail.betas, { saved: 4, runDate: TODAY });
+  });
+
+  it("falls back to FRED for the S&P 500 and to TWSE's daily report for TAIEX, filling missing days only", async () => {
+    const store = new MemoryStore({ regressionYears: 6 });
+    const run = await runNightly(deps(fakeGet((key) => key === 'USStockPrice ^GSPC' || key === 'TaiwanStockTotalReturnIndex TAIEX').get, store));
+    assert.deepEqual(store.indices.map((row) => `${row.index} ${row.date} ${row.source}`), ['SPX 2026-10-19 fred']);
+    assert.deepEqual(store.indexFills.map((row) => `${row.index} ${row.date} ${row.close} ${row.source}`), ['TAIEX 2026-10-21 108422.07 twse']);
+    assert.match(run.detail.warnings.join('\n'), /SPX: finmind: HTTP 503[\s\S]*TAIEX: finmind: HTTP 503/);
+  });
+
+  it('keeps everything else and reports a partial run when the β cannot be saved', async () => {
+    const run = await runNightly(deps(fakeGet().get, new MemoryStore({ regressionYears: 6, failBetas: true })));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['Betas: beta_results: permission denied']);
+  });
+
+  it('leaves the indices, the bill rate and the β alone before the Regression Lab migration', async () => {
+    const store = new MemoryStore();
+    const { get, urls } = fakeGet();
+    const run = await runNightly(deps(get, store));
+    assert.ok(!urls.some((url) => url.includes('GSPC') || url.includes('TB3MS') || url.includes('MI_INDEX')));
+    assert.equal(run.detail.indices, undefined);
+    assert.deepEqual(store.betaRuns, []);
   });
 
   it('records a failed run when nothing could be loaded', async () => {

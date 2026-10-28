@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Facts } from '@/components/facts';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { RiskCard } from '@/components/risk-card';
 import { ReturnHistogram } from '@/components/risk-charts';
@@ -34,12 +36,6 @@ export default async function RiskPage() {
         <h1>
           <Bi {...LABELS.risk} />
         </h1>
-        <p className="muted">
-          <Bi
-            en="How much the whole portfolio, both pools, could lose in a bad week (N4): a gauge to keep an eye on, not a risk limit. Each holding is measured by its asset class's proxy ETF, from three years of weekly returns in TWD."
-            zh="整個投資組合（兩個資金池）在不利的一週可能損失多少（N4）：僅供參考的指標，不是風險上限。每檔持股以所屬資產類別的代理 ETF 衡量，依過去三年的台幣週報酬計算。"
-          />
-        </p>
       </section>
       <RiskCard report={report} line={line} />
       {ready && report && (
@@ -72,12 +68,18 @@ function Distribution({ report }: { report: RiskReport }) {
       <h2>
         <Bi en={`Where the VaR sits among the last ${returns.length} weeks`} zh={`風險值在過去 ${returns.length} 週報酬中的位置`} />
       </h2>
-      <p className="muted small">
+      <Facts
+        facts={[
+          { label: { en: 'Weeks beyond the VaR', zh: '損失超過風險值的週數' }, value: `${beyond} / ${returns.length}`, note: { en: `≈ ${expected} expected`, zh: `預期約 ${expected}` }, tone: beyond > expected * 1.5 ? 'watch' : 'ok' },
+          { label: weekLabel(report), value: signedPercent(-cutoff) },
+        ]}
+      />
+      <Info>
         <Bi
           en={`Each bar counts the weeks in which today's mix, held through the last ${returns.length} weeks, gained or lost that much in TWD. In ${beyond} of them (${percent(beyond / returns.length)}) it lost more than the 1-week VaR of ${percent(cutoff)}; at ${confidenceText(report.settings.confidence)}, about ${expected} would. The VaR assumes weekly returns follow a normal curve; real ones have fatter tails, so more weeks beyond the line than that is the usual way it errs.`}
           zh={`每根長條是今天的持股組合若在過去 ${returns.length} 週一直持有，各週台幣報酬落在該區間的週數。其中有 ${beyond} 週（${percent(beyond / returns.length)}）損失超過 ${percent(cutoff)} 的一週風險值；在 ${confidenceText(report.settings.confidence)} 信賴水準下，預期約 ${expected} 週。風險值假設週報酬呈常態分布，實際報酬的尾部較厚，因此超過門檻的週數比預期多，是它最常見的誤差。`}
         />
-      </p>
+      </Info>
       <ReturnHistogram
         bins={bins}
         cutoff={cutoff}
@@ -139,12 +141,12 @@ function Inputs({ report }: { report: RiskReport }) {
       <h2>
         <Bi en="What the VaR is made of" zh="風險值的組成" />
       </h2>
-      <p className="muted small">
+      <Info>
         <Bi
           en="Weight = what each proxy measures ÷ the portfolio. Share of the VaR = its part of the portfolio's variance, w_i (Σw)_i ÷ wᵀΣw; the shares add up to 100%, and a proxy that moves against the rest can take a negative one."
           zh="權重＝各代理 ETF 衡量的市值 ÷ 投資組合。占風險值比例＝它對組合變異數的貢獻 w_i (Σw)_i ÷ wᵀΣw；各比例合計 100%，與其他資產反向變動的代理 ETF 可能為負值。"
         />
-      </p>
+      </Info>
       <div className="table-wrap">
         <table>
           <thead>
@@ -285,17 +287,16 @@ function Formula({ report }: { report: RiskReport }) {
     },
   ];
   return (
-    <section className="card form">
-      <h2>
-        <Bi en="The formula with today's numbers" zh="公式與今天的數值" />
-      </h2>
-      <ul className="formula">
-        {lines.map((line) => (
-          <li key={line.en}>
-            <Bi {...line} />
-          </li>
-        ))}
-      </ul>
+    <section className="card form" id="formula">
+      <Info label={{ en: "The formula with today's numbers", zh: '公式與今天的數值' }}>
+        <ul className="formula">
+          {lines.map((line) => (
+            <li key={line.en}>
+              <Bi {...line} />
+            </li>
+          ))}
+        </ul>
+      </Info>
     </section>
   );
 }
@@ -386,7 +387,7 @@ function Method({ report }: { report: RiskReport | undefined }) {
       </details>
       <p className="muted small">
         <Link href="/allocation/targets">
-          <Bi en="Each class’s proxy is its benchmark ETF on the targets page" zh="各類別的代理 ETF 即目標權重頁的基準 ETF" />
+          <Bi en="Proxies: benchmark ETFs" zh="代理 ETF：基準 ETF" />
         </Link>
       </p>
     </section>

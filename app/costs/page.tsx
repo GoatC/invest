@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Facts, type Fact } from '@/components/facts';
+import { Info } from '@/components/info';
 import { CostBars, type CostBar } from '@/components/cost-charts';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
@@ -164,12 +166,6 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <h1>
           <Bi {...LABELS.costs} />
         </h1>
-        <p className="muted">
-          <Bi
-            en="What owning and trading the portfolio costs: each fund's yearly fee (TER) and the tax withheld on what it pays out, the broker's fees and FX spread on every order, and what each choice would cost over your plan. Then the tax checks: the US estate tax, Taiwan's minimum tax on overseas income, and the supplementary health premium on Taiwan dividends. Every threshold is a setting at the bottom, with the date it was checked."
-            zh="持有與交易投資組合的成本：每檔基金每年的費用（總費用率）與配息被預扣的稅、每筆下單的券商手續費與換匯價差，以及各種選擇在你的計畫期間會花掉多少。接著是稅務檢查：美國遺產稅、台灣最低稅負制的海外所得，以及台股股利的二代健保補充保費。所有門檻都在頁面最下方的設定中，並註明確認日期。"
-          />
-        </p>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...saved} />
@@ -208,12 +204,6 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <h2>
           <Bi en="複委託 brokers" zh="複委託券商比較" />
         </h2>
-        <p className="muted">
-          <Bi
-            en="Each broker's fee and FX spread on a typical order through it, and what that and its custody fee would cost over the plan on the share of it bought abroad. The broker chosen here prices the orders in proposals; the listed prices are starting values from a public comparison, so check each against the broker's own page."
-            zh="每家券商在一筆典型下單上的手續費與換匯價差，以及這些成本加上保管費在計畫期間（以在海外買進的比例計）會花掉多少。這裡選定的券商用於估算提案的下單費用；列出的費率是公開比較文章的起始值，請到各券商官網確認。"
-          />
-        </p>
         {planned && orderTwd ? (
           <Brokers choices={brokers} chosen={broker} orderTwd={orderTwd} usdTwd={usdTwd} foreignShare={foreignShare} plan={planned.plan} />
         ) : (
@@ -256,12 +246,6 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <h2>
           <Bi en="Settings" zh="設定" />
         </h2>
-        <p className="muted">
-          <Bi
-            en="Every number above comes from here. Saving an entry with its box ticked records today as the day you checked it; the edit history keeps the old values."
-            zh="上方所有數字都來自這裡。勾選確認方塊後儲存，會記錄今天為確認日期；修改紀錄會保留舊的數值。"
-          />
-        </p>
         <details id="tax-settings">
           <summary>
             <Bi en={`Tax thresholds and rates (checked ${config.taxVerifiedOn ?? 'never'})`} zh={`稅務門檻與稅率（${config.taxVerifiedOn ? `${config.taxVerifiedOn} 確認` : '尚未確認'}）`} />
@@ -351,61 +335,27 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
 // ---------------------------------------------------------------------------
 
 function Summary({ cost, exposure, limitUsd, overseas, premiums, broker, tax }: { cost: PortfolioCost; exposure: SitusExposure | null; limitUsd: number | null; overseas: OverseasIncome | null; premiums: Premiums | null; broker: Broker | null; tax: TaxSettings | undefined }) {
-  const lines: Bilingual[] = [];
-  const known = cost.valueTwd - cost.unknownTwd;
-  lines.push(
+  const facts: Fact[] = [
     cost.rate === null
-      ? { en: 'Holding costs: none known yet; enter the fund costs below.', zh: '持有成本：尚無資料；請在下方填入基金成本。' }
-      : {
-          en: `Holding costs: ${percent(cost.rate, 2)} a year, about ${twd(cost.yearlyTwd)} on ${twd(known)}${cost.unknownTwd > 0 ? `; ${twd(cost.unknownTwd)} more has no costs entered` : ''}.`,
-          zh: `持有成本：每年 ${percent(cost.rate, 2)}，以 ${twd(known)} 計約 ${twd(cost.yearlyTwd)}${cost.unknownTwd > 0 ? `；另有 ${twd(cost.unknownTwd)} 尚未填入成本` : ''}。`,
-        },
-  );
+      ? { label: { en: 'Holding costs', zh: '持有成本' }, value: '—', note: { en: 'enter fund costs below', zh: '請於下方填入' }, tone: 'watch' }
+      : { label: { en: 'Holding costs a year', zh: '每年持有成本' }, value: `${percent(cost.rate, 2)} · ${twd(cost.yearlyTwd)}`, ...(cost.unknownTwd > 0 ? { note: { en: `${twd(cost.unknownTwd)} not costed`, zh: `${twd(cost.unknownTwd)} 未填成本` } } : {}) },
+  ];
   if (exposure && limitUsd !== null) {
-    const over = exposure.totalUsd > limitUsd;
-    lines.push({
-      en: `US estate tax: US-situs assets ${money(exposure.totalUsd, 'USD', 0)} of the ${money(limitUsd, 'USD', 0)} exemption (${percent(exposure.totalUsd / limitUsd, 0)})${over ? ': over it, see below' : ''}.`,
-      zh: `美國遺產稅：美國資產 ${money(exposure.totalUsd, 'USD', 0)}，免稅額 ${money(limitUsd, 'USD', 0)}（${percent(exposure.totalUsd / limitUsd, 0)}）${over ? '：已超過，見下方' : ''}。`,
-    });
+    facts.push({ label: { en: 'US estate tax', zh: '美國遺產稅' }, value: `${money(exposure.totalUsd, 'USD', 0)} / ${money(limitUsd, 'USD', 0)}`, tone: exposure.totalUsd > limitUsd ? 'alert' : 'ok' });
   }
   if (overseas && tax) {
-    lines.push(
-      overseas.counts
-        ? {
-            en: `Minimum tax: overseas income this year ${twd(overseas.totalTwd)} reaches the ${twd(overseas.floorTwd)} floor, so all of it counts in the household's basic income.`,
-            zh: `最低稅負制：今年海外所得 ${twd(overseas.totalTwd)} 已達 ${twd(overseas.floorTwd)} 門檻，全數計入申報戶的基本所得額。`,
-          }
-        : {
-            en: `Minimum tax: overseas income this year ${twd(overseas.totalTwd)}, under the ${twd(overseas.floorTwd)} floor, so it is left out of the basic income.`,
-            zh: `最低稅負制：今年海外所得 ${twd(overseas.totalTwd)}，未達 ${twd(overseas.floorTwd)} 門檻，不計入基本所得額。`,
-          },
-    );
+    facts.push({ label: { en: 'Overseas income (minimum tax)', zh: '海外所得（最低稅負）' }, value: `${twd(overseas.totalTwd)} / ${twd(overseas.floorTwd)}`, tone: overseas.counts ? 'watch' : 'ok' });
   }
   if (premiums && tax) {
     const liable = premiums.rows.filter((row) => row.premiumTwd > 0);
-    lines.push(
-      liable.length === 0
-        ? { en: `Supplementary premium: no Taiwan dividend this year reached ${twd(tax.nhi.singlePaymentTwd)} in one payment.`, zh: `二代健保補充保費：今年沒有單筆達 ${twd(tax.nhi.singlePaymentTwd)} 的台股股利。` }
-        : {
-            en: `Supplementary premium: ${liable.length} Taiwan dividend payment${liable.length === 1 ? '' : 's'} reached ${twd(tax.nhi.singlePaymentTwd)}, about ${twd(premiums.totalTwd)} at most.`,
-            zh: `二代健保補充保費：今年有 ${liable.length} 筆台股股利達 ${twd(tax.nhi.singlePaymentTwd)}，最多約 ${twd(premiums.totalTwd)}。`,
-          },
-    );
+    facts.push({ label: { en: 'Supplementary premium', zh: '二代健保補充保費' }, value: liable.length === 0 ? twd(0) : twd(premiums.totalTwd), tone: liable.length === 0 ? 'ok' : 'watch' });
   }
-  lines.push(
+  facts.push(
     broker
-      ? { en: `Order fees: estimated with the prices of ${broker.nameEn}.`, zh: `下單費用：依${broker.nameZh}的費率估算。` }
-      : { en: 'Order fees: choose your 複委託 broker below, so proposals and the fund comparison count its fees.', zh: '下單費用：請在下方選擇你的複委託券商，提案與基金比較才會計入其手續費。' },
+      ? { label: { en: 'Order fees priced with', zh: '下單費用依' }, value: <Bi en={broker.nameEn} zh={broker.nameZh} />, tone: 'ok' }
+      : { label: { en: 'Order fees', zh: '下單費用' }, value: '—', note: { en: 'choose your broker below', zh: '請於下方選擇券商' }, tone: 'watch' },
   );
-  return (
-    <ul className="summary-lines">
-      {lines.map((line) => (
-        <li key={line.en}>
-          <Bi {...line} />
-        </li>
-      ))}
-    </ul>
-  );
+  return <Facts facts={facts} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,9 +384,6 @@ function FundChoices({ choices, plan, saved, orderTwd, held, broker }: { choices
   const line = planLine(plan, saved);
   return (
     <>
-      <p className="muted">
-        <Bi {...line} />
-      </p>
       {bars.length > 0 && <CostBars bars={bars} label={{ en: 'What each fund would cost over the plan', zh: '各基金在計畫期間的成本' }} current={{ en: 'Held now', zh: '目前持有' }} />}
       {choices.map(({ assetClass, rows }) => (
         <div key={assetClass.id} className="form">
@@ -513,10 +460,10 @@ function FundChoices({ choices, plan, saved, orderTwd, held, broker }: { choices
           )}
         </div>
       ))}
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
+      <Info>
+        <p>
+          <Bi {...line} />
+        </p>
         <ul>
           <li>
             <Bi
@@ -537,7 +484,7 @@ function FundChoices({ choices, plan, saved, orderTwd, held, broker }: { choices
             />
           </li>
         </ul>
-      </details>
+      </Info>
     </>
   );
 }
@@ -609,12 +556,12 @@ function HoldingCosts({ cost, broker }: { cost: PortfolioCost; broker: Broker | 
           </table>
         </div>
       )}
-      <p className="muted small">
+      <Info>
         <Bi
           en={`Both pools, at today's values. Gold in grams and TWD balances cost nothing a year; a holding with no fund costs entered shows — and is left out of the total${cost.unknownTwd > 0 ? ` (${twd(cost.unknownTwd)} now)` : ''}. Custody is the fee ${broker ? broker.nameEn : 'the chosen broker'} charges on what is held abroad.`}
           zh={`兩個資金池合計，以今天的市值計算。以克計的黃金與台幣餘額每年沒有成本；未填入基金成本的持股顯示 —，不計入合計${cost.unknownTwd > 0 ? `（目前 ${twd(cost.unknownTwd)}）` : ''}。保管費為${broker ? broker.nameZh : '所選券商'}對海外持股收取的費用。`}
         />
-      </p>
+      </Info>
     </section>
   );
 }
@@ -636,12 +583,26 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
     .map((choice) => ({ label: choice.broker.nameEn, cost: choice.overPlan?.cost ?? 0, current: choice.broker.id === chosen?.id, note: { en: `${rate(choice.order?.share)} an order`, zh: `每筆 ${rate(choice.order?.share)}` } }));
   return (
     <>
-      <p className="muted">
+      <Facts
+        facts={[
+          { label: { en: 'A typical order', zh: '典型下單' }, value: `${twd(orderTwd)} · ${money(orderTwd / usdTwd, 'USD')}` },
+          { label: { en: 'Bought abroad', zh: '海外買進比例' }, value: percent(foreignShare, 0) },
+        ]}
+      />
+      <Info>
         <Bi
           en={`A typical order: ${twd(orderTwd)} (${money(orderTwd / usdTwd, 'USD')} at ${usdTwd}). Bought abroad: ${percent(foreignShare, 0)} of the regular pool's targets, the core classes whose fund lists in the US or London.`}
           zh={`典型下單：${twd(orderTwd)}（以 ${usdTwd} 計約 ${money(orderTwd / usdTwd, 'USD')}）。在海外買進的比例：一般投入資金池目標的 ${percent(foreignShare, 0)}，即基金在美國或倫敦上市的核心類別。`}
         />
-      </p>
+        <Bi
+          en="Each broker's fee and FX spread on a typical order, and with its custody fee what it would cost over the plan on the share bought abroad. The broker chosen below prices the orders in proposals; the prices are starting values from a public comparison, so check each against the broker's own page."
+          zh="每家券商在一筆典型下單上的手續費與換匯價差，加上保管費在計畫期間（以在海外買進的比例計）的成本。下方選定的券商用於估算提案的下單費用；費率是公開比較文章的起始值，請到各券商官網確認。"
+        />
+        <Bi
+          en="On the order: the fee in dollars and, with the FX spread, the share of the order it costs. A minimum fee weighs most on small orders, which is why F8 sends each month's cash to at most two classes. Over the plan counts the single-order fee, as proposals are placed as orders; a broker's DCA plan can cost less."
+          zh="這筆下單：美元手續費，以及加上換匯價差後占下單金額的比例。低消對小額下單影響最大，因此 F8 每月最多只投入兩個類別。計畫期間的成本以單筆下單費用計算（提案以單筆下單執行）；券商的定期定額可能更便宜。"
+        />
+      </Info>
       {bars.length > 0 && <CostBars bars={bars} label={{ en: 'What each broker would cost over the plan', zh: '各券商在計畫期間的成本' }} current={{ en: 'The broker you use', zh: '你使用的券商' }} />}
       <div className="table-wrap">
         <table className="compact">
@@ -687,10 +648,11 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
                   )}{' '}
                   <Source source={choice.broker.source} />
                   {(choice.broker.noteEn || choice.broker.noteZh) && (
-                    <span className="muted small pre-line">
-                      <br />
-                      <Bi en={choice.broker.noteEn} zh={choice.broker.noteZh} />
-                    </span>
+                    <Info label={{ en: 'Note', zh: '備註' }}>
+                      <span className="pre-line">
+                        <Bi en={choice.broker.noteEn} zh={choice.broker.noteZh} />
+                      </span>
+                    </Info>
                   )}
                 </td>
                 <td>
@@ -698,7 +660,7 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
                   {choice.minimumUpToUsd !== null && (
                     <span className="muted small">
                       <br />
-                      <Bi en={`the minimum applies up to US$${Number(choice.minimumUpToUsd.toFixed(0)).toLocaleString('en-US')}`} zh={`US$${Number(choice.minimumUpToUsd.toFixed(0)).toLocaleString('en-US')} 以下的下單適用低消`} />
+                      <Bi en={`minimum up to US$${Number(choice.minimumUpToUsd.toFixed(0)).toLocaleString('en-US')}`} zh={`低消至 US$${Number(choice.minimumUpToUsd.toFixed(0)).toLocaleString('en-US')}`} />
                     </span>
                   )}
                 </td>
@@ -719,12 +681,6 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
           </tbody>
         </table>
       </div>
-      <p className="muted small">
-        <Bi
-          en="On the order: the fee in dollars and, with the FX spread, the share of the order it costs. A minimum fee weighs most on small orders, which is why F8 sends each month's cash to at most two classes. Over the plan counts the single-order fee, as proposals are placed as orders; a broker's DCA plan can cost less."
-          zh="這筆下單：美元手續費，以及加上換匯價差後占下單金額的比例。低消對小額下單影響最大，因此 F8 每月最多只投入兩個類別。計畫期間的成本以單筆下單費用計算（提案以單筆下單執行）；券商的定期定額可能更便宜。"
-        />
-      </p>
     </>
   );
 }
@@ -751,24 +707,29 @@ function TaiwanTax({ overseas, premiums, tax }: { overseas: OverseasIncome; prem
       <div className="meter" role="img" aria-label={`${percent(share, 0)} of the floor 門檻的 ${percent(share, 0)}`}>
         <span style={{ width: `${share * 100}%` }} />
       </div>
-      <p>
+      <Facts
+        facts={[
+          { label: { en: 'Overseas income', zh: '海外所得' }, value: `${twd(overseas.totalTwd)} / ${twd(tax.amt.overseasFloorTwd)}`, tone: overseas.counts ? 'watch' : 'ok' },
+          { label: { en: 'Gains on sales abroad', zh: '海外賣出獲利' }, value: twd(Math.max(0, overseas.gainsTwd)) },
+          { label: { en: 'Dividends from them', zh: '其股利' }, value: twd(overseas.dividendsTwd) },
+        ]}
+      />
+      <Info>
         <Bi
           en={`${twd(overseas.totalTwd)} of the ${twd(tax.amt.overseasFloorTwd)} floor: gains on sales abroad ${twd(Math.max(0, overseas.gainsTwd))}${overseas.gainsTwd < 0 ? ` (a net loss of ${twd(-overseas.gainsTwd)}, counted as 0)` : ''}, dividends from them ${twd(overseas.dividendsTwd)}.`}
           zh={`${twd(overseas.totalTwd)}，門檻 ${twd(tax.amt.overseasFloorTwd)}：海外證券賣出獲利 ${twd(Math.max(0, overseas.gainsTwd))}${overseas.gainsTwd < 0 ? `（淨損失 ${twd(-overseas.gainsTwd)}，以 0 計）` : ''}，其股利 ${twd(overseas.dividendsTwd)}。`}
         />
-      </p>
-      <p className="muted small">
         <Bi
           en={`A household's overseas income (securities listed abroad, through 複委託) is left out of the basic income while under ${twd(tax.amt.overseasFloorTwd)} a year; from it, all of it counts, and the minimum tax is ${percent(tax.amt.rate, 0)} of the basic income above ${twd(tax.amt.exemptionTwd)}, paid only where it exceeds the regular income tax. A Taiwan-listed fund is domestic income whatever it holds. The household's other income is not known here, and dividends count as recorded.`}
           zh={`申報戶的海外所得（透過複委託投資的海外上市證券）每年未達 ${twd(tax.amt.overseasFloorTwd)} 時不計入基本所得額；達到時全數計入，基本稅額為基本所得額超過 ${twd(tax.amt.exemptionTwd)} 部分的 ${percent(tax.amt.rate, 0)}，且只在高於一般所得稅額時才需補繳。台灣上市的基金不論投資何處都屬國內所得。本頁不知道申報戶的其他所得，股利以登錄金額計算。`}
         />
-      </p>
+      </Info>
       <h3>
         <Bi en={`Supplementary health premium on Taiwan dividends, ${overseas.year} (二代健保)`} zh={`${overseas.year} 年台股股利的二代健保補充保費`} />
       </h3>
       {premiums.rows.length === 0 ? (
         <p className="muted">
-          <Bi en="No Taiwan dividends recorded this year." zh="今年尚未登錄台股股利。" />
+          <Bi en="No Taiwan dividends this year." zh="今年無台股股利。" />
         </p>
       ) : (
         <div className="table-wrap">
@@ -802,12 +763,12 @@ function TaiwanTax({ overseas, premiums, tax }: { overseas: OverseasIncome; prem
           </table>
         </div>
       )}
-      <p className="muted small">
+      <Info>
         <Bi
           en={`A single payment of ${twd(tax.nhi.singlePaymentTwd)} or more pays ${percent(tax.nhi.rate, 2)} of it (up to ${twd(tax.nhi.maxPaymentTwd)} a payment), withheld by the payer. For an ETF only its dividend-income part is liable, so the figure is an upper bound. An accumulating Taiwan fund such as 009816 pays nothing out, and so no premium.`}
           zh={`單筆股利達 ${twd(tax.nhi.singlePaymentTwd)} 時，扣取 ${percent(tax.nhi.rate, 2)}（每筆上限 ${twd(tax.nhi.maxPaymentTwd)}），由發放者代扣。ETF 只有股利所得部分需扣，因此此處為上限。不配息的台股基金（例如 009816）沒有配息，也就沒有補充保費。`}
         />
-      </p>
+      </Info>
     </>
   );
 }
@@ -831,12 +792,17 @@ function EstateTax({ exposure, limitUsd, enabled, tax, funds, securities, names 
       <div className={exposure.totalUsd > limitUsd ? 'meter over' : 'meter'} role="img" aria-label={`${percent(exposure.totalUsd / limitUsd, 0)} of the exemption 免稅額的 ${percent(exposure.totalUsd / limitUsd, 0)}`}>
         <span style={{ width: `${share * 100}%` }} />
       </div>
-      <p>
+      <Facts
+        facts={[
+          { label: { en: 'US-situs assets', zh: '美國資產' }, value: `${money(exposure.totalUsd, 'USD', 0)} / ${money(limitUsd, 'USD', 0)}`, note: { en: twd(exposure.totalTwd), zh: twd(exposure.totalTwd) }, tone: exposure.totalUsd > limitUsd ? 'alert' : 'ok' },
+        ]}
+      />
+      <Info>
         <Bi
           en={`US-situs assets: ${money(exposure.totalUsd, 'USD', 0)} (${twd(exposure.totalTwd)}) of the ${money(limitUsd, 'USD', 0)} a non-US resident's estate is exempt to.${tax ? ` Above it, the US taxes the estate at ${percent(tax.usEstate.minRate, 0)} to ${percent(tax.usEstate.maxRate, 0)}.` : ''}`}
           zh={`美國資產：${money(exposure.totalUsd, 'USD', 0)}（${twd(exposure.totalTwd)}），非美國居民的遺產免稅額為 ${money(limitUsd, 'USD', 0)}。${tax ? `超過的部分，美國課徵 ${percent(tax.usEstate.minRate, 0)} 至 ${percent(tax.usEstate.maxRate, 0)} 的遺產稅。` : ''}`}
         />
-      </p>
+      </Info>
       {exposure.rows.length > 0 && (
         <div className="table-wrap">
           <table className="compact">
@@ -879,17 +845,24 @@ function EstateTax({ exposure, limitUsd, enabled, tax, funds, securities, names 
               const irish = funds.filter((fund) => fund.assetClassId === classId && fund.domicile === 'IE');
               return (
                 <li key={classId}>
-                  <Bi
-                    en={`${name.en}: ${irish.length > 0 ? irish.map((fund) => `${fund.ticker} (${fund.name})`).join(', ') : 'none entered; US shares have none'}`}
-                    zh={`${name.zh}：${irish.length > 0 ? irish.map((fund) => `${fund.ticker}（${fund.name}）`).join('、') : '尚未填入；美股個股沒有替代'}`}
-                  />
+                  <Bi en={`${name.en}:`} zh={`${name.zh}：`} />{' '}
+                  {irish.length > 0 ? (
+                    irish.map((fund, index) => (
+                      <span key={fund.ticker}>
+                        {index > 0 && ', '}
+                        <abbr title={fund.name}>{fund.ticker}</abbr>
+                      </span>
+                    ))
+                  ) : (
+                    <Bi en="none" zh="無" />
+                  )}
                 </li>
               );
             })}
           </ul>
         </>
       )}
-      <p className="muted small">
+      <Info>
         <Bi
           en={`Every US-domiciled holding counts, both pools, US shares and US ETFs alike, held through 複委託 or not; Irish-domiciled ETFs, Taiwan-listed funds and TWD balances do not. ${enabled ? 'The rule US_ESTATE_TAX checks it after every nightly update and drafts a suggestion when it is over, with no orders: a sale abroad is overseas income, so the swap is your call.' : 'The rule US_ESTATE_TAX is off: turn it on on the Rules page for a suggestion when it is over.'} London-listed funds need a 複委託 broker that offers them and their London fees (see the brokers above).`}
           zh={`所有美國註冊的持股都計入（兩個資金池，美股個股與美國 ETF 皆同，無論是否透過複委託持有）；愛爾蘭註冊 ETF、台灣上市基金與台幣餘額不計入。${enabled ? 'US_ESTATE_TAX 規則每晚資料更新後檢查，超過時產生建議（不含下單清單：在海外賣出屬海外所得，是否轉換由你決定）。' : 'US_ESTATE_TAX 規則目前停用：可在「規則」頁啟用，超過時即產生建議。'}倫敦上市的基金需要有提供的複委託券商與其英股費率（見上方券商比較）。`}
@@ -897,7 +870,7 @@ function EstateTax({ exposure, limitUsd, enabled, tax, funds, securities, names 
         <Link href="/rules#rule-US_ESTATE_TAX">
           <Bi {...LABELS.rules} />
         </Link>
-      </p>
+      </Info>
     </>
   );
 }
@@ -913,12 +886,11 @@ function feeFields(brokers: readonly Broker[]): FieldSpec[] {
       label: { en: 'Your 複委託 broker', zh: '你的複委託券商' },
       kind: 'select',
       options: [{ value: '', label: { en: 'Not chosen yet', zh: '尚未選擇' } }, ...brokers.map((broker) => ({ value: broker.id, label: { en: broker.nameEn, zh: broker.nameZh } }))],
-      hint: { en: 'Prices the US and London orders in proposals.', zh: '用於估算提案中美股與英股的下單費用。' },
     },
-    { name: 'twRate', label: { en: 'Taiwan commission, % of the amount', zh: '台股手續費率（%）' }, numeric: true, hint: { en: '0.1425 is the listed rate.', zh: '牌告為 0.1425。' } },
-    { name: 'twDiscount', label: { en: 'Discount, in 折 (10 is none)', zh: '折扣（折數，10 為不打折）' }, numeric: true, hint: { en: 'e.g. 2.8 for 2.8折: ask your broker.', zh: '例如 2.8 折填 2.8；請向券商確認。' } },
-    { name: 'twMin', label: { en: 'Least a Taiwan order pays, NT$', zh: '台股每筆最低手續費（台幣）' }, numeric: true, hint: { en: 'Many brokers charge NT$1 on odd lots and NT$20 on board lots.', zh: '許多券商零股低消 1 元、整股 20 元。' } },
-    { name: 'fxSpread', label: { en: 'FX spread when a broker has none, % of the amount', zh: '換匯價差（券商未填時，金額的 %）' }, numeric: true, hint: { en: 'What changing TWD into dollars costs against the mid rate.', zh: '台幣換美元相對中價的成本。' } },
+    { name: 'twRate', label: { en: 'Taiwan commission, % of the amount', zh: '台股手續費率（%）' }, numeric: true, hint: { en: 'Listed: 0.1425', zh: '牌告：0.1425' } },
+    { name: 'twDiscount', label: { en: 'Discount, in 折 (10 is none)', zh: '折扣（折數，10 為不打折）' }, numeric: true, hint: { en: 'e.g. 2.8', zh: '例如 2.8' } },
+    { name: 'twMin', label: { en: 'Least a Taiwan order pays, NT$', zh: '台股每筆最低手續費（台幣）' }, numeric: true, hint: { en: 'Often NT$1 odd lot · NT$20 board lot', zh: '常見零股 1 元 · 整股 20 元' } },
+    { name: 'fxSpread', label: { en: 'FX spread when a broker has none, % of the amount', zh: '換匯價差（券商未填時，金額的 %）' }, numeric: true },
   ];
 }
 

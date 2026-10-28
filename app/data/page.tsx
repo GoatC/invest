@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataHealthBanner, RunStatusBadge } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
@@ -41,18 +42,19 @@ export default async function DataStatusPage() {
         <h1>
           <Bi {...LABELS.dataStatus} />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates, the gold price and the monthly market series of the windfall planner, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
             zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率、金價與大額資金分批所用的每月市場資料，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
           />
-        </p>
+        </Info>
         <DataHealthBanner health={health} threshold={status.threshold} />
       </section>
       {health.latest && <LatestRun run={health.latest} />}
       <Prices status={status} />
       <Rates rates={status.rates} />
       <MarketSeries series={status.series} lastRun={status.runs[0]?.detail.series ?? {}} />
+      <Indices indices={status.indices} lastRun={status.runs[0]?.detail.indices ?? {}} />
       {status.runs.length > 0 && <Runs runs={status.runs} />}
     </>
   );
@@ -108,6 +110,14 @@ function LatestRun({ run }: { run: JobRun }) {
           />{' '}
           <Link href="/proposals">
             <Bi en="Proposals" zh="提案" />
+          </Link>
+        </p>
+      )}
+      {detail.betas && (
+        <p className="muted small">
+          <Bi en={`Saved ${detail.betas.saved} β for the month.`} zh={`已存入本月 ${detail.betas.saved} 筆 β。`} />{' '}
+          <Link href="/regression">
+            <Bi {...LABELS.regression} />
           </Link>
         </p>
       )}
@@ -261,12 +271,17 @@ function Rates({ rates }: { rates: LatestQuote[] }) {
         </div>
       )}
       {gold && (
-        <p className="muted small">
-          <Bi
-            en={`Gold per gram: ${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = TWD per troy ounce ÷ ${GRAMS_PER_TROY_OUNCE} grams. TWD per ounce = the international USD price × the Bank of Taiwan USD rate of the day; the bank's own buy-back price is usually a little lower.`}
-            zh={`每克金價：${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = 每盎司台幣價格 ÷ ${GRAMS_PER_TROY_OUNCE} 克。每盎司台幣價格 = 國際美元金價 × 當日臺灣銀行美元匯率；銀行實際回收價通常略低。`}
-          />
-        </p>
+        <>
+          <p className="muted small">
+            <Bi en={`Gold per gram: ${twd(gold.value / GRAMS_PER_TROY_OUNCE)}`} zh={`每克金價：${twd(gold.value / GRAMS_PER_TROY_OUNCE)}`} />
+          </p>
+          <Info>
+            <Bi
+              en={`Per gram = TWD per troy ounce ÷ ${GRAMS_PER_TROY_OUNCE} grams. TWD per ounce = the international USD price × the Bank of Taiwan USD rate of the day; the bank's own buy-back price is usually a little lower.`}
+              zh={`每克金價 = 每盎司台幣價格 ÷ ${GRAMS_PER_TROY_OUNCE} 克。每盎司台幣價格 = 國際美元金價 × 當日臺灣銀行美元匯率；銀行實際回收價通常略低。`}
+            />
+          </Info>
+        </>
       )}
     </section>
   );
@@ -276,7 +291,71 @@ const SERIES_NAMES: Record<string, Bilingual> = {
   us_cape: { en: "S&P 500 CAPE (Shiller's P/E 10)", zh: 'S&P 500 週期調整本益比（CAPE）' },
   sp500_price: { en: 'S&P 500, monthly average close', zh: 'S&P 500 每月平均收盤' },
   sp500_yield: { en: 'S&P 500 dividend yield', zh: 'S&P 500 股息殖利率' },
+  us_tbill_3m: { en: 'US 3-month T-bill, a year', zh: '美國 3 個月國庫券年利率' },
 };
+
+const INDEX_NAMES: Record<string, Bilingual> = {
+  SPX: { en: 'S&P 500', zh: '標普 500' },
+  TAIEX: { en: 'TAIEX total return', zh: '加權報酬指數' },
+};
+
+/** The indices the Regression Lab regresses on (N1). */
+function Indices({ indices, lastRun }: { indices: LatestQuote[]; lastRun: JobRun['detail']['indices'] }) {
+  return (
+    <section className="card form" id="indices">
+      <h2>
+        <Bi en="Indices" zh="指數" />
+      </h2>
+      {indices.length === 0 ? (
+        <p className="muted">
+          <Bi en="Not loaded yet." zh="尚未載入。" />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>
+                  <Bi en="Index" zh="指數" />
+                </th>
+                <th>
+                  <Bi en="Close date" zh="收盤日" />
+                </th>
+                <th className="num">
+                  <Bi en="Close" zh="收盤" />
+                </th>
+                <th>
+                  <Bi {...LABELS.source} />
+                </th>
+                <th className="num">
+                  <Bi en="Days loaded last run" zh="上次載入天數" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {indices.map((index) => (
+                <tr key={index.key}>
+                  <td>
+                    <strong>{index.key}</strong>
+                    <div className="muted small">
+                      <Bi {...(INDEX_NAMES[index.key] ?? { en: index.key, zh: index.key })} />
+                    </div>
+                  </td>
+                  <td className="nowrap">{index.date}</td>
+                  <td className="num">{quantity(index.value)}</td>
+                  <td className="nowrap">
+                    <Bi {...feedLabel(index.source)} />
+                  </td>
+                  <td className="num">{lastRun[index.key]?.rows ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** The monthly series the windfall planner reads (F3): the valuation gauge and the backtest's market. */
 function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: JobRun['detail']['series'] }) {
@@ -321,7 +400,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
                     </div>
                   </td>
                   <td className="nowrap">{point.date}</td>
-                  <td className="num">{point.key === 'sp500_yield' ? percent(point.value, 2) : quantity(point.value)}</td>
+                  <td className="num">{point.key === 'sp500_yield' || point.key === 'us_tbill_3m' ? percent(point.value, 2) : quantity(point.value)}</td>
                   <td className="nowrap">
                     <Bi {...feedLabel(point.source)} />
                   </td>
@@ -332,7 +411,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
           </table>
         </div>
       )}
-      <p className="muted small">
+      <Info>
         <Bi
           en="Shiller's data is monthly and a few weeks behind; the Windfall page reads CAPE's percentile over its whole history and backtests on all three."
           zh="Shiller 的資料為每月更新，約落後數週；「大額資金」頁以 CAPE 在整段歷史中的百分位作為估值指標，並以三項資料進行回測。"
@@ -340,7 +419,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
         <Link href="/windfall">
           <Bi {...LABELS.windfall} />
         </Link>
-      </p>
+      </Info>
     </section>
   );
 }

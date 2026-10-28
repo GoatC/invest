@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Facts, type Fact } from '@/components/facts';
+import { Info } from '@/components/info';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { RiskCard } from '@/components/risk-card';
@@ -19,7 +21,6 @@ import { riskReport, sparkline } from '@/lib/models/risk';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
 import type { Holding } from '@/lib/models/valuation';
 import { stateText } from '@/lib/proposal-text';
-import { breachText } from '@/lib/rule-text';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -156,10 +157,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
         </div>
         {empty ? (
           <p className="muted">
-            <Bi
-              en="Nothing recorded yet. Add your first trade, import a broker statement, or add gold or a cash balance."
-              zh="尚無任何紀錄。請新增第一筆交易、匯入券商對帳單，或新增黃金與現金餘額。"
-            />
+            <Bi en="Nothing recorded yet." zh="尚無任何紀錄。" />
           </p>
         ) : (
           <Summary data={data} portfolio={portfolio} />
@@ -231,24 +229,27 @@ function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio
   );
 }
 
-function rulesOk(data: HoldingsData, portfolio: Portfolio): Bilingual[] {
+/** An R1 or R2 breach as a tile: the weight against its limit, and the trim that brings it back. */
+function breachFact(breach: CapBreach, caps: HoldingsData['caps']): Fact {
+  const trim = twd(breach.trimTwd);
+  if (breach.rule === 'R1') {
+    return { label: { en: `R1 ${breach.subject}`, zh: `R1 ${breach.subject}` }, value: `${percent(breach.weight)} > ${percent(breach.limit, 0)}`, note: { en: `sell ≈ ${trim}`, zh: `賣出約 ${trim}` }, tone: 'alert' };
+  }
+  const target = percent(caps.satellite?.targetWeight ?? 0, 0);
+  return { label: { en: 'R2 satellite', zh: 'R2 衛星部位' }, value: `${percent(breach.weight)} > ${percent(breach.limit, 0)}`, note: { en: `trim ≈ ${trim} → ${target}`, zh: `減碼約 ${trim} → ${target}` }, tone: 'alert' };
+}
+
+function rulesOk(data: HoldingsData, portfolio: Portfolio): Fact[] {
   const { singleStock, satellite } = data.caps;
-  const lines: Bilingual[] = [];
-  lines.push(
-    singleStock
-      ? { en: `R1: no single stock is above ${percent(singleStock.maxWeight, 0)} of the regular pool.`, zh: `R1：沒有任何單一個股超過一般投入資金池的 ${percent(singleStock.maxWeight, 0)}。` }
-      : { en: 'R1 is turned off in the rules table.', zh: 'R1 已在規則表中停用。' },
-  );
   const share = portfolio.pool.totalTwd > 0 ? satelliteValue(portfolio.pool) / portfolio.pool.totalTwd : 0;
-  lines.push(
+  return [
+    singleStock
+      ? { label: { en: 'R1 single stock', zh: 'R1 單一個股' }, value: `≤ ${percent(singleStock.maxWeight, 0)}`, tone: 'ok' }
+      : { label: { en: 'R1', zh: 'R1' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
     satellite
-      ? {
-          en: `R2: the satellite is ${percent(share)} of the regular pool, below the ${percent(satellite.triggerWeight, 0)} trigger.`,
-          zh: `R2：衛星部位占一般投入資金池的 ${percent(share)}，低於 ${percent(satellite.triggerWeight, 0)} 觸發點。`,
-        }
-      : { en: 'R2 is turned off in the rules table.', zh: 'R2 已在規則表中停用。' },
-  );
-  return lines;
+      ? { label: { en: 'R2 satellite', zh: 'R2 衛星部位' }, value: `${percent(share)} / ${percent(satellite.triggerWeight, 0)}`, tone: 'ok' }
+      : { label: { en: 'R2', zh: 'R2' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
+  ];
 }
 
 function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio }) {
@@ -260,36 +261,21 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
         <Bi en="Rules R1 and R2" zh="規則 R1 與 R2" />
       </h2>
       {breaches.length > 0 ? (
-        <div className="banner warn">
-          <Bi en="Above a limit:" zh="超過限制：" />
-          <ul>
-            {breaches.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, data.caps, 'now')} />
-              </li>
-            ))}
-          </ul>
+        <div className="form">
+          <Facts facts={breaches.map((breach) => breachFact(breach, data.caps))} />
           <Link href="/proposals">
             <Bi en="The rules engine drafts the trim as a proposal" zh="規則引擎會把減碼擬成提案" />
           </Link>
         </div>
       ) : (
-        <div className="banner ok">
-          <ul>
-            {rulesOk(data, portfolio).map((line) => (
-              <li key={line.en}>
-                <Bi {...line} />
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Facts facts={rulesOk(data, portfolio)} />
       )}
       <RuleMath caps={data.caps} pool={poolFigures(portfolio.pool)} />
       {unpriced.length > 0 && (
         <p className="banner info">
           <Bi
-            en={`Not valued yet, so left out of the totals, weights and rules: ${unpriced.map((holding) => holding.ticker ?? holding.label).join(', ')}.`}
-            zh={`尚未估值，暫不計入總額、權重與規則：${unpriced.map((holding) => holding.ticker ?? holding.label).join('、')}。`}
+            en={`Not valued yet, left out: ${unpriced.map((holding) => holding.ticker ?? holding.label).join(', ')}.`}
+            zh={`尚未估值，不計入：${unpriced.map((holding) => holding.ticker ?? holding.label).join('、')}。`}
           />
         </p>
       )}
@@ -304,15 +290,15 @@ function ClassWeights({ portfolio }: { portfolio: Portfolio }) {
       <h2>
         <Bi en="Actual vs target weight" zh="實際與目標權重" />
       </h2>
-      <p className="muted small">
+      <Info>
         <Bi
           en="Actual = class value ÷ regular pool (windfall money is not counted); drift = actual − target, in percentage points (pp)."
           zh="實際權重 = 類別市值 ÷ 一般投入資金池（不含大額資金）；偏離 = 實際 − 目標，單位為百分點（pp）。"
         />{' '}
         <Link href="/allocation">
-          <Bi en="Drift status, targets and allocation donuts" zh="偏離狀態、目標權重與配置圓餅圖" />
+          <Bi {...LABELS.allocation} />
         </Link>
-      </p>
+      </Info>
       <div className="table-wrap">
         <table>
           <thead>
@@ -678,19 +664,18 @@ function CashFlows({ flows, showAll }: { flows: CashFlowRecord[]; showAll: boole
       </div>
       {flows.length === 0 ? (
         <p className="muted">
-          <Bi
-            en="Money in and out: monthly contributions, the windfall arriving, dividends and withdrawals. True performance (Phase 1, step 5) is worked out from them."
-            zh="資金進出：每月投入、大額資金入帳、股利與提領。真實績效（第一階段第 5 步）會用它們計算。"
-          />
+          <Bi en="None yet." zh="尚無。" />
         </p>
       ) : (
         <>
-          <p className="muted small">
-            <Bi
-              en={`All recorded, in TWD at each day's rate: contributions ${twd(totals.contribution)}, windfall ${twd(totals.windfall)}, dividends ${twd(totals.dividend)}, withdrawals ${twd(totals.withdrawal)}.`}
-              zh={`全部紀錄，以各筆當日匯率換算台幣：投入資金 ${twd(totals.contribution)}、大額資金入帳 ${twd(totals.windfall)}、股利 ${twd(totals.dividend)}、提領 ${twd(totals.withdrawal)}。`}
-            />
-          </p>
+          <Facts
+            facts={[
+              { label: FLOW_TYPE.contribution, value: twd(totals.contribution) },
+              { label: FLOW_TYPE.windfall, value: twd(totals.windfall) },
+              { label: FLOW_TYPE.dividend, value: twd(totals.dividend) },
+              { label: FLOW_TYPE.withdrawal, value: twd(totals.withdrawal) },
+            ]}
+          />
           <div className="table-wrap">
             <table>
               <thead>
@@ -762,7 +747,7 @@ function CashFlows({ flows, showAll }: { flows: CashFlowRecord[]; showAll: boole
 
 function Footnotes() {
   return (
-    <section className="muted small form">
+    <Info label={{ en: 'How values are worked out', zh: '數值計算方式' }}>
       <p>
         <Bi
           en="Market value = quantity × the newest close × the newest FX rate, both loaded every night (the date under a value is its close's); see Data status. * Estimated: a security or currency the nightly job has not loaded yet uses its newest trade price or rate, and gold the last value you entered."
@@ -781,6 +766,6 @@ function Footnotes() {
           zh="平均成本 = 剩餘成本 ÷ 數量（含買進手續費與稅；賣出時按平均成本扣除）。未實現損益 = 市值 − 成本，皆以台幣計：市值用最新價格與匯率，成本用每筆買進當時的匯率，因此損益包含匯率變動。權重 = 市值 ÷ 一般投入資金池；大額資金持股顯示 —。"
         />
       </p>
-    </section>
+    </Info>
   );
 }

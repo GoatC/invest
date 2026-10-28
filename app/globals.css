@@ -669,6 +669,10 @@ tr.selected td {
   color: var(--danger-text);
 }
 
+.status-icon.idle {
+  color: var(--muted);
+}
+
 /* A long logged value (a JSON setting) wraps instead of pushing a phone screen sideways. */
 .changes li {
   overflow-wrap: anywhere;
@@ -780,4 +784,138 @@ details > form {
 /* Windfall page (F3): the backtest has a point per start month over 150 years, so it runs taller. */
 .chart.chart-backtest {
   height: 320px;
+}
+
+/* Regression Lab (N1): the two benchmarks side by side on a wide screen, stacked on a phone. */
+.grid-two {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .grid-two {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.grid-two > *,
+.grid-two .card > * {
+  margin: 0;
+  min-width: 0;
+}
+
+.chart.chart-scatter {
+  height: 300px;
+}
+
+.chart.chart-range {
+  height: 240px;
+}
+
+table.figures th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+fieldset.checks {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.equation {
+  margin: 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+/* An explanation folded behind ⓘ (components/info.tsx). */
+details.info > summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: fit-content;
+}
+
+details.info > .info-body {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Short labelled figures (components/facts.tsx): a grid of tiles in place of sentences. */
+.facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: 0.6rem;
+}
+
+.fact {
+  display: grid;
+  gap: 0.15rem;
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+
+.fact-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.fact-value {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.fact-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.fact.alert {
+  border-color: var(--danger-text);
+}
+
+.fact.watch {
+  border-color: var(--warn-text);
+}
+
+/* A folded edit history: the heading is the toggle. */
+details.history-section > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.history-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.history-section > summary h2 {
+  display: inline;
+}
+
+details.history-section > summary h2::after {
+  content: ' ▸';
+  color: var(--muted);
+}
+
+details.history-section[open] > summary h2::after {
+  content: ' ▾';
 }

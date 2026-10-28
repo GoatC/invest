@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingsData, orDataError } from '@/lib/data';
@@ -49,12 +50,12 @@ export default async function SecuritiesPage({ searchParams }: { searchParams: P
             <Bi {...LABELS.addSecurity} />
           </Link>
         </div>
-        <p className="muted small">
+        <Info>
           <Bi
             en="The product type and asset class decide how a security counts: R1 checks individual stocks only, and the asset class sets its sleeve and target weight."
             zh="產品類別與資產類別決定證券如何計算：R1 只檢查個股，資產類別決定所屬部位與目標權重。"
           />
-        </p>
+        </Info>
         <div className="table-wrap">
           <table>
             <thead>

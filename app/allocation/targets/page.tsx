@@ -1,9 +1,9 @@
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
-import { LogList } from '@/components/history';
+import { HistorySection, LogList } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAssetClassSettings, loadCaps, loadSecurities, loadTableLog, orDataError } from '@/lib/data';
-import { LABELS } from '@/lib/i18n';
 
 import { TargetsForm } from '../targets-form';
 
@@ -20,20 +20,17 @@ export default async function TargetsPage() {
         <h1>
           <Bi en="Edit targets" zh="修改目標權重" />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="Each class's share of the regular-contribution pool, from the Investment Principles. They must add up to 100%. F8 rebalances towards them, and the performance page's benchmark is built from them and the benchmark ETFs."
             zh="各類別占一般投入資金池的比例，來自投資原則，合計必須是 100%。F8 再平衡以此為目標，績效頁的基準也由這些權重與基準 ETF 組成。"
           />
-        </p>
+        </Info>
         <TargetsForm classes={classes} securities={securities} r2Target={caps.satellite?.targetWeight ?? null} />
       </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.history} />
-        </h2>
+      <HistorySection count={log.length}>
         <LogList entries={log} />
-      </section>
+      </HistorySection>
     </>
   );
 }

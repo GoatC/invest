@@ -3,6 +3,8 @@ import type { AuditEntry, FieldChange, LogEntry } from '@/lib/data';
 import { taipeiDateTime } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 
+import type { ReactNode } from 'react';
+
 import { Bi } from './bi';
 
 export const ACTION: Record<AuditEntry['action'], Bilingual> = {
@@ -143,5 +145,21 @@ export function LogList({ entries }: { entries: LogEntry[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A page's edit history, folded until asked for: the count shows in the heading. */
+export function HistorySection({ title = LABELS.history, count, children }: { title?: Bilingual; count: number; children: ReactNode }) {
+  return (
+    <section className="card">
+      <details className="history-section">
+        <summary>
+          <h2>
+            <Bi en={`${title.en} (${count})`} zh={`${title.zh}（${count}）`} />
+          </h2>
+        </summary>
+        {children}
+      </details>
+    </section>
   );
 }

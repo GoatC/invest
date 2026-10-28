@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
+import { Facts, type Fact } from '@/components/facts';
+import { Info } from '@/components/info';
 import { BacktestChart, type BacktestPoint } from '@/components/windfall-charts';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadWindfallData, type WindfallData } from '@/lib/data';
@@ -79,38 +81,37 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
   const saved = savedMessage(params['saved']);
   const core = data.classSettings.filter((assetClass) => assetClass.sleeve === 'core');
 
-  const lines: Bilingual[] = [];
+  const facts: Fact[] = [];
   if (plan) {
     const done = plan.tranches.filter((tranche) => tranche.status !== 'scheduled').length;
     const next = left[0];
-    lines.push({
-      en: `Plan: ${twd(plan.totalTwd)} from ${plan.startDate} in ${plan.tranches.length} monthly tranches (CAPE percentile ${plan.capePercentile === null ? '—' : Math.round(plan.capePercentile)} then); ${done} done or pulled forward, ${left.length} to go${next ? `, the next due ${next.dueDate}` : ''}.`,
-      zh: `計畫：${twd(plan.totalTwd)} 自 ${plan.startDate} 起分 ${plan.tranches.length} 個月投入（當時 CAPE 第 ${plan.capePercentile === null ? '—' : Math.round(plan.capePercentile)} 百分位）；已完成或提前 ${done} 批，剩 ${left.length} 批${next ? `，下一批 ${next.dueDate} 到期` : ''}。`,
+    facts.push({
+      label: { en: 'Plan', zh: '計畫' },
+      value: `${done} / ${plan.tranches.length}`,
+      note: { en: `${twd(plan.totalTwd)} · next ${next?.dueDate ?? '—'}`, zh: `${twd(plan.totalTwd)} · 下一批 ${next?.dueDate ?? '—'}` },
+      tone: 'ok',
     });
   } else {
-    lines.push({
-      en: 'No plan yet. When the windfall arrives, record it as a cash flow and as a TWD balance in the windfall pool (a money-market fund or time deposit), then start the plan below.',
-      zh: '尚無計畫。大額資金入帳後，請登錄為現金流，並在大額資金池新增一筆台幣餘額（貨幣基金或定存），再在下方建立計畫。',
-    });
+    facts.push({ label: { en: 'Plan', zh: '計畫' }, value: '—', note: { en: 'start one below', zh: '請於下方建立' }, tone: 'watch' });
   }
-  lines.push({
-    en: `Waiting as cash in the windfall pool: ${twd(waitingTwd)} of ${twd(poolTwd)}.`,
-    zh: `大額資金池中等待投入的現金：${twd(poolTwd)} 中的 ${twd(waitingTwd)}。`,
-  });
+  facts.push({ label: { en: 'Waiting as cash', zh: '等待中的現金' }, value: twd(waitingTwd), note: { en: `of ${twd(poolTwd)}`, zh: `共 ${twd(poolTwd)}` } });
   if (gauge && pace) {
-    lines.push({
-      en: `Valuation now: CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${ordinal(gauge.percentile)} percentile of ${gauge.months.toLocaleString('en-US')} months: a plan started now would take ${trancheCount(gauge.percentile, pace)} monthly tranches.`,
-      zh: `目前估值：${gauge.month} 的 CAPE 為 ${gauge.cape.toFixed(1)}，在 ${gauge.months.toLocaleString('en-US')} 個月中位於第 ${Math.round(gauge.percentile)} 百分位：現在建立的計畫會分 ${trancheCount(gauge.percentile, pace)} 個月投入。`,
+    facts.push({
+      label: { en: `CAPE ${gauge.month}`, zh: `CAPE ${gauge.month}` },
+      value: `${gauge.cape.toFixed(1)} · ${ordinal(gauge.percentile)}`,
+      note: { en: `→ ${trancheCount(gauge.percentile, pace)} tranches`, zh: `→ 分 ${trancheCount(gauge.percentile, pace)} 批` },
     });
   }
-  if (drawdown) {
-    lines.push({
-      en: `ACWI is ${percent(drawdown.drawdown)} below its 52-week high (${drawdown.peak.close} on ${drawdown.peak.date})${nextTier ? `; the next tier is at ${percent(nextTier.drawdown, 0)}` : ''}.`,
-      zh: `ACWI 自 52 週高點下跌 ${percent(drawdown.drawdown)}（高點為 ${drawdown.peak.date} 的 ${drawdown.peak.close}）${nextTier ? `；下一個級距為 ${percent(nextTier.drawdown, 0)}` : ''}。`,
-    });
-  } else {
-    lines.push({ en: "ACWI's closes are not loaded yet: the nightly job loads them.", zh: 'ACWI 的收盤價尚未載入：每夜排程會載入。' });
-  }
+  facts.push(
+    drawdown
+      ? {
+          label: { en: 'ACWI below 52-week high', zh: 'ACWI 距 52 週高點' },
+          value: `−${percent(drawdown.drawdown)}`,
+          note: { en: `high ${drawdown.peak.close} · ${drawdown.peak.date}${nextTier ? ` · next tier ${percent(nextTier.drawdown, 0)}` : ''}`, zh: `高點 ${drawdown.peak.close} · ${drawdown.peak.date}${nextTier ? ` · 下一級距 ${percent(nextTier.drawdown, 0)}` : ''}` },
+          tone: nextTier && drawdown.drawdown < (acceleration?.tiers[0]?.drawdown ?? 1) ? 'ok' : 'watch',
+        }
+      : { label: { en: 'ACWI', zh: 'ACWI' }, value: '—', note: { en: 'not loaded yet', zh: '尚未載入' } },
+  );
 
   return (
     <>
@@ -118,24 +119,24 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
         <h1>
           <Bi {...LABELS.windfall} />
         </h1>
-        <p className="muted">
-          <Bi
-            en="The windfall goes into the core classes only, never the satellite, in monthly tranches: fewer when the market is cheap, more when it is dear (by the S&P 500's CAPE against its history), and sooner when the world market (ACWI) falls 15%, 25% or 35% from its 52-week high. Each tranche is a proposal you approve and trade yourself (L2)."
-            zh="大額資金只投入核心類別，不投入衛星部位，每月分批：市場便宜時批數少、昂貴時批數多（以 S&P 500 的 CAPE 對照其歷史），全球股市（ACWI）自 52 週高點下跌 15%、25% 或 35% 時提前投入。每一批都是一份提案，由你核准並自行下單（L2）。"
-          />
-        </p>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...saved} />
           </p>
         )}
-        <ul className="summary-lines">
-          {lines.map((line) => (
-            <li key={line.en}>
-              <Bi {...line} />
-            </li>
-          ))}
-        </ul>
+        <Facts facts={facts} />
+        <Info>
+          <Bi
+            en="The windfall goes into the core classes only, never the satellite, in monthly tranches: fewer when the market is cheap, more when it is dear (by the S&P 500's CAPE against its history), and sooner when the world market (ACWI) falls 15%, 25% or 35% from its 52-week high. Each tranche is a proposal you approve and trade yourself (L2)."
+            zh="大額資金只投入核心類別，不投入衛星部位，每月分批：市場便宜時批數少、昂貴時批數多（以 S&P 500 的 CAPE 對照其歷史），全球股市（ACWI）自 52 週高點下跌 15%、25% 或 35% 時提前投入。每一批都是一份提案，由你核准並自行下單（L2）。"
+          />
+          {!plan && (
+            <Bi
+              en="When the windfall arrives, record it as a cash flow and as a TWD balance in the windfall pool (a money-market fund or time deposit), then start the plan below."
+              zh="大額資金入帳後，請登錄為現金流，並在大額資金池新增一筆台幣餘額（貨幣基金或定存），再在下方建立計畫。"
+            />
+          )}
+        </Info>
       </section>
 
       <section className="card form" id="backtest">
@@ -190,12 +191,12 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
         <h2>
           <Bi en="How the windfall is bought" zh="大額資金的買進方式" />
         </h2>
-        <p className="muted">
+        <Info>
           <Bi
             en="Each tranche is split by the core targets (the satellite excluded); strategic cash's share stays in the balance it waits in. Pick the fund each class is bought through: an Irish-domiciled one, such as AGGU for bonds, keeps the windfall out of US estate tax (Costs & tax). Blank buys the class's benchmark ETF, or the fund the windfall pool already holds most of."
             zh="每一批依核心目標權重分配（不含衛星）；戰略現金的部分留在等待中的帳戶。可為各類別選擇買進的基金：愛爾蘭註冊的基金（例如債券用 AGGU）可避開美國遺產稅（見「費用與稅務」）。留空則買進類別基準 ETF，或大額資金池已持有最多的那檔。"
           />
-        </p>
+        </Info>
         <WindfallForm
           kind="settings"
           fields={[
@@ -227,12 +228,12 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
         <h2>
           <Bi en="Pace and acceleration" zh="分批節奏與加速級距" />
         </h2>
-        <p className="muted">
+        <Info>
           <Bi
             en="The PRD's defaults, editable: below the 30th CAPE percentile 6 tranches, up to the 70th 12, above it 24; at a 15% fall the next tranche comes forward, at 25% half the cash left goes in, at 35% all of it. Each tier fires once per drawdown. The tiers are an open question (PRD Section 9): the backtest above shows what they did in the past."
             zh="規格書的預設值，可修改：CAPE 低於第 30 百分位分 6 批，到第 70 百分位分 12 批，高於則分 24 批；下跌 15% 下一批提前，25% 投入剩餘資金的一半，35% 全數投入。每個級距在同一波下跌中只觸發一次。加速級距仍是待決問題（規格書第 9 節）：上方回測顯示它們過去的表現。"
           />
-        </p>
+        </Info>
         {pace && acceleration ? (
           <WindfallForm kind="pace" fields={paceFields()} initial={paceInitial(pace, acceleration)} />
         ) : (
@@ -288,12 +289,12 @@ function Schedule({ plan, proposals }: { plan: NonNullable<WindfallData['plan']>
           })}
         </tbody>
       </table>
-      <p className="muted small">
+      <Info>
         <Bi
           en="Planned amounts are the total over the tranche count. When a tranche falls due, its proposal deploys the cash still waiting over the tranches still to go, so a tranche pulled forward, or one deployed late, evens out."
           zh="規劃金額為總額除以批數。每一批到期時，提案以「仍在等待的現金 ÷ 剩下的批數」投入，因此提前投入或延後投入的批次會自動平衡。"
         />
-      </p>
+      </Info>
     </div>
   );
 }
@@ -319,12 +320,12 @@ function Results({ result, horizon, acceleration, source }: { result: Backtest; 
   const points: BacktestPoint[] = result.rows.map((row) => ({ start: row.start, rule: row.rule / row.lump - 1, pace: row.pace / row.lump - 1, tranches: row.tranches }));
   return (
     <>
-      <p className="muted">
+      <Info>
         <Bi
           en={`Every start month from ${result.first} to ${result.last} (${result.rows.length.toLocaleString('en-US')} of them), each with ten years of CAPE behind it: what the tranches ended at ${horizon} months later against putting it all in at once, on the S&P 500 with dividends${source ? ` (${feedLabel(source).en})` : ''}.`}
           zh={`從 ${result.first} 到 ${result.last} 的每個起始月（共 ${result.rows.length.toLocaleString('en-US')} 個，每個都有十年的 CAPE 歷史）：分批投入在 ${horizon} 個月後與一次投入相比的結果，以 S&P 500 含股息計算${source ? `（${feedLabel(source).zh}）` : ''}。`}
         />
-      </p>
+      </Info>
       <BacktestChart points={points} label={{ en: 'Tranches against a lump sum, by start month', zh: '分批與一次投入的比較（依起始月）' }} />
       <div className="table-wrap">
         <table className="compact">
@@ -357,10 +358,7 @@ function Results({ result, horizon, acceleration, source }: { result: Backtest; 
           </tbody>
         </table>
       </div>
-      <details>
-        <summary>
-          <Bi en="How the backtest works" zh="回測方式" />
-        </summary>
+      <Info label={{ en: 'How the backtest works', zh: '回測方式' }}>
         <ul>
           <li>
             <Bi
@@ -381,7 +379,7 @@ function Results({ result, horizon, acceleration, source }: { result: Backtest; 
             />
           </li>
         </ul>
-      </details>
+      </Info>
     </>
   );
 }

@@ -59,25 +59,25 @@ export function PlanForm({ capes, pace, initial, replacing }: { capes: readonly 
       className="form"
     >
       <div className="form-grid">
-        <Field label={{ en: 'Windfall to deploy, NT$', zh: '要投入的大額資金（台幣）' }} error={error('totalTwd')} hint={<Bi en="Defaults to the windfall cash flows recorded." zh="預設為已登錄的大額資金入帳金額。" />}>
+        <Field label={{ en: 'Windfall to deploy, NT$', zh: '要投入的大額資金（台幣）' }} error={error('totalTwd')}>
           <input name="totalTwd" inputMode="numeric" autoComplete="off" value={values.totalTwd} onChange={(e) => change('totalTwd', e.target.value)} />
         </Field>
-        <Field label={{ en: 'First tranche due (YYYY-MM-DD)', zh: '第一批到期日（YYYY-MM-DD）' }} error={error('startDate')} hint={<Bi en="Then the same day each month." zh="之後每月同一天到期。" />}>
+        <Field label={{ en: 'First tranche due (YYYY-MM-DD)', zh: '第一批到期日（YYYY-MM-DD）' }} error={error('startDate')} hint={<Bi en="Then monthly." zh="之後每月一批。" />}>
           <input name="startDate" autoComplete="off" value={values.startDate} onChange={(e) => change('startDate', e.target.value)} />
         </Field>
       </div>
       <p className="muted" role="status">
         {gauge && count && first[0] ? (
           <Bi
-            en={`CAPE ${gauge.cape.toFixed(1)} in ${gauge.month}, the ${ordinal(gauge.percentile)} percentile of ${gauge.months.toLocaleString('en-US')} months: ${count} monthly tranches of about ${twd(first[0].amountTwd)}, ${first[0].dueDate} to ${first[first.length - 1]?.dueDate ?? ''}.`}
-            zh={`${gauge.month} 的 CAPE 為 ${gauge.cape.toFixed(1)}，在 ${gauge.months.toLocaleString('en-US')} 個月中位於第 ${Math.round(gauge.percentile)} 百分位：分 ${count} 個月，每批約 ${twd(first[0].amountTwd)}，${first[0].dueDate} 至 ${first[first.length - 1]?.dueDate ?? ''}。`}
+            en={`${count} × ≈ ${twd(first[0].amountTwd)} · ${first[0].dueDate} → ${first[first.length - 1]?.dueDate ?? ''} (CAPE ${gauge.cape.toFixed(1)}, ${ordinal(gauge.percentile)} percentile)`}
+            zh={`${count} 批 × 約 ${twd(first[0].amountTwd)} · ${first[0].dueDate} → ${first[first.length - 1]?.dueDate ?? ''}（CAPE ${gauge.cape.toFixed(1)}，第 ${Math.round(gauge.percentile)} 百分位）`}
           />
         ) : !pace ? (
           <Bi en="The pace setting is malformed: fix it below." zh="分批節奏設定格式錯誤：請在下方修正。" />
         ) : capes.length === 0 ? (
           <Bi en="No CAPE loaded yet: the nightly job loads it." zh="尚未載入 CAPE：每夜排程會載入。" />
         ) : (
-          <Bi en="Enter the amount and the date to see the pace." zh="輸入金額與日期即可看到分批節奏。" />
+          <Bi en="Amount and date → pace." zh="輸入金額與日期 → 分批節奏。" />
         )}
       </p>
       <Problem message={state.message} />
