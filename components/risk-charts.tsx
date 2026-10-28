@@ -73,7 +73,7 @@ function Sparkline({ points, scale, label }: { points: readonly VarPoint[]; scal
   if (!first || !last || points.length < 2) {
     return (
       <p className="muted small">
-        <Bi en="The 52-week line fills in as the nightly job saves each day's VaR." zh="每夜排程每天存下風險值後，這裡會逐漸畫出近 52 週的變化。" />
+        <Bi en="The 52-week line fills in nightly." zh="近 52 週走勢將每夜累積。" />
       </p>
     );
   }

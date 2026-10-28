@@ -1,4 +1,5 @@
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
@@ -58,12 +59,12 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         <h1>
           <Bi {...LABELS.notifications} />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="The app pushes only when a decision is due: a new proposal from the rules, the weekly review with its three lines, or a data failure. Never a price move. Pushes wait out the quiet hours."
             zh="App 只在需要你做決定時推播：規則產生的新提案、三行的每週檢視摘要，或資料異常；不推播價格波動。安靜時段內的推播會等到時段結束後才送出。"
           />
-        </p>
+        </Info>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...(saved === 'schedule' ? { en: 'Saved; pushes follow the new times.', zh: '已儲存，推播改依新的時間。' } : { en: 'Device removed.', zh: '已移除裝置。' })} />
@@ -121,12 +122,12 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         <h2>
           <Bi en="When pushes may arrive" zh="推播時間" />
         </h2>
-        <p className="muted small">
+        <Info>
           <Bi
             en="Taipei time. The weekly review goes out within the hour after its time (the push job runs at minute 7 of each hour). The day and time are still open in the spec (PRD Section 9): pick what suits you."
             zh="台北時間。每週檢視會在設定時間後一小時內送出（推播排程在每小時第 7 分鐘執行）。規格書第 9 節中星期與時間仍待決定，請依你的習慣設定。"
           />
-        </p>
+        </Info>
         <ScheduleForm
           initial={{
             quietStart: quiet ? hhmm(quiet.start) : '23:00',

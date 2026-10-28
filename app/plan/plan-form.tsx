@@ -31,7 +31,7 @@ function startValue(start: string, values: StartValues): { value: number; note: 
   const before = addMonths(start, -1);
   if (before >= values.current) return { value: values.today, note: { en: `Your regular pool today: ${twd(values.today)}.`, zh: `一般投入資金池目前市值：${twd(values.today)}。` } };
   const value = values.months[before] ?? 0;
-  return { value, note: { en: `Your regular pool on ${lastDayOf(before)}: ${twd(value)}.`, zh: `一般投入資金池在 ${lastDayOf(before)} 的市值：${twd(value)}。` } };
+  return { value, note: { en: `Regular pool ${lastDayOf(before)}: ${twd(value)}`, zh: `一般資金池 ${lastDayOf(before)}：${twd(value)}` } };
 }
 
 const FIELDS: Record<PlanField, Bilingual> = {

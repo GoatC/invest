@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataHealthBanner, RunStatusBadge } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
@@ -41,12 +42,12 @@ export default async function DataStatusPage() {
         <h1>
           <Bi {...LABELS.dataStatus} />
         </h1>
-        <p className="muted">
+        <Info>
           <Bi
             en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates, the gold price and the monthly market series of the windfall planner, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
             zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率、金價與大額資金分批所用的每月市場資料，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
           />
-        </p>
+        </Info>
         <DataHealthBanner health={health} threshold={status.threshold} />
       </section>
       {health.latest && <LatestRun run={health.latest} />}
@@ -270,12 +271,12 @@ function Rates({ rates }: { rates: LatestQuote[] }) {
         </div>
       )}
       {gold && (
-        <p className="muted small">
+        <Info>
           <Bi
             en={`Gold per gram: ${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = TWD per troy ounce ÷ ${GRAMS_PER_TROY_OUNCE} grams. TWD per ounce = the international USD price × the Bank of Taiwan USD rate of the day; the bank's own buy-back price is usually a little lower.`}
             zh={`每克金價：${twd(gold.value / GRAMS_PER_TROY_OUNCE)} = 每盎司台幣價格 ÷ ${GRAMS_PER_TROY_OUNCE} 克。每盎司台幣價格 = 國際美元金價 × 當日臺灣銀行美元匯率；銀行實際回收價通常略低。`}
           />
-        </p>
+        </Info>
       )}
     </section>
   );
@@ -405,7 +406,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
           </table>
         </div>
       )}
-      <p className="muted small">
+      <Info>
         <Bi
           en="Shiller's data is monthly and a few weeks behind; the Windfall page reads CAPE's percentile over its whole history and backtests on all three."
           zh="Shiller 的資料為每月更新，約落後數週；「大額資金」頁以 CAPE 在整段歷史中的百分位作為估值指標，並以三項資料進行回測。"
@@ -413,7 +414,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
         <Link href="/windfall">
           <Bi {...LABELS.windfall} />
         </Link>
-      </p>
+      </Info>
     </section>
   );
 }

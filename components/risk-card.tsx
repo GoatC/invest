@@ -6,6 +6,7 @@ import type { RiskReport, VarPoint } from '@/lib/models/risk';
 import { riskHorizons } from '@/lib/risk-text';
 
 import { Bi } from './bi';
+import { Info } from './info';
 import { VarFigure } from './risk-charts';
 
 /** Why there is no VaR to show, in the order they are checked. */
@@ -62,7 +63,7 @@ export function RiskCard({ report, line, details = false }: { report: RiskReport
         <VarFigure horizons={riskHorizons(report.settings)} weekVar={report.weekVar ?? 0} valueTwd={report.measured.valueTwd} line={line} />
       )}
       {report && report.measured.valueTwd > 0 && (
-        <p className="muted small">
+        <Info>
           <Bi
             en={`Weekly returns from ${report.window.from} to ${report.window.to}; the portfolio, both pools, at its newest closes: ${twd(report.measured.valueTwd)}.`}
             zh={`週報酬期間 ${report.window.from} 至 ${report.window.to}；投資組合（兩個資金池）以最新收盤價計：${twd(report.measured.valueTwd)}。`}
@@ -76,7 +77,7 @@ export function RiskCard({ report, line, details = false }: { report: RiskReport
               />
             </>
           )}
-        </p>
+        </Info>
       )}
     </section>
   );

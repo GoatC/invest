@@ -77,7 +77,6 @@ export function TargetsForm({ classes, securities, r2Target }: { classes: AssetC
                   <Field
                     label={{ en: 'Benchmark ETF', zh: '基準 ETF' }}
                     error={error(names.benchmark)}
-                    hint={<Bi en="Its return measures the class (F18) and its risk (N4)" zh="用來衡量此類別的報酬（F18）與風險（N4）" />}
                   >
                     <select name={names.benchmark} value={values[names.benchmark] ?? ''} onChange={(e) => change(names.benchmark, e.target.value)}>
                       <option value="">{bi({ en: 'None', zh: '無' })}</option>
@@ -94,7 +93,7 @@ export function TargetsForm({ classes, securities, r2Target }: { classes: AssetC
         </fieldset>
       ))}
       <p className={Math.abs(total - 1) > 1e-9 ? 'banner warn' : 'muted'} role="status">
-        <Bi en={`Total: ${percent(total, 2)} of the regular pool (it must be 100%).`} zh={`合計：一般投入資金池的 ${percent(total, 2)}（必須是 100%）。`} />
+        <Bi en={`Total ${percent(total, 2)} / 100%`} zh={`合計 ${percent(total, 2)} / 100%`} />
       </p>
       {totalError && (
         <p className="banner danger" role="alert">

@@ -2,7 +2,8 @@ import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { ChangeList, TaipeiTime } from '@/components/history';
+import { Info } from '@/components/info';
+import { ChangeList, HistorySection, TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadEngineInput, loadRuleChanges, type OrderSettings, type Proposal, type RuleChange, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
@@ -49,12 +50,6 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
         <h1>
           <Bi {...LABELS.rules} />
         </h1>
-        <p className="muted">
-          <Bi
-            en="The Investment Policy Statement in executable form. The engine evaluates the rules marked below after every nightly update, drafts a proposal when one fires, and stops there for you to decide. Every number lives here, not in the code, and every edit is logged."
-            zh="可執行版本的投資政策聲明。每晚資料更新後，規則引擎會評估下列規則，觸發時產生提案，然後停下來等你決定。所有數字都存放在這裡而不是程式中，每次修改都會留下紀錄。"
-          />
-        </p>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...(saved === 'settings' ? { en: 'Settings saved.', zh: '已儲存設定。' } : { en: `${saved} saved; the change is logged below.`, zh: `已儲存 ${saved}；修改紀錄列於下方。` })} />
@@ -92,10 +87,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
         ))}
       </section>
 
-      <section className="card">
-        <h2>
-          <Bi en="Edit history of the rules" zh="規則的修改紀錄" />
-        </h2>
+      <HistorySection title={{ en: 'Edit history of the rules', zh: '規則的修改紀錄' }} count={changes.length}>
         {changes.length === 0 ? (
           <p className="muted">
             <Bi en="No edits yet." zh="尚無修改紀錄。" />
@@ -110,10 +102,21 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
             ))}
           </ul>
         )}
-      </section>
+      </HistorySection>
     </>
   );
 }
+
+/** Each finding at a glance: ✓ nothing to do, ! a proposal, ✕ broken, … not yet. */
+const ICON: Record<Check['outcome'], [string, string]> = {
+  fires: ['!', 'watch'],
+  quiet: ['✓', 'ok'],
+  covered: ['✓', 'ok'],
+  waiting: ['…', 'idle'],
+  unreadable: ['✕', 'rebalance'],
+  off: ['–', 'idle'],
+  later: ['…', 'idle'],
+};
 
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
   const evaluated = check && check.outcome !== 'later';
@@ -129,11 +132,11 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           <Bi {...(rule.enabled ? { en: 'On', zh: '啟用' } : { en: 'Off', zh: '停用' })} />
         </span>
       </div>
-      <p>
-        <Bi en={rule.descEn} zh={rule.descZh} />
-      </p>
       {check && (
-        <p className={check.outcome === 'fires' ? 'banner warn' : check.outcome === 'unreadable' ? 'banner danger' : 'muted'}>
+        <p className={`rule-check ${check.outcome === 'fires' ? 'banner warn' : check.outcome === 'unreadable' ? 'banner danger' : 'muted'}`}>
+          <span className={`status-icon ${ICON[check.outcome][1]}`} aria-hidden="true">
+            {ICON[check.outcome][0]}
+          </span>{' '}
           <Bi {...checkText(check, rule.condition)} />
           {live && (
             <>
@@ -148,6 +151,9 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           )}
         </p>
       )}
+      <Info label={{ en: 'What it does', zh: '規則說明' }}>
+        <Bi en={rule.descEn} zh={rule.descZh} />
+      </Info>
       <details>
         <summary>
           <Bi en="Thresholds and cooldown" zh="門檻與冷卻期" />

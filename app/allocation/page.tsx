@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocation-charts';
 import { Bi } from '@/components/bi';
+import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAllocationData, type AllocationData } from '@/lib/data';
@@ -53,12 +54,6 @@ export default async function AllocationPage({ searchParams }: { searchParams: P
         <h1>
           <Bi {...LABELS.allocation} />
         </h1>
-        <p className="muted">
-          <Bi
-            en="How the portfolio is spread against the SAA targets of the Investment Principles (F6), and three ways of slicing it (N6). The targets are set on the regular-contribution pool, so drift is measured there."
-            zh="投資組合相對於投資原則 SAA 目標權重的分布（F6），以及三種分法的配置圓餅圖（N6）。目標權重以一般投入資金池為基礎，因此偏離也在一般資金池中計算。"
-          />
-        </p>
         {saved && (
           <p className="banner ok" role="status">
             <Bi {...saved} />
@@ -115,12 +110,12 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
         </p>
       ) : (
         <>
-          <p className="muted small">
+          <Info>
             <Bi
               en="Drift = actual weight − target, in percentage points (pp). A core class turns amber past half of its F8 band and red past the band itself, where F8 drafts a rebalance: 5 pp, or a quarter of the target if that is smaller (the 5/25 rule). Satellite classes are watched by R2 as a whole."
               zh="偏離＝實際權重－目標權重，單位為百分點（pp）。核心類別超過 F8 門檻的一半轉為黃色，超過門檻本身轉為紅色，此時 F8 會產生再平衡清單：門檻為 5 個百分點，或目標的四分之一（取較小者，即 5/25 規則）。衛星類別由 R2 以整體衡量。"
             />
-          </p>
+          </Info>
           {!data.bands && (
             <p className="banner info">
               <Bi en="The F8_DRIFT rule is off in the rules table, so no class is coloured." zh="rules 表中的 F8_DRIFT 規則未啟用，因此不顯示顏色。" />
@@ -224,12 +219,12 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
         </p>
       ) : (
         <>
-          <p className="muted small">
+          <Info>
             <Bi
               en={`Your expected yearly return and volatility per class, which the compounding calculator (F2) reads, and Monte Carlo (F5) and the efficient frontier (F7) will.${saved.verifiedOn ? ` Last reviewed on ${saved.verifiedOn}.` : ''}`}
               zh={`各類別的預期年報酬與年化波動度，供複利計算機（F2）使用，之後也供蒙地卡羅（F5）與效率前緣（F7）使用。${saved.verifiedOn ? `最後檢視日期：${saved.verifiedOn}。` : ''}`}
             />
-          </p>
+          </Info>
           <div className="table-wrap">
             <table>
               <thead>
@@ -268,8 +263,8 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
           <p className="muted small">
             {mix === null ? (
               <Bi
-                en="Once every class with a target has an assumption, the target mix's expected yearly return shows here."
-                zh="每個有目標權重的類別都設定假設後，這裡會顯示目標組合的預期年報酬。"
+                en="Expected return: once every class has an assumption."
+                zh="預期報酬：每個類別都設定假設後顯示。"
               />
             ) : (
               <Bi
@@ -307,12 +302,12 @@ function Donut({ data, portfolio, scope }: { data: AllocationData; portfolio: Po
       <h2>
         <Bi en="Allocation donuts" zh="資產配置圓餅圖" />
       </h2>
-      <p className="muted small">
+      <Info>
         <Bi
           en="Listing country is where a fund trades, not what it owns: VT trades in the US but holds the world. Non-listed assets (physical gold, savings) count as not listed."
           zh="上市國家是交易所所在地，不等於實際投資地區：VT 在美國上市，但投資全球。非上市資產（實體黃金、存款）列為非上市。"
         />
-      </p>
+      </Info>
       {split.totalTwd <= 0 ? (
         <p className="muted">
           <Bi en="This pool holds nothing priced yet." zh="這個資金池目前沒有已計價的持有。" />

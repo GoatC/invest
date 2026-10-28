@@ -202,8 +202,8 @@ export function ImportWizard({ data, rates, flows, mappings, today }: { data: Ho
                   <Bi en="TWD per 1 unit; TWD trades need none" zh="每 1 單位兌台幣；台幣交易不需要" />
                 ) : (
                   <Bi
-                    en="TWD per 1 unit. Leave blank to use each trade date's rate loaded by the nightly job (its date shows under the rate); TWD trades need none"
-                    zh="每 1 單位兌台幣。空白則使用每夜排程載入的交易日匯率（匯率下方顯示其日期）；台幣交易不需要"
+                    en="Blank: each trade date's rate"
+                    zh="空白：使用各交易日匯率"
                   />
                 )
               }

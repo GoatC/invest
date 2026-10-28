@@ -325,7 +325,7 @@ export function AllocationDonut({ slices, withTarget, label }: { slices: Record<
         </div>
       ) : (
         <p className="muted small">
-          <Bi en="Tap a slice or a row to list its holdings." zh="點選區塊或表格列，即可列出其中的持股。" />
+          <Bi en="Tap a slice or row for its holdings." zh="點選區塊或列 → 持股。" />
         </p>
       )}
     </figure>

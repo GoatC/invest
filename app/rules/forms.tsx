@@ -66,7 +66,7 @@ export function RuleForm({ id, enabled, cooldownDays, threshold }: { id: string;
         <Bi en="On: the engine evaluates it" zh="啟用：規則引擎會評估這條規則" />
       </label>
       <div className="form-grid">
-        <Field label={{ en: 'Cooldown, days', zh: '冷卻期（天）' }} error={error('cooldownDays')} hint={<Bi en="Fires at most once in this many days unless its state changes." zh="除非狀態改變，這段天數內最多觸發一次。" />}>
+        <Field label={{ en: 'Cooldown, days', zh: '冷卻期（天）' }} error={error('cooldownDays')} hint={<Bi en="Once per this many days." zh="這段天數內最多一次。" />}>
           <input name="cooldownDays" inputMode="numeric" autoComplete="off" value={values['cooldownDays'] ?? ''} onChange={(e) => change('cooldownDays', e.target.value)} />
         </Field>
         {numbers.map(([key, was]) => {
@@ -113,10 +113,8 @@ export function SettingsForm({ initial }: { initial: Record<EngineSettingsField,
   const [state, formAction, pending] = useActionState(saveEngineSettings, SETTINGS_STATE);
   const parsed = parseEngineSettings(values);
   const hints: Partial<Record<EngineSettingsField, Bilingual>> = {
-    dcaAmountTwd: { en: 'The contribution the monthly rule and the calculator start from.', zh: '每月投入規則與複利計算機使用的金額。' },
-    dcaDay: { en: 'The monthly-contribution rule fires the day after; leave it blank to keep it waiting.', zh: '每月投入規則在扣款日隔天觸發；留白則暫不觸發。' },
-    expiryDays: { en: 'Unactioned proposals close after this, and the rule is checked again.', zh: '未處理的提案在這段天數後關閉，並重新檢查規則。' },
-    shareDecimals: { en: "For the markets ticked above; use your broker's. Taiwan odd lots are whole shares.", zh: '適用於上方勾選的市場，請依券商規定；台股零股以整股計。' },
+    dcaDay: { en: 'Blank: the monthly rule waits.', zh: '留白：每月規則暫停。' },
+    shareDecimals: { en: 'Taiwan: whole shares.', zh: '台股以整股計。' },
   };
 
   function change(field: EngineSettingsField, value: string) {

@@ -36,8 +36,9 @@ A single-user PWA that runs a 30-year core–satellite portfolio on written rule
 1. **SAA first 配置優先** — Core ETFs carry the portfolio; satellite stocks are capped and must pass valuation and red-flag checks. 核心 ETF 是投資組合的主體；衛星個股有比例上限，且必須通過估值與紅旗檢查。
 2. **Decisions, not prices 推播決策而非價格** — No real-time price alerts; every push names a rule that fired and the action it proposes. 不推播即時股價；每則推播都要指出觸發的規則與建議的動作。
 3. **Human in the loop (L2) 人在迴路中** — The app drafts order lists; Hugo confirms and places every trade manually at the broker. No broker API access. 由 App 產生建議下單清單，Hugo 確認後到券商手動下單；不串接券商 API。
-4. **Explain every number 每個數字都可解釋** — Each model shows its formula, inputs and assumptions, in English and Chinese. 每個模型都以中英雙語顯示公式、輸入值與假設。
+4. **Explain every number 每個數字都可解釋** — Each model shows its formula, inputs and assumptions, in English and Chinese, one tap away: the explanation sits folded behind ⓘ. 每個模型都以中英雙語顯示公式、輸入值與假設，點一下 ⓘ 即可展開。
 5. **Free data only 只用免費資料** — All phases run on free data sources; paid upgrades stay an open question. 所有階段都只使用免費資料；是否升級付費資料列為待決問題。
+6. **Figures, not paragraphs 數字優先，少用段落** — A page shows labelled figures as tiles with a status icon (✓ on track, ! watch, ✕ act, … waiting) and short lines; sentences that explain go behind ⓘ, edit histories fold under their heading. 頁面以「標籤＋數字＋狀態圖示」的小卡呈現（✓ 正常、! 注意、✕ 需處理、… 等待中），只留短句；說明文字收進 ⓘ，修改紀錄收合在標題下。
 
 **Non-goals 非目標:** day trading, automatic order execution, multi-user or commercial use, real-time quote streaming. 不做當沖、不自動下單、不支援多人或商業使用、不提供即時報價串流。
 

@@ -75,3 +75,10 @@ binaries from GitHub on the first run. It is not meant for a Mac; Hugo does not 
 Screenshots of each screen and the service logs are kept in `/tmp/invest-e2e` (set `E2E_HOME` to
 change it). The run leaves a `.next` build pointing at the stand-in; run `npm run build` again
 before `npm start` against the real project.
+
+Two optional outputs: `DOCS_SHOTS=dir` saves the README images into `dir`, and `TEXT_REPORT=file`
+writes each page's visible text as JSON: the characters of prose (paragraphs, list items, hints and
+banners outside tables, legends and tiles), of summary tiles, and the prose lines themselves, so a
+change that adds sentences shows up. What sits folded behind ⓘ is not counted.
+
+另有兩個選用輸出：`DOCS_SHOTS=資料夾` 會存下 README 用的截圖；`TEXT_REPORT=檔案` 會把每頁可見文字的字數（段落、提示與摘要小卡分開計算）與段落內容寫成 JSON，方便檢查文字量是否又變多。收在 ⓘ 內的說明不計入。
