@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一階段已完成並通過關卡；第二階段依 PRD 第 11 節的順序進行中。
+Phase 1 is built and its gate has passed; Phase 2 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and waits on its gate before Phase 3 starts. 第一階段已完成並通過關卡；第二階段已依 PRD 第 11 節的順序完成，待通過關卡後才開始第三階段。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
