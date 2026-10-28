@@ -22,6 +22,9 @@ const TITLES: Record<string, Bilingual> = {
   us_situs_value_above: { en: 'US estate tax', zh: '美國遺產稅' },
   tranche_due: { en: 'Windfall tranche', zh: '大額資金分批' },
   index_drawdown_tier: { en: 'Windfall acceleration', zh: '大額資金加速投入' },
+  price_at_or_below_value_multiple: { en: 'Buy zone', zh: '進入買入區' },
+  price_at_or_above_value_multiple: { en: 'Trim zone', zh: '進入減碼區' },
+  value_change_exceeds: { en: 'Valuation updated', zh: '估值更新' },
 };
 
 /** "R1 · Single-stock trim". */
@@ -128,6 +131,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         en: `${twd(detail.contributionTwd ?? 0)} debited on ${detail.dcaDate ?? '—'} → the core classes furthest below target (pool ${pool} before it)`,
         zh: `${detail.dcaDate ?? '—'} 扣款 ${twd(detail.contributionTwd ?? 0)} → 最低於目標的核心類別（投入前資金池 ${pool}）`,
       });
+      if (detail.satelliteShareTwd) lines.push({ en: `${twd(detail.satelliteShareTwd)} of it goes to the buy-zone proposal`, zh: `其中 ${twd(detail.satelliteShareTwd)} 用於買入區提案` });
       break;
     case 'first_weekend_of_month':
       lines.push({ en: `Yearly check of the regular pool, ${pool}`, zh: `一般投入資金池 ${pool} 的年度檢查` });
@@ -167,6 +171,33 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       lines.push(...keptLine(detail));
       break;
     }
+    case 'price_at_or_below_value_multiple':
+      for (const row of detail.zone ?? []) {
+        const room = row.roomTwd !== undefined && row.roomTwd < (detail.satelliteShareTwd ?? 0) ? { en: ` · R1 / R2 room ${twd(row.roomTwd)}`, zh: ` · R1／R2 可容納 ${twd(row.roomTwd)}` } : { en: '', zh: '' };
+        lines.push({
+          en: `${row.ticker}: ${money(row.price, row.currency)} ≤ ${percent(row.multiple, 0)} of its ${money(row.value, row.currency)} value (${money(row.value * row.multiple, row.currency)})${room.en}`,
+          zh: `${row.ticker}：${money(row.price, row.currency)} ≤ 內在價值 ${money(row.value, row.currency)} 的 ${percent(row.multiple, 0)}（${money(row.value * row.multiple, row.currency)}）${room.zh}`,
+        });
+      }
+      lines.push({ en: `From this month's contribution: up to ${twd(detail.satelliteShareTwd ?? 0)}`, zh: `來自本月投入：最多 ${twd(detail.satelliteShareTwd ?? 0)}` });
+      break;
+    case 'price_at_or_above_value_multiple':
+      for (const row of detail.zone ?? []) {
+        lines.push({
+          en: `${row.ticker}: ${money(row.price, row.currency)} ≥ ${percent(row.multiple, 0)} of its ${money(row.value, row.currency)} value · sell ${percent(detail.sellShare ?? 0, 0)} of ${twd(row.heldTwd ?? 0)}`,
+          zh: `${row.ticker}：${money(row.price, row.currency)} ≥ 內在價值 ${money(row.value, row.currency)} 的 ${percent(row.multiple, 0)} · 賣出 ${twd(row.heldTwd ?? 0)} 的 ${percent(detail.sellShare ?? 0, 0)}`,
+        });
+      }
+      break;
+    case 'value_change_exceeds':
+      for (const row of detail.changes ?? []) {
+        lines.push({
+          en: `${row.ticker}: ${row.previous.toFixed(2)} (${row.previousOn}) → ${row.value.toFixed(2)} (${row.valuedOn}), ${row.change > 0 ? '+' : ''}${percent(row.change)}`,
+          zh: `${row.ticker}：${row.previous.toFixed(2)}（${row.previousOn}）→ ${row.value.toFixed(2)}（${row.valuedOn}），${row.change > 0 ? '+' : ''}${percent(row.change)}`,
+        });
+      }
+      lines.push({ en: 'Review the assumptions on the Valuation page · No orders drafted', zh: '請到「估值」頁檢視假設 · 不產生下單清單' });
+      break;
     default:
       break;
   }
@@ -199,6 +230,15 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
       return [{ en: 'Each tranche deploys the cash still waiting over the tranches still to go, split by the core targets; the satellite takes none of the windfall.', zh: '每一批以「仍在等待的現金 ÷ 剩下的批數」投入，依核心目標權重分配；大額資金不投入衛星部位。' }, ...kept];
     case 'index_drawdown_tier':
       return [{ en: 'Each tier fires once per drawdown; after a partial deployment, the tranches left deploy the rest at the usual pace.', zh: '每個級距在同一波下跌中只觸發一次；部分投入後，其餘依原節奏由剩下的批次投入。' }, ...kept];
+    case 'price_at_or_below_value_multiple':
+      return [
+        { en: "While a watched stock is in its buy zone, up to the contribution's satellite share (MONTHLY_CONTRIBUTION) goes to it each month, split over the stocks in the zone; the month's contribution puts the rest into the core. Each buy stays within R1's cap and R2's 20% target.", zh: '觀察清單個股在買入區期間，每月投入中最多衛星比例（MONTHLY_CONTRIBUTION）的金額可投入，多檔時平分；當月其餘投入核心類別。每筆買進都受 R1 上限與 R2 的 20% 目標限制。' },
+        { en: 'The value is the base case of the model its alerts use, as last saved on the Valuation page.', zh: '內在價值為警報所用模型的基本情境，取「估值」頁最後儲存的數值。' },
+      ];
+    case 'price_at_or_above_value_multiple':
+      return [{ en: 'Selling a share of the holding takes profit while the price is well above value; the proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '股價明顯高於內在價值時賣出部分持股以實現獲利；所得留在一般投入資金池，買進最低於目標的核心類別。' }];
+    case 'value_change_exceeds':
+      return [{ en: 'A new quarter changed the figures the value is worked out from. Check the growth rates and any typed figures still fit, then save the valuation again.', zh: '新一季財報改變了計算內在價值的數字。請確認成長率與自訂數字是否仍合適，再重新儲存估值。' }];
     default:
       return [];
   }
@@ -234,6 +274,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
       if (check.why === 'plan') return { en: 'Waiting for a windfall plan', zh: '尚無大額資金計畫' };
       if (check.why === 'windfall_cash') return { en: "Waiting for the windfall's cash", zh: '尚無大額資金的現金' };
       if (check.why === 'gauge') return { en: "Waiting for ACWI's closes", zh: '等待 ACWI 的收盤價' };
+      if (check.why === 'valuation') return { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' };
       return { en: 'Nothing to measure yet', zh: '尚無可衡量的持股' };
     case 'unreadable':
       return { en: 'Threshold missing or malformed', zh: '門檻缺漏或格式錯誤' };

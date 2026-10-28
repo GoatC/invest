@@ -3,7 +3,7 @@
  * shows counts and database errors only; which tickers were loaded stays in job_runs, behind
  * row-level security, and the app shows it. A run by hand prints everything.
  */
-import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
 import { DATABASE_ERRORS, type JobRun } from './job.ts';
 
 export function fullSummary(run: JobRun): string[] {
@@ -12,6 +12,9 @@ export function fullSummary(run: JobRun): string[] {
   for (const [key, loaded] of Object.entries({ ...detail.prices, ...detail.rates, ...detail.series, ...detail.indices })) {
     lines.push(`  ${key.padEnd(11)} ${loaded.source.padEnd(12)} ${String(loaded.rows).padStart(5)} rows, latest ${loaded.latest}`);
   }
+  for (const [key, loaded] of Object.entries(detail.filings ?? {})) {
+    lines.push(`  ${`${key} filings`.padEnd(11)} ${loaded.source.padEnd(12)} ${String(loaded.rows).padStart(5)} quarters, latest ${loaded.latest}`);
+  }
   if (detail.snapshots) {
     const risk = detail.snapshots.valueAtRisk;
     const withVar = risk === undefined ? '' : `; with a 1-week VaR 含一週風險值: ${risk} days 天`;
@@ -19,13 +22,14 @@ export function fullSummary(run: JobRun): string[] {
   }
   if (detail.rules) lines.push(`Rules 規則: ${detail.rules.created} proposals drafted 新提案, ${detail.rules.closed} closed 關閉`);
   if (detail.betas) lines.push(`Betas β: ${detail.betas.saved} saved for the month 已存入本月 β`);
+  if (detail.valued) lines.push(`Valuations 估值: ${detail.valued.join(', ')} valued after a new filing 依新財報重新估值`);
   for (const warning of detail.warnings) lines.push(`  warning 警告: ${warning}`);
   for (const error of detail.errors) lines.push(`  error 錯誤: ${error}`);
   return lines;
 }
 
 /** Errors about the database, the snapshots, their VaR, the rules or the β name no tickers or amounts, so the public log can show them. */
-const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR, RULES_ERROR, BETAS_ERROR].some((label) => line.startsWith(`${label}:`));
+const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR, RULES_ERROR, BETAS_ERROR, VALUATIONS_ERROR].some((label) => line.startsWith(`${label}:`));
 
 /** Lines with GitHub annotations, so a failed or partial run is flagged on the run's page. */
 export function publicSummary(run: JobRun): string[] {
@@ -34,6 +38,7 @@ export function publicSummary(run: JobRun): string[] {
   const rates = Object.keys(detail.rates).length;
   const series = Object.keys(detail.series ?? {}).length;
   const indices = Object.keys(detail.indices ?? {}).length;
+  const filings = Object.keys(detail.filings ?? {}).length;
   const fallbacks = detail.warnings.length;
   const errors = detail.errors.length;
   const level = run.status === 'failed' ? 'error' : errors > 0 ? 'warning' : 'notice';
@@ -46,8 +51,8 @@ export function publicSummary(run: JobRun): string[] {
   // That the rules ran, never what they proposed.
   const rules = detail.rules ? { en: ' Rules checked.', zh: '規則已檢查。' } : { en: '', zh: '' };
   return [
-    `::${level}::Nightly prices: ${run.status}. Loaded ${securities} securities, ${rates} rates, ${series} market series and ${indices} indices; ${fallbacks} fallbacks, ${errors} errors.${snapshots.en}${rules.en} The app's data status lists them.` +
-      ` 每夜價格：${run.status}。載入 ${securities} 檔證券、${rates} 組匯率、${series} 項市場資料、${indices} 個指數；使用備援 ${fallbacks} 次，錯誤 ${errors} 項。${snapshots.zh}${rules.zh}明細見 App 的資料狀態。`,
+    `::${level}::Nightly prices: ${run.status}. Loaded ${securities} securities, ${rates} rates, ${series} market series, ${indices} indices and ${filings} companies' filings; ${fallbacks} fallbacks, ${errors} errors.${snapshots.en}${rules.en} The app's data status lists them.` +
+      ` 每夜價格：${run.status}。載入 ${securities} 檔證券、${rates} 組匯率、${series} 項市場資料、${indices} 個指數、${filings} 家公司財報；使用備援 ${fallbacks} 次，錯誤 ${errors} 項。${snapshots.zh}${rules.zh}明細見 App 的資料狀態。`,
     ...detail.errors.filter(isDatabaseError).map((line) => `::error::${line}`),
   ];
 }

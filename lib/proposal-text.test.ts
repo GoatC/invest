@@ -72,6 +72,30 @@ describe('proposal text', () => {
     assert.equal(checkText({ ruleId: 'WINDFALL_TRANCHE_DUE', outcome: 'waiting', why: 'plan' }).zh, '尚無大額資金計畫');
   });
 
+  it('explains the buy and trim zones and a valuation a filing moved (F12)', () => {
+    const buy = whyLines(
+      { id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple' },
+      { poolTwd: 100_000, zone: [{ ticker: 'AAPL', price: 150, currency: 'USD', value: 210, multiple: 0.75, roomTwd: 2_000, boughtTwd: 1_950 }], satelliteShareTwd: 2_000, cashTwd: 2_000, leftTwd: 50 },
+      NAMES,
+    );
+    assert.equal(buy[0]?.en, 'AAPL: 150.00 USD ≤ 75% of its 210.00 USD value (157.50 USD)');
+    assert.equal(buy[1]?.zh, '來自本月投入：最多 NT$2,000');
+    const trim = whyLines(
+      { id: 'TRIM_ZONE', condition: 'price_at_or_above_value_multiple' },
+      { poolTwd: 100_000, zone: [{ ticker: '2330', price: 1500, currency: 'TWD', value: 1000, multiple: 1.25, heldTwd: 6_000, soldTwd: 3_000 }], sellShare: 0.5, cashTwd: 3_000, leftTwd: 0 },
+      NAMES,
+    );
+    assert.equal(trim[0]?.en, '2330: 1,500.00 TWD ≥ 125% of its 1,000.00 TWD value · sell 50% of NT$6,000');
+    const moved = whyLines(
+      { id: 'VALUATION_UPDATED', condition: 'value_change_exceeds' },
+      { poolTwd: 100_000, changes: [{ ticker: 'AAPL', value: 230, previous: 200, valuedOn: '2026-10-31', previousOn: '2026-08-01', change: 0.15 }], cashTwd: 0, leftTwd: 0 },
+      NAMES,
+    );
+    assert.equal(moved[0]?.en, 'AAPL: 200.00 (2026-08-01) → 230.00 (2026-10-31), +15.0%');
+    assert.deepEqual(proposalTitle({ id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple' }), { en: 'BUY_ZONE · Buy zone', zh: 'BUY_ZONE · 進入買入區' });
+    assert.deepEqual(checkText({ ruleId: 'BUY_ZONE', outcome: 'waiting', why: 'valuation' }), { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' });
+  });
+
   it('says when a whole share sells much more than the trim', () => {
     const lines = whyLines(
       { id: 'R1', condition: 'single_stock_weight_above' },

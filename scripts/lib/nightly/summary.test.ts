@@ -29,7 +29,7 @@ describe('nightly summaries', () => {
   it('keeps tickers out of the public Actions log, flagging the run by its status', () => {
     const partial = publicSummary(run('partial', ['NVDA: finmind: HTTP 503']));
     assert.equal(partial.length, 1);
-    assert.match(partial[0] ?? '', /^::warning::Nightly prices: partial\. Loaded 2 securities, 1 rates, 0 market series and 0 indices; 1 fallbacks, 1 errors\. NAV snapshots and VaR updated\. Rules checked\./);
+    assert.match(partial[0] ?? '', /^::warning::Nightly prices: partial\. Loaded 2 securities, 1 rates, 0 market series, 0 indices and 0 companies' filings; 1 fallbacks, 1 errors\. NAV snapshots and VaR updated\. Rules checked\./);
     // Nor when the snapshots start, which would tell when the investing began, nor how many have a VaR, nor what the rules proposed.
     for (const piece of ['2330', 'VT', 'NVDA', '168', '161', '2026-05-07', 'proposals']) assert.ok(!partial.join('\n').includes(piece), piece);
     assert.match(publicSummary(run('ok', []))[0] ?? '', /^::notice::/);

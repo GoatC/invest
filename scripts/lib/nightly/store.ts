@@ -1,14 +1,14 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadPerformanceInput, loadRiskInput, refreshBetas, runRules } from '../../../lib/data.ts';
+import { loadFilingTickers, loadPerformanceInput, loadRiskInput, refreshBetas, revalueOnFilings, runRules } from '../../../lib/data.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
-import type { JobRun, Security, Store } from './job.ts';
+import type { FundamentalRow, JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
 const BATCH = 500;
@@ -106,6 +106,21 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('index_prices', error);
       }
     },
+    async filingTickers() {
+      const { data, error } = await client.from('config').select('key').eq('key', 'valuation');
+      check('config', error);
+      return (data ?? []).length > 0 ? loadFilingTickers(client) : undefined;
+    },
+    async saveFundamentals(rows: readonly FundamentalRow[]) {
+      for (const batch of batches(rows)) {
+        const { error } = await client.from('fundamentals').upsert(
+          batch.map((row) => ({ ticker: row.ticker, period_end: row.periodEnd, figures: row.figures, currency: row.currency, filed_on: row.filed, source: row.source })),
+          { onConflict: 'ticker,period_end' },
+        );
+        check('fundamentals', error);
+      }
+    },
+    revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
     performanceInput: (end) => loadPerformanceInput(client, end),
     riskInput: (from, end) => loadRiskInput(client, from, end),

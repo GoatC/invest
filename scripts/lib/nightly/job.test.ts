@@ -8,7 +8,7 @@ import type { PerformanceInput, Snapshot } from '../../../lib/models/performance
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
-import { goldInTwd, riskWindowStart, runNightly, windowStart, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -68,10 +68,28 @@ const REPLIES: Record<string, string> = {
   'shillerdata.com': '<a href="https://img1.wsimg.com/blobby/go/x/downloads/ie_data.xls?ver=1">ie_data.xls</a>',
   // One by-month table answers for each series: for the yield, 40.81% and 40.42%.
   'multpl.com': '<table id="datatable"><tr><td>Oct 1, 2026</td><td>40.81</td></tr><tr><td>Sep 1, 2026</td><td>40.42</td></tr></table>',
+  // The valuation workbench's filings (F12): SEC's ticker list and a company's facts, FinMind's statements.
+  company_tickers: JSON.stringify({ 0: { cik_str: 320193, ticker: 'AAPL', title: 'Apple Inc.' } }),
+  companyfacts: JSON.stringify({
+    entityName: 'Apple Inc.',
+    facts: {
+      'us-gaap': {
+        NetIncomeLoss: { units: { USD: [{ start: '2025-06-29', end: '2026-06-27', val: 128930, form: '10-Q', filed: '2026-07-31' }, { start: '2012-09-30', end: '2013-09-28', val: 37037, form: '10-K', filed: '2013-10-30' }] } },
+        WeightedAverageNumberOfDilutedSharesOutstanding: { units: { shares: [{ start: '2026-03-29', end: '2026-06-27', val: 14715, form: '10-Q', filed: '2026-07-31' }] } },
+      },
+    },
+  }),
+  'TaiwanStockFinancialStatements 2330': ok([
+    { date: '2026-06-30', type: 'EquityAttributableToOwnersOfParent', origin_name: '淨利（淨損）歸屬於母公司業主', value: 707 },
+    { date: '2026-06-30', type: 'EPS', origin_name: '基本每股盈餘', value: 27.27 },
+  ]),
+  'TaiwanStockBalanceSheet 2330': ok([{ date: '2026-06-30', type: 'EquityAttributableToOwnersOfParent', origin_name: '歸屬於母公司業主之權益合計', value: 6432 }]),
+  'TaiwanStockCashFlowsStatement 2330': ok([]),
+  'TaiwanStockDividendResult 2330': ok([]),
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -127,6 +145,9 @@ class MemoryStore implements Store {
   indices: IndexClose[] = [];
   indexFills: IndexClose[] = [];
   betaRuns: string[] = [];
+  fundamentals: FundamentalRow[] = [];
+  /** When the watched stocks were valued again, and how many quarters were saved by then. */
+  revalues: Array<{ today: string; quartersSaved: number }> = [];
   runs: JobRun[] = [];
   snapshots: Snapshot[] = [];
   /** When the rules were evaluated, and how many snapshots were saved by then. */
@@ -145,6 +166,9 @@ class MemoryStore implements Store {
       failBetas?: boolean;
       /** Whether config capm exists (F11). */
       capm?: boolean;
+      /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
+      filings?: Array<{ ticker: string; market: string }>;
+      failRevalue?: boolean;
     } = {},
   ) {}
   async securities() {
@@ -192,6 +216,17 @@ class MemoryStore implements Store {
   async saveIndexPrices(rows: readonly IndexClose[], options: { fillOnly?: boolean } = {}) {
     (options.fillOnly ? this.indexFills : this.indices).push(...rows);
   }
+  async filingTickers() {
+    return this.options.filings;
+  }
+  async saveFundamentals(rows: readonly FundamentalRow[]) {
+    this.fundamentals.push(...rows);
+  }
+  async revalue(today: string) {
+    if (this.options.failRevalue) throw new Error('valuations: permission denied');
+    this.revalues.push({ today, quartersSaved: this.fundamentals.length });
+    return { valued: this.fundamentals.length > 0 ? ['AAPL'] : [] };
+  }
   async refreshBetas(today: string) {
     if (this.options.failBetas) throw new Error('beta_results: permission denied');
     this.betaRuns.push(today);
@@ -233,6 +268,58 @@ const deps = (get: Get, store: Store, alphaVantageKey?: string, bytes: GetBytes 
   alphaVantageKey,
   today: TODAY,
   now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++)),
+});
+
+describe('filings (F12)', () => {
+  const filers = [
+    { ticker: 'AAPL', market: 'US' },
+    { ticker: '2330', market: 'TW' },
+  ];
+
+  it("loads US filings from SEC with the contact User-Agent and Taiwan ones from FinMind, then values the watched stocks before the rules", async () => {
+    const store = new MemoryStore({ filings: filers });
+    const { get } = fakeGet();
+    const agents: Array<string | undefined> = [];
+    const spy: Get = async (url, headers) => {
+      if (url.includes('sec.gov')) agents.push(headers?.['User-Agent']);
+      return get(url, headers);
+    };
+    const run = await runNightly({ ...deps(spy, store), secUserAgent: 'LongViewInvest hugo@example.com' });
+    assert.equal(run.status, 'ok', JSON.stringify(run.detail.errors));
+    assert.deepEqual(agents, ['LongViewInvest hugo@example.com', 'LongViewInvest hugo@example.com']);
+    // The 2013 year is older than the seven years loaded.
+    assert.deepEqual(
+      store.fundamentals.map((row) => [row.ticker, row.periodEnd, row.currency, row.filed, row.source, row.figures.netIncome, row.figures.shares]),
+      [
+        ['AAPL', '2026-06-27', 'USD', '2026-07-31', 'sec', 128930, 14715],
+        ['2330', '2026-06-30', 'TWD', null, 'finmind', undefined, 26],
+      ],
+    );
+    assert.deepEqual(run.detail.filings, { AAPL: { source: 'sec', rows: 1, latest: '2026-06-27' }, '2330': { source: 'finmind', rows: 1, latest: '2026-06-30' } });
+    assert.deepEqual(store.revalues, [{ today: TODAY, quartersSaved: 2 }]);
+    assert.deepEqual(run.detail.valued, ['AAPL']);
+    assert.equal(store.ruleRuns.length, 1);
+  });
+
+  it('skips US filings without SEC_USER_AGENT and says so, and loads nothing before config valuation exists', async () => {
+    const store = new MemoryStore({ filings: filers });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.ok(run.detail.errors.some((line) => line.startsWith('US filings: SEC_USER_AGENT is not set')));
+    assert.deepEqual(Object.keys(run.detail.filings ?? {}), ['2330']);
+    const before = new MemoryStore();
+    const quiet = await runNightly(deps(fakeGet().get, before));
+    assert.equal(quiet.detail.filings, undefined);
+    assert.deepEqual(before.revalues, []);
+  });
+
+  it('records a failed re-valuation and still checks the rules', async () => {
+    const store = new MemoryStore({ filings: filers, failRevalue: true });
+    const run = await runNightly({ ...deps(fakeGet().get, store), secUserAgent: 'LongViewInvest hugo@example.com' });
+    assert.equal(run.status, 'partial');
+    assert.ok(run.detail.errors.includes('Valuations: valuations: permission denied'));
+    assert.equal(store.ruleRuns.length, 1);
+  });
 });
 
 describe('windowStart', () => {

@@ -5,7 +5,9 @@
  * English type. The income statement comes by quarter; the cash-flow statement as filed in Taiwan,
  * the year to date (each year starts on 1 January, as every Taiwan listing reports by calendar
  * year). The share count is the quarter's net income over its EPS, which follows a change of par
- * value, else the share capital at NT$10 a share.
+ * value, else the share capital at NT$10 a share. The dividend a share adds up each quarter's
+ * cash ex-dividends (息) from the ex-dividend results; one with a stock dividend in it (權息) is
+ * left out, as the cash part cannot be told apart.
  */
 import type { Fact, Item } from '../../../lib/models/fundamentals.ts';
 import type { Row } from './finmind.ts';
@@ -14,6 +16,8 @@ export const STATEMENT_DATASETS = {
   income: 'TaiwanStockFinancialStatements',
   balance: 'TaiwanStockBalanceSheet',
   cash: 'TaiwanStockCashFlowsStatement',
+  /** The ex-dividend results, for the cash dividend a share: the cash-flow statement may not list dividends paid. */
+  dividends: 'TaiwanStockDividendResult',
 } as const;
 
 type Match = { types: string[]; names: string[] };
@@ -78,8 +82,8 @@ function quarterStart(end: string): string {
   return `${year}-${String(month - 2).padStart(2, '0')}-01`;
 }
 
-/** A Taiwan company's facts from its three statements, in TWD. */
-export function finmindStatements(rows: { income: readonly Row[]; balance: readonly Row[]; cash: readonly Row[] }): Fact[] {
+/** A Taiwan company's facts from its three statements and its ex-dividend results, in TWD. */
+export function finmindStatements(rows: { income: readonly Row[]; balance: readonly Row[]; cash: readonly Row[]; dividends?: readonly Row[] }): Fact[] {
   const facts: Fact[] = [];
   const income = lines(rows.income);
   const incomeItems = Object.fromEntries(Object.entries(INCOME).map(([item, match]) => [item, pick(income, match as Match)]));
@@ -126,5 +130,25 @@ export function finmindStatements(rows: { income: readonly Row[]; balance: reado
   for (const end of new Set([...(depreciation?.keys() ?? []), ...(amortization?.keys() ?? [])])) {
     facts.push({ item: 'da', start: yearStart(end), end, value: (depreciation?.get(end) ?? 0) + (amortization?.get(end) ?? 0) });
   }
+
+  // The cash dividend a share, quarter by quarter over the quarters the income statement covers.
+  if (rows.dividends) {
+    const byQuarter = new Map<string, number>();
+    for (const row of rows.dividends) {
+      const day = typeof row['date'] === 'string' ? row['date'].slice(0, 10) : '';
+      const amount = row['stock_and_cache_dividend'];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || row['stock_or_cache_dividend'] !== '息' || typeof amount !== 'number' || !(amount > 0)) continue;
+      const end = quarterEnd(day);
+      byQuarter.set(end, (byQuarter.get(end) ?? 0) + amount);
+    }
+    for (const end of incomeItems['netIncome']?.keys() ?? []) facts.push({ item: 'dps', start: quarterStart(end), end, value: Math.round((byQuarter.get(end) ?? 0) * 1e4) / 1e4 });
+  }
   return facts;
+}
+
+/** The last day of the calendar quarter a date falls in. */
+function quarterEnd(date: string): string {
+  const [year, month] = date.split('-').map(Number) as [number, number];
+  const last = Math.ceil(month / 3) * 3;
+  return `${year}-${String(last).padStart(2, '0')}-${last === 6 || last === 9 ? '30' : '31'}`;
 }

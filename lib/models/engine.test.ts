@@ -18,6 +18,7 @@ import {
   type EngineRule,
   type ProposalRecord,
   type TradeOrder,
+  type WatchInput,
 } from './engine';
 import { ASSET_CLASSES, holding } from './test-helpers';
 import type { Holding } from './valuation';
@@ -51,6 +52,7 @@ const RULES: EngineRule[] = [
   { id: 'ANNUAL_REVIEW', condition: 'first_weekend_of_month', threshold: { month: 1 }, enabled: true, cooldownDays: 7 },
   { id: 'MONTHLY_CONTRIBUTION', condition: 'day_after_dca', threshold: { max_classes: 2, satellite_share_with_buy_alert: 0.2 }, enabled: true, cooldownDays: 7 },
   { id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple', threshold: { multiple: 0.75 }, enabled: false, cooldownDays: 7 },
+  { id: 'RED_FLAG_RED', condition: 'satellite_red_flag', threshold: {}, enabled: false, cooldownDays: 7 },
 ];
 
 /** A listed regular-pool holding worth `value` at NT$100 a share. */
@@ -553,12 +555,86 @@ describe('deciding what to save', () => {
     const off = evaluate(input({ holdings, rules: RULES.map((rule) => (rule.id === 'R1' ? { ...rule, enabled: false } : rule)), proposals: [record({})] }));
     assert.equal(checkOf(off, 'R1').outcome, 'off');
     assert.deepEqual(off.close, [{ id: 1, reason: 'cleared' }]);
-    assert.equal(checkOf(off, 'BUY_ZONE').outcome, 'later');
+    assert.equal(checkOf(off, 'BUY_ZONE').outcome, 'off');
+    assert.equal(checkOf(off, 'RED_FLAG_RED').outcome, 'later');
   });
 
   it('reports a malformed threshold instead of guessing one', () => {
     const rules = RULES.map((rule) => (rule.id === 'R1' ? { ...rule, threshold: { max_weight: 5 } } : rule));
     assert.equal(checkOf(evaluate(input({ holdings, rules })), 'R1').outcome, 'unreadable');
+  });
+});
+
+describe('valuation rules (F12)', () => {
+  const F12: EngineRule[] = [
+    ...RULES.filter((rule) => rule.id !== 'BUY_ZONE'),
+    { id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple', threshold: { multiple: 0.75 }, enabled: true, cooldownDays: 7 },
+    { id: 'TRIM_ZONE', condition: 'price_at_or_above_value_multiple', threshold: { multiple: 1.25, sell_share: 0.5 }, enabled: true, cooldownDays: 30 },
+    { id: 'VALUATION_UPDATED', condition: 'value_change_exceeds', threshold: { change: 0.1 }, enabled: true, cooldownDays: 7 },
+  ];
+  const watched = (ticker: string, value: number, overrides: Partial<WatchInput> = {}): WatchInput => ({ ticker, assetClassId: 'us_stocks', value, valuedOn: '2026-10-20', trigger: 'edit', ...overrides });
+  // NT$100,000 on target with a 20% satellite of a theme ETF; every price NT$100.
+  const holdings = onTarget(100_000, [listed('THEME', 'tactical_themes', 20_000, { productType: 'theme_etf' })]);
+
+  it('waits for the saved values', () => {
+    const outcome = evaluate(input({ holdings, rules: F12 }));
+    for (const id of ['BUY_ZONE', 'TRIM_ZONE', 'VALUATION_UPDATED']) assert.deepEqual(checkOf(outcome, id), { ruleId: id, outcome: 'waiting', why: 'valuation' });
+  });
+
+  it("buy zone: price 100 at or below 75% of a 140 value buys the contribution's 20% share, once a month", () => {
+    const outcome = evaluate(input({ holdings, rules: F12, watch: [watched('AAPL', 140), watched('MSFT', 120)] }));
+    const draft = draftOf(outcome, 'BUY_ZONE');
+    assert.ok(draft);
+    assert.equal(draft.state, '2026-10:AAPL');
+    // 20% of NT$10,000 at NT$100 a share.
+    assert.deepEqual(trades(draft.orders), [['buy', 'AAPL', 20]]);
+    assert.equal(draft.detail.satelliteShareTwd, 2000);
+    assert.equal(draft.detail.zone?.[0]?.multiple, 0.75);
+    // A stock's own multiple wins over the rule's.
+    assert.equal(checkOf(evaluate(input({ holdings, rules: F12, watch: [watched('AAPL', 140, { buy: 0.7 })] })), 'BUY_ZONE').outcome, 'quiet');
+    // Filled this month: not proposed again until next month.
+    const filled = { id: 9, ruleId: 'BUY_ZONE', state: '2026-10:AAPL', status: 'filled' as const, createdAt: '2026-10-02T01:00:00.000Z', expiresAt: null };
+    assert.equal(draftOf(evaluate(input({ holdings, rules: F12, watch: [watched('AAPL', 140)], proposals: [filled] })), 'BUY_ZONE'), undefined);
+    assert.ok(draftOf(evaluate(input({ holdings, rules: F12, watch: [watched('AAPL', 140)], proposals: [filled], today: '2026-11-02', now: '2026-11-02T01:00:00.000Z' })), 'BUY_ZONE'));
+  });
+
+  it('buy zone stays within R1 and R2: no buy while the satellite is at its target, and the cap bounds a stock held', () => {
+    const full = onTarget(100_000, [listed('THEME', 'tactical_themes', 22_000, { productType: 'theme_etf' })]);
+    const draft = draftOf(evaluate(input({ holdings: full, rules: F12, watch: [watched('AAPL', 140)] })), 'BUY_ZONE');
+    // 20% of NT$110,000 is NT$22,000: no room.
+    assert.deepEqual(draft?.orders, []);
+    assert.equal(draft?.detail.zone?.[0]?.roomTwd, 0);
+    const near = onTarget(100_000, [listed('AAPL', 'us_stocks', 5_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 10_000, { productType: 'theme_etf' })]);
+    // 5% of NT$110,000 = NT$5,500 cap: room for NT$500 more, 5 shares.
+    assert.deepEqual(trades(draftOf(evaluate(input({ holdings: near, rules: F12, watch: [watched('AAPL', 140)] })), 'BUY_ZONE')?.orders ?? []), [['buy', 'AAPL', 5]]);
+  });
+
+  it("the month's contribution leaves the buy zone its share and puts the rest into the core", () => {
+    const outcome = evaluate(input({ holdings, rules: F12, watch: [watched('AAPL', 140)], dca: { amountTwd: 10_000, dayOfMonth: 10 } }));
+    const monthly = draftOf(outcome, 'MONTHLY_CONTRIBUTION');
+    assert.equal(monthly?.detail.satelliteShareTwd, 2000);
+    assert.equal(monthly?.detail.cashTwd, 8000);
+  });
+
+  it('trim zone: a held stock at or above 125% of its value sells half, the proceeds into the core', () => {
+    const held = onTarget(100_000, [listed('AAPL', 'us_stocks', 4_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 16_000, { productType: 'theme_etf' })]);
+    const draft = draftOf(evaluate(input({ holdings: held, rules: F12, watch: [watched('AAPL', 80)] })), 'TRIM_ZONE');
+    assert.ok(draft);
+    assert.equal(draft.state, 'AAPL');
+    assert.deepEqual(trades(draft.orders)[0], ['sell', 'AAPL', 20]);
+    assert.equal(draft.detail.cashTwd, 2000);
+    assert.equal(checkOf(evaluate(input({ holdings: held, rules: F12, watch: [watched('AAPL', 81)] })), 'TRIM_ZONE').outcome, 'quiet');
+  });
+
+  it('valuation updated: a filing that moves the value by more than 10% prompts a review; an edit does not', () => {
+    const moved = watched('AAPL', 115, { trigger: 'filing', valuedOn: '2026-10-21', previous: { value: 100, valuedOn: '2026-08-01' } });
+    const draft = draftOf(evaluate(input({ holdings, rules: F12, watch: [moved] })), 'VALUATION_UPDATED');
+    assert.ok(draft);
+    assert.equal(draft.state, 'AAPL:2026-10-21');
+    assert.deepEqual(draft.orders, []);
+    assert.ok(Math.abs((draft.detail.changes?.[0]?.change ?? 0) - 0.15) < 1e-9);
+    assert.equal(checkOf(evaluate(input({ holdings, rules: F12, watch: [{ ...moved, trigger: 'edit' }] })), 'VALUATION_UPDATED').outcome, 'quiet');
+    assert.equal(checkOf(evaluate(input({ holdings, rules: F12, watch: [{ ...moved, value: 109 }] })), 'VALUATION_UPDATED').outcome, 'quiet');
   });
 });
 
