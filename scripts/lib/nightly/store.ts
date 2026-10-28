@@ -93,6 +93,11 @@ export function supabaseStore(client: SupabaseClient): Store {
       if (!settings) throw new Error('config regression is malformed');
       return Math.max(...settings.windows) + 1;
     },
+    async capmReady() {
+      const { data, error } = await client.from('config').select('key').eq('key', 'capm');
+      check('config', error);
+      return (data ?? []).length > 0;
+    },
     async saveIndexPrices(rows: readonly IndexClose[], options: { fillOnly?: boolean } = {}) {
       for (const batch of batches(rows)) {
         const { error } = await client

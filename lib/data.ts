@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
-import { addDays } from './dates';
+import { addDays, addMonths } from './dates';
 import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
@@ -36,6 +36,7 @@ import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
 import { INDICES, loadFrom, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type RegressionSettings } from './models/regression';
 import { MARKET_SERIES } from './models/windfall';
+import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 
 /** A query failed; the table name tells which part of the database to look at. */
@@ -405,7 +406,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
     rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
     Promise.all(
-      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES)].map((name) =>
+      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES), ...Object.values(CAPM_SERIES)].map((name) =>
         rows<{ series: string; obs_month: string; value: number; source: string }>(
           'market_series',
           supabase.from('market_series').select('series, obs_month, value, source').eq('series', name).order('obs_month', { ascending: false }).limit(1),
@@ -1626,4 +1627,100 @@ export async function loadSavedBetas(supabase: SupabaseClient): Promise<Array<{ 
     seen.add(key);
     return [{ ticker: row.ticker, benchmark: row.benchmark, beta: Number(row.beta), runDate: row.run_date }];
   });
+}
+
+// ---------------------------------------------------------------------------
+// F11 CAPM cost of equity (Phase 2, step 3)
+// ---------------------------------------------------------------------------
+
+/** Months of F11's series the page reads: enough for the newest and the months before it. */
+const CAPM_MONTHS = 13;
+
+export interface StockCost {
+  security: SecurityRecord;
+  /** Held now in either pool. */
+  held: boolean;
+  outcome: CostOutcome;
+  /** Why no β could be worked out live: too few periods, say (N1's problems). */
+  betaProblem?: { problem: 'fx' | 'observations' | 'collinear' | 'settings'; n: number };
+}
+
+export interface CapmData {
+  /** config capm; undefined when missing or malformed (before its migration, say). */
+  settings: CapmSettings | undefined;
+  regression: RegressionSettings | undefined;
+  /** F11's monthly series, oldest first. */
+  series: Map<string, MonthValue[]>;
+  stocks: StockCost[];
+}
+
+/** The newest β saved for each ticker and benchmark (N1's monthly refresh), raw and adjusted. */
+async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, BetaInput>> {
+  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; factor_loadings: Record<string, unknown> | null; run_date: string }>(
+    'beta_results',
+    supabase.from('beta_results').select('ticker, benchmark, beta, factor_loadings, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(500),
+  );
+  const out = new Map<string, BetaInput>();
+  for (const row of found) {
+    const key = `${row.ticker}|${row.benchmark}`;
+    const adjusted = row.factor_loadings?.['adjusted'];
+    if (out.has(key) || row.beta === null || typeof adjusted !== 'number') continue;
+    out.set(key, { raw: Number(row.beta), adjusted, runDate: row.run_date });
+  }
+  return out;
+}
+
+/**
+ * Each single stock's cost of equity (F11): its market's 10-year yield and ERP, and its β against
+ * the market's index, the newest saved by the monthly refresh, else worked out now at N1's defaults.
+ */
+export async function loadCapmData(supabase: SupabaseClient, today: string): Promise<CapmData> {
+  const since = `${addMonths(today.slice(0, 7), -CAPM_MONTHS)}-01`;
+  const [capmRow, setup, saved, seriesRows, holdings] = await Promise.all([
+    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'capm')),
+    loadRegressionSetup(supabase),
+    savedBetaInputs(supabase),
+    rows<{ series: string; obs_month: string; value: number }>(
+      'market_series',
+      supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(CAPM_SERIES)).gte('obs_month', since).order('obs_month'),
+    ),
+    loadHoldingsData(supabase),
+  ]);
+  const settings = readCapmSettings(capmRow[0]?.value);
+  const regression = setup.settings;
+  const series = new Map<string, MonthValue[]>();
+  for (const row of seriesRows) {
+    const list = series.get(row.series) ?? [];
+    list.push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
+    series.set(row.series, list);
+  }
+  const held = new Set(buildPortfolio(holdings).holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])));
+  const stocks = setup.securities.filter((security) => security.productType === 'stock').sort((a, b) => Number(held.has(b.ticker)) - Number(held.has(a.ticker)) || a.ticker.localeCompare(b.ticker));
+  if (!settings) return { settings, regression, series, stocks: [] };
+  const benchmarkOf = (security: SecurityRecord) => settings.markets[security.market]?.benchmark;
+  // A stock with no saved β against its market's index gets one now, as the Regression page would.
+  const missing = stocks.filter((security) => setup.priced.has(security.ticker) && benchmarkOf(security) && !saved.has(`${security.ticker}|${benchmarkOf(security)}`));
+  const live = new Map<string, { beta?: BetaInput; problem?: StockCost['betaProblem'] }>();
+  if (missing.length > 0 && regression) {
+    const { defaults } = regression;
+    const data = await loadRegressionData(supabase, missing.map((security) => security.ticker), loadFrom(today, defaults.years, regression.rollingWeeks), setup);
+    for (const security of missing) {
+      const benchmark = regression.benchmarks.find((candidate) => candidate.id === benchmarkOf(security));
+      if (!benchmark) continue;
+      const outcome = regressTicker(data, security, benchmark, { freq: defaults.freq, years: defaults.years, basis: defaults.currency }, regression);
+      live.set(security.ticker, outcome.ok ? { beta: { raw: outcome.result.beta, adjusted: outcome.result.adjusted, runDate: null } } : { problem: { problem: outcome.problem, n: outcome.n } });
+    }
+  }
+  return {
+    settings,
+    regression,
+    series,
+    stocks: stocks.map((security) => {
+      const benchmark = benchmarkOf(security);
+      const found = benchmark ? saved.get(`${security.ticker}|${benchmark}`) : undefined;
+      const now = live.get(security.ticker);
+      const problem = now?.problem ?? (!found && !now && benchmark && !regression ? { problem: 'settings' as const, n: 0 } : undefined);
+      return { security, held: held.has(security.ticker), outcome: stockCostOfEquity(security, found ?? now?.beta, settings, series), ...(problem ? { betaProblem: problem } : {}) };
+    }),
+  };
 }

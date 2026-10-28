@@ -70,6 +70,7 @@ export const LABELS = {
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },
+  costOfEquity: { en: 'Cost of equity', zh: '權益成本' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
@@ -137,6 +138,9 @@ export const FEED: Record<string, Bilingual> = {
   fred: { en: 'FRED', zh: 'FRED' },
   shiller: { en: "Shiller's data", zh: 'Shiller 的資料' },
   multpl: { en: 'multpl.com', zh: 'multpl.com' },
+  treasury: { en: 'US Treasury', zh: '美國財政部' },
+  cbc: { en: 'Central Bank of the ROC', zh: '中央銀行' },
+  damodaran: { en: 'Damodaran Online', zh: 'Damodaran Online' },
   demo: { en: 'Demo data', zh: '示範資料' },
 };
 

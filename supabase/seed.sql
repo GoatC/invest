@@ -72,7 +72,8 @@ from (values
 ) as demo (ticker, price_date, close);
 
 -- Three years of weekly demo closes before the first demo trade for the VaR proxies (N4), ACWI
--- (the F3 drawdown gauge) and the dollar, so the VaR card has a covariance to read. Invented by a
+-- (the F3 drawdown gauge), the two demo stocks (so N1 and F11 have a β to show) and the dollar,
+-- so the VaR card has a covariance to read. Invented by a
 -- fixed recipe: a random walk backwards from each 2026-05-07 close, every Friday; each week's move
 -- is the proxy's drift, plus a shared market shock times its beta, plus a shock of its own, both
 -- drawn from an md5 hash of the date (Box–Muller), so every load gives the same numbers.
@@ -85,7 +86,7 @@ shocks as (
            * cos(2 * pi() * (('x' || substr(h.hash, 9, 8))::bit(32)::bigint + 0.5) / 4294967296.0) as z
   from fridays f
   cross join lateral (
-    select name, md5(name || f.friday::text) as hash from unnest(array['market', 'VT', 'VOO', '0050', 'BNDW', 'GLDM', 'BIL', 'ACWI', 'USD']) as name
+    select name, md5(name || f.friday::text) as hash from unnest(array['market', 'VT', 'VOO', '0050', 'BNDW', 'GLDM', 'BIL', 'ACWI', 'AAPL', '2330', 'USD']) as name
   ) as h
 ),
 walks (name, anchor, weekly_vol, beta, drift) as (values
@@ -96,6 +97,8 @@ walks (name, anchor, weekly_vol, beta, drift) as (values
   ('GLDM', 84.00, 0.020, 0.10, 0.0025),
   ('BIL', 91.40, 0.0003, 0.00, 0.0008),
   ('ACWI', 128.40, 0.021, 0.97, 0.0015),
+  ('AAPL', 212.00, 0.034, 0.75, 0.0030),
+  ('2330', 2150.00, 0.033, 0.80, 0.0035),
   -- TWD per dollar: the dollar tends to rise against TWD when shares fall.
   ('USD', 31.80, 0.006, -0.35, 0.0000)
 ),
@@ -200,3 +203,11 @@ select 'us_tbill_3m', (date '2023-01-01' + make_interval(months => i))::date, ro
 from generate_series(0, 44) as i;
 
 insert into public.watchlist (ticker, added_on) values ('AAPL', '2026-10-08');
+
+-- The cost of equity's inputs (F11), as the nightly job loads them: the US 10-year Treasury yield
+-- at each month end, Taiwan's 10-year government bond yield a month's average (about two months
+-- behind), and Damodaran's implied ERP at the start of each month.
+insert into public.market_series (series, obs_month, value, source) values
+  ('us_treasury_10y', '2026-08-01', 0.0475, 'demo'), ('us_treasury_10y', '2026-09-01', 0.0529, 'demo'), ('us_treasury_10y', '2026-10-01', 0.0500, 'demo'),
+  ('tw_govt_10y', '2026-06-01', 0.0177, 'demo'), ('tw_govt_10y', '2026-07-01', 0.0190, 'demo'), ('tw_govt_10y', '2026-08-01', 0.0196, 'demo'),
+  ('us_implied_erp', '2026-08-01', 0.0414, 'demo'), ('us_implied_erp', '2026-09-01', 0.0409, 'demo'), ('us_implied_erp', '2026-10-01', 0.0370, 'demo');

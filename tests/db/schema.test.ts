@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
+import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
@@ -493,6 +494,26 @@ describe('Regression Lab (Phase 2, step 2)', () => {
     assert.equal(settings.riskFreeChecked, null);
   });
 
+  it("seeds the cost of equity's settings (F11): adjusted β, Damodaran's ERP, each market's index, yield series and country premium", async () => {
+    const settings = readCapmSettings(await scalar(db, `select value from public.config where key = 'capm'`));
+    assert.ok(settings);
+    assert.equal(settings.beta, 'adjusted');
+    assert.deepEqual(settings.erp, { source: 'damodaran', manual: 0.0423 });
+    assert.deepEqual(settings.markets, {
+      US: { benchmark: 'SPX', riskFreeSeries: 'us_treasury_10y', riskFree: 0.05, countryPremium: 0 },
+      TW: { benchmark: 'TAIEX', riskFreeSeries: 'tw_govt_10y', riskFree: 0.01955, countryPremium: 0.0078 },
+    });
+    assert.equal(settings.checked, null);
+    // Each benchmark is one the Regression Lab measures β against.
+    const regression = readRegressionSettings(await scalar(db, `select value from public.config where key = 'regression'`));
+    for (const inputs of Object.values(settings.markets)) assert.ok(regression?.benchmarks.some((benchmark) => benchmark.id === inputs.benchmark));
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`update public.config set value = jsonb_set(value, '{beta}', '"raw"') where key = 'capm'`);
+      const { rows } = await tx.query<{ beta: string }>(`select new_row -> 'value' ->> 'beta' as beta from public.audit_log where table_name = 'config' and row_key = 'capm'`);
+      assert.deepEqual(rows, [{ beta: 'raw' }]);
+    });
+  });
+
   it('lets the owner keep β results, which the monthly refresh writes', async () => {
     await as(db, 'owner', async (tx) => {
       await tx.query(
@@ -595,14 +616,14 @@ describe('weekly prices for the VaR (step 7)', () => {
     assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query('select 1 from public.weekly_prices'))), DENIED);
   });
 
-  it('come with three years of invented weekly closes for every proxy, ACWI and the dollar in the demo seed, ending at the first demo trade', async () => {
+  it('come with three years of invented weekly closes for every proxy, ACWI, the two demo stocks and the dollar in the demo seed, ending at the first demo trade', async () => {
     const { rows } = await db.query<{ ticker: string; weeks: string; first: Date; last: Date }>(
       `select ticker, count(*) as weeks, min(price_date) as first, max(price_date) as last
        from public.prices where price_date < '2026-05-07' group by ticker order by ticker`,
     );
     assert.deepEqual(
       rows.map((row) => [row.ticker, Number(row.weeks), row.first.toISOString().slice(0, 10), row.last.toISOString().slice(0, 10)]),
-      ['0050', 'ACWI', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
+      ['0050', '2330', 'AAPL', 'ACWI', 'BIL', 'BNDW', 'GLDM', 'VOO', 'VT'].map((ticker) => [ticker, 174, '2023-01-06', '2026-05-01']),
     );
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where pair = 'USD/TWD' and rate_date < '2026-05-07'`), 174);
     // A walk that lands on the first demo trade's close, a week away, with weekly moves of shares-like size.
@@ -624,7 +645,7 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.index_prices where source <> 'demo'`), 0);
   });
 
-  it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09", async () => {
+  it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09; and the cost of equity's yields and ERP (F11)", async () => {
     const { rows } = await db.query<{ series: string; months: string; first: Date; last: Date }>(
       `select series, count(*) as months, min(obs_month) as first, max(obs_month) as last from public.market_series group by series order by series`,
     );
@@ -633,8 +654,11 @@ describe('demo seed', () => {
       [
         ['sp500_price', 1869, '1871-01', '2026-09'],
         ['sp500_yield', 1869, '1871-01', '2026-09'],
+        ['tw_govt_10y', 3, '2026-06', '2026-08'],
         ['us_cape', 1749, '1881-01', '2026-09'],
+        ['us_implied_erp', 3, '2026-08', '2026-10'],
         ['us_tbill_3m', 45, '2023-01', '2026-09'],
+        ['us_treasury_10y', 3, '2026-08', '2026-10'],
       ],
     );
     // CAPE ends above its 70th percentile, so a demo plan takes 24 tranches.
