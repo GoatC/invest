@@ -71,6 +71,7 @@ export const LABELS = {
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },
   costOfEquity: { en: 'Cost of equity', zh: '權益成本' },
+  valuation: { en: 'Valuation', zh: '估值' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
