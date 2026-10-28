@@ -7,7 +7,8 @@ import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
-import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type LookThrough, type LookThroughSettings } from './models/look-through';
+import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
+import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
 import {
   evaluate,
   readDetail,
@@ -2233,8 +2234,8 @@ export interface LookThroughData {
   fundCosts: FundCost[];
 }
 
-/** The whole portfolio opened up, from the saved holdings files. */
-export async function loadLookThroughData(supabase: SupabaseClient, holdings?: HoldingsData): Promise<LookThroughData> {
+/** The whole portfolio opened up, from the saved holdings files; `pool` keeps one pool's holdings only. */
+export async function loadLookThroughData(supabase: SupabaseClient, holdings?: HoldingsData, pool?: Pool): Promise<LookThroughData> {
   const [settings, data, costs] = await Promise.all([
     loadLookThroughSettings(supabase),
     holdings ?? loadHoldingsData(supabase),
@@ -2249,10 +2250,39 @@ export async function loadLookThroughData(supabase: SupabaseClient, holdings?: H
   ]);
   const byTicker = new Map(data.securities.map((security) => [security.ticker, security]));
   const result = lookThrough({
-    holdings: buildPortfolio(data).holdings,
+    holdings: buildPortfolio(data).holdings.filter((holding) => !pool || holding.pool === pool),
     files: new Map(files.map((row) => [row.fund, { fund: row.fund, asOf: row.as_of, source: row.source, constituents: unpackConstituents(row.constituents) }])),
     sectors: new Map(sectors.flatMap((row) => (row.sector && byTicker.get(row.ticker) ? [[directKey((byTicker.get(row.ticker) as SecurityRecord).market, row.ticker), row.sector] as [string, string]] : []))),
     settings,
   });
   return { settings, result, securities: data.securities, fundCosts };
+}
+
+// ---------------------------------------------------------------------------
+// The sector tab (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+export async function loadSectorSettings(supabase: SupabaseClient): Promise<SectorSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'sectors'));
+  return readSectorSettings(found[0]?.value);
+}
+
+export interface SectorData {
+  settings: SectorSettings | undefined;
+  view?: SectorView;
+  /** The look-through's exposures, for the companies behind a sector. */
+  exposures?: Exposure[];
+}
+
+/** Each sector's returns and volatility from its proxies' closes, and the portfolio's exposure from the look-through. */
+export async function loadSectorData(supabase: SupabaseClient, today: string, pool?: Pool): Promise<SectorData> {
+  const [settings, look] = await Promise.all([loadSectorSettings(supabase), loadLookThroughData(supabase, undefined, pool)]);
+  if (!settings || !look.result) return { settings };
+  const ids = settings.proxies.map((proxy) => proxy.id);
+  const found = await allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (from, to) =>
+    supabase.from('index_prices').select('index_id, price_date, close').in('index_id', ids).gte('price_date', addDays(today, -SECTOR_DAYS)).order('index_id').order('price_date').range(from, to),
+  );
+  const closes = new Map<string, SectorClose[]>();
+  for (const row of found) closes.set(row.index_id, [...(closes.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  return { settings, view: sectorView(settings.proxies, closes, look.result.exposures, today), exposures: look.result.exposures };
 }

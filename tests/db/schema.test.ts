@@ -8,6 +8,7 @@ import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
+import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
@@ -673,6 +674,26 @@ describe('look-through (Phase 2, step 6)', () => {
     assert.equal(settings.twSectors['24'], 'Information Technology');
     assert.equal(settings.twSectors['17'], 'Financials');
     assert.equal(Object.keys(settings.twSectors).length, 36);
+  });
+});
+
+describe('sector tab (Phase 2, step 7)', () => {
+  it('seeds the settings: Taiwan red up, an SPDR fund for each of the 11 GICS sectors, 20 TWSE industry indices', async () => {
+    const settings = readSectorSettings(await scalar(db, `select value from public.config where key = 'sectors'`));
+    assert.ok(settings);
+    assert.equal(settings.colour, 'red_up');
+    const us = settings.proxies.filter((proxy) => proxy.market === 'US');
+    assert.equal(us.length, 11);
+    assert.equal(new Set(us.map((proxy) => proxy.sector)).size, 11);
+    assert.equal(settings.proxies.filter((proxy) => proxy.market === 'TW').length, 20);
+    assert.equal(settings.proxies.find((proxy) => proxy.id === 'TW_ELECTRONIC')?.name, '電子工業類指數');
+  });
+
+  it('invents 61 weekly closes for every proxy, to 2026-10-23', async () => {
+    const { rows } = await db.query<{ proxies: string; closes: string; last: string }>(
+      `select count(distinct index_id) as proxies, count(*) as closes, max(price_date)::text as last from public.index_prices where index_id like 'X%' or index_id like 'TW\\_%'`,
+    );
+    assert.deepEqual(rows.map((row) => [Number(row.proxies), Number(row.closes), row.last]), [[31, 31 * 61, '2026-10-23']]);
   });
 });
 

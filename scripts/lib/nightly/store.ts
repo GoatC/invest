@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadLookThroughPlan, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
@@ -138,6 +138,10 @@ export function supabaseStore(client: SupabaseClient): Store {
     },
     scanRedFlags: (today, tickers) => scanRedFlags(client, today, tickers),
     lookThroughPlan: (today) => loadLookThroughPlan(client, today),
+    async sectorProxies() {
+      const settings = await loadSectorSettings(client);
+      return settings?.proxies.map((proxy) => ({ id: proxy.id, market: proxy.market, symbol: proxy.symbol, name: proxy.name }));
+    },
     async saveFundFile(file: FundFileRow) {
       const { error } = await client
         .from('fund_holdings')

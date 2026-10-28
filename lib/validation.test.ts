@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
 import { readRedFlagSettings } from './models/red-flags';
+import { readSectorSettings } from './models/sectors';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   MESSAGES,
@@ -35,6 +36,7 @@ import {
   parseValuationSettingsForm,
   listField,
   parseLookThroughForm,
+  parseSectorForm,
   parseFlagEntryForm,
   parseFlagSettingsForm,
 } from './validation';
@@ -594,5 +596,26 @@ describe('look-through form (F14)', () => {
   it('refuses an unknown sector, a bad country and too few companies', () => {
     const parsed = parseLookThroughForm({ topCompanies: '3', refreshDays: '28', twSectors: '24 = Chips', fundCountry: 'BIL = USA' }, current, sectorNames, '2026-10-28');
     assert.ok(!parsed.ok && parsed.errors.topCompanies && parsed.errors.twSectors && parsed.errors.fundCountry);
+  });
+});
+
+describe('sector form (N7)', () => {
+  const current = readSectorSettings({ colour: 'red_up', us: { XLK: 'Information Technology' }, tw: { Electronic: { name: '電子工業類指數', sector: 'Information Technology' }, Cement: { name: '水泥類指數', sector: 'Materials' } }, last_verified: null });
+  const names = new Map([['information technology', 'Information Technology'], ['原物料', 'Materials'], ['industrials', 'Industrials']]);
+
+  it('reads the convention and remaps or drops the Taiwan indices already listed, keeping the US funds', () => {
+    assert.ok(current);
+    const parsed = parseSectorForm({ colour: 'green_up', tw: 'cement = Industrials\n' }, current, names, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.colour, 'green_up');
+    assert.deepEqual(parsed.value.proxies.map((proxy) => [proxy.id, proxy.sector]), [['XLK', 'Information Technology'], ['TW_CEMENT', 'Industrials']]);
+  });
+
+  it('refuses an index not listed, or an unknown sector', () => {
+    assert.ok(current);
+    for (const tw of ['Semiconductor = Information Technology', 'Cement = Chips']) {
+      const parsed = parseSectorForm({ colour: 'red_up', tw }, current, names, '2026-10-28');
+      assert.ok(!parsed.ok && parsed.errors.tw, tw);
+    }
   });
 });

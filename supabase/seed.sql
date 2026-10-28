@@ -289,3 +289,23 @@ insert into public.fund_holdings (fund, as_of, source, constituents) values
      ["TW:2308", "台達電（示範）", "2308", "TW", "TWD", "Information Technology", "equity", 0.034],
      ["TW:2881", "富邦金（示範）", "2881", "TW", "TWD", "Financials", "equity", 0.03]
    ]');
+
+-- The sector tab (N7): invented weekly closes for each sector proxy in config sectors, the 61
+-- Fridays to 2026-10-23, each with its own drift and swing, so the heatmap, treemap and bubbles
+-- have figures to show. Real daily closes come from the nightly job.
+insert into public.index_prices (index_id, price_date, close, source)
+select p.id,
+       (date '2026-10-23' - 7 * (60 - w))::date,
+       round((100 * power(1 + p.drift, w) * (1 + p.swing * sin(w * 0.9 + p.n)))::numeric, 4),
+       'demo'
+from (
+  select id, n, ((n % 7) - 3) * 0.002 as drift, 0.01 + (n % 5) * 0.006 as swing
+  from unnest(array[
+    'XLK', 'XLF', 'XLV', 'XLY', 'XLC', 'XLI', 'XLP', 'XLE', 'XLB', 'XLU', 'XLRE',
+    'TW_ELECTRONIC', 'TW_FINANCIALINSURANCE', 'TW_BIOTECHNOLOGYMEDICALCARE', 'TW_AUTOMOBILE', 'TW_TEXTILES', 'TW_TOURISM',
+    'TW_TRADINGCONSUMERSGOODS', 'TW_RUBBER', 'TW_FOOD', 'TW_CEMENT', 'TW_PLASTICS', 'TW_CHEMICAL', 'TW_IRONSTEEL',
+    'TW_PAPERPULP', 'TW_GLASSCERAMIC', 'TW_ELECTRICMACHINERY', 'TW_ELECTRICALCABLE', 'TW_SHIPPINGTRANSPORTATION',
+    'TW_BUILDINGMATERIALCONSTRUCTION', 'TW_OILGASELECTRICITY'
+  ]) with ordinality as t (id, n)
+) as p
+cross join generate_series(0, 60) as w;

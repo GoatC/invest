@@ -1427,6 +1427,53 @@ await step('look-through: every fund opened up, TSMC through VT, 00692 and held 
   check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'the map checked today');
 });
 
+await step('sectors: the heatmap of returns by period, one market at a time, the treemap of exposure with a sector\'s companies, the bubbles, the settings logged (N7)', async () => {
+  await page.goto(`${BASE}/sectors`);
+  await page.getByRole('heading', { level: 1, name: /^Sectors/ }).waitFor();
+  await page.locator('.chart-heatmap svg').waitFor();
+  check((await body()).includes('Closes to 2026-10-23'), 'the seed\'s newest weekly close');
+  const returns = await page.locator('#sector-returns').innerText();
+  check(/Information Technology 資訊科技 US · XLK(\s+[+−]\d+\.\d%){5}/.test(returns) && /Information Technology 資訊科技 TW · ELECTRONIC/.test(returns), `both markets' tech rows, every period, got ${returns}`);
+  const materials = /Materials 原物料 TW · ([A-Z, ]+)/.exec(returns)?.[1].split(', ') ?? [];
+  check(['CEMENT', 'PLASTICS', 'CHEMICAL'].every((id) => materials.includes(id)), `a sector of several Taiwan indices, got ${materials}`);
+  await snap('sectors-heatmap');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('sectors', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('group', { name: /Market/ }).getByRole('link', { name: /Taiwan/ }).click();
+  await page.waitForURL('**/sectors?*market=TW*');
+  check(!(await page.locator('#sector-returns').innerText()).includes(' US · '), 'Taiwan alone');
+
+  // The treemap: exposure from the look-through, coloured by the chosen period; a sector lists its companies.
+  await page.getByRole('group', { name: /Chart/ }).getByRole('link', { name: /Treemap/ }).click();
+  await page.waitForURL('**/sectors?view=treemap*');
+  await page.locator('.chart-treemap svg').waitFor();
+  const exposure = await page.locator('#sector-exposure').innerText();
+  check(/Information Technology 資訊科技\s+NT\$[\d,]+\s+[\d.]+%/.test(exposure), `tech exposure, got ${exposure}`);
+  await page.locator('#sector-exposure').getByRole('link', { name: /Information Technology/ }).click();
+  await page.waitForURL('**/sectors?*sector=Information*');
+  check(/NT\$[\d,]+/.test(await page.locator('#sector-companies').innerText()), 'the companies behind the sector');
+  await snap('sectors-treemap');
+
+  // The bubbles: 1-year return against volatility, with the portfolio's point.
+  await page.getByRole('group', { name: /Chart/ }).getByRole('link', { name: /Bubbles/ }).click();
+  await page.waitForURL('**/sectors?view=bubble*');
+  await page.locator('.chart-bubbles svg').waitFor();
+  check(/Portfolio, by exposure[^\n]*\s+[+−]\d+\.\d%\s+\d+\.\d%/.test(await page.locator('#sector-risk').innerText()), 'the portfolio\'s point');
+  await snap('sectors-bubbles');
+  check((await body()).includes('產業熱圖') && (await body()).includes('波動度'), 'Chinese labels');
+
+  // The colour convention and the index map are a logged setting.
+  await page.goto(`${BASE}/sectors`);
+  await page.locator('#settings select[name=colour]').selectOption('green_up');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/sectors?saved=settings**');
+  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`) && (await page.locator('#settings select[name=colour]').inputValue()) === 'green_up', 'saved and checked today');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -1447,7 +1494,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1473,7 +1520,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1676,6 +1723,17 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const sectors = await page.locator('#sectors').innerText();
     check(/Information Technology 資訊科技\s+\d+\.\d%/.test(sectors), `sectors from the live files, got ${sectors}`);
     await snap('look-through-after-job');
+  });
+
+  await step('sectors after the job: every SPDR fund\'s and TWSE industry index\'s live closes, a year of returns (N7)', async () => {
+    await page.goto(`${BASE}/sectors`);
+    await page.locator('.chart-heatmap svg').waitFor();
+    check(new RegExp(`Closes to (${taipeiToday}|\\d{4}-\\d{2}-\\d{2})`).test(await body()) && !(await body()).includes('Closes to 2026-10-23 '), 'newer than the seed');
+    const returns = await page.locator('#sector-returns').innerText();
+    console.log(`  ${returns.split('\n').slice(0, 4).join(' | ')}`);
+    check(/Information Technology 資訊科技 US · XLK(\s+[+−]\d+\.\d%){5}/.test(returns), `XLK's live returns for every period, got ${returns}`);
+    check(/Financials 金融 TW · FINANCIALINSURANCE(\s+[+−]\d+\.\d%){5}/.test(returns), `the TWSE financials index live, got ${returns}`);
+    await snap('sectors-after-job');
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {

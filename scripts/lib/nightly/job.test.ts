@@ -32,6 +32,7 @@ const REPLIES: Record<string, string> = {
   ]),
   'TaiwanStockDividendResult 0050': ok([{ date: '2026-07-21', before_price: 99.2, after_price: 98.6 }]),
   'USStockPrice VT': ok([{ date: '2026-10-20', Close: 157.8, Adj_Close: 157.8 }]),
+  'USStockPrice XLK': ok([{ date: '2026-10-20', Close: 250.5, Adj_Close: 249.8 }]),
   'TaiwanExchangeRate USD': ok([
     { date: '2026-10-20', spot_buy: 32.58, spot_sell: 32.68, cash_buy: 32.2, cash_sell: 32.9 },
     { date: '2026-10-21', spot_buy: 32.435, spot_sell: 32.535, cash_buy: 32.085, cash_sell: 32.755 },
@@ -61,6 +62,7 @@ const REPLIES: Record<string, string> = {
   MI_INDEX: JSON.stringify([
     { 日期: '1151021', 指數: '發行量加權股價指數', 收盤指數: '46096.23' },
     { 日期: '1151021', 指數: '發行量加權股價報酬指數', 收盤指數: '108,422.07' },
+    { 日期: '1151021', 指數: '半導體類指數', 收盤指數: '1,564.79' },
   ]),
   'id=TB3MS': 'observation_date,TB3MS\n2026-08-01,3.72\n2026-09-01,3.94\n',
   // The cost of equity's inputs (F11): the US 10-year from FRED, else the Treasury, and Taiwan's from the Central Bank.
@@ -217,8 +219,13 @@ class MemoryStore implements Store {
       flags?: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }>;
       /** The look-through's plan (F14); undefined before config look_through. */
       look?: { due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> };
+      /** The sector tab's proxies (N7); undefined before config sectors. */
+      sectors?: Array<{ id: string; market: 'US' | 'TW'; symbol: string; name: string }>;
     } = {},
   ) {}
+  async sectorProxies() {
+    return this.options.sectors;
+  }
   fundFiles: FundFileRow[] = [];
   sectors: Array<{ ticker: string; market: string; sector: string }> = [];
   async lookThroughPlan() {
@@ -478,6 +485,22 @@ describe('look-through (F14)', () => {
     await runNightly(deps(get, store));
     assert.ok(!urls.some((url) => url.includes('vanguard') || url.includes('fsit')));
     assert.deepEqual([store.fundFiles, store.sectors], [[], []]);
+  });
+});
+
+describe('sector proxies (N7)', () => {
+  it("loads each Select Sector SPDR fund's and TWSE industry index's closes into the index closes, TWSE's last day filling in for FinMind", async () => {
+    const store = new MemoryStore({
+      sectors: [
+        { id: 'XLK', market: 'US', symbol: 'XLK', name: 'XLK' },
+        { id: 'TW_SEMICONDUCTOR', market: 'TW', symbol: 'Semiconductor', name: '半導體類指數' },
+      ],
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.indices.filter((row) => row.index === 'XLK').map((row) => [row.date, row.close, row.source]), [['2026-10-20', 249.8, 'finmind']]);
+    assert.deepEqual(store.indexFills.filter((row) => row.index === 'TW_SEMICONDUCTOR').map((row) => [row.date, row.close, row.source]), [['2026-10-21', 1564.79, 'twse']]);
+    assert.deepEqual(run.detail.indices?.['XLK'], { source: 'finmind', rows: 1, latest: '2026-10-20' });
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('TW_SEMICONDUCTOR: finmind')), JSON.stringify(run.detail.warnings));
   });
 });
 

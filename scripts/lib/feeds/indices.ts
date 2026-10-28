@@ -4,6 +4,7 @@
  * (the last trading day only, filling a missing day) are the fallbacks.
  */
 import { parseCsv } from '../payload.ts';
+import { avUrl, avWeeklyAdjusted } from './alphavantage.ts';
 import { rocDateToIso } from './twse.ts';
 import { FeedError, positive, type Get } from './types.ts';
 import type { FinMind } from './finmind.ts';
@@ -85,3 +86,70 @@ export function indexAttempts(index: string, finmind: FinMind, get: Get, span: {
 }
 
 export { INDICES } from '../../../lib/models/regression.ts';
+
+// ---------------------------------------------------------------------------
+// The sector tab's proxies (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+/** A sector proxy as the nightly job loads it: the id it is saved under, its market, FinMind's id and TWSE's name. */
+export interface SectorProxyFeed {
+  id: string;
+  market: 'US' | 'TW';
+  symbol: string;
+  name: string;
+}
+
+/** FinMind's USStockPrice rows of a Select Sector SPDR fund: the dividend-adjusted close, else the close. */
+export function finmindSectorFund(rows: ReadonlyArray<Record<string, unknown>>, id: string): IndexClose[] {
+  return rows.flatMap((row) => {
+    const close = positive(row['Adj_Close']) ?? positive(row['Close']);
+    const date = String(row['date'] ?? '');
+    return close && /^\d{4}-\d{2}-\d{2}$/.test(date) ? [{ index: id, date, close, source: 'finmind' }] : [];
+  });
+}
+
+/** FinMind's TaiwanStockPrice rows of a TWSE industry index. */
+export function finmindIndustryIndex(rows: ReadonlyArray<Record<string, unknown>>, id: string): IndexClose[] {
+  return rows.flatMap((row) => {
+    const close = positive(row['close']);
+    const date = String(row['date'] ?? '');
+    return close && /^\d{4}-\d{2}-\d{2}$/.test(date) ? [{ index: id, date, close, source: 'finmind' }] : [];
+  });
+}
+
+/** TWSE's MI_INDEX reply: one industry index, by its TWSE name, on the last trading day. */
+export function twseIndustryIndex(json: string, id: string, name: string): IndexClose[] {
+  let rows: unknown;
+  try {
+    rows = JSON.parse(json);
+  } catch {
+    throw new FeedError('TWSE MI_INDEX: reply is not JSON');
+  }
+  if (!Array.isArray(rows)) throw new FeedError('TWSE MI_INDEX: reply is not a list');
+  return rows.flatMap((row: Record<string, unknown>) => {
+    const date = rocDateToIso(String(row['日期'] ?? ''));
+    const close = positive(String(row['收盤指數'] ?? '').replace(/,/g, ''));
+    return row['指數'] === name && date && close ? [{ index: id, date, close, source: 'twse' }] : [];
+  });
+}
+
+/** Alpha Vantage's weekly adjusted closes of a Select Sector SPDR fund, from the span's start. */
+export function avSectorFund(json: string, id: string, start: string): IndexClose[] {
+  return avWeeklyAdjusted(json, id).flatMap((row) => (row.date >= start ? [{ index: id, date: row.date, close: row.adjClose ?? row.close, source: 'alphavantage' }] : []));
+}
+
+/**
+ * A sector proxy's feeds: FinMind, then for a US fund Alpha Vantage's weekly closes (with a key),
+ * for a Taiwan index TWSE's last trading day (filling a missing day).
+ */
+export function sectorAttempts(proxy: SectorProxyFeed, finmind: FinMind, get: Get, span: { start: string; end: string }, avKey?: string): IndexAttempt[] {
+  if (proxy.market === 'US') {
+    const attempts: IndexAttempt[] = [{ source: 'finmind', load: async () => finmindSectorFund(await finmind.rows('USStockPrice', { dataId: proxy.symbol, ...span }), proxy.id) }];
+    if (avKey) attempts.push({ source: 'alphavantage', load: async () => avSectorFund(await get(avUrl('TIME_SERIES_WEEKLY_ADJUSTED', proxy.symbol, avKey)), proxy.id, span.start) });
+    return attempts;
+  }
+  return [
+    { source: 'finmind', load: async () => finmindIndustryIndex(await finmind.rows('TaiwanStockPrice', { dataId: proxy.symbol, ...span }), proxy.id) },
+    { source: 'twse', fillOnly: true, load: async () => twseIndustryIndex(await get(MI_INDEX), proxy.id, proxy.name) },
+  ];
+}

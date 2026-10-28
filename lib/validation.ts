@@ -8,6 +8,7 @@ import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './
 import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
+import type { SectorProxy, SectorSettings } from './models/sectors';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
@@ -85,6 +86,7 @@ export const MESSAGES = {
   industryCodes: { en: 'List two-digit TWSE industry codes, e.g. 24, 28.', zh: '請列出兩位數的證交所產業別代碼，例如 24、28。' },
   topCompanies: { en: 'Enter a whole number from 5 to 100.', zh: '請輸入 5 到 100 的整數。' },
   codeSectors: { en: 'One per line: a TWSE industry code, "=", a GICS sector, e.g. 24 = Information Technology.', zh: '每行一個：證交所產業別代碼、「=」、GICS 產業，例如 24 = 資訊科技。' },
+  indexSectors: { en: 'One per line: an industry index already listed, "=", a GICS sector, e.g. Electronic = Information Technology.', zh: '每行一個：清單中的類股指數、「=」、GICS 產業，例如 Electronic = 資訊科技。' },
   fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -1287,3 +1289,28 @@ export function parseLookThroughForm(raw: RawForm, current: LookThroughSettings,
   }));
 }
 
+// ---------------------------------------------------------------------------
+// The sector tab (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+export type SectorField = 'colour' | 'tw';
+
+/** config sectors: the colour convention and each Taiwan industry index's GICS sector, "Electronic = Information Technology" per line. */
+export function parseSectorForm(raw: RawForm, current: SectorSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<SectorSettings, SectorField> {
+  const errors: FieldErrors<SectorField> = {};
+  const colour = oneOf(raw['colour'], ['red_up', 'green_up'] as const);
+  if (!colour) errors.colour = MESSAGES.choice;
+  const known = new Map(current.proxies.filter((proxy) => proxy.market === 'TW').map((proxy) => [proxy.symbol.toLowerCase(), proxy]));
+  const tw: SectorProxy[] = [];
+  for (const line of (raw['tw'] ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z]+)\s*[=:：]\s*(.+)$/.exec(line);
+    const proxy = match ? known.get((match[1] as string).toLowerCase()) : undefined;
+    const sector = match ? sectorNames.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!proxy || !sector) {
+      errors.tw = MESSAGES.indexSectors;
+      break;
+    }
+    tw.push({ ...proxy, sector });
+  }
+  return finish(errors, () => ({ ...current, colour: colour as SectorSettings['colour'], proxies: [...current.proxies.filter((proxy) => proxy.market === 'US'), ...tw], lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw) }));
+}

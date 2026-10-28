@@ -15,7 +15,8 @@
  * 8-K items and going-concern search, or its Ministry of Environment penalties; then it saves the
  * week's scan of each company due one, before the rules read it. Since step 6, once a month, it
  * reads each held fund's holdings file from its issuer and the GICS sectors of the companies in
- * them, for the combined look-through (F14). Everything outside this file
+ * them, for the combined look-through (F14). Since step 7 it loads the sector tab's proxies (N7):
+ * the Select Sector SPDR funds' and the TWSE industry indices' daily closes. Everything outside this file
  * is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
@@ -30,7 +31,8 @@ import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
-import { INDICES, indexAttempts, type IndexClose } from '../feeds/indices.ts';
+import { INDICES, indexAttempts, sectorAttempts, type IndexClose, type SectorProxyFeed } from '../feeds/indices.ts';
+import { SECTOR_DAYS } from '../../../lib/models/sectors.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
 import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
 import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
@@ -109,6 +111,8 @@ export interface Store {
   lookThroughPlan(today: string): Promise<
     { settings: LookThroughSettings; due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> } | undefined
   >;
+  /** The sector tab's proxies (N7, config sectors); undefined before its migration. */
+  sectorProxies(): Promise<SectorProxyFeed[] | undefined>;
   /** Replaces a fund's saved holdings file (fund_holdings). */
   saveFundFile(file: FundFileRow): Promise<void>;
   /** Sets the GICS sector of single stocks held (company_profiles.sector). */
@@ -280,8 +284,9 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let filingTickers: Array<{ ticker: string; market: string }> | undefined;
   let flagCompanies: Awaited<ReturnType<Store['redFlagCompanies']>>;
   let lookPlan: Awaited<ReturnType<Store['lookThroughPlan']>>;
+  let sectorProxies: SectorProxyFeed[] | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
@@ -291,7 +296,9 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       store.filingTickers(),
       store.redFlagCompanies(today),
       store.lookThroughPlan(today),
+      store.sectorProxies(),
     ]);
+    sectorProxies = sectors;
     filingTickers = filers;
     flagCompanies = flagged;
     lookPlan = plan;
@@ -443,6 +450,19 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     if (bill) {
       series.push(...bill.rows);
       (detail.series ??= {})[name] = { source: bill.source, rows: bill.rows.length, latest: bill.rows.reduce((max, point) => (point.month > max ? point.month : max), '') };
+    }
+  }
+
+  // The sector tab (N7): each sector proxy's daily closes over a little more than a year.
+  if (sectorProxies && sectorProxies.length > 0) {
+    const span = { start: addDays(today, -SECTOR_DAYS), end: today };
+    for (const proxy of sectorProxies) {
+      const result = await firstWorking(proxy.id, sectorAttempts(proxy, finmind, get, span, avKey), detail);
+      const rows = unique(result?.rows ?? [], (row) => row.date);
+      if (result && rows.length > 0) {
+        (result.fillOnly ? indexFills : indexRows).push(...rows);
+        (detail.indices ??= {})[proxy.id] = { source: result.source, rows: rows.length, latest: latest(rows) };
+      }
     }
   }
 

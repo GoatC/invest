@@ -13,6 +13,7 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 - **財報**（第二階段第 4 步，F12）：持有或觀察中的個股與其同業，每晚載入近 7 年的季報（美股 SEC EDGAR、台股 FinMind），存入 `fundamentals`；觀察中的個股有新一季財報時自動重新估值，再檢查規則。**美股需要 `SEC_USER_AGENT` secret**（下面第 3 步），沒有時只略過美股財報。
 - **紅旗指標**（第二階段第 5 步，N3）：持有或觀察中的個股，每晚讀取證交所的公司基本資料（產業、簽證會計師事務所、統一編號）與當天的重大訊息（財報重編、繼續經營疑慮、更換會計師）；每家公司每週一次另查美股的 SEC 8-K（4.01 更換會計師、4.02 財報重編）與 10-K 繼續經營全文搜尋，或台股的環境部裁罰（**需要 `MOENV_API_KEY` secret**，沒有時只略過台股環境裁罰），再存下該週的紅旗掃描。
 - **成分股**（第二階段第 6 步，F14）：每月一次讀取持有基金的成分股（VT、VOO 來自 Vanguard，00692 來自富邦投信），以及 S&P 500 成分股的 GICS 產業（State Street Select Sector SPDR 持股檔）與台股產業別，存入 `fund_holdings`。不需要金鑰。
+- **類股價格**（第二階段第 7 步，N7）：每晚讀取 11 檔 Select Sector SPDR 類股 ETF 與 20 個證交所類股指數約一年（400 天）的收盤價，存入 `index_prices`（ETF 代號，或 `TW_` 加指數代號）。來源是 FinMind；美股備援為 Alpha Vantage（有 `ALPHAVANTAGE_API_KEY` 時），台股備援為證交所 OpenAPI（只有最近一天）。
 - **規則與推播**：最後以剛載入的資料檢查規則、產生提案，並送出推播（[推播通知](web-push.md)）。
 - **失敗時**：App 沿用最後一次成功的資料；連續 2 晚失敗（`DATA_FAILURE`）就顯示警示並推播一次。公開的執行紀錄只寫數量，不寫代號與提案內容。
 
@@ -120,6 +121,7 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | `red flags: MOENV_API_KEY is not set …`（警告） | 第 3 步加上 `MOENV_API_KEY`；其他紅旗指標不受影響 |
 | `VT holdings: vanguard: …` 或 `00692 holdings: fubon: …` | 發行商網站暫時連不上或改版；合併透視沿用上次的成分股，隔天會再試。持續失敗請把錯誤訊息貼給 Claude |
 | `red flags: TWSE …: HTTP …` | 證交所 OpenAPI 暫時連不上；隔天會自動再讀，重大訊息只會漏掉那一天（可到公開資訊觀測站查詢後在「紅旗指標」頁自行登錄） |
+| `XLK: finmind: …` 或 `TW_ELECTRONIC: finmind returned no data` | FinMind 暫時沒有該類股的資料；產業熱圖沿用已存的收盤價，隔天會再試。若同一個台股指數一直沒有資料，可能是 FinMind 改了代號：先在「產業熱圖」頁的設定刪除那一行，再把錯誤訊息貼給 Claude |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 

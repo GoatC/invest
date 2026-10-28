@@ -74,6 +74,7 @@ export const LABELS = {
   valuation: { en: 'Valuation', zh: '估值' },
   redFlags: { en: 'Red flags', zh: '紅旗指標' },
   lookThrough: { en: 'Look-through', zh: '合併透視' },
+  sectors: { en: 'Sectors', zh: '產業熱圖' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
