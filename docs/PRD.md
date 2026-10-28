@@ -420,7 +420,7 @@ Nightly jobs pull free data into Postgres; the rules engine turns fired rules in
 | Data 資料 | Free source 免費來源 | Used by 使用者 |
 | --- | --- | --- |
 | Taiwan prices, financials, filings 台股價格、財報、重大訊息 | TWSE OpenAPI, FinMind, MOPS 公開資訊觀測站. Daily closes: FinMind, dividend-adjusted by the nightly job from its ex-dividend results; TWSE OpenAPI as backup 每日收盤價以 FinMind 為主（由每夜排程依除權息結果還原），證交所 OpenAPI 備援 | F12, N1, N3, F18 |
-| US filings 美股財報與 8-K | SEC EDGAR | F12, N3 |
+| US filings 美股財報與 8-K | SEC EDGAR: XBRL company facts of 10-K / 10-Q (F12, step 4), sent with a contact User-Agent (`SEC_USER_AGENT`) as the SEC requires; Taiwan statements from FinMind's three statements and ex-dividend results 美股財報取自 SEC company facts（需聯絡 email）；台股財報取自 FinMind 三大報表與除權息結果 | F12, N3 |
 | US stock, ETF and index prices 美股、ETF 與指數價格 | FinMind US prices as primary (daily, with adjusted close); Alpha Vantage free key as backup (25 requests/day; fills missing days only). LSE-listed AGGU: iShares daily NAV, with Alpha Vantage AGGU.LON weekly as backup (step 4) 主要用 FinMind（每日、含還原收盤價），Alpha Vantage 備援；倫敦掛牌的 AGGU 用 iShares 每日淨值，Alpha Vantage 週線備援（第 4 步） | All |
 | TWD/USD 台幣匯率 | Bank of Taiwan daily rates through FinMind, the middle of spot buy and sell; FRED (weekly) as backup 臺灣銀行每日牌告（經 FinMind，取即期買賣中間值），FRED 週資料備援 | F18, N2, N5 |
 | US rates 美國利率 | FRED; the 3-month bill (TB3MS, monthly) as N1's risk-free rate since Phase 2, step 2; the 10-year (DGS10, each month's last day) as F11's since step 3, with the US Treasury's daily par yield curve as fallback 自第二階段第 2 步起以 3 個月國庫券（TB3MS，每月）作為 N1 的無風險利率；第 3 步起以 10 年期公債（DGS10，取每月最後一天）作為 F11 的無風險利率，美國財政部每日殖利率曲線為備援 | F11, N1 |
@@ -459,7 +459,7 @@ Nineteen Postgres tables cover holdings, market data, rules and model outputs; a
 | red\_flags 紅旗 | ticker, date, indicator, value, level, coverage\_pct | N3 |
 | attribution 歸因 | period, level, segment, allocation, selection, interaction, fx | N2 |
 | config 設定 | tax thresholds, push schedule, quiet hours, satellite cap, single-stock cap, CMA per asset class | F15, Section 4–5 |
-| watchlist 觀察清單 | ticker, added\_on, buy\_threshold, trim\_threshold, active | F12, N3 |
+| watchlist 觀察清單 | ticker, added\_on, buy\_threshold, trim\_threshold, active, assumptions (step 4) | F12, N3 |
 | windfall\_plan 大額資金計畫 | total\_twd, received\_on, cape\_percentile, tranche\_count, tiers\_fired, current\_drawdown\_peak | F3 |
 | manual\_assets 非上市資產 | name, asset\_class\_id, unit (grams/TWD), quantity, valuation\_method, last\_value\_twd | N5, N4, N6 |
 
@@ -468,6 +468,8 @@ A 20th table, push\_subscriptions (endpoint, keys, device name), is added in Pha
 Two bookkeeping tables join them in Phase 1: audit\_log (table, row, old and new values, who and when) for N5's edit history (step 2), and job\_runs (job, start, finish, status, per-feed detail) for the nightly job's outcomes and the data-failure alert (step 4). 第一階段另有兩張紀錄用資料表：audit\_log（資料表、資料列、修改前後內容、修改者與時間），供 N5 的修改紀錄使用（第 2 步）；job\_runs（工作、開始與結束時間、狀態、各資料來源明細），記錄每夜排程結果並供資料異常警示使用（第 4 步）。
 
 Phase 2 adds market\_series (series, obs\_month, value, source): the monthly S&P 500 CAPE, price and dividend yield the windfall planner reads, and since step 2 the US 3-month bill rate, written by the nightly job only (step 1); and index\_prices (index\_id, price\_date, close, source): the daily closes of the indices N1 regresses on, S&P 500 and TAIEX, and later N7's sector proxies, also written by the job only (step 2). beta\_results gets each holding's β once a month. Since step 3 market\_series also holds F11's US and Taiwan 10-year yields and Damodaran's implied ERP (us\_treasury\_10y, tw\_govt\_10y, us\_implied\_erp). 第二階段新增 market\_series（資料名稱、月份、數值、來源）：大額資金分批使用的每月 S&P 500 CAPE、價格與股息殖利率，第 2 步起另有美國 3 個月國庫券利率，只有每夜排程能寫入（第 1 步）；以及 index\_prices（指數代號、日期、收盤、來源）：N1 回歸使用的標普 500 與加權報酬指數每日收盤，之後也存放 N7 的類股代理，同樣只有排程能寫入（第 2 步）。beta\_results 每月存入各持股的 β。第 3 步起 market\_series 另存 F11 的美國與台灣 10 年期公債殖利率及 Damodaran 隱含風險溢酬。
+
+Phase 2, step 4 adds fundamentals (ticker, period\_end, figures, currency, filed\_on, source): each single stock's twelve-month flows and quarter-end balances from its filings, written by the nightly job only. 第二階段第 4 步新增 fundamentals：個股每季的近四季流量與季末餘額，只有每夜排程能寫入。
 
 ## 8. Roadmap 開發路線圖
 
@@ -501,7 +503,8 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 
 - [ ] CMA per asset class: entered on the Allocation page (step 6) 各類別資本市場假設：在「資產配置」頁輸入
 - [ ] F3 acceleration tiers 15% / 25% / 35%: editable on the Windfall page; decide with its backtest once real series load 加速級距：在「大額資金」頁依回測決定
-- [ ] Valuation trim threshold 1.25 × intrinsic value (rule TRIM_ZONE) 估值減碼門檻 1.25 倍
+- [ ] Valuation trim threshold 1.25 × intrinsic value and selling half (rule TRIM_ZONE); F12's default growth rates (`valuation`) are placeholders until Hugo sets his 估值減碼門檻與賣出比例、預設成長率待確認
+- [ ] Foreign filers (IFRS, 20-F) and ADRs have no filings feed: type FCFF, net debt and shares on the Valuation page 外國發行人與存託憑證無財報來源，需自行輸入
 - [ ] Weekly review day and time; Sunday 20:00 Taipei until set on the Notifications page 每週檢視時間；預設週日 20:00
 - [ ] N3 exclusion list N3 排除產業清單
 - [ ] DCA debit day (`dca.day_of_month`, Rules page); MONTHLY_CONTRIBUTION waits until set 定期定額扣款日；設定前每月投入規則不觸發
@@ -536,6 +539,7 @@ Phase 2 第二階段:
 
 - Step 1, F3: `market_series` holds `us_cape`, `sp500_price`, `sp500_yield` monthly from Shiller's ie_data.xls (link read nightly; SheetJS 0.20.3 from its own site), multpl.com fallback; gauge = CAPE percentile since 1881 at the plan's start month, tranche count by `windfall_pace` (30 / 70 → 6 / 12 / 24), due monthly on the start day; ACWI ETF as the MSCI ACWI proxy, drawdown vs the 52-week high (`window_weeks`), named by its peak, a deeper tier marks shallower ones; `tiers_fired` records {drawdown, peak_date, fired_on}; a tranche = cash waiting ÷ tranches left, from the windfall pool's TWD balances; split by core targets, `pool = windfall`, bought through `windfall.vehicles`, else the pool's largest holding, else the benchmark; strategic cash's share stays; backtest on Shiller's S&P 500 from `windfall.backtest.from_year` over `horizon_months` (cash at `windfall.cash_return`) CAPE 百分位定批數；ACWI 回落觸發級距；每批 = 等待現金 ÷ 剩餘批數
 - Step 2, N1: benchmarks S&P 500 (FinMind ^GSPC, FRED fallback) and TAIEX total return (FinMind, TWSE fallback) in `index_prices`; closes reach back 5 + 1 years; returns from adjusted closes, local currency by default, TWD toggle; R_f per period from TB3MS (USD) or the TWD setting; Dimson for daily returns across markets > 8 h apart (Taiwan vs S&P adds the index's day before; US vs TAIEX adds TAIEX's day after), SE of the sum; t-interval with n − k df; Blume in config `regression`; rolling 52 weeks; compare up to 5; the monthly refresh saves each holding's β vs both indices in `beta_results` (adjusted β, CI, n, slopes in `factor_loadings`); N7 added as step 7 N1 基準、報酬、Dimson、每月存 β
+- Step 4, F12: figures per quarter end in `fundamentals` (TTM flows from quarters, years to date and years; balances at the end; first report kept); loaded nightly for stocks held or watched and their peers; DCF = two-stage FCFF (`valuation.years`, scenario growth, terminal growth) at WACC with E at market value, R_e from F11, R_d = interest ÷ debt else R_f + `debt_spread`, tax = tax ÷ pretax else `tax_rate`; ΔNWC excludes cash and short-term debt; Gordon DDM on TTM dividends a share at the terminal rate; multiples (P/E, P/B, EV/EBITDA) against the peers' median and the own median over `history_years` (≥ `min_quarters`), bear / base / bull = lowest / median / highest implied price; per stock in `watchlist.assumptions` (model, years, rates, typed FCFF, net debt, shares, tax, R_d, peers); values saved in `valuations` on an edit and by the nightly job after a new quarter; the alerts read the newest saved base value of the stock's model; BUY_ZONE buys the month's contribution share (`satellite_share_with_buy_alert`) within R1's cap and R2's target, once a month per stock list, and MONTHLY_CONTRIBUTION leaves it that share; TRIM_ZONE sells `sell_share` (0.5) of a holding, cooldown 30 days; VALUATION_UPDATED prompts a review when a filing moves the value by more than `change`; the coming week lists each stock's next report (Taiwan deadline, US estimated from last year's filing date) 財報、三種模型、警報與下週財報日
 - Step 3, F11: CAPM per market in its own currency: E(R) = R_f + β (ERP + CRP), R_f the 10-year (US DGS10 month end, Treasury fallback; Taiwan CBC EG43M01, setting fallback), ERP Damodaran's monthly implied (T12m, Excel 1904 dates) or typed (`capm.erp`), Taiwan CRP 0.78%; β Blume-adjusted (`capm.beta`) from N1's monthly refresh, else live; no new table: worked out on request F11 各市場 CAPM；R_f 用 10 年期；β 用 Blume 調整
 
 ## 10. Glossary 雙語術語表
@@ -636,6 +640,11 @@ Rules:
 | N1 Dimson | Daily Taiwan series = 0.7 × S&P 500 that day + 0.5 × the day before | Slopes 0.7 and 0.5, summed β 1.2 |
 | F11 CAPM, US (added in Phase 2, step 3) | R\_f 4.0%, β 1.2, ERP 5.0% | Cost of equity 4.0% + 1.2 × 5.0% = 10.0% |
 | F11 CAPM, Taiwan | R\_f 1.8%, raw β 0.85 (Blume 0.8995), ERP 4.23% + country premium 0.78% | 1.8% + 0.8995 × 5.01% ≈ 6.31% |
+| F12 FCFF (added in Phase 2, step 4) | EBIT 100, tax 20%, D&A 30, CapEx 40, ΔNWC 10 | 60 |
+| F12 WACC | E 600 at 10%, D 400 at 5%, tax 20% | 7.6% |
+| F12 DCF | FCFF 100, 5% for 5 years, WACC 9%, terminal 2.5%; net debt 200, 10 shares | EV ≈ 1,755.62 (TV 2,012.60); 155.56 a share |
+| F12 Gordon | D₀ 2.00, g 3%, R\_e 8% | 41.20 |
+| F12 zones | Value 100, price 70; multiples 0.75 / 1.25 | Margin of safety 30%; buy zone at ≤ 75, trim zone at ≥ 125 |
 
 **First prompt for Claude Code 第一個指令**
 

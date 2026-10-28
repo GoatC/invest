@@ -350,9 +350,17 @@ function nextMonth(month: string): string {
 /**
  * What falls in the next seven days, today included: the DCA debit (config dca.day_of_month) and
  * the monthly-contribution proposal the day after it, the weekly review, January's review, and
- * the windfall tranches still scheduled (F3, Phase 2 step 1). Earnings dates come with F12.
+ * the windfall tranches still scheduled (F3, Phase 2 step 1), and the quarterly reports due of the
+ * single stocks held or watched (F12, step 4): a Taiwan deadline, a US date estimated.
  */
-export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyReview | null, annualMonth: number | null, tranches: ReadonlyArray<{ dueDate: string; status: string }> = []): WeekEvent[] {
+export function comingWeek(
+  today: string,
+  dcaDay: number | null,
+  weekly: WeeklyReview | null,
+  annualMonth: number | null,
+  tranches: ReadonlyArray<{ dueDate: string; status: string }> = [],
+  filings: ReadonlyArray<{ ticker: string; date: string; kind: 'deadline' | 'estimate' }> = [],
+): WeekEvent[] {
   const last = addDays(today, 6);
   const inWeek = (date: string) => date >= today && date <= last;
   const events: WeekEvent[] = [];
@@ -378,6 +386,13 @@ export function comingWeek(today: string, dcaDay: number | null, weekly: WeeklyR
   }
   for (const tranche of tranches) {
     if (tranche.status === 'scheduled' && inWeek(tranche.dueDate)) events.push({ date: tranche.dueDate, what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } });
+  }
+  for (const filing of filings) {
+    if (!inWeek(filing.date)) continue;
+    events.push({
+      date: filing.date,
+      what: filing.kind === 'deadline' ? { en: `${filing.ticker} quarterly report deadline`, zh: `${filing.ticker} 季報公布期限` } : { en: `${filing.ticker} quarterly report, about (last year's date)`, zh: `${filing.ticker} 季報約略日期（依去年）` },
+    });
   }
   return events.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
 }

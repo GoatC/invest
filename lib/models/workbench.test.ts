@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Quarter } from './fundamentals';
 import { assumed, readValuationSettings, valueStock, type ValuationSettings } from './intrinsic';
-import { closeOn, currentMultiples, filedSince, historyMultiples, readSaved, valuationInput, valuationRows, watchInputs, type SavedValuation, type StockSeries } from './workbench';
+import { closeOn, currentMultiples, filedSince, nextFiling, historyMultiples, readSaved, valuationInput, valuationRows, watchInputs, type SavedValuation, type StockSeries } from './workbench';
 
 const SETTINGS = readValuationSettings({
   model: 'dcf',
@@ -90,5 +90,14 @@ describe('F12 workbench', () => {
     assert.equal(filedSince(STOCK.quarters, saved, 'AAPL'), false);
     assert.equal(filedSince(STOCK.quarters, saved.slice(0, 1), 'AAPL'), true);
     assert.equal(filedSince(STOCK.quarters, [], 'AAPL'), true);
+  });
+
+  it("dates the next report: Taiwan's deadline, a US company's from the same quarter's filing a year before", () => {
+    const tw = [quarter('2026-06-30', 100)];
+    assert.deepEqual(nextFiling('TW', tw), { date: '2026-11-14', kind: 'deadline' });
+    assert.deepEqual(nextFiling('TW', [quarter('2026-09-30', 100)]), { date: '2027-03-31', kind: 'deadline' });
+    const us = [quarter('2025-09-27', 90, '2025-10-31'), quarter('2026-06-27', 100, '2026-07-31')];
+    assert.deepEqual(nextFiling('US', us), { date: '2026-10-31', kind: 'estimate' });
+    assert.equal(nextFiling('US', [quarter('2026-06-27', 100, '2026-07-31')]), undefined);
   });
 });

@@ -1010,7 +1010,7 @@ function evaluateBuyZone(rule: EngineRule, context: Context): Result {
   const multiple = fraction(record(rule.threshold)['multiple']);
   if (multiple === undefined) return { outcome: 'unreadable' };
   const { watch, quotes, dca, rules, today } = context.input;
-  if (!watch) return { outcome: 'waiting', why: 'valuation' };
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
   const inZone = watch
     .flatMap((entry) => {
       const quote = quotes.get(entry.ticker);
@@ -1060,7 +1060,7 @@ function evaluateTrimZone(rule: EngineRule, context: Context): Result {
   const sellShare = typeof threshold['sell_share'] === 'number' && threshold['sell_share'] > 0 && threshold['sell_share'] <= 1 ? threshold['sell_share'] : undefined;
   if (typeof multiple !== 'number' || !(multiple > 1) || sellShare === undefined) return { outcome: 'unreadable' };
   const { watch, quotes } = context.input;
-  if (!watch) return { outcome: 'waiting', why: 'valuation' };
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
   const byTicker = new Map(watch.map((entry) => [entry.ticker, entry]));
   const held = context.pool.holdings
     .flatMap((holding) => {
@@ -1097,7 +1097,7 @@ function evaluateValueChange(rule: EngineRule, context: Context): Result {
   const limit = fraction(record(rule.threshold)['change']);
   if (limit === undefined) return { outcome: 'unreadable' };
   const { watch } = context.input;
-  if (!watch) return { outcome: 'waiting', why: 'valuation' };
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
   const changes = watch
     .flatMap((entry) => {
       const previous = entry.previous;

@@ -142,6 +142,7 @@ export const FEED: Record<string, Bilingual> = {
   treasury: { en: 'US Treasury', zh: '美國財政部' },
   cbc: { en: 'Central Bank of the ROC', zh: '中央銀行' },
   damodaran: { en: 'Damodaran Online', zh: 'Damodaran Online' },
+  sec: { en: 'SEC EDGAR', zh: 'SEC EDGAR' },
   demo: { en: 'Demo data', zh: '示範資料' },
 };
 

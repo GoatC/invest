@@ -30,11 +30,12 @@ function rangeOption(rows: readonly ValueRange[], marks: { price: number; buy: n
   const markLine = (value: number, label: Bilingual, color: string, type: 'solid' | 'dashed') => ({
     xAxis: value,
     lineStyle: { color, width: type === 'solid' ? 2 : 1, type },
-    label: { formatter: bi(label), color: colors.muted, fontSize: 12, position: 'end' as const },
+    // The category axis runs top down, so a line's start is its top: the label sits above the bars.
+    label: { formatter: bi(label), color: colors.muted, fontSize: 12, position: 'start' as const },
   });
   return {
     textStyle: { fontFamily: colors.font },
-    grid: { left: 4, right: 16, top: 28, bottom: 4, containLabel: true },
+    grid: { left: 4, right: 16, top: 40, bottom: 4, containLabel: true },
     tooltip: {
       ...tooltipStyle(colors, 'item'),
       formatter: (params) => {

@@ -191,10 +191,42 @@ export function watchInputs(
   });
 }
 
-/** Whether a filing has come in since a stock was last valued: a quarter end newer than the one its newest value used. */
+/**
+ * Whether a filing has come in since a stock was last valued: its newest quarter end is not the one
+ * its newest value used (a later quarter, or the figures replaced, as when a feed restates them).
+ */
 export function filedSince(quarters: readonly Quarter[], saved: readonly SavedValuation[], ticker: string): boolean {
   const latest = latestQuarter(quarters);
   if (!latest) return false;
-  const used = saved.filter((row) => row.ticker === ticker).reduce<string | null>((max, row) => (row.periodEnd && (!max || row.periodEnd > max) ? row.periodEnd : max), null);
-  return used === null || latest.periodEnd > used;
+  const newest = saved.filter((row) => row.ticker === ticker).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return !newest || newest.periodEnd !== latest.periodEnd;
+}
+
+/** Taiwan's filing deadlines by quarter-end month: Q1 by 15 May, Q2 by 14 August, Q3 by 14 November, the year by 31 March. */
+const TW_DEADLINES: Record<string, [number, string]> = { '03': [0, '05-15'], '06': [0, '08-14'], '09': [0, '11-14'], '12': [1, '03-31'] };
+
+function quarterAfter(periodEnd: string): string {
+  const [year, month] = periodEnd.split('-').map(Number) as [number, number];
+  const next = month + 3 > 12 ? [year + 1, month - 9] : [year, month + 3];
+  const end = new Date(Date.UTC(next[0] as number, next[1] as number, 0));
+  return end.toISOString().slice(0, 10);
+}
+
+/**
+ * When a stock's next quarterly report is due (PRD Section 5's "earnings dates of holdings"): a
+ * Taiwan company's statutory deadline for the quarter after its newest one; a US company's is
+ * estimated as the day the same quarter was filed a year before, a year on, as free sources give
+ * no dates ahead.
+ */
+export function nextFiling(market: string, quarters: readonly Quarter[]): { date: string; kind: 'deadline' | 'estimate' } | undefined {
+  const latest = latestQuarter(quarters);
+  if (!latest) return undefined;
+  const next = quarterAfter(latest.periodEnd);
+  if (market === 'TW') {
+    const deadline = TW_DEADLINES[next.slice(5, 7)];
+    return deadline ? { date: `${Number(next.slice(0, 4)) + deadline[0]}-${deadline[1]}`, kind: 'deadline' } : undefined;
+  }
+  const yearAgo = quarters.find((quarter) => quarter.filed && Math.abs(Date.parse(quarter.periodEnd) - Date.parse(next) + 365 * 86_400_000) <= 14 * 86_400_000);
+  if (!yearAgo?.filed) return undefined;
+  return { date: `${Number(yearAgo.filed.slice(0, 4)) + 1}${yearAgo.filed.slice(4)}`, kind: 'estimate' };
 }

@@ -52,7 +52,7 @@ Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of 
 | 1. F3 windfall tranche planner 大額資金分批部署 | ✅ |
 | 2. N1 Regression Lab, single-factor β 回歸分析區（單因子 β） | ✅ |
 | 3. F11 CAPM cost of equity CAPM 權益成本 | ✅ |
-| 4. F12 valuation workbench and alerts 估值工作台與警報 | |
+| 4. F12 valuation workbench and alerts 估值工作台與警報 | ✅ |
 | 5. N3 red-flag indicator 紅旗指標 | |
 | 6. F14 combined look-through 核心與衛星合併透視 | |
 | 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | Planned 已規劃 ([spec 規格](docs/PRD.md#module-c--security-analysis-證券分析)) |
@@ -94,6 +94,8 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 
 ![Cost of equity with demo data: each market's 10-year yield and Damodaran's ERP, every stock's β and cost of equity](docs/images/capm.png)
 
+![Valuation workbench with demo filings: AAPL valued a share by DCF, the dividend model and multiples, against its price](docs/images/valuation.png)
+
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 
 ![CSV import preview: every row explained, unknown tickers can be added on the spot](docs/images/import-preview.png)
@@ -129,7 +131,7 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 | Path 路徑 | Contents 內容 |
 | --- | --- |
 | `app/` | Pages and server actions 頁面與伺服器動作 |
-| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, the capital market assumptions, the Value at Risk, the projection engine, the rules engine, costs and tax, the windfall planner, the regression and the cost of equity, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設、風險值、預測引擎、規則引擎、費用與稅務、大額資金分批、回歸分析、權益成本，皆為純函式 |
+| `lib/models/` | Positions, valuation, trade-date FX, data health, the R1 / R2 rules, performance (TWR, XIRR, FX split, NAV snapshots), drift and allocation lenses, the capital market assumptions, the Value at Risk, the projection engine, the rules engine, costs and tax, the windfall planner, the regression, the cost of equity, and the filings' figures and the valuation models, as pure functions 持倉、估值、交易日匯率、資料狀態、R1／R2 規則、績效（TWR、XIRR、匯率拆解、淨值快照）、偏離與配置分法、資本市場假設、風險值、預測引擎、規則引擎、費用與稅務、大額資金分批、回歸分析、權益成本、財報數字與估值模型，皆為純函式 |
 | `lib/csv/` | Statement reading, column mapping and the import plan 對帳單讀取、欄位對應與匯入計畫 |
 | `supabase/migrations/` | Schema, row-level security, reference data and change logs 資料庫結構、權限、參考資料與變更紀錄 |
 | `supabase/seed.sql` | Demo data for local use only 僅供本機使用的示範資料 |

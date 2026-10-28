@@ -577,8 +577,10 @@ describe('valuation rules (F12)', () => {
   const holdings = onTarget(100_000, [listed('THEME', 'tactical_themes', 20_000, { productType: 'theme_etf' })]);
 
   it('waits for the saved values', () => {
-    const outcome = evaluate(input({ holdings, rules: F12 }));
-    for (const id of ['BUY_ZONE', 'TRIM_ZONE', 'VALUATION_UPDATED']) assert.deepEqual(checkOf(outcome, id), { ruleId: id, outcome: 'waiting', why: 'valuation' });
+    for (const watch of [undefined, []]) {
+      const outcome = evaluate(input({ holdings, rules: F12, ...(watch ? { watch } : {}) }));
+      for (const id of ['BUY_ZONE', 'TRIM_ZONE', 'VALUATION_UPDATED']) assert.deepEqual(checkOf(outcome, id), { ruleId: id, outcome: 'waiting', why: 'valuation' });
+    }
   });
 
   it("buy zone: price 100 at or below 75% of a 140 value buys the contribution's 20% share, once a month", () => {

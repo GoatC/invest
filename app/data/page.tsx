@@ -44,8 +44,8 @@ export default async function DataStatusPage() {
         </h1>
         <Info>
           <Bi
-            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates, the gold price and the monthly market series of the windfall planner, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last prices it has."
-            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率、金價與大額資金分批所用的每月市場資料，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的價格。"
+            en="Every night at about 22:23 Taipei time, a GitHub Actions job loads daily closes, Bank of Taiwan exchange rates, the gold price, the monthly market series, the indices and the single stocks' filings, then saves each day's NAV snapshot. Each feed has one fallback; when a night fails, the app keeps the last data it has."
+            zh="每晚台北時間約 22:23，GitHub Actions 排程會載入每日收盤價、臺灣銀行匯率、金價、每月市場資料、指數與個股財報，再存入每一天的淨值快照。每種資料各有一個備援來源；某晚失敗時，App 會沿用最後一次載入的資料。"
           />
         </Info>
         <DataHealthBanner health={health} threshold={status.threshold} />
@@ -55,6 +55,7 @@ export default async function DataStatusPage() {
       <Rates rates={status.rates} />
       <MarketSeries series={status.series} lastRun={status.runs[0]?.detail.series ?? {}} />
       <Indices indices={status.indices} lastRun={status.runs[0]?.detail.indices ?? {}} />
+      <Filings filings={status.filings} lastRun={status.runs[0]?.detail.filings ?? {}} />
       {status.runs.length > 0 && <Runs runs={status.runs} />}
     </>
   );
@@ -353,6 +354,61 @@ function Indices({ indices, lastRun }: { indices: LatestQuote[]; lastRun: JobRun
                     <Bi {...feedLabel(index.source)} />
                   </td>
                   <td className="num">{lastRun[index.key]?.rows ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Each single stock's newest quarter from its filings (F12): SEC EDGAR for US stocks, FinMind for Taiwan ones. */
+function Filings({ filings, lastRun }: { filings: DataStatus['filings']; lastRun: JobRun['detail']['filings'] }) {
+  return (
+    <section className="card form" id="filings">
+      <h2>
+        <Bi en="Filings" zh="財報" />
+      </h2>
+      {filings.length === 0 ? (
+        <p className="muted">
+          <Bi en="None loaded yet: the nightly job loads the single stocks held or watched (US stocks need SEC_USER_AGENT)." zh="尚未載入：每夜排程會載入持有或觀察中的個股（美股需要 SEC_USER_AGENT）。" />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>
+                  <Bi {...LABELS.ticker} />
+                </th>
+                <th>
+                  <Bi en="Newest quarter" zh="最新一季" />
+                </th>
+                <th>
+                  <Bi en="Filed" zh="申報日" />
+                </th>
+                <th>
+                  <Bi {...LABELS.source} />
+                </th>
+                <th className="num">
+                  <Bi en="Quarters" zh="季數" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filings.map((row) => (
+                <tr key={row.key}>
+                  <td>
+                    <Link href={`/valuation?t=${encodeURIComponent(row.key)}`}>{row.key}</Link>
+                  </td>
+                  <td className="nowrap">{row.date}</td>
+                  <td className="nowrap">{row.filed ?? '—'}</td>
+                  <td className="nowrap">
+                    <Bi {...feedLabel(row.source)} />
+                  </td>
+                  <td className="num">{lastRun[row.key]?.rows ?? row.value}</td>
                 </tr>
               ))}
             </tbody>

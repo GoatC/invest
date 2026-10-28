@@ -696,6 +696,17 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.fx_rates where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.index_prices where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.fundamentals where source <> 'demo'`), 0);
+  });
+
+  it("invents thirteen quarters of filings for the two demo stocks (F12), AAPL's with the day it filed", async () => {
+    const { rows } = await db.query<{ ticker: string; quarters: string; first: string; last: string; filed: string }>(
+      `select ticker, count(*) as quarters, min(period_end)::text as first, max(period_end)::text as last, count(filed_on) as filed from public.fundamentals group by ticker order by ticker`,
+    );
+    assert.deepEqual(rows.map((row) => [row.ticker, Number(row.quarters), row.first, row.last, Number(row.filed)]), [
+      ['2330', 13, '2023-06-30', '2026-06-30', 0],
+      ['AAPL', 13, '2023-06-30', '2026-06-30', 13],
+    ]);
   });
 
   it("invents Shiller's monthly series for the windfall planner (F3): price and yield from 1871, CAPE from 1881, to 2026-09; and the cost of equity's yields and ERP (F11)", async () => {

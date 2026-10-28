@@ -401,10 +401,12 @@ export interface DataStatus {
   series: LatestQuote[];
   /** Each index's newest close (N1, Phase 2 step 2). */
   indices: LatestQuote[];
+  /** Each single stock's newest quarter end from its filings (F12, step 4); `value` is the quarters loaded, `filed` when known. */
+  filings: Array<LatestQuote & { filed: string | null }>;
 }
 
 export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStatus> {
-  const [{ runs, threshold }, securities, prices, rates, series, indices] = await Promise.all([
+  const [{ runs, threshold }, securities, prices, rates, series, indices, quarters] = await Promise.all([
     loadJobRuns(supabase),
     loadSecurities(supabase),
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
@@ -425,7 +427,16 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
         ),
       ),
     ),
+    allRows<{ ticker: string; period_end: string; filed_on: string | null; source: string }>('fundamentals', (from, to) =>
+      supabase.from('fundamentals').select('ticker, period_end, filed_on, source').order('ticker').order('period_end', { ascending: false }).range(from, to),
+    ),
   ]);
+  const filings = new Map<string, LatestQuote & { filed: string | null }>();
+  for (const row of quarters) {
+    const held = filings.get(row.ticker);
+    if (held) held.value += 1;
+    else filings.set(row.ticker, { key: row.ticker, date: row.period_end, value: 1, source: row.source, filed: row.filed_on });
+  }
   return {
     runs,
     threshold,
@@ -434,6 +445,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     rates: rates.map((row) => ({ key: row.pair, date: row.rate_date, value: Number(row.rate), source: row.source })),
     series: series.flat().map((row) => ({ key: row.series, date: row.obs_month.slice(0, 7), value: Number(row.value), source: row.source })),
     indices: indices.flat().map((row) => ({ key: row.index_id, date: row.price_date, value: Number(row.close), source: row.source })),
+    filings: [...filings.values()],
   };
 }
 
