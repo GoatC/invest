@@ -66,6 +66,18 @@ export const MESSAGES = {
   share: { en: 'Enter a percentage above 0, up to 100.', zh: '請輸入大於 0、最多 100 的百分比。' },
   drawdown: { en: 'Enter a fall in percent, above 0 and up to 99.', zh: '請輸入大於 0、最多 99 的跌幅百分比。' },
   ascending: { en: 'Must be above the one before it.', zh: '必須大於前一個數值。' },
+  growth: { en: 'Enter a yearly growth from −20% to 40%.', zh: '請輸入 −20% 到 40% 之間的年成長率。' },
+  terminal: { en: 'Enter a terminal growth from −2% to 6%.', zh: '請輸入 −2% 到 6% 之間的永續成長率。' },
+  scenarioOrder: { en: 'Bear ≤ base ≤ bull.', zh: '悲觀 ≤ 基本 ≤ 樂觀。' },
+  forecastYears: { en: 'Enter whole years from 1 to 20.', zh: '請輸入 1 到 20 的整數年數。' },
+  millions: { en: 'Enter a number in millions, or leave it blank.', zh: '請輸入以百萬為單位的數字，或留白。' },
+  positiveMillions: { en: 'Enter a number in millions above 0, or leave it blank.', zh: '請輸入大於 0 的百萬單位數字，或留白。' },
+  optionalRate: { en: 'Enter a percentage from 0 to 60, or leave it blank.', zh: '請輸入 0 到 60 的百分比，或留白。' },
+  peers: { en: 'List up to 8 single stocks, by ticker, separated by commas; each a security already.', zh: '請以逗號分隔最多 8 檔個股代號，且都已是證券。' },
+  buyMultiple: { en: 'Enter a multiple between 0 and 1, e.g. 0.75, or leave it blank.', zh: '請輸入 0 到 1 之間的倍數，例如 0.75，或留白。' },
+  trimMultiple: { en: 'Enter a multiple above 1, e.g. 1.25, or leave it blank.', zh: '請輸入大於 1 的倍數，例如 1.25，或留白。' },
+  quarters: { en: 'Enter whole quarters from 1 to 40.', zh: '請輸入 1 到 40 的整數季數。' },
+  historyYears: { en: 'Enter whole years from 1 to 10.', zh: '請輸入 1 到 10 的整數年數。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -970,6 +982,141 @@ export function parseCapmForm(raw: RawForm, markets: readonly string[], today: s
     erpSource: erpSource ?? 'damodaran',
     erpManual: erpManual ?? 0,
     markets: values,
+    checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// F12 valuation workbench (Phase 2, step 4)
+// ---------------------------------------------------------------------------
+
+type ScenarioKey = 'bear' | 'base' | 'bull';
+const SCENARIO_KEYS: readonly ScenarioKey[] = ['bear', 'base', 'bull'];
+type ValuationModel = 'dcf' | 'ddm' | 'multiples';
+const VALUATION_MODELS: readonly ValuationModel[] = ['dcf', 'ddm', 'multiples'];
+
+/** Each scenario's rate from `${prefix}_bear` and so on, in percent, in order bear to bull. */
+function scenarioRates(raw: RawForm, prefix: string, min: number, max: number, message: Bilingual, errors: FieldErrors<string>): Record<ScenarioKey, number> {
+  const out = {} as Record<ScenarioKey, number>;
+  for (const scenario of SCENARIO_KEYS) {
+    const value = ratePercent(raw[`${prefix}_${scenario}`], min, max);
+    if (value === undefined) errors[`${prefix}_${scenario}`] = message;
+    out[scenario] = value ?? 0;
+  }
+  if (!errors[`${prefix}_bear`] && !errors[`${prefix}_base`] && !errors[`${prefix}_bull`] && (out.bear > out.base || out.base > out.bull)) errors[`${prefix}_base`] = MESSAGES.scenarioOrder;
+  return out;
+}
+
+/** An optional figure typed in millions: blank is null. */
+function optionalMillions(raw: string | undefined, positive: boolean): number | null | undefined {
+  if (text(raw) === '') return null;
+  const value = parseNumber(raw);
+  if (value === undefined || (positive && value <= 0)) return undefined;
+  return Math.round(value * 1e6);
+}
+
+function wholeIn(raw: string | undefined, min: number, max: number): number | undefined {
+  const value = parseNumber(raw);
+  return value !== undefined && Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+}
+
+export interface AssumptionsInput {
+  active: boolean;
+  buy: number | null;
+  trim: number | null;
+  assumptions: {
+    model: ValuationModel;
+    years: number;
+    growth: Record<ScenarioKey, number>;
+    terminal: Record<ScenarioKey, number>;
+    overrides: { fcff?: number; netDebt?: number; shares?: number; taxRate?: number; costOfDebt?: number };
+    peers: string[];
+  };
+}
+
+/** A stock's assumptions on its Valuation page; FCFF, net debt and shares in millions of the reporting currency. */
+export function parseAssumptionsForm(raw: RawForm, stocks: readonly string[], self: string): Parsed<AssumptionsInput, string> {
+  const errors: FieldErrors<string> = {};
+  const model = oneOf(raw['model'], VALUATION_MODELS);
+  if (!model) errors['model'] = MESSAGES.choice;
+  const years = wholeIn(raw['years'], 1, 20);
+  if (years === undefined) errors['years'] = MESSAGES.forecastYears;
+  const growth = scenarioRates(raw, 'growth', -20, 40, MESSAGES.growth, errors);
+  const terminal = scenarioRates(raw, 'terminal', -2, 6, MESSAGES.terminal, errors);
+  const overrides: AssumptionsInput['assumptions']['overrides'] = {};
+  for (const [field, positive] of [['fcff', true], ['netDebt', false], ['shares', true]] as const) {
+    const value = optionalMillions(raw[field], positive);
+    if (value === undefined) errors[field] = positive ? MESSAGES.positiveMillions : MESSAGES.millions;
+    else if (value !== null) overrides[field] = value;
+  }
+  for (const field of ['taxRate', 'costOfDebt'] as const) {
+    const value = optionalRate(raw[field], 0, 60);
+    if (value === undefined) errors[field] = MESSAGES.optionalRate;
+    else if (value !== null) overrides[field] = value;
+  }
+  const peers = [...new Set(text(raw['peers']).toUpperCase().split(/[,\s，、]+/).filter(Boolean))];
+  if (peers.length > 8 || peers.some((peer) => peer === self || !stocks.includes(peer))) errors['peers'] = MESSAGES.peers;
+  const multiple = (field: string, check: (value: number) => boolean, message: Bilingual): number | null => {
+    if (text(raw[field]) === '') return null;
+    const value = parseNumber(raw[field]);
+    if (value === undefined || !check(value)) {
+      errors[field] = message;
+      return null;
+    }
+    return value;
+  };
+  const buy = multiple('buy', (value) => value > 0 && value < 1, MESSAGES.buyMultiple);
+  const trim = multiple('trim', (value) => value > 1 && value <= 5, MESSAGES.trimMultiple);
+  return finish(errors, () => ({
+    active: raw['active'] === 'on',
+    buy,
+    trim,
+    assumptions: { model: model ?? 'dcf', years: years ?? 5, growth, terminal, overrides, peers },
+  }));
+}
+
+export interface ValuationSettingsInput {
+  model: ValuationModel;
+  years: number;
+  growth: Record<ScenarioKey, number>;
+  terminal: Record<ScenarioKey, number>;
+  debtSpread: number;
+  taxRate: Record<string, number>;
+  historyYears: number;
+  minQuarters: number;
+  checked: string | null;
+}
+
+/** config valuation: the defaults a stock starts from. */
+export function parseValuationSettingsForm(raw: RawForm, markets: readonly string[], today: string): Parsed<ValuationSettingsInput, string> {
+  const errors: FieldErrors<string> = {};
+  const model = oneOf(raw['model'], VALUATION_MODELS);
+  if (!model) errors['model'] = MESSAGES.choice;
+  const years = wholeIn(raw['years'], 1, 20);
+  if (years === undefined) errors['years'] = MESSAGES.forecastYears;
+  const growth = scenarioRates(raw, 'growth', -20, 40, MESSAGES.growth, errors);
+  const terminal = scenarioRates(raw, 'terminal', -2, 6, MESSAGES.terminal, errors);
+  const debtSpread = ratePercent(raw['debtSpread'], 0, 20);
+  if (debtSpread === undefined) errors['debtSpread'] = MESSAGES.premium;
+  const taxRate: Record<string, number> = {};
+  for (const market of markets) {
+    const value = ratePercent(raw[`tax_${market}`], 0, 60);
+    if (value === undefined) errors[`tax_${market}`] = MESSAGES.optionalRate;
+    taxRate[market] = value ?? 0;
+  }
+  const historyYears = wholeIn(raw['historyYears'], 1, 10);
+  if (historyYears === undefined) errors['historyYears'] = MESSAGES.historyYears;
+  const minQuarters = wholeIn(raw['minQuarters'], 1, 40);
+  if (minQuarters === undefined) errors['minQuarters'] = MESSAGES.quarters;
+  return finish(errors, () => ({
+    model: model ?? 'dcf',
+    years: years ?? 5,
+    growth,
+    terminal,
+    debtSpread: debtSpread ?? 0,
+    taxRate,
+    historyYears: historyYears ?? 5,
+    minQuarters: minQuarters ?? 8,
     checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
 }

@@ -204,6 +204,33 @@ from generate_series(0, 44) as i;
 
 insert into public.watchlist (ticker, added_on) values ('AAPL', '2026-10-08');
 
+-- The two demo stocks' filings (F12), as the nightly job saves them: thirteen quarter ends from
+-- 2023-06-30 to 2026-06-30, the flows over the twelve months to each, the balances at it. Invented
+-- by a fixed recipe: revenue grows 2% a quarter from its first figure, the other lines are fixed
+-- shares of it, and the share count falls (AAPL buys back) or holds (2330), so the workbench has
+-- an own range of multiples and a DCF to show.
+insert into public.fundamentals (ticker, period_end, figures, currency, filed_on, source)
+select c.ticker,
+       q.period_end,
+       jsonb_build_object(
+         'revenue', round(r), 'ebit', round(r * c.margin), 'pretax', round(r * c.margin * 1.02), 'tax', round(r * c.margin * 1.02 * c.tax),
+         'netIncome', round(r * c.margin * 1.02 * (1 - c.tax)), 'da', round(r * c.da), 'capex', round(r * c.capex), 'ocf', round(r * c.margin * 1.15),
+         'dividendsPaid', round(c.dps * c.shares * power(c.buyback, q.i)), 'dps', round((c.dps * power(1.01, q.i))::numeric, 4), 'interest', round(c.debt * 0.04),
+         'currentAssets', round(r * 0.35), 'cash', round(r * c.cash), 'currentLiabilities', round(r * 0.33), 'shortDebt', round(c.debt * 0.15),
+         'debt', round(c.debt * power(0.99, q.i)), 'equity', round(r * c.equity), 'shares', round(c.shares * power(c.buyback, q.i))
+       ),
+       c.currency,
+       case when c.ticker = 'AAPL' then q.period_end + 33 else null end,
+       'demo'
+from (values
+  ('AAPL', 'USD', 380e9::float8, 0.31, 0.15, 0.03, 0.028, 0.09, 0.20, 0.96, 106e9::float8, 15.6e9::float8, 0.995),
+  ('2330', 'TWD', 2.1e12::float8, 0.45, 0.16, 0.25, 0.34, 0.80, 1.60, 14.0, 9.5e11::float8, 25.93e9::float8, 1.0)
+) as c (ticker, currency, revenue, margin, tax, da, capex, cash, equity, dps, debt, shares, buyback)
+cross join lateral (
+  select i, (date '2023-07-01' + make_interval(months => 3 * i) - interval '1 day')::date as period_end, c.revenue * power(1.02, i) as r
+  from generate_series(0, 12) as i
+) as q;
+
 -- The cost of equity's inputs (F11), as the nightly job loads them: the US 10-year Treasury yield
 -- at each month end, Taiwan's 10-year government bond yield a month's average (about two months
 -- behind), and Damodaran's implied ERP at the start of each month.

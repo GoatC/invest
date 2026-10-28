@@ -58,6 +58,8 @@ describe('parseRunDetail', () => {
       rules: { created: 2, closed: 0 },
       indices: { TAIEX: { source: 'finmind', rows: 1249, latest: '2026-10-27' } },
       betas: { saved: 8, runDate: '2026-11-02' },
+      filings: { AAPL: { source: 'sec', rows: 28, latest: '2026-06-27' } },
+      valued: ['AAPL', 3],
     });
     assert.deepEqual(detail, {
       window: { start: '2023-10-07', end: '2026-10-21' },
@@ -70,7 +72,14 @@ describe('parseRunDetail', () => {
       snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 160 },
       rules: { created: 2, closed: 0 },
       betas: { saved: 8, runDate: '2026-11-02' },
+      filings: { AAPL: { source: 'sec', rows: 28, latest: '2026-06-27' } },
+      valued: ['AAPL'],
     });
+  });
+
+  it('reads a run from before the valuation workbench (Phase 2, step 4) as one with no filings', () => {
+    assert.deepEqual(parseRunDetail({}).filings, {});
+    assert.equal(parseRunDetail({}).valued, null);
   });
 
   it('reads a run from before the Regression Lab (Phase 2, step 2) as one with no indices or β', () => {

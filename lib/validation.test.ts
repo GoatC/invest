@@ -6,6 +6,7 @@ import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   MESSAGES,
   parseAssumptionForm,
+  parseAssumptionsForm,
   parseBrokerForm,
   parseCashFlow,
   parseFeeForm,
@@ -30,6 +31,7 @@ import {
   parseWindfallSettingsForm,
   vehicleField,
   withholdingField,
+  parseValuationSettingsForm,
 } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
@@ -476,5 +478,60 @@ describe('parseCapmForm (F11)', () => {
     const bad = parseCapmForm({ ...form, beta: 'blume', erpManual: '0', crp_TW: '-1', rf_US: '' }, ['US', 'TW'], '2026-10-28');
     assert.ok(!bad.ok);
     assert.deepEqual(Object.keys(bad.errors).sort(), ['beta', 'crp_TW', 'erpManual', 'rf_US']);
+  });
+});
+
+describe('F12 valuation forms', () => {
+  const form = {
+    model: 'dcf',
+    years: '5',
+    growth_bear: '2',
+    growth_base: '6',
+    growth_bull: '10',
+    terminal_bear: '1.5',
+    terminal_base: '2.5',
+    terminal_bull: '3',
+    fcff: '',
+    netDebt: '-1,500',
+    shares: '',
+    taxRate: '18',
+    costOfDebt: '',
+    peers: 'msft, nvda',
+    buy: '',
+    trim: '1.3',
+    active: 'on',
+  };
+
+  it("reads a stock's assumptions: rates in percent, figures in millions, peers by ticker", () => {
+    const parsed = parseAssumptionsForm(form, ['AAPL', 'MSFT', 'NVDA'], 'AAPL');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value, {
+      active: true,
+      buy: null,
+      trim: 1.3,
+      assumptions: {
+        model: 'dcf',
+        years: 5,
+        growth: { bear: 0.02, base: 0.06, bull: 0.1 },
+        terminal: { bear: 0.015, base: 0.025, bull: 0.03 },
+        overrides: { netDebt: -1_500_000_000, taxRate: 0.18 },
+        peers: ['MSFT', 'NVDA'],
+      },
+    });
+  });
+
+  it('refuses scenarios out of order, a peer that is no stock or the stock itself, and multiples on the wrong side of 1', () => {
+    const parsed = parseAssumptionsForm({ ...form, growth_base: '12', peers: 'AAPL, XYZ', buy: '1.2', trim: '0.9', shares: '0', terminal_bull: '9' }, ['AAPL', 'MSFT'], 'AAPL');
+    assert.ok(!parsed.ok);
+    assert.deepEqual(Object.keys(parsed.errors).sort(), ['buy', 'growth_base', 'peers', 'shares', 'terminal_bull', 'trim']);
+  });
+
+  it('reads the defaults, with a tax rate per market', () => {
+    const parsed = parseValuationSettingsForm({ ...form, debtSpread: '1.5', tax_US: '21', tax_TW: '20', historyYears: '5', minQuarters: '8', checked: 'on' }, ['US', 'TW'], '2026-10-29');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.taxRate, { US: 0.21, TW: 0.2 });
+    assert.equal(parsed.value.debtSpread, 0.015);
+    assert.equal(parsed.value.checked, '2026-10-29');
+    assert.ok(!parseValuationSettingsForm({ ...form, debtSpread: '1.5', tax_US: '21', historyYears: '0', minQuarters: '8' }, ['US'], '2026-10-29').ok);
   });
 });

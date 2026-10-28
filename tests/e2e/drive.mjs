@@ -686,7 +686,8 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   const fires = async (id) => /^\S*\s*Fires/.test(await page.locator(`#rule-${id} .rule-check`).innerText());
   check(await fires('R1'), 'R1 fires on the demo holdings');
   check((await page.locator('#rule-R2').innerText()).includes('Not firing'), 'R2 quiet at the demo satellite share');
-  check((await page.locator('#rule-BUY_ZONE').innerText()).includes('a later step'), 'Phase 2 rules wait for their feature');
+  check((await page.locator('#rule-RED_FLAG_RED').innerText()).includes('a later step'), "N3's rules wait for their feature");
+  check((await page.locator('#rule-BUY_ZONE').innerText()).includes('Waiting for a saved valuation'), 'the F12 rules wait for a saved valuation');
   check((await page.locator('#rule-R1').textContent())?.includes('單一個股'), 'Chinese text');
   await page.fill('input[name=dcaDay]', '32');
   await page.getByText('Enter a day of the month from 1 to 31').waitFor();
@@ -1118,6 +1119,64 @@ await step("cost of equity: each market's 10-year yield and Damodaran's ERP, eve
   check(/Setting[\s\S]*capm/.test(await body()), 'the settings change in the edit history');
 });
 
+await step('valuation: the watchlist, a workbench valued by DCF, the dividend model and multiples from the demo filings; saved, the alerts read it (F12)', async () => {
+  await page.goto(`${BASE}/valuation`);
+  await page.getByRole('heading', { level: 1, name: /^Valuation/ }).waitFor();
+  const list = await page.locator('main table').first().innerText();
+  // AAPL is watched (the seed) and 2330 held; neither has a saved value yet.
+  check(/AAPL[\s\S]*not saved/.test(list) && /2330[\s\S]*held/.test(list), `the watched and the held stock, got ${list}`);
+  await page.getByRole('link', { name: 'AAPL', exact: true }).click();
+  await page.waitForURL('**/valuation?t=AAPL');
+  await page.locator('.chart-ranges svg').waitFor();
+  // Demo filings to 2026-06-30, filed 33 days later; F11's live β gives the cost of equity.
+  check((await fact('Newest quarter')).includes('2026-06-30') && (await fact('Newest quarter')).includes('filed 2026-08-02'), `the newest quarter, got ${await fact('Newest quarter')}`);
+  check((await fact('Cost of equity')).includes('9.43%'), `R_e from F11, got ${await fact('Cost of equity')}`);
+  const models = await page.locator('main table').first().innerText();
+  check(/DCF \(FCFF\)[^\n]*alerts[\s\S]*USD[\s\S]*Gordon DDM[\s\S]*USD[\s\S]*Multiples[\s\S]*USD/.test(models), `all three models valued, got ${models}`);
+  const dcf = page.locator('section', { has: page.getByRole('heading', { name: /^DCF \(FCFF\)/ }) });
+  check(/Year \(base\)[\s\S]*Terminal value/.test(await dcf.innerText()), 'the DCF table with its terminal value');
+  await dcf.getByText('Each figure worked out').click();
+  const worked = await dcf.locator('.formula').innerText();
+  check(/^FCFF = [\d,]+ M USD × \(1 − 15\.00%\) \+ [\d,]+ M USD − [\d,]+ M USD [−+] [\d,]+ M USD = /m.test(worked) && /^WACC = /m.test(worked), `FCFF and WACC worked out, got ${worked}`);
+  check((await body()).includes('估值') && (await body()).includes('安全邊際'), 'Chinese labels');
+  check((await fact('Alerts: saved value')).includes('save the assumptions'), 'no saved value yet');
+  await snap('valuation');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.setViewportSize({ width: 1280, height: 1400 });
+  await docShot('valuation', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Scenarios out of order are refused as typed; saved, the valuation is saved with them and logged.
+  await page.fill('#assumptions input[name=growth_base]', '12');
+  await page.getByText('Bear ≤ base ≤ bull.').waitFor();
+  await page.fill('#assumptions input[name=growth_base]', '6');
+  await page.fill('#assumptions input[name=trim]', '1.3');
+  await page.locator('#assumptions form.form button[type=submit]').click();
+  await page.waitForURL('**/valuation?t=AAPL&saved=assumptions**');
+  check((await body()).includes('Assumptions saved'), 'saved');
+  const alerts = await fact('Alerts: saved value');
+  check(/[\d,]+\.\d\d USD/.test(alerts) && alerts.includes(taipeiToday), `the saved value of today, got ${alerts}`);
+  await page.getByText(/^Saved values \(\d\)/).click();
+  check(/your edit/.test(await body()), 'saved by the edit');
+  await page.goto(`${BASE}/history`);
+  check(/Watchlist[\s\S]*AAPL/.test(await body()), 'the watchlist edit in the edit history');
+
+  // The rules read the saved value now; the dashboard's watchlist shows how far the price is from each zone.
+  await page.goto(`${BASE}/rules`);
+  check(!(await page.locator('#rule-BUY_ZONE').innerText()).includes('Waiting for a saved valuation'), 'BUY_ZONE reads the saved value');
+  await page.goto(`${BASE}/`);
+  const watch = await page.locator('#dashboard-watchlist').innerText();
+  check(/AAPL [\d,.]+ USD vs [\d,.]+ USD \([+−][\d.]+%\): /.test(watch), `the dashboard watchlist line, got ${watch}`);
+
+  // The defaults are a logged setting too.
+  await page.goto(`${BASE}/valuation`);
+  await page.locator('#settings summary').click();
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/valuation?saved=settings**');
+  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'the defaults checked today');
+});
+
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
 // job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
 const pushes = [];
@@ -1288,7 +1347,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1314,7 +1373,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1345,7 +1404,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (path === '/valuation?t=AAPL') await page.locator('.chart-ranges svg').waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1356,13 +1416,14 @@ const nightly = (extra = {}) =>
   promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/nightly.ts'], {
     cwd: REPO,
     timeout: 15 * 60_000,
-    env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, NODE_USE_ENV_PROXY: '1', ...extra },
+    // SEC asks for a contact in the User-Agent (F12's US filings); a test address stands in for Hugo's.
+    env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, SEC_USER_AGENT: process.env.SEC_USER_AGENT ?? 'LongViewInvest-e2e e2e@example.com', NODE_USE_ENV_PROXY: '1', ...extra },
   });
 if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
-  await step('before the job: the invented weekly history goes, as a real project has none', async () => {
-    // Its Fridays include market holidays the live feeds have no close for; left in, they would
-    // sit among the real closes.
-    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo']) {
+  await step('before the job: the invented weekly history and filings go, as a real project has none', async () => {
+    // Its Fridays include market holidays the live feeds have no close for, and its quarter ends
+    // are calendar ones where Apple's are not; left in, they would sit among the real figures.
+    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo', 'fundamentals?source=eq.demo']) {
       const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
       check(res.ok, `DELETE ${path}: HTTP ${res.status}`);
     }
@@ -1466,6 +1527,20 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const rate = pct(tsmc[5]);
     check(rate > 2 && rate < 15, `a plausible cost of equity for 2330, got ${tsmc[5]}`);
     await snap('capm-after-job');
+  });
+
+  await step("valuation after the job: live filings for AAPL (SEC) and 2330 (FinMind), each watched stock valued again on its new quarter (F12)", async () => {
+    await page.goto(`${BASE}/data`);
+    const filings = (await page.locator('#filings').innerText()).replace(/\s+/g, ' ');
+    console.log(`  ${filings}`);
+    check(/AAPL \d{4}-\d{2}-\d{2} \d{4}-\d{2}-\d{2} SEC EDGAR \d+/.test(filings), `AAPL's quarters from SEC, got ${filings}`);
+    check(/2330 \d{4}-\d{2}-\d{2} — FinMind \d+/.test(filings), `2330's quarters from FinMind, got ${filings}`);
+    await page.goto(`${BASE}/valuation?t=AAPL`);
+    const quarter = await fact('Newest quarter');
+    check(/SEC EDGAR · filed \d{4}-\d{2}-\d{2}/.test(quarter) && !quarter.includes('2026-06-30 demo'), `AAPL's live newest quarter, got ${quarter}`);
+    await page.getByText(/^Saved values \(\d+\)/).click();
+    check(/filing \d{4}-\d{2}-\d{2}/.test(await body()), 'valued again after the live filing');
+    await snap('valuation-after-job');
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {

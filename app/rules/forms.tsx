@@ -24,6 +24,9 @@ const KEYS: Record<string, Bilingual> = {
   satellite_share_with_buy_alert: { en: 'Satellite share of a contribution during a buy-zone alert', zh: '買入區警報時投入衛星的比例上限' },
   month: { en: 'Month', zh: '月份' },
   usd: { en: 'US-situs assets above, US$', zh: '美國資產超過（美元）' },
+  multiple: { en: 'Multiple of the base value', zh: '基本情境內在價值的倍數' },
+  sell_share: { en: 'Share of the holding sold', zh: '賣出持股的比例' },
+  change: { en: 'Change in value that prompts a review', zh: '提醒檢視的價值變動幅度' },
 };
 
 function label(key: string): Bilingual {

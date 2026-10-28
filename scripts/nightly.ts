@@ -2,7 +2,8 @@
  * The nightly price and FX job (PRD Phase 1, step 4). GitHub Actions runs it every night
  * (.github/workflows/nightly.yml); `npm run nightly` runs it by hand. It needs SUPABASE_URL (or
  * NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SECRET_KEY and FINMIND_TOKEN, from the environment or
- * .env.local; ALPHAVANTAGE_API_KEY is an optional fallback. Exits with 1 when the run failed, so
+ * .env.local; ALPHAVANTAGE_API_KEY is an optional fallback, and SEC_USER_AGENT (a name and a contact
+ * email) lets it read US filings for F12. Exits with 1 when the run failed, so
  * GitHub marks the run red.
  */
 import { existsSync } from 'node:fs';
@@ -40,6 +41,7 @@ async function main(): Promise<number> {
       store: supabaseStore(createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } })),
       finmindToken,
       alphaVantageKey: env['ALPHAVANTAGE_API_KEY'] || undefined,
+      secUserAgent: env['SEC_USER_AGENT'] || undefined,
       today: taipeiToday(),
       now: () => new Date(),
     });

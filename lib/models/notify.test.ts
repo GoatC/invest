@@ -199,6 +199,15 @@ describe('comingWeek', () => {
     assert.deepEqual(comingWeek('2026-10-22', null, null, null, tranches), [{ date: '2026-10-24', what: { en: 'Windfall tranche due', zh: '大額資金分批到期' } }]);
   });
 
+  it("lists the quarterly reports due in the week: a Taiwan deadline, a US date estimated (F12)", () => {
+    const filings = [
+      { ticker: 'AAPL', date: '2026-10-25', kind: 'estimate' as const },
+      { ticker: '2330', date: '2026-11-14', kind: 'deadline' as const },
+    ];
+    assert.deepEqual(comingWeek('2026-10-22', null, null, null, [], filings), [{ date: '2026-10-25', what: { en: 'AAPL quarterly report, about (last year\'s date)', zh: 'AAPL 季報約略日期（依去年）' } }]);
+    assert.equal(comingWeek('2026-11-10', null, null, null, [], filings)[0]?.what.en, '2330 quarterly report deadline');
+  });
+
   it('crosses into the next month and the new year, and leaves out what is not set', () => {
     const events = comingWeek('2026-12-29', 2, null, 1);
     assert.deepEqual(

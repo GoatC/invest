@@ -18,6 +18,7 @@ import {
   loadRules,
   loadValueWeek,
   loadWindfallPlan,
+  loadWorkbench,
   orDataError,
   type AllocationData,
   type PlanData,
@@ -25,9 +26,10 @@ import {
   type RiskData,
   type RuleRecord,
   type WindfallPlanRecord,
+  type WorkbenchData,
 } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { percent, points, signedTwd, twd } from '@/lib/format';
+import { money, percent, points, signedPercent, signedTwd, twd } from '@/lib/format';
 import { DRIFT_ICON, DRIFT_STATUS, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
 import { dataHealth } from '@/lib/models/data-health';
@@ -37,6 +39,8 @@ import { buildSeries } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
+import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
+import { nextFiling, savedFor } from '@/lib/models/workbench';
 import { proposalTitle } from '@/lib/proposal-text';
 
 import { approveProposal, dismissProposal } from './proposals/actions';
@@ -56,7 +60,7 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall] = await Promise.all([
+  const [risk, proposals, value, plan, jobs, settings, windfall, workbench] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -70,6 +74,7 @@ export default async function Dashboard() {
       })(),
     ),
     orDataError(loadWindfallPlan(supabase)),
+    orDataError(loadWorkbench(supabase, today)),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -105,17 +110,71 @@ export default async function Dashboard() {
       {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
       <Donut data={data} portfolio={portfolio} />
       <Windfall portfolio={portfolio} plan={windfall} today={today} />
-      <section className="card form">
+      {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} />}
+      <ComingWeek
+        today={today}
+        settings={settings}
+        rules={rules}
+        tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
+        filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
+          const due = nextFiling(bench.security.market, bench.series.quarters);
+          return due ? [{ ticker: bench.security.ticker, ...due }] : [];
+        })}
+      />
+      {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
+    </>
+  );
+}
+
+/** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12); red flags come with N3. */
+function Watchlist({ data }: { data: WorkbenchData }) {
+  const watched = data.stocks.filter((stock) => stock.watch?.active);
+  return (
+    <section className="card form" id="dashboard-watchlist">
+      <div className="row spread">
         <h2>
           <Bi en="Watchlist" zh="觀察清單" />
         </h2>
+        <Link href="/valuation">
+          <Bi en="Valuation" zh="估值" />
+        </Link>
+      </div>
+      {watched.length === 0 ? (
         <p className="muted">
-          <Bi en="Coming with F12 and N3." zh="將隨 F12、N3 加入。" />
+          <Bi en="No stock watched: add one on the Valuation page." zh="尚無觀察中的個股：請在「估值」頁加入。" />
         </p>
-      </section>
-      <ComingWeek today={today} settings={settings} rules={rules} tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])} />
-      {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
-    </>
+      ) : (
+        <ul className="summary-lines">
+          {watched.map((bench) => {
+            const saved = savedFor(bench.saved, bench.security.ticker, bench.assumed.model)[0];
+            const price = bench.series.closes[bench.series.closes.length - 1];
+            const buy = bench.watch?.buy ?? data.rules.buy;
+            const trim = bench.watch?.trim ?? data.rules.trim;
+            if (!saved || !price || buy === null || trim === null) {
+              return (
+                <li key={bench.security.ticker}>
+                  <Bi en={`${bench.security.ticker}: no saved value yet`} zh={`${bench.security.ticker}：尚無已儲存的估值`} />
+                </li>
+              );
+            }
+            const zone = zoneOf(price.close, saved.base, { buy, trim });
+            const where =
+              zone.zone === 'buy'
+                ? { en: 'in the buy zone', zh: '在買入區' }
+                : zone.zone === 'trim'
+                  ? { en: 'in the trim zone', zh: '在減碼區' }
+                  : { en: `${percent(zone.toBuy)} above the buy zone, ${percent(zone.toTrim)} below the trim zone`, zh: `距買入區 ${percent(zone.toBuy)}、距減碼區 ${percent(zone.toTrim)}` };
+            const margin = signedPercent(marginOfSafety(saved.base, price.close));
+            return (
+              <li key={bench.security.ticker}>
+                <Link href={`/valuation?t=${encodeURIComponent(bench.security.ticker)}`}>{bench.security.ticker}</Link>{' '}
+                <Bi en={`${money(price.close, bench.security.currency)} vs ${money(saved.base, bench.security.currency)} (${margin}): ${where.en}`} zh={`${money(price.close, bench.security.currency)} 對 ${money(saved.base, bench.security.currency)}（${margin}）：${where.zh}`} />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -358,18 +417,20 @@ function ComingWeek({
   settings,
   rules,
   tranches,
+  filings,
 }: {
   today: string;
   settings: Array<{ key: string; value: unknown }> | DataError;
   rules: readonly RuleRecord[];
   tranches: ReadonlyArray<{ dueDate: string; status: string }>;
+  filings: ReadonlyArray<{ ticker: string; date: string; kind: 'deadline' | 'estimate' }>;
 }) {
   const rows = settings instanceof DataError ? [] : settings;
   const dca = rows.find((row) => row.key === 'dca')?.value as Record<string, unknown> | undefined;
   const day = typeof dca?.['day_of_month'] === 'number' ? dca['day_of_month'] : null;
   const annual = rules.find((rule) => rule.condition === 'first_weekend_of_month' && rule.enabled);
   const month = annual ? (annual.threshold as Record<string, unknown> | null)?.['month'] : undefined;
-  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches);
+  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches, filings);
   return (
     <section className="card form">
       <h2>

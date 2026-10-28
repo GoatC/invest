@@ -17,6 +17,8 @@ export const RISK_ERROR = 'VaR';
 export const RULES_ERROR = 'Rules';
 /** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
 export const BETAS_ERROR = 'Betas';
+/** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
+export const VALUATIONS_ERROR = 'Valuations';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -35,6 +37,8 @@ export interface RunDetail {
   series: Record<string, Loaded>;
   /** The daily index closes (N1, Phase 2 step 2). Empty before. */
   indices: Record<string, Loaded>;
+  /** The single stocks' quarters from their filings (F12, Phase 2 step 4); `latest` is a quarter end. Empty before. */
+  filings: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -45,6 +49,8 @@ export interface RunDetail {
   rules: { created: number; closed: number } | null;
   /** The holdings' β saved for the month (N1), on the month's first run; null otherwise. */
   betas: { saved: number; runDate: string } | null;
+  /** The watched stocks valued again after a new filing (F12); null when none was. */
+  valued: string[] | null;
 }
 
 export interface JobRun {
@@ -85,6 +91,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     rates: loadedMap(detail['rates']),
     series: loadedMap(detail['series']),
     indices: loadedMap(detail['indices']),
+    filings: loadedMap(detail['filings']),
     warnings: lines(detail['warnings']),
     errors: lines(detail['errors']),
     snapshots:
@@ -93,6 +100,7 @@ export function parseRunDetail(value: unknown): RunDetail {
         : null,
     rules: typeof created === 'number' && typeof closed === 'number' ? { created, closed } : null,
     betas: typeof saved === 'number' && typeof runDate === 'string' ? { saved, runDate } : null,
+    valued: Array.isArray(detail['valued']) ? lines(detail['valued']) : null,
   };
 }
 

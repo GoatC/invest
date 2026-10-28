@@ -26,6 +26,15 @@
  *   Windfall orders draw on the windfall pool's TWD balance and buy through config windfall.vehicles,
  *   else the pool's largest holding of the class, else its benchmark; strategic cash's share stays
  *   in the balance, which is strategic cash already.
+ * - price_at_or_below_value_multiple (BUY_ZONE, Phase 2 step 4): a watched stock's price at or below
+ *   its saved base value × the buy multiple → a buy of the month's contribution share
+ *   (MONTHLY_CONTRIBUTION's satellite_share_with_buy_alert), split over the stocks in the zone and
+ *   each kept within R1's cap and R2's target; the month's contribution then puts the rest into the
+ *   core. Once a month per stock list.
+ * - price_at_or_above_value_multiple (TRIM_ZONE): a held stock's price at or above its saved base
+ *   value × the trim multiple → sell sell_share of it, the proceeds into the core.
+ * - value_change_exceeds (VALUATION_UPDATED): a filing moved a watched stock's base value by more
+ *   than `change` from the value saved before it → a prompt to review, with no orders.
  *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
@@ -114,6 +123,24 @@ export interface EngineInput {
   usdTwd?: number | null;
   /** The windfall plan (F3); without it the two windfall rules wait. */
   windfall?: WindfallInput;
+  /** The watched stocks' saved values (F12); without them the three valuation rules wait. */
+  watch?: readonly WatchInput[];
+}
+
+/** A watched single stock's newest saved value a share (F12), for the zone rules. */
+export interface WatchInput {
+  ticker: string;
+  assetClassId: string;
+  /** The base value a share of the model its alerts use, in the stock's trade currency. */
+  value: number;
+  valuedOn: string;
+  /** What saved it: Hugo's edit, or a new quarter's filing. */
+  trigger: 'edit' | 'filing';
+  /** The value of the same model saved before it. */
+  previous?: { value: number; valuedOn: string };
+  /** The stock's own multiples (watchlist), else the rules'. */
+  buy?: number;
+  trim?: number;
 }
 
 export interface WindfallTranche {
@@ -224,6 +251,28 @@ export interface ProposalDetail {
   /** A tier that deploys a share of the cash waiting: that share. */
   share?: number;
   accelerated?: number[];
+  /** BUY_ZONE and TRIM_ZONE: each stock in the zone, its price, value a share, the multiple, and what is bought or sold. */
+  zone?: ZoneRow[];
+  /** BUY_ZONE: the month's contribution share it may spend. MONTHLY_CONTRIBUTION: the share it leaves to BUY_ZONE. */
+  satelliteShareTwd?: number;
+  /** TRIM_ZONE: the share of each holding sold. */
+  sellShare?: number;
+  /** VALUATION_UPDATED: each stock whose value a filing moved. */
+  changes?: Array<{ ticker: string; value: number; previous: number; valuedOn: string; previousOn: string; change: number }>;
+}
+
+export interface ZoneRow {
+  ticker: string;
+  price: number;
+  currency: string;
+  value: number;
+  multiple: number;
+  /** BUY_ZONE: what R1 and R2 leave room for, TWD; the share bought. */
+  roomTwd?: number;
+  boughtTwd?: number;
+  /** TRIM_ZONE: the holding's value and what is sold of it. */
+  heldTwd?: number;
+  soldTwd?: number;
 }
 
 export interface Draft {
@@ -245,7 +294,7 @@ export interface Check {
   ruleId: string;
   outcome: CheckOutcome;
   draft?: Draft;
-  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd'. */
+  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd', 'plan', 'windfall_cash', 'gauge', 'valuation'. */
   why?: string;
   /** For a firing rule: held back by its cooldown until this date. */
   cooldownUntil?: string;
@@ -518,6 +567,8 @@ interface Context {
   /** R1's trims as evaluated, before the decision on its proposal. */
   pendingTrims: Map<string, number>;
   monthlyActive: boolean;
+  /** The month's contribution share BUY_ZONE spends, which the month's contribution leaves to it. */
+  buyZoneTwd: number;
 }
 
 type Result = Omit<Check, 'ruleId'>;
@@ -725,14 +776,23 @@ function evaluateMonthly(rule: EngineRule, context: Context): Result {
   const date = dueContribution(context.input.today, dayOfMonth, context.input.expiryDays ?? 28);
   if (!date) return { outcome: 'quiet' };
   const book = newBook(context);
-  const result = invest(context, book, [], amountTwd);
+  const reserved = Math.min(amountTwd, context.buyZoneTwd);
+  const result = invest(context, book, [], amountTwd - reserved);
   return {
     outcome: 'fires',
     draft: {
       ruleId: rule.id,
       state: date.slice(0, 7),
       orders: result.orders,
-      detail: { poolTwd: context.pool.totalTwd, contributionTwd: amountTwd, dcaDate: date, cashTwd: result.cashTwd, leftTwd: result.leftTwd, ...(result.noFund.length ? { noFund: result.noFund } : {}) },
+      detail: {
+        poolTwd: context.pool.totalTwd,
+        contributionTwd: amountTwd,
+        dcaDate: date,
+        ...(reserved > 0 ? { satelliteShareTwd: reserved } : {}),
+        cashTwd: result.cashTwd,
+        leftTwd: result.leftTwd,
+        ...(result.noFund.length ? { noFund: result.noFund } : {}),
+      },
     },
   };
 }
@@ -934,20 +994,148 @@ function evaluateAcceleration(rule: EngineRule, context: Context): Result {
   };
 }
 
+/** The share of a contribution that may go to the satellite during a buy-zone alert (MONTHLY_CONTRIBUTION). */
+function satelliteShare(rules: readonly EngineRule[]): number {
+  const rule = rules.find((candidate) => candidate.condition === 'day_after_dca');
+  return fraction(record(rule?.threshold)['satellite_share_with_buy_alert']) ?? 0;
+}
+
+/** An enabled rule's threshold number, by condition and key. */
+function capOf(rules: readonly EngineRule[], condition: string, key: string): number | undefined {
+  const rule = rules.find((candidate) => candidate.condition === condition && candidate.enabled);
+  return rule ? fraction(record(rule.threshold)[key]) : undefined;
+}
+
+function evaluateBuyZone(rule: EngineRule, context: Context): Result {
+  const multiple = fraction(record(rule.threshold)['multiple']);
+  if (multiple === undefined) return { outcome: 'unreadable' };
+  const { watch, quotes, dca, rules, today } = context.input;
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
+  const inZone = watch
+    .flatMap((entry) => {
+      const quote = quotes.get(entry.ticker);
+      const used = entry.buy ?? multiple;
+      return quote && quote.price <= entry.value * used + EPS ? [{ entry, quote, used }] : [];
+    })
+    .sort((a, b) => a.entry.ticker.localeCompare(b.entry.ticker));
+  if (inZone.length === 0) return { outcome: 'quiet' };
+  const shareTwd = (dca.amountTwd ?? 0) * satelliteShare(rules);
+  // Room under R1 and R2 counts the pool once the contribution is in, and what R1's live proposal sells.
+  const total = context.pool.totalTwd + (dca.amountTwd ?? 0);
+  const maxWeight = capOf(rules, 'single_stock_weight_above', 'max_weight');
+  const satelliteTarget = capOf(rules, 'satellite_weight_above', 'target_weight');
+  const trimmed = [...context.r1Trims.values()].reduce((sum, value) => sum + value, 0);
+  const satelliteTwd = context.pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0) - trimmed;
+  let satelliteRoom = satelliteTarget === undefined ? Number.POSITIVE_INFINITY : satelliteTarget * total - satelliteTwd;
+  const orders: DraftOrder[] = [];
+  const zone: ZoneRow[] = inZone.map(({ entry, quote, used }) => {
+    const held = context.pool.holdings.filter((holding) => holding.ticker === entry.ticker).reduce((sum, holding) => sum + (holding.valueTwd ?? 0) - (context.r1Trims.get(holding.key) ?? 0), 0);
+    const room = Math.max(0, Math.min(maxWeight === undefined ? Number.POSITIVE_INFINITY : maxWeight * total - held, satelliteRoom));
+    const want = Math.min(shareTwd / inZone.length, room);
+    const qty = unitOf(quote) > 0 ? roundShares(want / unitOf(quote), quote.decimals, 'down') : 0;
+    const row: ZoneRow = { ticker: entry.ticker, price: quote.price, currency: quote.currency, value: entry.value, multiple: used, roomTwd: Number.isFinite(room) ? room : shareTwd };
+    if (qty > 0) {
+      const order = tradeOrder(entry.ticker, 'buy', qty, quote, entry.assetClassId);
+      orders.push(order);
+      satelliteRoom -= order.amountTwd;
+      row.boughtTwd = order.amountTwd;
+    }
+    return row;
+  });
+  const bought = orders.reduce((sum, order) => sum + order.amountTwd, 0);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: `${today.slice(0, 7)}:${zone.map((row) => row.ticker).join(',')}`,
+      orders,
+      detail: { poolTwd: context.pool.totalTwd, zone, satelliteShareTwd: shareTwd, cashTwd: shareTwd, leftTwd: Math.max(0, shareTwd - bought) },
+    },
+  };
+}
+
+function evaluateTrimZone(rule: EngineRule, context: Context): Result {
+  const threshold = record(rule.threshold);
+  const multiple = threshold['multiple'];
+  const sellShare = typeof threshold['sell_share'] === 'number' && threshold['sell_share'] > 0 && threshold['sell_share'] <= 1 ? threshold['sell_share'] : undefined;
+  if (typeof multiple !== 'number' || !(multiple > 1) || sellShare === undefined) return { outcome: 'unreadable' };
+  const { watch, quotes } = context.input;
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
+  const byTicker = new Map(watch.map((entry) => [entry.ticker, entry]));
+  const held = context.pool.holdings
+    .flatMap((holding) => {
+      const entry = holding.ticker ? byTicker.get(holding.ticker) : undefined;
+      const quote = holding.ticker ? quotes.get(holding.ticker) : undefined;
+      const used = entry?.trim ?? multiple;
+      return entry && quote && quote.price + EPS >= entry.value * used ? [{ holding, entry, quote, used }] : [];
+    })
+    .sort((a, b) => a.entry.ticker.localeCompare(b.entry.ticker));
+  if (held.length === 0) return { outcome: 'quiet' };
+  const book = newBook(context);
+  const sells: DraftOrder[] = [];
+  const zone: ZoneRow[] = held.map(({ holding, entry, quote, used }) => {
+    // What R1's live proposal sells of it already is not sold twice.
+    const left = Math.max(0, (holding.valueTwd ?? 0) - (context.r1Trims.get(holding.key) ?? 0));
+    book.values.set(holding.key, left);
+    const order = book.sell(holding, left * sellShare);
+    if (order) sells.push(order);
+    return { ticker: entry.ticker, price: quote.price, currency: quote.currency, value: entry.value, multiple: used, heldTwd: holding.valueTwd ?? 0, ...(order ? { soldTwd: order.amountTwd } : {}) };
+  });
+  const result = invest(context, book, sells, 0);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: zone.map((row) => row.ticker).join(','),
+      orders: result.orders,
+      detail: { poolTwd: context.pool.totalTwd, zone, sellShare, cashTwd: result.cashTwd, leftTwd: result.leftTwd, ...(result.noFund.length ? { noFund: result.noFund } : {}) },
+    },
+  };
+}
+
+function evaluateValueChange(rule: EngineRule, context: Context): Result {
+  const limit = fraction(record(rule.threshold)['change']);
+  if (limit === undefined) return { outcome: 'unreadable' };
+  const { watch } = context.input;
+  if (!watch || watch.length === 0) return { outcome: 'waiting', why: 'valuation' };
+  const changes = watch
+    .flatMap((entry) => {
+      const previous = entry.previous;
+      if (entry.trigger !== 'filing' || !previous || previous.value <= 0) return [];
+      const change = entry.value / previous.value - 1;
+      return Math.abs(change) - limit > EPS ? [{ ticker: entry.ticker, value: entry.value, previous: previous.value, valuedOn: entry.valuedOn, previousOn: previous.valuedOn, change }] : [];
+    })
+    .sort((a, b) => a.ticker.localeCompare(b.ticker));
+  if (changes.length === 0) return { outcome: 'quiet' };
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: changes.map((row) => `${row.ticker}:${row.valuedOn}`).join(','),
+      orders: [],
+      detail: { poolTwd: context.pool.totalTwd, changes, cashTwd: 0, leftTwd: 0 },
+    },
+  };
+}
+
 /** The conditions this engine evaluates, in the order it runs them (R2 counts what R1 sells). */
 export const CONDITIONS = [
   'single_stock_weight_above',
   'satellite_weight_above',
   'class_drift_exceeds',
+  // Before the contribution, which leaves the buy zone its share.
+  'price_at_or_below_value_multiple',
   'day_after_dca',
   'first_weekend_of_month',
   'us_situs_value_above',
   'tranche_due',
   'index_drawdown_tier',
+  'price_at_or_above_value_multiple',
+  'value_change_exceeds',
 ] as const;
 
-/** Conditions that fire once per period: their state is the month or the year. */
-const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month'];
+/** Conditions that fire once per period: their state is (or starts with) the month or the year. */
+const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month', 'price_at_or_below_value_multiple'];
 
 // ---------------------------------------------------------------------------
 // Deciding what to save
@@ -971,6 +1159,7 @@ export function evaluate(input: EngineInput): Outcome {
     r1Trims: new Map(),
     pendingTrims: new Map(),
     monthlyActive: Boolean(monthly?.enabled && input.dca.dayOfMonth !== null && (input.dca.amountTwd ?? 0) > 0),
+    buyZoneTwd: 0,
   };
   const drift = input.rules.find((rule) => rule.condition === 'class_drift_exceeds' && rule.enabled);
   const order = (rule: EngineRule) => {
@@ -995,6 +1184,9 @@ export function evaluate(input: EngineInput): Outcome {
     else if (rule.condition === 'us_situs_value_above') result = evaluateEstate(rule, context);
     else if (rule.condition === 'tranche_due') result = evaluateTranche(rule, context);
     else if (rule.condition === 'index_drawdown_tier') result = evaluateAcceleration(rule, context);
+    else if (rule.condition === 'price_at_or_below_value_multiple') result = evaluateBuyZone(rule, context);
+    else if (rule.condition === 'price_at_or_above_value_multiple') result = evaluateTrimZone(rule, context);
+    else if (rule.condition === 'value_change_exceeds') result = evaluateValueChange(rule, context);
     else result = evaluateAnnual(rule, context, drift);
     const check: Check = { ruleId: rule.id, ...result };
     checks.push(check);
@@ -1011,6 +1203,12 @@ export function evaluate(input: EngineInput): Outcome {
     const created = create.length;
     const live = decide(rule, check, mine, open);
     if (rule.condition === 'single_stock_weight_above') context.r1Trims = live ? context.pendingTrims : new Map();
+    // The month's contribution leaves its satellite share to a buy-zone proposal of the month, live or filled.
+    if (rule.condition === 'price_at_or_below_value_multiple') {
+      const month = `${input.today.slice(0, 7)}:`;
+      const spent = mine.some((proposal) => proposal.state.startsWith(month) && ['open', 'approved', 'filled'].includes(proposal.status) && !close.some((closed) => closed.id === proposal.id));
+      if (live || spent) context.buyZoneTwd = (input.dca.amountTwd ?? 0) * satelliteShare(input.rules);
+    }
     // A tier fires once per drawdown: the plan keeps the record once its proposal is drafted.
     const plan = input.windfall?.plan;
     const tier = check.draft?.detail;

@@ -7,10 +7,14 @@
  * series the windfall planner reads (F3): CAPE, the S&P 500's price and its dividend yield. Since
  * step 2 it loads the Regression Lab's (N1) index closes and the US 3-month bill rate, reaches
  * back over its longest window, and saves the holdings' β once a month. Since step 3 it loads the
- * cost of equity's (F11) 10-year yields and Damodaran's implied ERP. Everything outside this file
+ * cost of equity's (F11) 10-year yields and Damodaran's implied ERP. Since step 4 it loads the
+ * filings of the single stocks held or watched (F12): SEC EDGAR's company facts for US stocks,
+ * FinMind's three statements for Taiwan ones, and values a watched stock again once a new quarter
+ * is in, before the rules read it. Everything outside this file
  * is injected, so the whole run can be tested without a network or a database.
  */
-import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
+import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
@@ -23,6 +27,8 @@ import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../
 import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
 import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
 import { CBC_CAPITAL_MARKET_RATES, cbcTenYear, DAMODARAN_ERP, damodaranErp, fredTenYear, treasuryTenYear, treasuryUrl, TW_GOVT_10Y, US_IMPLIED_ERP, US_TREASURY_10Y } from '../feeds/yields.ts';
+import { companyFactsUrl, SEC_TICKERS, secCiks, secFacts } from '../feeds/sec.ts';
+import { finmindStatements, STATEMENT_DATASETS } from '../feeds/statements.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 
@@ -36,6 +42,16 @@ export interface Security {
   ticker: string;
   market: string;
   currency: string;
+}
+
+/** One quarter end of a stock's filings, as the fundamentals table keeps it. */
+export interface FundamentalRow {
+  ticker: string;
+  periodEnd: string;
+  figures: Figures;
+  currency: string;
+  filed: string | null;
+  source: string;
 }
 
 export interface Store {
@@ -57,6 +73,12 @@ export interface Store {
   saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
   /** Whether config capm exists (F11, Phase 2 step 3): false before its migration. */
   capmReady(): Promise<boolean>;
+  /** The single stocks whose filings to load (F12): held or watched, and their peers; undefined before config valuation exists. */
+  filingTickers(): Promise<Array<{ ticker: string; market: string }> | undefined>;
+  /** Upserts each stock's quarters (fundamentals), one row per stock and quarter end. */
+  saveFundamentals(rows: readonly FundamentalRow[]): Promise<void>;
+  /** Values every watched stock with a quarter newer than its last value (revalueOnFilings in lib/data). */
+  revalue(today: string): Promise<{ valued: string[] } | undefined>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -80,6 +102,8 @@ export interface RunDetail {
   series?: Record<string, Loaded>;
   /** The daily index closes (N1). */
   indices?: Record<string, Loaded>;
+  /** The single stocks' quarters (F12); `latest` is a quarter end. */
+  filings?: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];
   /** Data that could not be loaded at all. */
@@ -90,6 +114,8 @@ export interface RunDetail {
   rules?: { created: number; closed: number };
   /** The holdings' β saved for the month (N1), on the month's first run. */
   betas?: { saved: number; runDate: string };
+  /** The watched stocks valued again after a new filing (F12). */
+  valued?: string[];
 }
 
 export interface JobRun {
@@ -107,6 +133,8 @@ export interface Deps {
   store: Store;
   finmindToken: string;
   alphaVantageKey?: string;
+  /** The User-Agent SEC EDGAR is sent: a name and a contact email (its fair-access policy); without it US filings are skipped. */
+  secUserAgent?: string;
   /** Today's date in Taipei. */
   today: string;
   now: () => Date;
@@ -135,6 +163,9 @@ export function riskWindowStart(today: string, weeks: number, earliestTrade?: st
   const yearAgo = addDays(today, -364);
   return addDays(gridStart(earliestTrade && earliestTrade < yearAgo ? earliestTrade : yearAgo, weeks), -14);
 }
+
+/** Years of filings to load: the own range of multiples (5) and the year before it, with one to spare. */
+const FILING_YEARS = 7;
 
 /** Months of F11's yields and ERP to load each night: a year and the month before it. */
 const CAPM_MONTHS = 13;
@@ -206,15 +237,18 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let proxies: Set<string>;
   let regressionYears: number | undefined;
   let capm: boolean;
+  let filingTickers: Array<{ ticker: string; market: string }> | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
       store.riskProxies(),
       store.regressionYears(),
       store.capmReady(),
+      store.filingTickers(),
     ]);
+    filingTickers = filers;
     securities = found;
     regressionYears = regression;
     capm = capmReady;
@@ -404,6 +438,51 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   }
 
+  // The filings of the single stocks held or watched (F12), each quarter end's figures.
+  const fundamentals: FundamentalRow[] = [];
+  if (filingTickers && filingTickers.length > 0) {
+    const since = `${Number(today.slice(0, 4)) - FILING_YEARS}${today.slice(4)}`;
+    const secHeaders = deps.secUserAgent ? { 'User-Agent': deps.secUserAgent } : undefined;
+    let ciks: Promise<Map<string, number>> | undefined;
+    if (!secHeaders && filingTickers.some((stock) => stock.market === 'US')) detail.errors.push('US filings: SEC_USER_AGENT is not set (a name and a contact email); see docs/nightly-job.md');
+    for (const { ticker, market } of filingTickers) {
+      const attempts: Array<Attempt<Fact>> = [];
+      if (market === 'US' && secHeaders) {
+        attempts.push({
+          source: 'sec',
+          load: async () => {
+            ciks ??= get(SEC_TICKERS, secHeaders).then(secCiks);
+            const cik = (await ciks).get(ticker);
+            if (cik === undefined) throw new FeedError(`no SEC filer for ${ticker}`);
+            return secFacts(await get(companyFactsUrl(cik), secHeaders)).facts;
+          },
+        });
+      } else if (market === 'TW') {
+        attempts.push({
+          source: 'finmind',
+          load: async () => {
+            const span = { dataId: ticker, start: since, end: today };
+            const [income, balance, cash, dividends] = await Promise.all(
+              [STATEMENT_DATASETS.income, STATEMENT_DATASETS.balance, STATEMENT_DATASETS.cash, STATEMENT_DATASETS.dividends].map((dataset) => finmind.rows(dataset, span)),
+            );
+            return finmindStatements({ income: income ?? [], balance: balance ?? [], cash: cash ?? [], dividends: dividends ?? [] });
+          },
+        });
+      } else {
+        continue;
+      }
+      const result = await firstWorking(`${ticker} filings`, attempts, detail);
+      if (!result) continue;
+      const quarters = quarterFigures(result.rows).filter((quarter) => quarter.periodEnd >= since && quarter.periodEnd <= today);
+      if (quarters.length === 0) {
+        detail.errors.push(`${ticker} filings: ${result.source} had no quarter from ${since} on`);
+        continue;
+      }
+      fundamentals.push(...quarters.map((quarter) => ({ ticker, periodEnd: quarter.periodEnd, figures: quarter.figures, currency: market === 'US' ? 'USD' : 'TWD', filed: quarter.filed, source: result.source })));
+      (detail.filings ??= {})[ticker] = { source: result.source, rows: quarters.length, latest: quarters[quarters.length - 1]?.periodEnd ?? '' };
+    }
+  }
+
   try {
     await store.savePrices(unique(prices, (row) => `${row.ticker}|${row.date}`));
     await store.savePrices(unique(fills, (row) => `${row.ticker}|${row.date}`), { fillOnly: true });
@@ -411,6 +490,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     await store.saveSeries(unique(series, (point) => `${point.series}|${point.month}`));
     if (indexRows.length > 0) await store.saveIndexPrices(unique(indexRows, (row) => `${row.index}|${row.date}`));
     if (indexFills.length > 0) await store.saveIndexPrices(unique(indexFills, (row) => `${row.index}|${row.date}`), { fillOnly: true });
+    if (fundamentals.length > 0) await store.saveFundamentals(fundamentals);
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
@@ -440,6 +520,16 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   } catch (err) {
     detail.errors.push(`${SNAPSHOT_ERROR}: ${message(err)}`);
+  }
+
+  // A watched stock with a new quarter is valued again (F12), so the zone rules read its new value.
+  if (filingTickers !== undefined) {
+    try {
+      const revalued = await store.revalue(today);
+      if (revalued && revalued.valued.length > 0) detail.valued = revalued.valued;
+    } catch (err) {
+      detail.errors.push(`${VALUATIONS_ERROR}: ${message(err)}`);
+    }
   }
 
   // The data is fresh: evaluate the rules (PRD Section 4, L2 step 1), on the closes just saved.
