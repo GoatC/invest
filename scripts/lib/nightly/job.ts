@@ -10,10 +10,15 @@
  * cost of equity's (F11) 10-year yields and Damodaran's implied ERP. Since step 4 it loads the
  * filings of the single stocks held or watched (F12): SEC EDGAR's company facts for US stocks,
  * FinMind's three statements for Taiwan ones, and values a watched stock again once a new quarter
- * is in, before the rules read it. Everything outside this file
+ * is in, before the rules read it. Since step 5 it reads the red-flag indicator's feeds (N3): each
+ * night the TWSE company profiles and material announcements, and on a company's scan day its SEC
+ * 8-K items and going-concern search, or its Ministry of Environment penalties; then it saves the
+ * week's scan of each company due one, before the rules read it. Everything outside this file
  * is injected, so the whole run can be tested without a network or a database.
  */
-import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import type { ProfileRecord } from '../../../lib/data.ts';
+import { BETAS_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
@@ -29,6 +34,7 @@ import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
 import { CBC_CAPITAL_MARKET_RATES, cbcTenYear, DAMODARAN_ERP, damodaranErp, fredTenYear, treasuryTenYear, treasuryUrl, TW_GOVT_10Y, US_IMPLIED_ERP, US_TREASURY_10Y } from '../feeds/yields.ts';
 import { companyFactsUrl, SEC_TICKERS, secCiks, secFacts } from '../feeds/sec.ts';
 import { finmindStatements, STATEMENT_DATASETS } from '../feeds/statements.ts';
+import { auditorChange, fullTextUrl, moenvPenalties, moenvUrl, secGoingConcern, secSubmissions, submissionsUrl, TWSE_MATERIAL, TWSE_PROFILES, twseMaterial, twseProfiles, type FeedEvent } from '../feeds/redflags.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 
@@ -79,6 +85,14 @@ export interface Store {
   saveFundamentals(rows: readonly FundamentalRow[]): Promise<void>;
   /** Values every watched stock with a quarter newer than its last value (revalueOnFilings in lib/data). */
   revalue(today: string): Promise<{ valued: string[] } | undefined>;
+  /** The single stocks the red-flag indicator lights (N3), their profiles and whether each is due a scan; undefined before config red_flags. */
+  redFlagCompanies(today: string): Promise<{ settings: RedFlagSettings; companies: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }> } | undefined>;
+  /** Upserts each company's profile (company_profiles). */
+  saveProfiles(rows: readonly ProfileRecord[]): Promise<void>;
+  /** Adds the events the feeds found (red_flag_events); one already saved is left as it is. */
+  saveFlagEvents(rows: readonly FeedEvent[]): Promise<void>;
+  /** Saves today's scan of each company asked for (scanRedFlags in lib/data). */
+  scanRedFlags(today: string, tickers: readonly string[]): Promise<{ scanned: string[] }>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -116,6 +130,8 @@ export interface RunDetail {
   betas?: { saved: number; runDate: string };
   /** The watched stocks valued again after a new filing (F12). */
   valued?: string[];
+  /** The red-flag indicator (N3): the companies scanned tonight, and the events the feeds found. */
+  redFlags?: { scanned: string[]; events: number };
 }
 
 export interface JobRun {
@@ -135,6 +151,8 @@ export interface Deps {
   alphaVantageKey?: string;
   /** The User-Agent SEC EDGAR is sent: a name and a contact email (its fair-access policy); without it US filings are skipped. */
   secUserAgent?: string;
+  /** The Ministry of Environment open-data key (N3); without it Taiwan penalties are not checked. */
+  moenvKey?: string;
   /** Today's date in Taipei. */
   today: string;
   now: () => Date;
@@ -238,8 +256,9 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let regressionYears: number | undefined;
   let capm: boolean;
   let filingTickers: Array<{ ticker: string; market: string }> | undefined;
+  let flagCompanies: Awaited<ReturnType<Store['redFlagCompanies']>>;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
@@ -247,8 +266,10 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       store.regressionYears(),
       store.capmReady(),
       store.filingTickers(),
+      store.redFlagCompanies(today),
     ]);
     filingTickers = filers;
+    flagCompanies = flagged;
     securities = found;
     regressionYears = regression;
     capm = capmReady;
@@ -440,22 +461,23 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
 
   // The filings of the single stocks held or watched (F12), each quarter end's figures.
   const fundamentals: FundamentalRow[] = [];
+  const secHeaders = deps.secUserAgent ? { 'User-Agent': deps.secUserAgent } : undefined;
+  let ciks: Promise<Map<string, number>> | undefined;
+  const cikOf = async (ticker: string) => {
+    ciks ??= get(SEC_TICKERS, secHeaders).then(secCiks);
+    const cik = (await ciks).get(ticker);
+    if (cik === undefined) throw new FeedError(`no SEC filer for ${ticker}`);
+    return cik;
+  };
   if (filingTickers && filingTickers.length > 0) {
     const since = `${Number(today.slice(0, 4)) - FILING_YEARS}${today.slice(4)}`;
-    const secHeaders = deps.secUserAgent ? { 'User-Agent': deps.secUserAgent } : undefined;
-    let ciks: Promise<Map<string, number>> | undefined;
     if (!secHeaders && filingTickers.some((stock) => stock.market === 'US')) detail.errors.push('US filings: SEC_USER_AGENT is not set (a name and a contact email); see docs/nightly-job.md');
     for (const { ticker, market } of filingTickers) {
       const attempts: Array<Attempt<Fact>> = [];
       if (market === 'US' && secHeaders) {
         attempts.push({
           source: 'sec',
-          load: async () => {
-            ciks ??= get(SEC_TICKERS, secHeaders).then(secCiks);
-            const cik = (await ciks).get(ticker);
-            if (cik === undefined) throw new FeedError(`no SEC filer for ${ticker}`);
-            return secFacts(await get(companyFactsUrl(cik), secHeaders)).facts;
-          },
+          load: async () => secFacts(await get(companyFactsUrl(await cikOf(ticker)), secHeaders)).facts,
         });
       } else if (market === 'TW') {
         attempts.push({
@@ -483,6 +505,78 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   }
 
+  // The red-flag indicator's feeds (N3): each night TWSE's profiles and the day's announcements,
+  // and on a company's scan day its SEC 8-K items and going-concern search, or its penalties.
+  const flagEvents: FeedEvent[] = [];
+  const profiles: ProfileRecord[] = [];
+  if (flagCompanies && flagCompanies.companies.length > 0) {
+    const { settings, companies } = flagCompanies;
+    const since = flagWindow(today, settings.lookbackYears);
+    const check = (profile: ProfileRecord, indicators: readonly EventIndicator[], forwardOnly: boolean) => {
+      for (const indicator of indicators) profile.checked[indicator] = { on: today, ...(forwardOnly ? { since: profile.checked[indicator]?.since ?? today } : {}) };
+    };
+    const taiwan = companies.filter((company) => company.market === 'TW');
+    const twTickers = new Set(taiwan.map((company) => company.ticker));
+    let twProfiles: ReturnType<typeof twseProfiles> | undefined;
+    let material: FeedEvent[] | undefined;
+    if (taiwan.length > 0) {
+      try {
+        twProfiles = twseProfiles(await get(TWSE_PROFILES), twTickers);
+      } catch (err) {
+        detail.errors.push(`red flags: TWSE company profiles: ${message(err)}`);
+      }
+      try {
+        material = twseMaterial(await get(TWSE_MATERIAL), twTickers);
+      } catch (err) {
+        detail.errors.push(`red flags: TWSE material announcements: ${message(err)}`);
+      }
+    }
+    for (const company of companies) {
+      const profile: ProfileRecord = company.profile
+        ? { ...company.profile, checked: { ...company.profile.checked } }
+        : { ticker: company.ticker, industryCode: null, industry: null, sic: null, auditor: null, businessId: null, checked: {}, source: company.market === 'US' ? 'sec' : 'twse' };
+      let touched = false;
+      if (company.market === 'TW') {
+        const found = twProfiles?.get(company.ticker);
+        if (found) {
+          const changed = auditorChange(company.ticker, profile.auditor, found.auditor, today);
+          if (changed) flagEvents.push(changed);
+          Object.assign(profile, { industryCode: found.industryCode ?? profile.industryCode, industry: found.industry ?? profile.industry, auditor: found.auditor ?? profile.auditor, businessId: found.businessId ?? profile.businessId });
+          touched = true;
+        }
+        if (material) {
+          flagEvents.push(...material.filter((event) => event.ticker === company.ticker));
+          check(profile, ['auditor_change', 'going_concern', 'restatement'], true);
+          touched = true;
+        }
+        if (company.due && deps.moenvKey && profile.businessId) {
+          try {
+            flagEvents.push(...moenvPenalties(await get(moenvUrl(deps.moenvKey, profile.businessId)), company.ticker, since));
+            check(profile, ['environmental_penalties'], false);
+            touched = true;
+          } catch (err) {
+            detail.errors.push(`${company.ticker} red flags: MOENV penalties: ${message(err)}`);
+          }
+        }
+      } else if (company.market === 'US' && company.due && secHeaders) {
+        try {
+          const cik = await cikOf(company.ticker);
+          const found = secSubmissions(await get(submissionsUrl(cik), secHeaders), company.ticker, since);
+          flagEvents.push(...found.events);
+          Object.assign(profile, { sic: found.sic ?? profile.sic, industryCode: found.sic !== null ? String(found.sic) : profile.industryCode, industry: found.industry ?? profile.industry });
+          check(profile, ['auditor_change', 'restatement'], false);
+          touched = true;
+          flagEvents.push(...secGoingConcern(await get(fullTextUrl(cik, since, today), secHeaders), company.ticker, cik));
+          check(profile, ['going_concern'], false);
+        } catch (err) {
+          detail.errors.push(`${company.ticker} red flags: SEC: ${message(err)}`);
+        }
+      }
+      if (touched) profiles.push(profile);
+    }
+    if (taiwan.some((company) => company.due) && !deps.moenvKey) detail.warnings.push('red flags: MOENV_API_KEY is not set, so Taiwan environmental penalties are not checked; see docs/nightly-job.md');
+  }
+
   try {
     await store.savePrices(unique(prices, (row) => `${row.ticker}|${row.date}`));
     await store.savePrices(unique(fills, (row) => `${row.ticker}|${row.date}`), { fillOnly: true });
@@ -491,6 +585,8 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     if (indexRows.length > 0) await store.saveIndexPrices(unique(indexRows, (row) => `${row.index}|${row.date}`));
     if (indexFills.length > 0) await store.saveIndexPrices(unique(indexFills, (row) => `${row.index}|${row.date}`), { fillOnly: true });
     if (fundamentals.length > 0) await store.saveFundamentals(fundamentals);
+    if (profiles.length > 0) await store.saveProfiles(profiles);
+    if (flagEvents.length > 0) await store.saveFlagEvents(unique(flagEvents, (event) => `${event.ticker}|${event.indicator}|${event.source}|${event.ref}`));
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
@@ -529,6 +625,17 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       if (revalued && revalued.valued.length > 0) detail.valued = revalued.valued;
     } catch (err) {
       detail.errors.push(`${VALUATIONS_ERROR}: ${message(err)}`);
+    }
+  }
+
+  // The week's red-flag scan of each company due one (N3), so the two N3 rules read it.
+  if (flagCompanies) {
+    const due = flagCompanies.companies.filter((company) => company.due).map((company) => company.ticker);
+    try {
+      const { scanned } = due.length > 0 ? await store.scanRedFlags(today, due) : { scanned: [] };
+      detail.redFlags = { scanned, events: flagEvents.length };
+    } catch (err) {
+      detail.errors.push(`${RED_FLAGS_ERROR}: ${message(err)}`);
     }
   }
 

@@ -52,6 +52,10 @@ const FLOW_TAGS: Partial<Record<Item, string[]>> = {
   dividendsPaid: ['PaymentsOfDividendsCommonStock', 'PaymentsOfDividends'],
   dps: ['CommonStockDividendsPerShareDeclared', 'CommonStockDividendsPerShareCashPaid'],
   interest: ['InterestExpense', 'InterestExpenseNonoperating', 'InterestExpenseDebt'],
+  // The red-flag indicator's (N3): gross margin, SG&A (else all operating expenses).
+  grossProfit: ['GrossProfit'],
+  cogs: ['CostOfRevenue', 'CostOfGoodsAndServicesSold', 'CostOfGoodsSold'],
+  sga: ['SellingGeneralAndAdministrativeExpense', 'OperatingExpenses'],
 };
 /** Balance-sheet figures. */
 const BALANCE_TAGS: Partial<Record<Item, string[]>> = {
@@ -59,6 +63,11 @@ const BALANCE_TAGS: Partial<Record<Item, string[]>> = {
   currentLiabilities: ['LiabilitiesCurrent'],
   cash: ['CashAndCashEquivalentsAtCarryingValue', 'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents'],
   equity: ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'],
+  receivables: ['AccountsReceivableNetCurrent', 'ReceivablesNetCurrent'],
+  ppe: ['PropertyPlantAndEquipmentNet', 'PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization'],
+  totalAssets: ['Assets'],
+  totalLiabilities: ['Liabilities'],
+  retainedEarnings: ['RetainedEarningsAccumulatedDeficit'],
 };
 const DEBT_TAGS = ['LongTermDebt', 'LongTermDebtNoncurrent', 'LongTermDebtCurrent', 'CommercialPaper', 'ShortTermBorrowings'] as const;
 const SHARES_TAG = 'WeightedAverageNumberOfDilutedSharesOutstanding';

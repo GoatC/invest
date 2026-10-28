@@ -1,12 +1,13 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadPerformanceInput, loadRiskInput, refreshBetas, revalueOnFilings, runRules } from '../../../lib/data.ts';
+import { loadFilingTickers, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
 import type { FundamentalRow, JobRun, Security, Store } from './job.ts';
 
@@ -120,6 +121,21 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('fundamentals', error);
       }
     },
+    redFlagCompanies: (today) => loadRedFlagCompanies(client, today),
+    async saveProfiles(rows) {
+      const { error } = await client.from('company_profiles').upsert(rows.map(profileColumns), { onConflict: 'ticker' });
+      check('company_profiles', error);
+    },
+    async saveFlagEvents(rows: readonly FeedEvent[]) {
+      for (const batch of batches(rows)) {
+        const { error } = await client.from('red_flag_events').upsert(
+          batch.map((row) => ({ ticker: row.ticker, indicator: row.indicator, event_date: row.date, source: row.source, ref: row.ref, title: row.title, url: row.url, value: row.value })),
+          { onConflict: 'ticker,indicator,source,ref', ignoreDuplicates: true },
+        );
+        check('red_flag_events', error);
+      }
+    },
+    scanRedFlags: (today, tickers) => scanRedFlags(client, today, tickers),
     revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
     performanceInput: (end) => loadPerformanceInput(client, end),

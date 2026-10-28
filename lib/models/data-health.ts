@@ -19,6 +19,8 @@ export const RULES_ERROR = 'Rules';
 export const BETAS_ERROR = 'Betas';
 /** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
 export const VALUATIONS_ERROR = 'Valuations';
+/** …and when the week's red-flag scan could not be saved (N3, Phase 2 step 5). */
+export const RED_FLAGS_ERROR = 'Red flags';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -51,6 +53,8 @@ export interface RunDetail {
   betas: { saved: number; runDate: string } | null;
   /** The watched stocks valued again after a new filing (F12); null when none was. */
   valued: string[] | null;
+  /** The companies scanned for red flags (N3) and the events the feeds found; null when none. */
+  redFlags: { scanned: string[]; events: number } | null;
 }
 
 export interface JobRun {
@@ -101,6 +105,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     rules: typeof created === 'number' && typeof closed === 'number' ? { created, closed } : null,
     betas: typeof saved === 'number' && typeof runDate === 'string' ? { saved, runDate } : null,
     valued: Array.isArray(detail['valued']) ? lines(detail['valued']) : null,
+    redFlags: readRedFlagRun(detail['redFlags']),
   };
 }
 
@@ -131,4 +136,10 @@ export function dataHealth(runs: readonly JobRun[], threshold: number | null, to
   const nightsWithoutRun = Math.max(0, daysBetween(taipeiToday(new Date(latest.finishedAt)), today) - 1);
   const misses = failedInARow + nightsWithoutRun;
   return { latest, misses, alert: threshold !== null && misses >= threshold };
+}
+
+function readRedFlagRun(value: unknown): RunDetail['redFlags'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const { scanned, events } = value as Record<string, unknown>;
+  return Array.isArray(scanned) && typeof events === 'number' ? { scanned: lines(scanned), events } : null;
 }

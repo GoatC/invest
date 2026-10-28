@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
+import { readRedFlagSettings } from './models/red-flags';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   MESSAGES,
@@ -32,6 +33,9 @@ import {
   vehicleField,
   withholdingField,
   parseValuationSettingsForm,
+  listField,
+  parseFlagEntryForm,
+  parseFlagSettingsForm,
 } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
@@ -533,5 +537,43 @@ describe('F12 valuation forms', () => {
     assert.equal(parsed.value.debtSpread, 0.015);
     assert.equal(parsed.value.checked, '2026-10-29');
     assert.ok(!parseValuationSettingsForm({ ...form, debtSpread: '1.5', tax_US: '21', historyYears: '0', minQuarters: '8' }, ['US'], '2026-10-29').ok);
+  });
+});
+
+describe('red-flag forms (N3)', () => {
+  it('reads an entry: a count of events as of a date, or a governance tier, never in the future', () => {
+    const parsed = parseFlagEntryForm({ ticker: 'AAPL', indicator: 'environmental_penalties', asOf: '2026-10-01', value: '0', note: ' ECHO: none ' }, ['AAPL', '2330'], '2026-10-28');
+    assert.deepEqual(parsed, { ok: true, value: { ticker: 'AAPL', indicator: 'environmental_penalties', asOf: '2026-10-01', value: 0, note: 'ECHO: none' } });
+    const tier = parseFlagEntryForm({ ticker: '2330', indicator: 'governance_rating', asOf: '2026-05-01', value: '33' }, ['2330'], '2026-10-28');
+    assert.equal(tier.ok, false);
+    assert.ok(!tier.ok && tier.errors.value);
+    const wrong = parseFlagEntryForm({ ticker: 'X', indicator: 'beneish_m', asOf: '2026-11-01', value: '1.5' }, ['2330'], '2026-10-28');
+    assert.ok(!wrong.ok && wrong.errors.ticker && wrong.errors.indicator && wrong.errors.asOf && wrong.errors.value);
+  });
+
+  it('reads the settings, lists typed one per line or with commas, and keeps the SIC ranges', () => {
+    const current = readRedFlagSettings({
+      lookback_years: 3,
+      scan_days: 7,
+      beneish: { red_above: -1.78 },
+      altman: { z: { red_below: 1.81, amber_below: 2.99 }, z2: { red_below: 1.1, amber_below: 2.6 } },
+      cash_flow_years: 3,
+      governance: { bottom_share: 0.35 },
+      manufacturing: { sic: [[2000, 3999]], tw_industries: ['24'] },
+      financial: { sic: [[6000, 6799]], tw_industries: ['17'] },
+      excluded: { industries: [], tickers: [] },
+      last_verified: null,
+    });
+    assert.ok(current);
+    const raw = { lookbackYears: '3', scanDays: '7', beneish: '-1.78', zRed: '1.81', zAmber: '2.99', z2Red: '1.1', z2Amber: '2.6', cashFlowYears: '3', governance: '35', manufacturing: '24, 28\n1', financial: '17', industries: 'Tobacco\n菸酒', tickers: 'mo, pm', checked: 'on' };
+    const parsed = parseFlagSettingsForm(raw, current, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.governanceBottomShare, 0.35);
+    assert.deepEqual(parsed.value.manufacturing, { sic: [[2000, 3999]], twIndustries: ['24', '28', '01'] });
+    assert.deepEqual(parsed.value.excluded, { industries: ['Tobacco', '菸酒'], tickers: ['MO', 'PM'] });
+    assert.equal(parsed.value.lastVerified, '2026-10-28');
+    const bad = parseFlagSettingsForm({ ...raw, zAmber: '1', manufacturing: 'semis' }, current, '2026-10-28');
+    assert.ok(!bad.ok && bad.errors.zAmber && bad.errors.manufacturing);
+    assert.deepEqual(listField(' a，b、a\n\n'), ['a', 'b']);
   });
 });

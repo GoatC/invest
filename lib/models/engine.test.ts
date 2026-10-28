@@ -20,6 +20,7 @@ import {
   type TradeOrder,
   type WatchInput,
 } from './engine';
+import type { Scan } from './red-flags';
 import { ASSET_CLASSES, holding } from './test-helpers';
 import type { Holding } from './valuation';
 
@@ -52,7 +53,7 @@ const RULES: EngineRule[] = [
   { id: 'ANNUAL_REVIEW', condition: 'first_weekend_of_month', threshold: { month: 1 }, enabled: true, cooldownDays: 7 },
   { id: 'MONTHLY_CONTRIBUTION', condition: 'day_after_dca', threshold: { max_classes: 2, satellite_share_with_buy_alert: 0.2 }, enabled: true, cooldownDays: 7 },
   { id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple', threshold: { multiple: 0.75 }, enabled: false, cooldownDays: 7 },
-  { id: 'RED_FLAG_RED', condition: 'satellite_red_flag', threshold: {}, enabled: false, cooldownDays: 7 },
+  { id: 'DATA_FAILURE', condition: 'job_failed_consecutively', threshold: { failures: 2 }, enabled: true, cooldownDays: 7 },
 ];
 
 /** A listed regular-pool holding worth `value` at NT$100 a share. */
@@ -549,14 +550,14 @@ describe('deciding what to save', () => {
     assert.ok(draftOf(outcome, 'R1'));
   });
 
-  it('clears an open proposal once its rule stops firing or is turned off, and leaves later steps’ rules alone', () => {
+  it('clears an open proposal once its rule stops firing or is turned off, and leaves the rules other checks watch alone', () => {
     const cleared = evaluate(input({ holdings: onTarget(200_000, [listed('THEME', 'tactical_themes', 40_000, { productType: 'theme_etf' })]), proposals: [record({})] }));
     assert.deepEqual(cleared.close, [{ id: 1, reason: 'cleared' }]);
     const off = evaluate(input({ holdings, rules: RULES.map((rule) => (rule.id === 'R1' ? { ...rule, enabled: false } : rule)), proposals: [record({})] }));
     assert.equal(checkOf(off, 'R1').outcome, 'off');
     assert.deepEqual(off.close, [{ id: 1, reason: 'cleared' }]);
     assert.equal(checkOf(off, 'BUY_ZONE').outcome, 'off');
-    assert.equal(checkOf(off, 'RED_FLAG_RED').outcome, 'later');
+    assert.equal(checkOf(off, 'DATA_FAILURE').outcome, 'later');
   });
 
   it('reports a malformed threshold instead of guessing one', () => {
@@ -637,6 +638,59 @@ describe('valuation rules (F12)', () => {
     assert.ok(Math.abs((draft.detail.changes?.[0]?.change ?? 0) - 0.15) < 1e-9);
     assert.equal(checkOf(evaluate(input({ holdings, rules: F12, watch: [{ ...moved, trigger: 'edit' }] })), 'VALUATION_UPDATED').outcome, 'quiet');
     assert.equal(checkOf(evaluate(input({ holdings, rules: F12, watch: [{ ...moved, value: 109 }] })), 'VALUATION_UPDATED').outcome, 'quiet');
+  });
+});
+
+describe('red-flag rules (N3)', () => {
+  const N3: EngineRule[] = [
+    ...RULES,
+    { id: 'RED_FLAG_WORSENS', condition: 'red_flag_worsens', threshold: {}, enabled: true, cooldownDays: 7 },
+    { id: 'RED_FLAG_RED', condition: 'satellite_red_flag', threshold: { sell_share: 1 }, enabled: true, cooldownDays: 7 },
+  ];
+  const scan = (date: string, light: Scan['light'], fired: Scan['fired'] = []): Scan => ({ date, light, coverage: 87.5, fired, indicators: [] });
+  const holdings = onTarget(200_000, [listed('AAPL', 'us_stocks', 8_000, { productType: 'stock' }), listed('2330', 'tw_stocks', 8_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 24_000, { productType: 'theme_etf' })]);
+
+  it('wait for the scans, and stay quiet while every light holds or improves', () => {
+    const waiting = evaluate(input({ holdings, rules: N3 }));
+    for (const id of ['RED_FLAG_WORSENS', 'RED_FLAG_RED']) assert.deepEqual(checkOf(waiting, id), { ruleId: id, outcome: 'waiting', why: 'red_flags' });
+    const better = evaluate(input({ holdings, rules: N3, redFlags: [{ ticker: 'AAPL', scans: [scan('2026-10-21', 'green'), scan('2026-10-14', 'amber')] }] }));
+    assert.equal(checkOf(better, 'RED_FLAG_WORSENS').outcome, 'quiet');
+    assert.equal(checkOf(better, 'RED_FLAG_RED').outcome, 'quiet');
+  });
+
+  it('prompt a review when a held stock goes green → amber, named by the day the amber run began, with no orders', () => {
+    const redFlags = [{ ticker: 'AAPL', scans: [scan('2026-10-21', 'amber', ['altman_z']), scan('2026-10-14', 'amber', ['altman_z']), scan('2026-10-07', 'green')] }];
+    const draft = draftOf(evaluate(input({ holdings, rules: N3, redFlags })), 'RED_FLAG_WORSENS');
+    assert.ok(draft);
+    assert.equal(draft.state, 'AAPL:2026-10-14');
+    assert.deepEqual(draft.orders, []);
+    assert.deepEqual(draft.detail.flags, [{ ticker: 'AAPL', before: 'green', light: 'amber', since: '2026-10-14', fired: ['altman_z'] }]);
+    // Dismissed, it is not proposed again for the same run.
+    const dismissed: ProposalRecord = { id: 7, ruleId: 'RED_FLAG_WORSENS', state: 'AAPL:2026-10-14', status: 'dismissed', createdAt: '2026-10-01T00:00:00.000Z', expiresAt: null };
+    assert.equal(draftOf(evaluate(input({ holdings, rules: N3, redFlags, proposals: [dismissed] })), 'RED_FLAG_WORSENS'), undefined);
+  });
+
+  it('draft the exit when a satellite stock turns red: all of it sold, the proceeds into the core, and leave it out of the review prompt', () => {
+    const redFlags = [{ ticker: '2330', scans: [scan('2026-10-21', 'red', ['going_concern']), scan('2026-10-14', 'amber')] }];
+    const outcome = evaluate(input({ holdings, rules: N3, redFlags }));
+    const draft = draftOf(outcome, 'RED_FLAG_RED');
+    assert.ok(draft);
+    assert.equal(draft.state, '2330:2026-10-21');
+    assert.deepEqual(trades(draft.orders)[0], ['sell', '2330', 80]);
+    assert.ok(trades(draft.orders).slice(1).every(([side]) => side === 'buy'));
+    assert.equal(draft.detail.flags?.[0]?.soldTwd, 8_000);
+    assert.equal(checkOf(outcome, 'RED_FLAG_WORSENS').outcome, 'quiet');
+    // With RED_FLAG_RED off, the worsening prompts the review instead.
+    const off = evaluate(input({ holdings, rules: N3.map((rule) => (rule.id === 'RED_FLAG_RED' ? { ...rule, enabled: false } : rule)), redFlags }));
+    assert.equal(draftOf(off, 'RED_FLAG_WORSENS')?.state, '2330:2026-10-21');
+  });
+
+  it('read sell_share, and a first scan already red as turning red', () => {
+    const redFlags = [{ ticker: 'AAPL', scans: [scan('2026-10-21', 'red')] }];
+    const half = N3.map((rule) => (rule.id === 'RED_FLAG_RED' ? { ...rule, threshold: { sell_share: 0.5 } } : rule));
+    assert.deepEqual(trades(draftOf(evaluate(input({ holdings, rules: half, redFlags })), 'RED_FLAG_RED')?.orders ?? [])[0], ['sell', 'AAPL', 40]);
+    const broken = N3.map((rule) => (rule.id === 'RED_FLAG_RED' ? { ...rule, threshold: { sell_share: 2 } } : rule));
+    assert.equal(checkOf(evaluate(input({ holdings, rules: broken, redFlags })), 'RED_FLAG_RED').outcome, 'unreadable');
   });
 });
 

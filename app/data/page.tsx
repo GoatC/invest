@@ -122,6 +122,17 @@ function LatestRun({ run }: { run: JobRun }) {
           </Link>
         </p>
       )}
+      {detail.redFlags && (
+        <p className="muted small">
+          <Bi
+            en={`Red flags: scanned ${detail.redFlags.scanned.join(', ') || 'none due'}; ${detail.redFlags.events} event${detail.redFlags.events === 1 ? '' : 's'} read from the feeds.`}
+            zh={`紅旗指標：已掃描 ${detail.redFlags.scanned.join('、') || '（無到期）'}；自資料來源讀到 ${detail.redFlags.events} 件事件。`}
+          />{' '}
+          <Link href="/red-flags">
+            <Bi {...LABELS.redFlags} />
+          </Link>
+        </p>
+      )}
       {rulesErrors.length > 0 && (
         <div className="banner warn">
           <Bi en="The rules could not be checked; use Check the rules now on the proposals page:" zh="無法檢查規則；請到提案頁按「立即檢查規則」：" />

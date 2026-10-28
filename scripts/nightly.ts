@@ -3,7 +3,8 @@
  * (.github/workflows/nightly.yml); `npm run nightly` runs it by hand. It needs SUPABASE_URL (or
  * NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SECRET_KEY and FINMIND_TOKEN, from the environment or
  * .env.local; ALPHAVANTAGE_API_KEY is an optional fallback, and SEC_USER_AGENT (a name and a contact
- * email) lets it read US filings for F12. Exits with 1 when the run failed, so
+ * email) lets it read US filings for F12 and their 8-Ks for N3, and MOENV_API_KEY Taiwan's
+ * environmental penalties for N3. Exits with 1 when the run failed, so
  * GitHub marks the run red.
  */
 import { existsSync } from 'node:fs';
@@ -42,6 +43,7 @@ async function main(): Promise<number> {
       finmindToken,
       alphaVantageKey: env['ALPHAVANTAGE_API_KEY'] || undefined,
       secUserAgent: env['SEC_USER_AGENT'] || undefined,
+      moenvKey: env['MOENV_API_KEY'] || undefined,
       today: taipeiToday(),
       now: () => new Date(),
     });

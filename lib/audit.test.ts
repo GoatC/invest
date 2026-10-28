@@ -4,6 +4,13 @@ import { describe, it } from 'node:test';
 import { describeRow, TABLE_LABELS } from './audit';
 
 describe('describeRow', () => {
+  it("names an owner's red-flag entry by its stock, indicator, date and value", () => {
+    assert.deepEqual(describeRow('red_flag_entries', { ticker: 'AAPL', indicator: 'environmental_penalties', as_of: '2026-10-28', value: 0 }, '3'), {
+      en: 'AAPL Environmental penalties 2026-10-28: 0',
+      zh: 'AAPL 環境裁罰 2026-10-28：0',
+    });
+  });
+
   it('names a deleted trade by its date, side, quantity, ticker and price, in both languages', () => {
     const row = { id: 7, trade_date: '2026-10-07', ticker: 'VT', side: 'buy', qty: 2, price: 150, currency: 'USD' };
     assert.deepEqual(describeRow('transactions', row, '7'), {

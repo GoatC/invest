@@ -60,6 +60,7 @@ describe('parseRunDetail', () => {
       betas: { saved: 8, runDate: '2026-11-02' },
       filings: { AAPL: { source: 'sec', rows: 28, latest: '2026-06-27' } },
       valued: ['AAPL', 3],
+      redFlags: { scanned: ['AAPL', 7], events: 2 },
     });
     assert.deepEqual(detail, {
       window: { start: '2023-10-07', end: '2026-10-21' },
@@ -74,12 +75,14 @@ describe('parseRunDetail', () => {
       betas: { saved: 8, runDate: '2026-11-02' },
       filings: { AAPL: { source: 'sec', rows: 28, latest: '2026-06-27' } },
       valued: ['AAPL'],
+      redFlags: { scanned: ['AAPL'], events: 2 },
     });
   });
 
   it('reads a run from before the valuation workbench (Phase 2, step 4) as one with no filings', () => {
     assert.deepEqual(parseRunDetail({}).filings, {});
     assert.equal(parseRunDetail({}).valued, null);
+    assert.equal(parseRunDetail({}).redFlags, null);
   });
 
   it('reads a run from before the Regression Lab (Phase 2, step 2) as one with no indices or β', () => {

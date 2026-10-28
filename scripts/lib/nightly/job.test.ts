@@ -3,10 +3,13 @@ import { describe, it } from 'node:test';
 
 import * as XLSX from 'xlsx';
 
+import type { ProfileRecord } from '../../../lib/data.ts';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
+import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type JobRun, type Security, type Store } from './job.ts';
 
@@ -70,6 +73,18 @@ const REPLIES: Record<string, string> = {
   'multpl.com': '<table id="datatable"><tr><td>Oct 1, 2026</td><td>40.81</td></tr><tr><td>Sep 1, 2026</td><td>40.42</td></tr></table>',
   // The valuation workbench's filings (F12): SEC's ticker list and a company's facts, FinMind's statements.
   company_tickers: JSON.stringify({ 0: { cik_str: 320193, ticker: 'AAPL', title: 'Apple Inc.' } }),
+  // The red-flag feeds (N3): an auditor change in AAPL's 8-Ks, no going-concern 10-K, 2330's TWSE
+  // profile with a new audit firm, a restatement among the day's announcements, one penalty.
+  'submissions/CIK': JSON.stringify({
+    cik: '320193',
+    sic: '3571',
+    sicDescription: 'Electronic Computers',
+    filings: { recent: { accessionNumber: ['0000320193-26-000100'], filingDate: ['2026-09-02'], reportDate: ['2026-09-01'], form: ['8-K'], items: ['4.01,9.01'], primaryDocument: ['a.htm'] } },
+  }),
+  'efts.sec.gov': JSON.stringify({ hits: { total: { value: 0 }, hits: [] } }),
+  t187ap03_L: JSON.stringify([{ 公司代號: '2330', 產業別: '24', 營利事業統一編號: '22099131', 簽證會計師事務所: 'B 事務所' }]),
+  t187ap04_L: JSON.stringify([{ 發言日期: '1151019', 發言時間: '170000', 公司代號: '2330', '主旨 ': '公告本公司重編財務報告', 說明: '' }]),
+  'data.moenv.gov.tw': JSON.stringify([{ document_no: '40-115-070014', penalty_date: '2026-07-28', penalty_money: '6000', transgress_type: '事業廢棄物', fac_name: '台積電' }]),
   companyfacts: JSON.stringify({
     entityName: 'Apple Inc.',
     facts: {
@@ -89,7 +104,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'submissions/CIK', 'efts.sec.gov', 't187ap03_L', 't187ap04_L', 'data.moenv.gov.tw', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -137,6 +152,20 @@ function weeklyHistory(): PriceRow[] {
   });
 }
 
+/** config red_flags as seeded, the parts the job reads. */
+const RED_FLAG_SETTINGS = {
+  lookback_years: 3,
+  scan_days: 7,
+  beneish: { red_above: -1.78 },
+  altman: { z: { red_below: 1.81, amber_below: 2.99 }, z2: { red_below: 1.1, amber_below: 2.6 } },
+  cash_flow_years: 3,
+  governance: { bottom_share: 0.35 },
+  manufacturing: { sic: [[2000, 3999]], tw_industries: ['24'] },
+  financial: { sic: [[6000, 6799]], tw_industries: ['17'] },
+  excluded: { industries: [], tickers: [] },
+  last_verified: null,
+};
+
 class MemoryStore implements Store {
   prices: DailyPrice[] = [];
   fills: DailyPrice[] = [];
@@ -169,8 +198,28 @@ class MemoryStore implements Store {
       /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
       filings?: Array<{ ticker: string; market: string }>;
       failRevalue?: boolean;
+      /** The companies N3 lights (undefined before config red_flags), with the profile saved for each. */
+      flags?: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }>;
     } = {},
   ) {}
+  profiles: ProfileRecord[] = [];
+  flagEvents: FeedEvent[] = [];
+  /** When the red flags were scanned, and whether the rules had run by then. */
+  scans: Array<{ today: string; tickers: string[]; rulesRun: number }> = [];
+  async redFlagCompanies() {
+    const settings = readRedFlagSettings(RED_FLAG_SETTINGS);
+    return this.options.flags && settings ? { settings, companies: this.options.flags } : undefined;
+  }
+  async saveProfiles(rows: readonly ProfileRecord[]) {
+    this.profiles.push(...rows);
+  }
+  async saveFlagEvents(rows: readonly FeedEvent[]) {
+    this.flagEvents.push(...rows);
+  }
+  async scanRedFlags(today: string, tickers: readonly string[]) {
+    this.scans.push({ today, tickers: [...tickers], rulesRun: this.ruleRuns.length });
+    return { scanned: [...tickers] };
+  }
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
     return SECURITIES;
@@ -319,6 +368,49 @@ describe('filings (F12)', () => {
     assert.equal(run.status, 'partial');
     assert.ok(run.detail.errors.includes('Valuations: valuations: permission denied'));
     assert.equal(store.ruleRuns.length, 1);
+  });
+});
+
+describe('red flags (N3)', () => {
+  const twProfile: ProfileRecord = { ticker: '2330', industryCode: '24', industry: '半導體業', sic: null, auditor: 'A 事務所', businessId: '22099131', checked: { restatement: { on: '2026-10-19', since: '2026-10-12' } }, source: 'twse' };
+  const flags = [
+    { ticker: 'AAPL', market: 'US', due: true, profile: null },
+    { ticker: '2330', market: 'TW', due: true, profile: twProfile },
+  ];
+
+  it("reads each company's events and profile, then saves the week's scan before the rules", async () => {
+    const store = new MemoryStore({ flags });
+    const run = await runNightly({ ...deps(fakeGet().get, store), secUserAgent: 'LongViewInvest hugo@example.com', moenvKey: 'KEY' });
+    assert.deepEqual(run.detail.errors, []);
+    assert.deepEqual(
+      store.flagEvents.map((event) => [event.ticker, event.indicator, event.source, event.date]).sort(),
+      [
+        ['2330', 'auditor_change', 'twse', TODAY],
+        ['2330', 'environmental_penalties', 'moenv', '2026-07-28'],
+        ['2330', 'restatement', 'twse', '2026-10-19'],
+        ['AAPL', 'auditor_change', 'sec', '2026-09-01'],
+      ],
+    );
+    const [aapl, tw] = [store.profiles.find((row) => row.ticker === 'AAPL'), store.profiles.find((row) => row.ticker === '2330')];
+    assert.deepEqual([aapl?.sic, aapl?.industry, aapl?.source], [3571, 'Electronic Computers', 'sec']);
+    assert.deepEqual(aapl?.checked, { auditor_change: { on: TODAY }, restatement: { on: TODAY }, going_concern: { on: TODAY } });
+    // The announcements reach forward only: since keeps the first night they were read.
+    assert.deepEqual(tw?.checked, { restatement: { on: TODAY, since: '2026-10-12' }, auditor_change: { on: TODAY, since: TODAY }, going_concern: { on: TODAY, since: TODAY }, environmental_penalties: { on: TODAY } });
+    assert.equal(tw?.auditor, 'B 事務所');
+    assert.deepEqual(store.scans, [{ today: TODAY, tickers: ['AAPL', '2330'], rulesRun: 0 }]);
+    assert.deepEqual(run.detail.redFlags, { scanned: ['AAPL', '2330'], events: 4 });
+  });
+
+  it('checks SEC and the penalties only on a scan day, says when the MOENV key is missing, and does nothing before config red_flags', async () => {
+    const store = new MemoryStore({ flags: flags.map((flag) => ({ ...flag, due: flag.ticker === '2330' })) });
+    const { get, urls } = fakeGet();
+    const run = await runNightly({ ...deps(get, store), secUserAgent: 'LongViewInvest hugo@example.com' });
+    assert.ok(!urls.some((url) => url.includes('submissions') || url.includes('moenv')));
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('red flags: MOENV_API_KEY is not set')));
+    assert.deepEqual(store.scans.map((row) => row.tickers), [['2330']]);
+    const before = new MemoryStore();
+    await runNightly(deps(fakeGet().get, before));
+    assert.deepEqual([before.profiles, before.scans], [[], []]);
   });
 });
 
