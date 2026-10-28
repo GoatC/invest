@@ -292,7 +292,13 @@ const SERIES_NAMES: Record<string, Bilingual> = {
   sp500_price: { en: 'S&P 500, monthly average close', zh: 'S&P 500 每月平均收盤' },
   sp500_yield: { en: 'S&P 500 dividend yield', zh: 'S&P 500 股息殖利率' },
   us_tbill_3m: { en: 'US 3-month T-bill, a year', zh: '美國 3 個月國庫券年利率' },
+  us_treasury_10y: { en: 'US 10-year Treasury, month end', zh: '美國 10 年期公債殖利率（月底）' },
+  tw_govt_10y: { en: 'Taiwan 10-year bond, month average', zh: '台灣 10 年期公債殖利率（月平均）' },
+  us_implied_erp: { en: "Damodaran's implied ERP", zh: 'Damodaran 隱含股票風險溢酬' },
 };
+
+/** The series quoted as a rate a year rather than a level. */
+const RATE_SERIES = new Set(['sp500_yield', 'us_tbill_3m', 'us_treasury_10y', 'tw_govt_10y', 'us_implied_erp']);
 
 const INDEX_NAMES: Record<string, Bilingual> = {
   SPX: { en: 'S&P 500', zh: '標普 500' },
@@ -357,7 +363,7 @@ function Indices({ indices, lastRun }: { indices: LatestQuote[]; lastRun: JobRun
   );
 }
 
-/** The monthly series the windfall planner reads (F3): the valuation gauge and the backtest's market. */
+/** The monthly series: the windfall planner's (F3), the Regression Lab's bill rate (N1), the cost of equity's yields and ERP (F11). */
 function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: JobRun['detail']['series'] }) {
   return (
     <section className="card form" id="market-series">
@@ -400,7 +406,7 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
                     </div>
                   </td>
                   <td className="nowrap">{point.date}</td>
-                  <td className="num">{point.key === 'sp500_yield' || point.key === 'us_tbill_3m' ? percent(point.value, 2) : quantity(point.value)}</td>
+                  <td className="num">{RATE_SERIES.has(point.key) ? percent(point.value, 2) : quantity(point.value)}</td>
                   <td className="nowrap">
                     <Bi {...feedLabel(point.source)} />
                   </td>
@@ -418,6 +424,13 @@ function MarketSeries({ series, lastRun }: { series: LatestQuote[]; lastRun: Job
         />{' '}
         <Link href="/windfall">
           <Bi {...LABELS.windfall} />
+        </Link>{' '}
+        <Bi
+          en="The 10-year yields and Damodaran's ERP feed the cost of equity; Taiwan's yield comes about two months behind."
+          zh="10 年期公債殖利率與 Damodaran 風險溢酬用於權益成本；台灣殖利率約落後兩個月。"
+        />{' '}
+        <Link href="/capm">
+          <Bi {...LABELS.costOfEquity} />
         </Link>
       </Info>
     </section>

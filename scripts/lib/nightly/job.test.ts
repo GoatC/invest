@@ -59,6 +59,10 @@ const REPLIES: Record<string, string> = {
     { 日期: '1151021', 指數: '發行量加權股價報酬指數', 收盤指數: '108,422.07' },
   ]),
   'id=TB3MS': 'observation_date,TB3MS\n2026-08-01,3.72\n2026-09-01,3.94\n',
+  // The cost of equity's inputs (F11): the US 10-year from FRED, else the Treasury, and Taiwan's from the Central Bank.
+  'id=DGS10': 'observation_date,DGS10\n2025-08-29,4.23\n2025-09-30,4.16\n2026-09-30,5.29\n2026-10-20,.\n2026-10-21,5.00\n',
+  'home.treasury.gov': 'Date,"3 Mo","10 Yr"\n10/21/2026,4.22,4.99\n09/30/2026,4.30,5.29\n',
+  'cbc.gov.tw': '\uFEFF"月","政府公債-10年期(%)","十年期政府公債次級市場利率(%)"\n"2025-08","-","-"\n"2025M08","1.5","1.50000"\n"2026M07","-","1.90030"\n"2026M08","1.969","1.95500"\n',
   fredgraph: 'observation_date,DEXTAUS\n2026-10-16,32.34\n',
   alphavantage: JSON.stringify({ 'Time Series (Daily)': { '2026-10-20': { '4. close': '157.80' } } }),
   'shillerdata.com': '<a href="https://img1.wsimg.com/blobby/go/x/downloads/ie_data.xls?ver=1">ie_data.xls</a>',
@@ -67,7 +71,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -92,7 +96,14 @@ function shillerWorkbook(): Uint8Array {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'Data');
   return new Uint8Array(XLSX.write(book, { bookType: 'xls', type: 'array' }) as ArrayBuffer);
 }
-const getBytes: GetBytes = async () => shillerWorkbook();
+/** Damodaran's ERP by month, dated in Excel's 1904 system: September and October 2026. */
+function erpWorkbook(): Uint8Array {
+  const book = XLSX.utils.book_new();
+  book.Workbook = { WBProps: { date1904: true } };
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Start of month', 'S&P 500', 'T.Bond Rate', 'ERP (T12m)'], [44804, 7686.14, 0.0475, 0.0409], [44834, 7652, 0.0529, 0.037]]), 'Historical ERP');
+  return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
+}
+const getBytes: GetBytes = async (url) => (url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
 const bytesDown: GetBytes = async () => {
   throw new FeedError('HTTP 403 from img1.wsimg.com');
 };
@@ -132,6 +143,8 @@ class MemoryStore implements Store {
       /** config regression's longest window plus a year (N1); undefined before its migration. */
       regressionYears?: number;
       failBetas?: boolean;
+      /** Whether config capm exists (F11). */
+      capm?: boolean;
     } = {},
   ) {}
   async securities() {
@@ -172,6 +185,9 @@ class MemoryStore implements Store {
   }
   async regressionYears() {
     return this.options.regressionYears;
+  }
+  async capmReady() {
+    return this.options.capm ?? false;
   }
   async saveIndexPrices(rows: readonly IndexClose[], options: { fillOnly?: boolean } = {}) {
     (options.fillOnly ? this.indexFills : this.indices).push(...rows);
@@ -439,6 +455,52 @@ describe('runNightly', () => {
     assert.ok(!urls.some((url) => url.includes('GSPC') || url.includes('TB3MS') || url.includes('MI_INDEX')));
     assert.equal(run.detail.indices, undefined);
     assert.deepEqual(store.betaRuns, []);
+  });
+
+  it("loads a year of the 10-year yields and Damodaran's implied ERP for the cost of equity (F11)", async () => {
+    const store = new MemoryStore({ capm: true });
+    const { get, urls } = fakeGet();
+    const run = await runNightly(deps(get, store));
+    assert.equal(run.status, 'ok', JSON.stringify(run.detail));
+    assert.equal(new URL(urls.find((url) => url.includes('id=DGS10')) ?? 'http://none').searchParams.get('cosd'), '2025-09-01');
+    const of = (name: string) => store.series.filter((point) => point.series === name).map((point) => [point.month, point.value, point.source]);
+    // Months from September 2025 on: August 2025 is left out, October 2026 is its newest day so far.
+    assert.deepEqual(of('us_treasury_10y'), [
+      ['2025-09', 0.0416, 'fred'],
+      ['2026-09', 0.0529, 'fred'],
+      ['2026-10', 0.05, 'fred'],
+    ]);
+    assert.deepEqual(of('tw_govt_10y'), [
+      ['2026-07', 0.019003, 'cbc'],
+      ['2026-08', 0.01955, 'cbc'],
+    ]);
+    assert.deepEqual(of('us_implied_erp'), [
+      ['2026-09', 0.0409, 'damodaran'],
+      ['2026-10', 0.037, 'damodaran'],
+    ]);
+    assert.deepEqual(run.detail.series?.['tw_govt_10y'], { source: 'cbc', rows: 2, latest: '2026-08' });
+  });
+
+  it("falls back to the Treasury's yield curve for the US 10-year, and reports the yields it could not load", async () => {
+    const store = new MemoryStore({ capm: true });
+    const { get, urls } = fakeGet((key) => key === 'id=DGS10' || key === 'cbc.gov.tw');
+    const run = await runNightly(deps(get, store, undefined, async () => {
+      throw new FeedError('HTTP 403 from pages.stern.nyu.edu');
+    }));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(urls.filter((url) => url.includes('home.treasury.gov')).map((url) => url.split('/')[7]), ['2025', '2026']);
+    assert.deepEqual(store.series.filter((point) => point.series === 'us_treasury_10y').map((point) => [point.month, point.value, point.source]), [
+      ['2026-09', 0.0529, 'treasury'],
+      ['2026-10', 0.0499, 'treasury'],
+    ]);
+    assert.match(run.detail.warnings.join('\n'), /us_treasury_10y: fred: HTTP 503/);
+    assert.deepEqual(run.detail.errors.map((line) => line.split(':')[0]).filter((label) => label !== 'us_cape' && label !== 'sp500_price' && label !== 'sp500_yield'), ['tw_govt_10y', 'us_implied_erp']);
+  });
+
+  it('leaves the yields and the ERP alone before the cost of equity migration', async () => {
+    const { get, urls } = fakeGet();
+    await runNightly(deps(get, new MemoryStore()));
+    assert.ok(!urls.some((url) => url.includes('DGS10') || url.includes('treasury.gov') || url.includes('cbc.gov.tw')));
   });
 
   it('records a failed run when nothing could be loaded', async () => {

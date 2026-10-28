@@ -6,8 +6,9 @@
  * and records the outcome in job_runs. Since Phase 2, step 1 it also loads the monthly market
  * series the windfall planner reads (F3): CAPE, the S&P 500's price and its dividend yield. Since
  * step 2 it loads the Regression Lab's (N1) index closes and the US 3-month bill rate, reaches
- * back over its longest window, and saves the holdings' β once a month. Everything outside this
- * file is injected, so the whole run can be tested without a network or a database.
+ * back over its longest window, and saves the holdings' β once a month. Since step 3 it loads the
+ * cost of equity's (F11) 10-year yields and Damodaran's implied ERP. Everything outside this file
+ * is injected, so the whole run can be tested without a network or a database.
  */
 import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR } from '../../../lib/models/data-health.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
@@ -21,6 +22,7 @@ import { INDICES, indexAttempts, type IndexClose } from '../feeds/indices.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
 import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
 import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
+import { CBC_CAPITAL_MARKET_RATES, cbcTenYear, DAMODARAN_ERP, damodaranErp, fredTenYear, treasuryTenYear, treasuryUrl, TW_GOVT_10Y, US_IMPLIED_ERP, US_TREASURY_10Y } from '../feeds/yields.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 
@@ -53,6 +55,8 @@ export interface Store {
   regressionYears(): Promise<number | undefined>;
   /** Upserts daily index closes (index_prices); fillOnly adds missing days only. */
   saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
+  /** Whether config capm exists (F11, Phase 2 step 3): false before its migration. */
+  capmReady(): Promise<boolean>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -132,6 +136,15 @@ export function riskWindowStart(today: string, weeks: number, earliestTrade?: st
   return addDays(gridStart(earliestTrade && earliestTrade < yearAgo ? earliestTrade : yearAgo, weeks), -14);
 }
 
+/** Months of F11's yields and ERP to load each night: a year and the month before it. */
+const CAPM_MONTHS = 13;
+
+/** The first day of the month `months` before today's. */
+export function monthsBefore(today: string, months: number): string {
+  const [year, month] = today.split('-').map(Number) as [number, number];
+  return new Date(Date.UTC(year, month - 1 - months, 1)).toISOString().slice(0, 10);
+}
+
 /** XAU/TWD (TWD per troy ounce) for each gold close, at that day's USD/TWD rate or the latest one before it. */
 export function goldInTwd(gold: readonly DailyRate[], usdTwd: readonly DailyRate[]): DailyRate[] {
   const newestFirst = [...usdTwd].sort((a, b) => b.date.localeCompare(a.date));
@@ -192,16 +205,19 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let riskStart: string;
   let proxies: Set<string>;
   let regressionYears: number | undefined;
+  let capm: boolean;
   try {
-    const [found, years, earliestTrade, riskProxies, regression] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
       store.riskProxies(),
       store.regressionYears(),
+      store.capmReady(),
     ]);
     securities = found;
     regressionYears = regression;
+    capm = capmReady;
     // Every security reaches back over the VaR's years or the Regression Lab's longest window (N1).
     start = windowStart(today, Math.max(years, regression ?? 0), earliestTrade);
     riskStart = riskWindowStart(today, lookbackWeeks({ lookbackYears: years }), earliestTrade);
@@ -347,6 +363,44 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     if (bill) {
       series.push(...bill.rows);
       (detail.series ??= {})[name] = { source: bill.source, rows: bill.rows.length, latest: bill.rows.reduce((max, point) => (point.month > max ? point.month : max), '') };
+    }
+  }
+
+  // The cost of equity (F11): each market's 10-year yield behind R_f, and Damodaran's implied ERP.
+  if (capm) {
+    const since = monthsBefore(today, CAPM_MONTHS);
+    const years = [...new Set([since.slice(0, 4), today.slice(0, 4)])].map(Number);
+    const feeds: Array<[string, Array<Attempt<MonthlyPoint>>]> = [
+      [
+        US_TREASURY_10Y,
+        [
+          { source: 'fred', load: async () => fredTenYear(await get(fredUrl('DGS10', since))) },
+          { source: 'treasury', load: async () => (await Promise.all(years.map(async (year) => treasuryTenYear(await get(treasuryUrl(year)))))).flat() },
+        ],
+      ],
+      [TW_GOVT_10Y, [{ source: 'cbc', load: async () => cbcTenYear(await get(CBC_CAPITAL_MARKET_RATES)) }]],
+      [
+        US_IMPLIED_ERP,
+        [
+          {
+            source: 'damodaran',
+            load: async () => {
+              if (!deps.getBytes) throw new FeedError('no binary fetch');
+              return damodaranErp(await deps.getBytes(DAMODARAN_ERP));
+            },
+          },
+        ],
+      ],
+    ];
+    for (const [name, attempts] of feeds) {
+      const result = await firstWorking(name, attempts, detail);
+      const rows = unique(result?.rows.filter((point) => point.month >= since.slice(0, 7) && point.month <= today.slice(0, 7)) ?? [], (point) => point.month);
+      if (result && rows.length > 0) {
+        series.push(...rows);
+        (detail.series ??= {})[name] = { source: result.source, rows: rows.length, latest: rows.reduce((max, point) => (point.month > max ? point.month : max), '') };
+      } else if (result) {
+        detail.errors.push(`${name}: ${result.source} had nothing from ${since.slice(0, 7)} on`);
+      }
     }
   }
 

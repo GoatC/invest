@@ -16,6 +16,7 @@ import {
   parseEngineSettings,
   parseOrderSizes,
   parsePaceForm,
+  parseCapmForm,
   parseRegressionForm,
   parsePlanForm,
   parsePlanStart,
@@ -451,5 +452,29 @@ describe('parseRegressionForm (N1)', () => {
     const bad = parseRegressionForm({ ...form, windowYears: '4', blumeWeight: '1.2', rfTWD: '' }, [1, 2, 3, 5], '2026-10-28');
     assert.ok(!bad.ok);
     assert.deepEqual(Object.keys(bad.errors).sort(), ['blumeWeight', 'rfTWD', 'windowYears']);
+  });
+});
+
+describe('parseCapmForm (F11)', () => {
+  const form = { beta: 'adjusted', erpSource: 'damodaran', erpManual: '4.23', rf_US: '5', crp_US: '0', rf_TW: '1.955', crp_TW: '0.78' };
+
+  it('reads the β choice, the ERP and each market in percent, stamping today when ticked', () => {
+    const parsed = parseCapmForm({ ...form, checked: 'on' }, ['US', 'TW'], '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value, {
+      beta: 'adjusted',
+      erpSource: 'damodaran',
+      erpManual: 0.0423,
+      markets: { US: { riskFree: 0.05, countryPremium: 0 }, TW: { riskFree: 0.01955, countryPremium: 0.0078 } },
+      checked: '2026-10-28',
+    });
+  });
+
+  it('keeps the date it was checked before, and refuses an unknown choice, a zero ERP or a negative premium', () => {
+    const kept = parseCapmForm({ ...form, checkedOn: '2026-10-01' }, ['US', 'TW'], '2026-10-28');
+    assert.ok(kept.ok && kept.value.checked === '2026-10-01');
+    const bad = parseCapmForm({ ...form, beta: 'blume', erpManual: '0', crp_TW: '-1', rf_US: '' }, ['US', 'TW'], '2026-10-28');
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['beta', 'crp_TW', 'erpManual', 'rf_US']);
   });
 });

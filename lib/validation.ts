@@ -58,6 +58,7 @@ export const MESSAGES = {
   cashReturn: { en: 'Enter a yearly return from −10% to 20%.', zh: '請輸入 −10% 到 20% 的年報酬。' },
   riskFree: { en: 'Enter a yearly rate from −5% to 30%.', zh: '請輸入 −5% 到 30% 的年利率。' },
   blume: { en: 'Enter a weight from 0 to 1.', zh: '請輸入 0 到 1 之間的權重。' },
+  premium: { en: 'Enter a premium from 0% to 20% a year.', zh: '請輸入每年 0% 到 20% 的溢酬。' },
   fromYear: { en: 'Enter a year from 1871 on.', zh: '請輸入 1871 年以後的年份。' },
   horizonMonths: { en: 'Enter whole months from 12 to 240.', zh: '請輸入 12 到 240 的整數月數。' },
   percentile: { en: 'Enter a percentile from 0 to 100.', zh: '請輸入 0 到 100 的百分位。' },
@@ -928,6 +929,47 @@ export function parseRegressionForm(raw: RawForm, windows: readonly number[], to
     currency: currency ?? 'local',
     blumeWeight: blumeWeight ?? 0.67,
     riskFree: { TWD: twd ?? 0, USD: usd ?? 0 },
+    checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// F11 CAPM cost of equity (Phase 2, step 3)
+// ---------------------------------------------------------------------------
+
+export interface CapmSettingsInput {
+  beta: 'adjusted' | 'raw';
+  erpSource: 'damodaran' | 'manual';
+  /** Fractions a year. */
+  erpManual: number;
+  /** By market: the yield used until its series loads, and the country risk premium. */
+  markets: Record<string, { riskFree: number; countryPremium: number }>;
+  /** Today when "checked today" is ticked, else the date it was checked before. */
+  checked: string | null;
+}
+
+/** The cost of equity's settings in percent: the ERP and, per market, the fallback yield (rf_US) and the country premium (crp_US). */
+export function parseCapmForm(raw: RawForm, markets: readonly string[], today: string): Parsed<CapmSettingsInput, string> {
+  const errors: FieldErrors<string> = {};
+  const beta = oneOf(raw['beta'], ['adjusted', 'raw'] as const);
+  if (!beta) errors['beta'] = MESSAGES.choice;
+  const erpSource = oneOf(raw['erpSource'], ['damodaran', 'manual'] as const);
+  if (!erpSource) errors['erpSource'] = MESSAGES.choice;
+  const erpManual = ratePercent(raw['erpManual'], 0, 20);
+  if (erpManual === undefined || erpManual <= 0) errors['erpManual'] = MESSAGES.premium;
+  const values: CapmSettingsInput['markets'] = {};
+  for (const market of markets) {
+    const riskFree = ratePercent(raw[`rf_${market}`], -5, 30);
+    if (riskFree === undefined) errors[`rf_${market}`] = MESSAGES.riskFree;
+    const countryPremium = ratePercent(raw[`crp_${market}`], 0, 20);
+    if (countryPremium === undefined) errors[`crp_${market}`] = MESSAGES.premium;
+    values[market] = { riskFree: riskFree ?? 0, countryPremium: countryPremium ?? 0 };
+  }
+  return finish(errors, () => ({
+    beta: beta ?? 'adjusted',
+    erpSource: erpSource ?? 'damodaran',
+    erpManual: erpManual ?? 0,
+    markets: values,
     checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
 }

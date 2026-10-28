@@ -1062,6 +1062,62 @@ await step('regression: compare up to five against one index, each β with its 9
   check(/Setting[\s\S]*regression/.test(await body()), 'the settings change in the edit history');
 });
 
+/** A stock's row on the Cost of equity page: its cells' text. */
+const costRow = async (ticker) => (await page.locator('#stocks tbody tr', { hasText: ticker }).first().locator('td').allInnerTexts()).map((cell) => cell.replace(/\s+/g, ' ').trim());
+const pct = (text) => Number(String(text).replace(/[^\d.−-]/g, '').replace('−', '-'));
+
+await step("cost of equity: each market's 10-year yield and Damodaran's ERP, every stock's β and E(R) worked out (F11)", async () => {
+  await page.goto(`${BASE}/capm`);
+  // Seed: US 10-year 5.00% (2026-10), Taiwan 1.96% (2026-08), ERP 3.70% (2026-10), Taiwan's premium 0.78%.
+  check((await fact('R_f US')).includes('5.00%') && (await fact('R_f US')).includes('2026-10'), `US R_f, got ${await fact('R_f US')}`);
+  check((await fact('R_f Taiwan')).includes('1.96%') && (await fact('R_f Taiwan')).includes('2026-08'), `Taiwan R_f, got ${await fact('R_f Taiwan')}`);
+  check((await fact('ERP')).includes('3.70%') && (await fact('ERP')).includes('Damodaran'), `ERP, got ${await fact('ERP')}`);
+  check((await fact('CRP Taiwan')).includes('0.78%'), `Taiwan's premium, got ${await fact('CRP Taiwan')}`);
+  check(/E\(R\s*i\s*\) = R\s*f\s*\+ β\s*i\s*\(ERP \+ CRP\)/.test(await page.locator('.equation').innerText()), `the formula, got ${await page.locator('.equation').innerText()}`);
+  // The demo stocks have no saved β, so it is worked out from their weekly demo closes; E(R) multiplies out.
+  // 2330 is held (the CSV import sold AAPL), and comes first.
+  const aapl = await costRow('AAPL');
+  const tsmc = await costRow('2330');
+  console.log(`  AAPL ${aapl.join(' | ')}\n  2330 ${tsmc.join(' | ')}`);
+  check(aapl.join(' | ').startsWith('AAPL Apple Inc. | US 美國 | 1.20 vs SPX · live') && aapl.slice(3).join(' | ') === '5.00% | 3.70% | 9.43%', `AAPL against the S&P 500, live, not held; got ${aapl.join(' | ')}`);
+  check(tsmc[0]?.includes('held') && tsmc[2]?.startsWith('0.85 vs TAIEX') && tsmc.slice(3).join(' | ') === '1.96% | 4.48% | 5.75%', `2330 against TAIEX, ERP + CRP 4.48%; got ${tsmc.join(' | ')}`);
+  check((await page.locator('#stocks tbody tr').first().innerText()).includes('2330'), 'the held stock first');
+  // The worked-out lines carry β to three decimals, so each multiplies out at the precision shown
+  // (within the rounding of β and of the result: 0.0005 × the premium + 0.005 points).
+  await page.getByText('Each figure worked out').click();
+  const lines = await page.locator('#stocks .formula li').allInnerTexts();
+  const aaplLine = lines.find((line) => line.startsWith('AAPL:')) ?? '';
+  const tsmcLine = lines.find((line) => line.startsWith('2330:')) ?? '';
+  const [, b1, r1] = /^AAPL: 5\.00% \+ (\d\.\d{3}) × 3\.70% = (\d+\.\d\d)%$/.exec(aaplLine) ?? [];
+  const [, b2, r2] = /^2330: 1\.96% \+ (\d\.\d{3}) × \(3\.70% \+ 0\.78%\) = (\d+\.\d\d)%$/.exec(tsmcLine) ?? [];
+  check(b1 && Math.abs(5 + Number(b1) * 3.7 - Number(r1)) < 0.0075 && r1 === '9.43', `AAPL worked out, got ${aaplLine}`);
+  check(b2 && Math.abs(1.96 + Number(b2) * 4.48 - Number(r2)) < 0.0075 && r2 === '5.75', `2330 worked out, got ${tsmcLine}`);
+  await snap('capm');
+  await docShot('capm', page);
+
+  // A typed ERP replaces Damodaran's, and the change is logged; then back to Damodaran's.
+  await page.locator('#settings summary').click();
+  await page.locator('#settings select[name=erpSource]').selectOption('manual');
+  await page.fill('#settings input[name=erpManual]', '5');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/capm?saved=settings**');
+  check((await fact('ERP')).includes('5.00%') && (await fact('ERP')).includes('typed'), `the typed ERP, got ${await fact('ERP')}`);
+  // AAPL at 5.00% + β × 5.00%, with β as worked out above.
+  const typed = await costRow('AAPL');
+  check(Math.abs(5 + Number(b1) * 5 - pct(typed[5])) < 0.0075, `AAPL at the typed ERP, got ${typed[5]}`);
+  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'checked today');
+  // From the plain page, so the save's redirect is a navigation to wait for.
+  await page.goto(`${BASE}/capm`);
+  await page.locator('#settings summary').click();
+  await page.locator('#settings select[name=erpSource]').selectOption('damodaran');
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/capm?saved=settings**');
+  check((await fact('ERP')).includes('3.70%'), `Damodaran's ERP again, got ${await fact('ERP')}`);
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*capm/.test(await body()), 'the settings change in the edit history');
+});
+
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
 // job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
 const pushes = [];
@@ -1232,7 +1288,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1258,7 +1314,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1289,7 +1345,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/costs') await page.locator('#fund-choices .chart svg').waitFor();
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1394,6 +1450,22 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const spx = await figures('#vs-SPX');
     const value = Number((spx[0] ?? '').split(' ')[0]);
     check(value > 0.6 && value < 1.3, `a plausible β for VT against the S&P 500 on live closes, got ${spx[0]}`);
+  });
+
+  await step("cost of equity after the job: the 10-year yields and Damodaran's ERP loaded live, 2330's β saved for the month (F11)", async () => {
+    await page.goto(`${BASE}/data`);
+    const series = (await page.locator('#market-series').innerText()).replace(/\s+/g, ' ');
+    check(/us_treasury_10y .*? \d{4}-\d{2} [\d.]+% (FRED|US Treasury)/.test(series), `the US 10-year loaded live, got ${series}`);
+    check(/tw_govt_10y .*? \d{4}-\d{2} [\d.]+% Central Bank of the ROC/.test(series), `Taiwan's 10-year loaded live, got ${series}`);
+    check(/us_implied_erp .*? \d{4}-\d{2} [\d.]+% Damodaran Online/.test(series), `Damodaran's ERP loaded live, got ${series}`);
+    await page.goto(`${BASE}/capm`);
+    // 2330 is held, so this month's refresh saved its β on live closes.
+    const tsmc = await costRow('2330');
+    console.log(`  2330 ${tsmc.join(' | ')}`);
+    check(tsmc[2]?.includes(`saved ${taipeiToday}`), `2330's β from this month's refresh, got ${tsmc[2]}`);
+    const rate = pct(tsmc[5]);
+    check(rate > 2 && rate < 15, `a plausible cost of equity for 2330, got ${tsmc[5]}`);
+    await snap('capm-after-job');
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {
