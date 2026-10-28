@@ -17,7 +17,7 @@ npm run check:supabase
 
 - `npm install`：安裝套件（第二階段第 1 步起含讀 Excel 的 `xlsx`）。
 - `npx supabase db push`：列出新的 migration（每個 PR 的說明都會寫出），輸入 `Y` 套用。migration 只新增資料表、設定或欄位，不會改動你的資料。
-- `npm run check:supabase`：每張資料表與檢視表都要 ✅；第二階段第 5 步（N3）之後是 **33 項**（新增 `company_profiles`、`red_flag_events`、`red_flag_entries`）。出現「找不到資料表，請先執行 db push」代表上一行還沒成功。
+- `npm run check:supabase`：每張資料表與檢視表都要 ✅；第二階段第 6 步（F14）之後是 **34 項**（第 5 步新增 `company_profiles`、`red_flag_events`、`red_flag_entries`，第 6 步新增 `fund_holdings`）。出現「找不到資料表，請先執行 db push」代表上一行還沒成功。
 
 ## 2. 啟動 App Start
 
@@ -53,6 +53,7 @@ npm run dev
   - 設定中的**排除產業**（PRD 第 9 節待決）預設是空的：填入你不想投資的產業代碼或名稱（例如「菸」），符合的公司會變紅燈。
   - 每週掃描後，持股燈號轉差會產生「紅旗惡化」提案提醒檢視；衛星持股轉紅會產生「紅旗轉紅」提案，並先準備好全數賣出的出場清單，可修改或略過。
   - 台股環境裁罰需要 GitHub secret `MOENV_API_KEY`（見 [每夜價格排程](nightly-job.md)）。
+- **合併透視**（F14）：「合併透視」頁把每檔基金依發行商的成分股展開，合併成每家公司的曝險（例如透過 VT、00692 與直接持有的台積電合併為一列），並列出國家、產業、幣別分布、基金間重疊度與各基金費用。成分股由每夜排程每月讀取一次（VT、VOO 來自 Vanguard，00692 來自富邦投信）；其他基金以整檔計算。設定中的**證交所產業別 → GICS 產業**是起始對應，請確認後勾選「今天已確認對應」；第 7 步的產業熱圖也會用到。
 - **複利計算機**：填好輸入後按「儲存為我的計畫」，之後每月底比較實際與計畫。
 
 ## 補充 Notes

@@ -1401,6 +1401,32 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   check(/AAPL [^\n]*Amber, 88% covered/.test(await page.locator('#dashboard-watchlist').innerText()), 'the light on the dashboard');
 });
 
+await step('look-through: every fund opened up, TSMC through VT, 00692 and held directly, countries, sectors, the funds and their overlap (F14)', async () => {
+  await page.goto(`${BASE}/look-through`);
+  await page.getByRole('heading', { level: 1, name: /^Look-through/ }).waitFor();
+  await page.locator('.chart-treemap svg').waitFor();
+  const tsmc = (await page.locator('#companies tr', { hasText: 'Taiwan Semiconductor' }).innerText()).replace(/\s+/g, ' ');
+  // The seed's invented files: 52.5% of 00692 and 1.6% of VT are TSMC; 2330 is also held directly.
+  check(/Taiwan · Information Technology/.test(tsmc) && ['00692 NT$', 'direct NT$', 'VT NT$'].every((route) => tsmc.includes(route)), `TSMC by route, got ${tsmc}`);
+  check((await fact('Looked through')).match(/\d+\.\d%/) !== null, `the share looked through, got ${await fact('Looked through')}`);
+  check(/00692 × VT\s+1\.6%/.test(await page.locator('#overlaps').innerText()), 'the overlap of 00692 and VT');
+  const countries = await page.locator('#countries').innerText();
+  check(countries.includes('Taiwan') && countries.includes('台灣') && countries.includes('Funds not looked through'), `countries, got ${countries}`);
+  check((await page.locator('#sectors').innerText()).includes('Information Technology'), 'sectors');
+  const funds = await page.locator('#funds').innerText();
+  check(/VT[\s\S]*2026-09-30 · Demo data · 8 lines[\s\S]*30% withholding/.test(funds) && /BNDW[\s\S]*None: counted whole/.test(funds), `the funds, got ${funds}`);
+  check((await body()).includes('合併透視') && (await body()).includes('公司曝險'), 'Chinese labels');
+  await snap('look-through');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('look-through', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // The map from TWSE industries to GICS sectors is a logged setting.
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/look-through?saved=settings**');
+  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'the map checked today');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -1421,7 +1447,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1447,7 +1473,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1498,7 +1524,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     // Its Fridays include market holidays the live feeds have no close for, and its quarter ends
     // are calendar ones where Apple's are not; left in, they would sit among the real figures.
     // Today's red-flag scan (the entry's) goes too, so the job scans both stocks against live feeds.
-    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo', 'fundamentals?source=eq.demo', `red_flags?flag_date=eq.${taipeiToday}`]) {
+    for (const path of ['prices?source=eq.demo&price_date=lt.2026-05-07', 'fx_rates?source=eq.demo&rate_date=lt.2026-05-07', 'index_prices?source=eq.demo', 'fundamentals?source=eq.demo', 'fund_holdings?source=eq.demo', `red_flags?flag_date=eq.${taipeiToday}`]) {
       const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
       check(res.ok, `DELETE ${path}: HTTP ${res.status}`);
     }
@@ -1634,6 +1660,22 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const apple = await page.locator('main table').first().innerText();
     check(new RegExp(`Going-concern opinion[\\s\\S]*Checked ${taipeiToday}`).test(apple), 'the going-concern search ran');
     await snap('red-flags-after-job');
+  });
+
+  await step("look-through after the job: VT's live file from Vanguard and 00692's from Fubon, with sectors (F14)", async () => {
+    await page.goto(`${BASE}/data`);
+    const files = (await page.locator('#holdings-files').innerText().catch(() => '')).replace(/\s+/g, ' ');
+    // The first run read them; its line may be under an older run, so the page is the check.
+    await page.goto(`${BASE}/look-through`);
+    const funds = (await page.locator('#funds').innerText()).replace(/\s+/g, ' ');
+    console.log(`  ${files || '(holdings line from an earlier run)'}\n  ${funds}`);
+    const vt = /VT NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · Vanguard · (\d+) lines, (\d+)% named/.exec(funds);
+    check(vt !== null && Number(vt[2]) > 5000 && Number(vt[3]) > 90, `VT's live file, got ${funds}`);
+    const tw = /00692 NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · Fubon · (\d+) lines/.exec(funds);
+    check(tw !== null && Number(tw[2]) > 50, `00692's live file, got ${funds}`);
+    const sectors = await page.locator('#sectors').innerText();
+    check(/Information Technology 資訊科技\s+\d+\.\d%/.test(sectors), `sectors from the live files, got ${sectors}`);
+    await snap('look-through-after-job');
   });
 
   await step('holdings after the job: gold valued at the gold price, closes dated', async () => {

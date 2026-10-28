@@ -10,11 +10,13 @@ import {
   LineChart,
   PieChart,
   ScatterChart,
+  TreemapChart,
   type BarSeriesOption,
   type CustomSeriesOption,
   type LineSeriesOption,
   type PieSeriesOption,
   type ScatterSeriesOption,
+  type TreemapSeriesOption,
 } from 'echarts/charts';
 import { GridComponent, MarkLineComponent, TooltipComponent, type GridComponentOption, type MarkLineComponentOption, type TooltipComponentOption } from 'echarts/components';
 import * as echarts from 'echarts/core';
@@ -24,10 +26,10 @@ import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, TreemapChart, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 export type Option = echarts.ComposeOption<
-  BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption
+  BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | TreemapSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption
 >;
 export type Chart = echarts.ECharts;
 

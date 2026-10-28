@@ -55,6 +55,8 @@ export interface RunDetail {
   valued: string[] | null;
   /** The companies scanned for red flags (N3) and the events the feeds found; null when none. */
   redFlags: { scanned: string[]; events: number } | null;
+  /** The funds' holdings files read (F14); `latest` is the file's date. Empty before. */
+  holdings: Record<string, Loaded>;
 }
 
 export interface JobRun {
@@ -106,6 +108,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     betas: typeof saved === 'number' && typeof runDate === 'string' ? { saved, runDate } : null,
     valued: Array.isArray(detail['valued']) ? lines(detail['valued']) : null,
     redFlags: readRedFlagRun(detail['redFlags']),
+    holdings: loadedMap(detail['holdings']),
   };
 }
 

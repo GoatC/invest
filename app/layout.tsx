@@ -81,6 +81,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/red-flags">
                 <Bi {...LABELS.redFlags} />
               </Link>
+              <Link href="/look-through">
+                <Bi {...LABELS.lookThrough} />
+              </Link>
               <Link href="/proposals">
                 <Bi {...LABELS.proposals} />
               </Link>

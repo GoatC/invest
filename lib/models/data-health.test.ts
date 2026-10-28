@@ -76,6 +76,7 @@ describe('parseRunDetail', () => {
       filings: { AAPL: { source: 'sec', rows: 28, latest: '2026-06-27' } },
       valued: ['AAPL'],
       redFlags: { scanned: ['AAPL'], events: 2 },
+      holdings: {},
     });
   });
 

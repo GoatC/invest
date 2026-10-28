@@ -6,6 +6,7 @@ import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
+import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
@@ -19,14 +20,14 @@ const KEY_MISSING = '23503';
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
-// the valuation workbench (step 4) fundamentals, and the red-flag indicator (step 5) company_profiles,
-// red_flag_events and red_flag_entries.
+// the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
+// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
-  'company_profiles', 'red_flag_events', 'red_flag_entries',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -46,7 +47,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events and red_flag_entries', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries and fund_holdings', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -648,6 +649,33 @@ describe('red-flag indicator (Phase 2, step 5)', () => {
   });
 });
 
+describe('look-through (Phase 2, step 6)', () => {
+  it('keeps each fund\'s holdings file for the owner to read and the job to write, as an array', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[]')`)), DENIED);
+    });
+    assert.equal(await errorCode(db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '{}')`)), CHECK_FAILED);
+    await db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[["US:X", "X", "X", "US", "USD", null, "bond", 1]]')`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select jsonb_array_length(constituents) from public.fund_holdings where fund = 'BNDW'`), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.fund_holdings'), 0);
+    });
+    await db.query(`delete from public.fund_holdings where fund = 'BNDW'`);
+    assert.equal(await errorCode(db.query(`update public.company_profiles set sector = 'Chips' where ticker = 'AAPL'`)), CHECK_FAILED);
+  });
+
+  it('seeds the settings: VT and VOO from Vanguard, 00692 from Fubon, a GICS sector for every TWSE industry', async () => {
+    const settings = readLookThroughSettings(await scalar(db, `select value from public.config where key = 'look_through'`));
+    assert.ok(settings);
+    assert.deepEqual(Object.keys(settings.sources).sort(), ['00692', 'VOO', 'VT']);
+    assert.equal(settings.twSectors['24'], 'Information Technology');
+    assert.equal(settings.twSectors['17'], 'Financials');
+    assert.equal(Object.keys(settings.twSectors).length, 36);
+  });
+});
+
 describe('windfall planner (Phase 2, step 1)', () => {
   it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
     await as(db, 'owner', async (tx) => {
@@ -770,6 +798,7 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.fundamentals where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.company_profiles where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.red_flag_events where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.fund_holdings where source <> 'demo'`), 0);
   });
 
   it('invents two green weekly red-flag scans (N3), and an auditor change for AAPL after them', async () => {

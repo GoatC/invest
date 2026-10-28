@@ -7,6 +7,7 @@ import type { Bilingual } from './i18n';
 import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './models/costs';
 import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
+import type { LookThroughSettings } from './models/look-through';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
@@ -82,6 +83,9 @@ export const MESSAGES = {
   scanDays: { en: 'Enter whole days from 1 to 90.', zh: '請輸入 1 到 90 的整數天數。' },
   score: { en: 'Enter a score, e.g. −1.78 or 2.99.', zh: '請輸入分數，例如 −1.78 或 2.99。' },
   industryCodes: { en: 'List two-digit TWSE industry codes, e.g. 24, 28.', zh: '請列出兩位數的證交所產業別代碼，例如 24、28。' },
+  topCompanies: { en: 'Enter a whole number from 5 to 100.', zh: '請輸入 5 到 100 的整數。' },
+  codeSectors: { en: 'One per line: a TWSE industry code, "=", a GICS sector, e.g. 24 = Information Technology.', zh: '每行一個：證交所產業別代碼、「=」、GICS 產業，例如 24 = 資訊科技。' },
+  fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -1232,3 +1236,54 @@ export function parseFlagSettingsForm(raw: RawForm, current: RedFlagSettings, to
     lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// The combined look-through (F14, Phase 2 step 6)
+// ---------------------------------------------------------------------------
+
+export type LookThroughField = 'topCompanies' | 'refreshDays' | 'twSectors' | 'fundCountry';
+
+/** "24 = Information Technology", one per line, to {"24": "Information Technology"}; the Chinese sector names are read too. */
+export function parseCodeSectors(raw: string | undefined, sectors: ReadonlyMap<string, string>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^(\d{1,2})\s*[=:：]\s*(.+)$/.exec(line);
+    const sector = match ? sectors.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!match || !sector) return undefined;
+    out[(match[1] as string).padStart(2, '0')] = sector;
+  }
+  return out;
+}
+
+/** "BIL = US", one per line, to {"BIL": "US"}. */
+export function parseFundCountries(raw: string | undefined): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z0-9.-]{1,12})\s*[=:：]\s*([A-Za-z]{2})$/.exec(line);
+    if (!match) return undefined;
+    out[(match[1] as string).toUpperCase()] = (match[2] as string).toUpperCase();
+  }
+  return out;
+}
+
+/** config look_through: companies named, days between holdings files, each TWSE industry's sector, each whole fund's country. */
+export function parseLookThroughForm(raw: RawForm, current: LookThroughSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<LookThroughSettings, LookThroughField> {
+  const errors: FieldErrors<LookThroughField> = {};
+  const topCompanies = wholeIn(raw['topCompanies'], 5, 100);
+  if (topCompanies === undefined) errors.topCompanies = MESSAGES.topCompanies;
+  const refreshDays = wholeIn(raw['refreshDays'], 1, 90);
+  if (refreshDays === undefined) errors.refreshDays = MESSAGES.scanDays;
+  const twSectors = parseCodeSectors(raw['twSectors'], sectorNames);
+  if (!twSectors) errors.twSectors = MESSAGES.codeSectors;
+  const fundCountry = parseFundCountries(raw['fundCountry']);
+  if (!fundCountry) errors.fundCountry = MESSAGES.fundCountries;
+  return finish(errors, () => ({
+    ...current,
+    topCompanies: topCompanies as number,
+    refreshDays: refreshDays as number,
+    twSectors: twSectors as Record<string, string>,
+    fundCountry: fundCountry as Record<string, string>,
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+

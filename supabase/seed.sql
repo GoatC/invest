@@ -246,11 +246,11 @@ insert into public.market_series (series, obs_month, value, source) values
 -- two weekly scans, both green. AAPL's invented 8-K auditor change, dated after them, turns its
 -- light amber at the next scan, so RED_FLAG_WORSENS then has a review to prompt; 2330 stays green.
 -- All invented, labelled demo; 2330's audit firm is left for the TWSE profile to fill.
-insert into public.company_profiles (ticker, industry_code, industry, sic, auditor, business_id, checked, source) values
+insert into public.company_profiles (ticker, industry_code, industry, sic, auditor, business_id, checked, source, sector) values
   ('AAPL', '3571', 'Electronic Computers', 3571, null, null,
-   '{"auditor_change": {"on": "2026-10-18"}, "restatement": {"on": "2026-10-18"}, "going_concern": {"on": "2026-10-18"}}', 'demo'),
+   '{"auditor_change": {"on": "2026-10-18"}, "restatement": {"on": "2026-10-18"}, "going_concern": {"on": "2026-10-18"}}', 'demo', 'Information Technology'),
   ('2330', '24', '半導體業', null, null, null,
-   '{"auditor_change": {"on": "2026-10-18", "since": "2026-10-11"}, "restatement": {"on": "2026-10-18", "since": "2026-10-11"}, "going_concern": {"on": "2026-10-18", "since": "2026-10-11"}, "environmental_penalties": {"on": "2026-10-18"}}', 'demo');
+   '{"auditor_change": {"on": "2026-10-18", "since": "2026-10-11"}, "restatement": {"on": "2026-10-18", "since": "2026-10-11"}, "going_concern": {"on": "2026-10-18", "since": "2026-10-11"}, "environmental_penalties": {"on": "2026-10-18"}}', 'demo', 'Information Technology');
 
 insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values
   ('AAPL', 'auditor_change', '2026-10-20', 'demo', 'demo-8k-401', '8-K Item 4.01 (demo, invented 示範虛構)');
@@ -268,3 +268,24 @@ select s.ticker, s.flag_date, i.indicator,
        case when s.ticker = 'AAPL' then 87.5 else 100 end
 from (values ('AAPL', date '2026-10-11'), ('AAPL', date '2026-10-18'), ('2330', date '2026-10-11'), ('2330', date '2026-10-18')) as s (ticker, flag_date)
 cross join unnest(array['beneish_m', 'altman_z', 'cash_flow_vs_earnings', 'auditor_change', 'going_concern', 'restatement', 'governance_rating', 'environmental_penalties', 'excluded_business']) as i (indicator);
+
+-- The look-through (F14): invented holdings files for the two demo funds with one, cut down to a
+-- few lines each (weights as fractions; the rest of each fund is left unnamed), so TSMC shows
+-- through VT, through 00692 and held directly. Real files come from the nightly job.
+insert into public.fund_holdings (fund, as_of, source, constituents) values
+  ('VT', '2026-09-30', 'demo', '[
+     ["US:NVDA", "NVIDIA Corp. (demo)", "NVDA", "US", "USD", "Information Technology", "equity", 0.045],
+     ["US:AAPL", "Apple Inc. (demo)", "AAPL", "US", "USD", "Information Technology", "equity", 0.04],
+     ["US:MSFT", "Microsoft Corp. (demo)", "MSFT", "US", "USD", "Information Technology", "equity", 0.038],
+     ["US:AMZN", "Amazon.com Inc. (demo)", "AMZN", "US", "USD", "Consumer Discretionary", "equity", 0.022],
+     ["US:JPM", "JPMorgan Chase & Co. (demo)", "JPM", "US", "USD", "Financials", "equity", 0.009],
+     ["TW:2330", "Taiwan Semiconductor Manufacturing (demo)", "2330", "TW", "TWD", "Information Technology", "equity", 0.016],
+     ["JP:7203", "Toyota Motor Corp. (demo)", "7203", "JP", "JPY", null, "equity", 0.003],
+     ["GB:AZN", "AstraZeneca plc (demo)", "AZN", "GB", "GBP", null, "equity", 0.004]
+   ]'),
+  ('00692', '2026-10-28', 'demo', '[
+     ["TW:2330", "台積電（示範）", "2330", "TW", "TWD", "Information Technology", "equity", 0.525],
+     ["TW:2454", "聯發科（示範）", "2454", "TW", "TWD", "Information Technology", "equity", 0.057],
+     ["TW:2308", "台達電（示範）", "2308", "TW", "TWD", "Information Technology", "equity", 0.034],
+     ["TW:2881", "富邦金（示範）", "2881", "TW", "TWD", "Financials", "equity", 0.03]
+   ]');

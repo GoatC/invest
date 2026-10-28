@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadFilingTickers, loadLookThroughPlan, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
@@ -9,7 +9,8 @@ import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import type { FeedEvent } from '../feeds/redflags.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
-import type { FundamentalRow, JobRun, Security, Store } from './job.ts';
+import { packConstituent } from '../../../lib/models/look-through.ts';
+import type { FundamentalRow, FundFileRow, JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
 const BATCH = 500;
@@ -136,6 +137,22 @@ export function supabaseStore(client: SupabaseClient): Store {
       }
     },
     scanRedFlags: (today, tickers) => scanRedFlags(client, today, tickers),
+    lookThroughPlan: (today) => loadLookThroughPlan(client, today),
+    async saveFundFile(file: FundFileRow) {
+      const { error } = await client
+        .from('fund_holdings')
+        .upsert({ fund: file.fund, as_of: file.asOf, source: file.source, constituents: file.constituents.map(packConstituent), loaded_at: new Date().toISOString() }, { onConflict: 'fund' });
+      check('fund_holdings', error);
+    },
+    async saveSectors(rows) {
+      for (const row of rows) {
+        const { data, error } = await client.from('company_profiles').update({ sector: row.sector }).eq('ticker', row.ticker).select('ticker');
+        check('company_profiles', error);
+        if ((data ?? []).length > 0) continue;
+        const { error: insertError } = await client.from('company_profiles').insert({ ticker: row.ticker, sector: row.sector, source: row.market === 'TW' ? 'twse' : 'ssga' });
+        check('company_profiles', insertError);
+      }
+    },
     revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
     performanceInput: (end) => loadPerformanceInput(client, end),

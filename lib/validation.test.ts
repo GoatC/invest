@@ -34,6 +34,7 @@ import {
   withholdingField,
   parseValuationSettingsForm,
   listField,
+  parseLookThroughForm,
   parseFlagEntryForm,
   parseFlagSettingsForm,
 } from './validation';
@@ -575,5 +576,23 @@ describe('red-flag forms (N3)', () => {
     const bad = parseFlagSettingsForm({ ...raw, zAmber: '1', manufacturing: 'semis' }, current, '2026-10-28');
     assert.ok(!bad.ok && bad.errors.zAmber && bad.errors.manufacturing);
     assert.deepEqual(listField(' a，b、a\n\n'), ['a', 'b']);
+  });
+});
+
+describe('look-through form (F14)', () => {
+  const sectorNames = new Map([['information technology', 'Information Technology'], ['資訊科技', 'Information Technology'], ['financials', 'Financials']]);
+  const current = { sources: {}, fundCountry: {}, refreshDays: 28, topCompanies: 30, twSectors: {}, lastVerified: null };
+
+  it('reads the TWSE industry map in either language and the whole funds\' countries', () => {
+    const parsed = parseLookThroughForm({ topCompanies: '40', refreshDays: '28', twSectors: '24 = Information Technology\n17：Financials\n2 = 資訊科技', fundCountry: 'bil = us\n0050=TW', checked: 'on' }, current, sectorNames, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.twSectors, { '24': 'Information Technology', '17': 'Financials', '02': 'Information Technology' });
+    assert.deepEqual(parsed.value.fundCountry, { BIL: 'US', '0050': 'TW' });
+    assert.equal(parsed.value.lastVerified, '2026-10-28');
+  });
+
+  it('refuses an unknown sector, a bad country and too few companies', () => {
+    const parsed = parseLookThroughForm({ topCompanies: '3', refreshDays: '28', twSectors: '24 = Chips', fundCountry: 'BIL = USA' }, current, sectorNames, '2026-10-28');
+    assert.ok(!parsed.ok && parsed.errors.topCompanies && parsed.errors.twSectors && parsed.errors.fundCountry);
   });
 });

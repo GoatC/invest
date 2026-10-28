@@ -6,12 +6,13 @@ import * as XLSX from 'xlsx';
 import type { ProfileRecord } from '../../../lib/data.ts';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
+import { readLookThroughSettings } from '../../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
-import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type FundFileRow, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -84,6 +85,13 @@ const REPLIES: Record<string, string> = {
   'efts.sec.gov': JSON.stringify({ hits: { total: { value: 0 }, hits: [] } }),
   t187ap03_L: JSON.stringify([{ 公司代號: '2330', 產業別: '24', 營利事業統一編號: '22099131', 簽證會計師事務所: 'B 事務所' }]),
   t187ap04_L: JSON.stringify([{ 發言日期: '1151019', 發言時間: '170000', 公司代號: '2330', '主旨 ': '公告本公司重編財務報告', 說明: '' }]),
+  // The look-through's holdings files (F14): VT's 501 lines over two pages (cut down here), 00692 on Fubon's page.
+  'portfolio-holding/stock.json?start=1&': JSON.stringify({ size: 501, asOfDate: '2026-09-30T00:00:00-04:00', fund: { entity: [
+    { longName: 'Apple Inc.', ticker: 'AAPL', isin: 'US0378331005', percentWeight: '4.0' },
+    { longName: 'Taiwan Semiconductor Manufacturing Co. Ltd.', ticker: '2330', isin: 'TW0002330008', percentWeight: '1.5' },
+  ] } }),
+  'portfolio-holding/stock.json?start=501&': JSON.stringify({ size: 501, fund: { entity: [{ longName: 'Toyota Motor Corp.', ticker: '7203', isin: 'JP3633400001', percentWeight: '0.3' }] } }),
+  'websys.fsit.com.tw': '<p>資料日期：2026/10/28</p><table><tr><td>2330</td><td>台積電</td><td>1,000</td><td>2,000,000</td><td>52.5</td></tr></table>',
   'data.moenv.gov.tw': JSON.stringify([{ document_no: '40-115-070014', penalty_date: '2026-07-28', penalty_money: '6000', transgress_type: '事業廢棄物', fac_name: '台積電' }]),
   companyfacts: JSON.stringify({
     entityName: 'Apple Inc.',
@@ -104,7 +112,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'submissions/CIK', 'efts.sec.gov', 't187ap03_L', 't187ap04_L', 'data.moenv.gov.tw', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'portfolio-holding/stock.json?start=1&', 'portfolio-holding/stock.json?start=501&', 'websys.fsit.com.tw', 'submissions/CIK', 'efts.sec.gov', 't187ap03_L', 't187ap04_L', 'data.moenv.gov.tw', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -136,7 +144,14 @@ function erpWorkbook(): Uint8Array {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Start of month', 'S&P 500', 'T.Bond Rate', 'ERP (T12m)'], [44804, 7686.14, 0.0475, 0.0409], [44834, 7652, 0.0529, 0.037]]), 'Historical ERP');
   return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
 }
-const getBytes: GetBytes = async (url) => (url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
+/** A Select Sector SPDR holdings file: XLK holds AAPL; the others hold nothing the tests ask about. */
+function sectorWorkbook(url: string): Uint8Array {
+  const book = XLSX.utils.book_new();
+  const rows = [['Fund Name:', 'Select Sector SPDR'], [], ['Name', 'Ticker', 'Identifier', 'Weight'], ...(url.includes('-xlk.') ? [['APPLE INC', 'AAPL', '037833100', 14.6]] : [['OTHER', 'ZZZ', '', 1]])];
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'holdings');
+  return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
+}
+const getBytes: GetBytes = async (url) => (url.includes('ssga.com') ? sectorWorkbook(url) : url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
 const bytesDown: GetBytes = async () => {
   throw new FeedError('HTTP 403 from img1.wsimg.com');
 };
@@ -200,8 +215,22 @@ class MemoryStore implements Store {
       failRevalue?: boolean;
       /** The companies N3 lights (undefined before config red_flags), with the profile saved for each. */
       flags?: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }>;
+      /** The look-through's plan (F14); undefined before config look_through. */
+      look?: { due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> };
     } = {},
   ) {}
+  fundFiles: FundFileRow[] = [];
+  sectors: Array<{ ticker: string; market: string; sector: string }> = [];
+  async lookThroughPlan() {
+    const settings = readLookThroughSettings({ sources: {}, fund_country: {}, refresh_days: 28, top_companies: 30, tw_sectors: { '24': 'Information Technology' }, last_verified: null });
+    return this.options.look && settings ? { settings, ...this.options.look } : undefined;
+  }
+  async saveFundFile(file: FundFileRow) {
+    this.fundFiles.push(file);
+  }
+  async saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>) {
+    this.sectors.push(...rows);
+  }
   profiles: ProfileRecord[] = [];
   flagEvents: FeedEvent[] = [];
   /** When the red flags were scanned, and whether the rules had run by then. */
@@ -411,6 +440,44 @@ describe('red flags (N3)', () => {
     const before = new MemoryStore();
     await runNightly(deps(fakeGet().get, before));
     assert.deepEqual([before.profiles, before.scans], [[], []]);
+  });
+});
+
+describe('look-through (F14)', () => {
+  it("reads each due fund's file from its issuer, page by page, with the sectors of its lines, and the held stocks' sectors", async () => {
+    const store = new MemoryStore({
+      look: {
+        due: [
+          { fund: 'VT', source: 'vanguard', id: 'VT' },
+          { fund: '00692', source: 'fubon', id: '00692' },
+        ],
+        stocks: [
+          { ticker: 'AAPL', market: 'US', sector: null },
+          { ticker: '2330', market: 'TW', sector: 'Information Technology' },
+        ],
+      },
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.ok(!run.detail.errors.some((line) => line.includes('holdings')), JSON.stringify(run.detail.errors));
+    const vt = store.fundFiles.find((file) => file.fund === 'VT');
+    assert.deepEqual(vt?.constituents.map((row) => [row.key, row.sector, row.weight]), [
+      ['US:AAPL', 'Information Technology', 0.04],
+      ['TW:2330', 'Information Technology', 0.015],
+      ['JP:7203', null, 0.003],
+    ]);
+    assert.equal(vt?.asOf, '2026-09-30');
+    assert.deepEqual(store.fundFiles.find((file) => file.fund === '00692')?.constituents.map((row) => [row.key, row.weight]), [['TW:2330', 0.525]]);
+    assert.deepEqual(run.detail.holdings, { VT: { source: 'vanguard', rows: 3, latest: '2026-09-30' }, '00692': { source: 'fubon', rows: 1, latest: '2026-10-28' } });
+    // 2330's sector is already saved; AAPL's is new.
+    assert.deepEqual(store.sectors, [{ ticker: 'AAPL', market: 'US', sector: 'Information Technology' }]);
+  });
+
+  it('reads nothing when no file is due and every held stock has its sector', async () => {
+    const store = new MemoryStore({ look: { due: [], stocks: [{ ticker: '2330', market: 'TW', sector: 'Information Technology' }] } });
+    const { get, urls } = fakeGet();
+    await runNightly(deps(get, store));
+    assert.ok(!urls.some((url) => url.includes('vanguard') || url.includes('fsit')));
+    assert.deepEqual([store.fundFiles, store.sectors], [[], []]);
   });
 });
 

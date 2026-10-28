@@ -161,7 +161,7 @@ function field(row: Record<string, unknown>, name: string): string {
 }
 
 /** Each listed company's industry, audit firm and business ID, for the tickers asked for. */
-export function twseProfiles(text: string, tickers: ReadonlySet<string>): Map<string, TwProfile> {
+export function twseProfiles(text: string, tickers: Pick<ReadonlySet<string>, 'has'>): Map<string, TwProfile> {
   const out = new Map<string, TwProfile>();
   for (const row of rows(text, 'TWSE company profiles')) {
     const ticker = field(row, '公司代號');
