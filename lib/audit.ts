@@ -17,6 +17,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   windfall_plan: { en: 'Windfall plan', zh: '大額資金計畫' },
   windfall_tranches: { en: 'Windfall tranche', zh: '大額資金分批' },
   red_flag_entries: { en: 'Red flag entry', zh: '紅旗紀錄' },
+  splits: { en: 'Stock split', zh: '股票分割' },
 };
 
 function text(value: unknown): string {
@@ -78,6 +79,11 @@ export function describeRow(table: string, row: Record<string, unknown> | null, 
       const indicator = INDICATOR[text(row['indicator']) as Indicator] ?? same(text(row['indicator']));
       return { en: `${text(row['ticker'])} ${indicator.en} ${text(row['as_of'])}: ${text(row['value'])}`, zh: `${text(row['ticker'])} ${indicator.zh} ${text(row['as_of'])}：${text(row['value'])}` };
     }
+    case 'splits':
+      return {
+        en: `${text(row['ticker'])} split ×${text(row['ratio'])} from ${text(row['ex_date'])}`,
+        zh: `${text(row['ticker'])} 自 ${text(row['ex_date'])} 起分割 ×${text(row['ratio'])}`,
+      };
     default:
       return same(text(row['ticker']) || rowKey);
   }

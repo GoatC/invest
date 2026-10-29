@@ -12,6 +12,7 @@ import { twd } from '@/lib/format';
 import { bi, FLOW_TYPE, LABELS, POOL, type Bilingual } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { buildPositions } from '@/lib/models/positions';
+import { restateTrades } from '@/lib/models/splits';
 import type { FlowType, FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { FLOW_TYPES, parseCashFlow, parseNumber, type CashFlowField } from '@/lib/validation';
@@ -48,7 +49,7 @@ export function CashFlowForm({ data, rates, today, id, initial }: { data: Holdin
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
   const history = useMemo(() => rateHistory(rates), [rates]);
-  const positions = useMemo(() => buildPositions(data.trades).positions, [data.trades]);
+  const positions = useMemo(() => buildPositions(restateTrades(data.trades, data.splits)).positions, [data.trades, data.splits]);
   const type = isFlowType(values.type) ? values.type : 'contribution';
   const currency = values.currency.trim().toUpperCase();
   const security = type === 'dividend' ? securities.get(values.ticker.trim().toUpperCase()) : undefined;

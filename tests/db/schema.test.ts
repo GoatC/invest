@@ -27,13 +27,13 @@ const KEY_MISSING = '23503';
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
-// (Phase 3, step 1) adds simulation_runs.
+// (Phase 3, step 1) adds simulation_runs, and N5's stock splits splits.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
-  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -53,7 +53,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings and simulation_runs', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs and splits', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -958,5 +958,31 @@ describe('stress test (Phase 3, step 3)', () => {
     const gfc = settings.scenarios[0]?.returns['us_equity'] ?? [];
     const level = gfc.slice(0, 18).reduce((acc, value) => acc * (1 + value), 1);
     assert.ok(level < 0.65 && level > 0.45, `${level}`);
+  });
+});
+
+describe('stock splits (N5)', () => {
+  it('keep one split per security a day, a ratio above 0 that changes the share count, and log edits and deletes', async () => {
+    const split = (values: string) => db.query(`insert into public.splits (ticker, ex_date, ratio) values ${values}`);
+    assert.equal(await errorCode(split(`('AAPL', '2026-07-10', 1)`)), CHECK_FAILED);
+    assert.equal(await errorCode(split(`('AAPL', '2026-07-10', 0)`)), CHECK_FAILED);
+    assert.equal(await errorCode(split(`('NOPE', '2026-07-10', 2)`)), KEY_MISSING);
+    assert.equal(await errorCode(split(`('AAPL', '2026-06-10', 4), ('AAPL', '2026-06-10', 2)`)), '23505');
+    await as(db, 'owner', async (tx) => {
+      const id = await scalar<number>(tx, `insert into public.splits (ticker, ex_date, ratio) values ('AAPL', '2026-06-10', 4) returning id`);
+      await tx.query('update public.splits set ratio = 0.1 where id = $1', [id]);
+      await tx.query('delete from public.splits where id = $1', [id]);
+      const { rows } = await tx.query(`select action, old_row ->> 'ratio' as old_ratio, changed_by from public.audit_log where table_name = 'splits' order by id`);
+      assert.deepEqual(rows, [
+        { action: 'update', old_ratio: '4', changed_by: OWNER_ID },
+        { action: 'delete', old_ratio: '0.1', changed_by: OWNER_ID },
+      ]);
+    });
+  });
+
+  it('stay closed to a stranger', async () => {
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.splits (ticker, ex_date, ratio) values ('AAPL', '2026-06-10', 4)`)), DENIED);
+    });
   });
 });

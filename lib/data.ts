@@ -44,6 +44,7 @@ import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type 
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
+import { restateCloses, restateTrades, type Split } from './models/splits';
 import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
 import { MARKET_SERIES, readAcceleration, type Acceleration } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
@@ -324,9 +325,37 @@ export function fxMaxAgeDays(value: unknown): number | null {
   return typeof days === 'number' && Number.isInteger(days) && days >= 0 ? days : null;
 }
 
+// ---------------------------------------------------------------------------
+// Stock splits (N5)
+// ---------------------------------------------------------------------------
+
+interface SplitRow {
+  id: number;
+  ticker: string;
+  ex_date: string;
+  ratio: number;
+  note: string | null;
+}
+
+/** A saved split, with its note. */
+export interface SplitRecord extends Split {
+  id: number;
+  note: string | null;
+}
+
+const SPLIT_COLUMNS = 'id, ticker, ex_date, ratio, note';
+
+/** Every split entered, oldest first. */
+export async function loadSplits(supabase: SupabaseClient): Promise<SplitRecord[]> {
+  const found = await rows<SplitRow>('splits', supabase.from('splits').select(SPLIT_COLUMNS).order('ex_date').order('id'));
+  return found.map((row) => ({ id: row.id, ticker: row.ticker, exDate: row.ex_date, ratio: Number(row.ratio), note: row.note }));
+}
+
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */
 export interface HoldingsData extends PortfolioData {
+  /** As saved, in the units they were traded in; the models restate them with `splits`. */
   trades: TransactionRecord[];
+  splits: SplitRecord[];
   securities: SecurityRecord[];
   caps: Caps;
   fxMaxGap: number | null;
@@ -334,7 +363,7 @@ export interface HoldingsData extends PortfolioData {
 }
 
 export async function loadHoldingsData(supabase: SupabaseClient): Promise<HoldingsData> {
-  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules, settings] = await Promise.all([
+  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules, settings, splits] = await Promise.all([
     allRows<TransactionRow>('transactions', (from, to) =>
       supabase.from('transactions').select(TRANSACTION_COLUMNS).order('trade_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
     ),
@@ -345,9 +374,11 @@ export async function loadHoldingsData(supabase: SupabaseClient): Promise<Holdin
     rows<ManualAssetRow>('manual_assets', supabase.from('manual_assets').select(MANUAL_ASSET_COLUMNS).order('id')),
     rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])),
     rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'fx_rate_check')),
+    loadSplits(supabase),
   ]);
   return {
     trades: transactions.map(toTransaction),
+    splits,
     securities,
     assetClasses,
     prices: prices.map((row): PriceQuote => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close) })),
@@ -638,7 +669,7 @@ const GOLD_PROXY = 'GLDM';
  * nightly job's NAV snapshots both read it.
  */
 export async function loadPerformanceInput(supabase: SupabaseClient, end: string): Promise<PerformanceInput> {
-  const [transactions, dividends, manualAssets, audit, securities, assetClasses] = await Promise.all([
+  const [transactions, dividends, manualAssets, audit, securities, assetClasses, splits] = await Promise.all([
     allRows<TransactionRow>('transactions', (from, to) => supabase.from('transactions').select(TRANSACTION_COLUMNS).order('trade_date').order('id').range(from, to)),
     allRows<CashFlowRow>('cash_flows', (from, to) => supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).eq('type', 'dividend').order('flow_date').order('id').range(from, to)),
     rows<ManualAssetRow & { created_at: string }>('manual_assets', supabase.from('manual_assets').select(`${MANUAL_ASSET_COLUMNS}, created_at`).order('id')),
@@ -653,8 +684,10 @@ export async function loadPerformanceInput(supabase: SupabaseClient, end: string
     ),
     loadSecurities(supabase),
     rows<{ target_weight: number; benchmark_ticker: string | null }>('asset_classes', supabase.from('asset_classes').select('target_weight, benchmark_ticker')),
+    loadSplits(supabase),
   ]);
-  const trades = transactions.map(toTransaction);
+  // In today's units, trades and quoted closes alike, so a split moves no value from one day to the next.
+  const trades = restateTrades(transactions.map(toTransaction), splits);
   const histories = manualHistories(
     manualAssets.map((row) => ({ ...toManualAsset(row), createdAt: row.created_at })),
     audit.map((row) => ({ rowKey: row.row_key, action: row.action, changedAt: row.changed_at, oldRow: row.old_row, newRow: row.new_row })),
@@ -684,7 +717,10 @@ export async function loadPerformanceInput(supabase: SupabaseClient, end: string
   ]);
   return {
     ...input,
-    prices: prices.map((row) => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close), adjClose: row.adj_close === null ? null : Number(row.adj_close) })),
+    prices: restateCloses(
+      prices.map((row) => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close), adjClose: row.adj_close === null ? null : Number(row.adj_close) })),
+      splits,
+    ),
     rates: rates.map((row) => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
   };
 }
@@ -1003,7 +1039,7 @@ export function orderSettings(value: unknown): OrderSettings {
 
 /** The latest close and TWD rate of every security that has both, with the decimals its orders may have. */
 export function engineQuotes(data: PortfolioData, orders: OrderSettings = { fractionalMarkets: [], shareDecimals: 0 }): Map<string, EngineQuote> {
-  const prices = latestPrices(data.prices, data.trades);
+  const prices = latestPrices(data.prices, restateTrades(data.trades, data.splits));
   const fx = latestFx(data.fx, data.trades);
   const out = new Map<string, EngineQuote>();
   for (const security of data.securities) {

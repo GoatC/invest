@@ -9,6 +9,7 @@ import { ACTION_MESSAGES, formFields, parseId, saveFailed, shortfallMessage, typ
 import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, previewTrade } from '@/lib/models/portfolio';
 import { buildPositions } from '@/lib/models/positions';
+import { restateTrades } from '@/lib/models/splits';
 import { parseTrade, type FieldErrors, type TradeField } from '@/lib/validation';
 
 export interface TradeFormState {
@@ -57,7 +58,8 @@ export async function deleteTrade(_previous: DeleteState, formData: FormData): P
   if (data instanceof DataError) return { message: saveFailed(data.detail) };
   if (id === undefined || !data.trades.some((trade) => trade.id === id)) return { message: ACTION_MESSAGES.notFound };
 
-  const [shortfall] = addedShortfalls(buildPositions(data.trades).shortfalls, buildPositions(data.trades.filter((trade) => trade.id !== id)).shortfalls);
+  const trades = restateTrades(data.trades, data.splits);
+  const [shortfall] = addedShortfalls(buildPositions(trades).shortfalls, buildPositions(trades.filter((trade) => trade.id !== id)).shortfalls);
   if (shortfall) return { message: shortfallMessage(shortfall) };
 
   const { error } = await supabase.from('transactions').delete().eq('id', id);

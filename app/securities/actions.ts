@@ -3,10 +3,13 @@
 import { redirect } from 'next/navigation';
 
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadSecurities, orDataError } from '@/lib/data';
-import { ACTION_MESSAGES, afterSecurityAdded, formFields, saveFailed, type DeleteState } from '@/lib/forms';
+import { DataError, loadAssetClasses, loadHoldingsData, loadSecurities, orDataError, type HoldingsData } from '@/lib/data';
+import { taipeiToday } from '@/lib/dates';
+import { ACTION_MESSAGES, afterSecurityAdded, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
-import { parseSecurity, type FieldErrors, type SecurityField } from '@/lib/validation';
+import { addedShortfalls, buildPortfolio } from '@/lib/models/portfolio';
+import type { Split } from '@/lib/models/splits';
+import { parseSecurity, parseSplitForm, type FieldErrors, type SecurityField, type SplitField } from '@/lib/validation';
 
 export interface SecurityFormState {
   errors: FieldErrors<SecurityField>;
@@ -75,8 +78,8 @@ export async function updateSecurity(_previous: SecurityFormState, formData: For
 }
 
 const IN_USE: Bilingual = {
-  en: 'This security is still in use (trades, prices, a benchmark or the watchlist), so it cannot be deleted.',
-  zh: '這檔證券仍在使用中（交易、價格、基準或觀察清單），因此無法刪除。',
+  en: 'This security is still in use (trades, prices, splits, a benchmark or the watchlist), so it cannot be deleted.',
+  zh: '這檔證券仍在使用中（交易、價格、分割、基準或觀察清單），因此無法刪除。',
 };
 
 /** Deletes a security nothing refers to; the database refuses one that trades or prices still use. */
@@ -89,4 +92,56 @@ export async function deleteSecurity(_previous: DeleteState, formData: FormData)
   if (error) return { message: error.code === '23503' ? IN_USE : saveFailed(error.message) };
   if (!data || data.length === 0) return { message: ACTION_MESSAGES.notFound };
   redirect('/securities?saved=deleted');
+}
+
+// ---------------------------------------------------------------------------
+// Stock splits (N5)
+// ---------------------------------------------------------------------------
+
+export interface SplitFormState {
+  errors: FieldErrors<SplitField>;
+  message: Bilingual | null;
+}
+
+/** A sell the change would leave larger than the holding: the split or a trade around it is wrong. */
+function splitShortfall(data: HoldingsData, splits: readonly Split[]): Bilingual | null {
+  const [shortfall] = addedShortfalls(buildPortfolio(data).shortfalls, buildPortfolio({ ...data, splits }).shortfalls);
+  return shortfall
+    ? {
+        en: `This would leave the ${shortfall.tradeDate} sell of ${shortfall.ticker} larger than the holding: check the split's date and numbers.`,
+        zh: `這樣會使 ${shortfall.tradeDate} 賣出的 ${shortfall.ticker} 超過持有數量：請檢查分割的日期與股數。`,
+      }
+    : null;
+}
+
+const securityPage = (ticker: string) => `/securities/${encodeURIComponent(ticker)}`;
+
+/** Records a split; trades before its ex-date are then read in the new shares. */
+export async function addSplit(_previous: SplitFormState, formData: FormData): Promise<SplitFormState> {
+  const { supabase } = await requireSession();
+  const data = await orDataError(loadHoldingsData(supabase));
+  if (data instanceof DataError) return { errors: {}, message: saveFailed(data.detail) };
+  const parsed = parseSplitForm(formFields(formData), data.securities.map((security) => security.ticker), data.splits, taipeiToday());
+  if (!parsed.ok) return { errors: parsed.errors, message: ACTION_MESSAGES.checkFields };
+  const { ticker, exDate, ratio, note } = parsed.value;
+  const refused = splitShortfall(data, [...data.splits, { ticker, exDate, ratio }]);
+  if (refused) return { errors: {}, message: refused };
+  const { error } = await supabase.from('splits').insert({ ticker, ex_date: exDate, ratio, note });
+  if (error) return { errors: {}, message: saveFailed(error.message) };
+  redirect(`${securityPage(ticker)}?saved=split#splits`);
+}
+
+/** Deletes a split (the edit history keeps it) unless a later sell depends on it. */
+export async function deleteSplit(_previous: DeleteState, formData: FormData): Promise<DeleteState> {
+  const { supabase } = await requireSession();
+  const id = parseId(formFields(formData)['id']);
+  const data = await orDataError(loadHoldingsData(supabase));
+  if (data instanceof DataError) return { message: saveFailed(data.detail) };
+  const split = data.splits.find((one) => one.id === id);
+  if (id === undefined || !split) return { message: ACTION_MESSAGES.notFound };
+  const refused = splitShortfall(data, data.splits.filter((one) => one.id !== id));
+  if (refused) return { message: refused };
+  const { error } = await supabase.from('splits').delete().eq('id', id);
+  if (error) return { message: saveFailed(error.message) };
+  redirect(`${securityPage(split.ticker)}?saved=split-deleted#splits`);
 }

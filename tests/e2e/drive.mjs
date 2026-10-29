@@ -326,6 +326,34 @@ await step('securities: an edit is logged; one in use cannot be deleted, an unus
   check((await body()).includes('仍在使用中'), 'Chinese refusal');
 });
 
+await step('splits: a split restates the shares bought before it; a future one and a refused sell are explained; deleting puts it back (N5)', async () => {
+  const r1 = async () => {
+    await page.goto(`${BASE}/holdings`);
+    return fact('R1 AAPL');
+  };
+  check((await r1()).includes('9.7% > 5%'), 'R1 AAPL at the demo figure first');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
+  await page.goto(`${BASE}/securities/AAPL`);
+  await page.fill('input[name=exDate]', '2999-01-01');
+  await page.fill('input[name=newShares]', '2');
+  await page.getByRole('button', { name: /Add split/ }).click();
+  await page.getByText('once its ex-date arrives').waitFor();
+  await page.fill('input[name=exDate]', today);
+  await page.fill('input[name=newShares]', '2');
+  await page.getByRole('button', { name: /Add split/ }).click();
+  await page.waitForURL('**/securities/AAPL?saved=split#splits');
+  check((await body()).includes('each share became 2'), 'split listed');
+  await snap('split');
+  // Every demo AAPL share was bought before today, so twice the shares at the same close.
+  check((await r1()).includes('17.'), `R1 AAPL doubles with twice the shares, got ${await fact('R1 AAPL')}`);
+  await page.goto(`${BASE}/securities/AAPL`);
+  await page.locator('#splits').getByRole('button', { name: /Delete/ }).click();
+  await page.waitForURL('**/securities/AAPL?saved=split-deleted#splits');
+  check((await r1()).includes('9.7% > 5%'), 'R1 AAPL back at the demo figure');
+  await page.goto(`${BASE}/history`);
+  check((await body()).includes(`AAPL split ×2 from ${today}`), 'the deleted split stays in the edit history');
+});
+
 await step('CSV import: Big5 statement, title lines, guessed columns, every row explained', async () => {
   await page.goto(`${BASE}/import`);
   await page.getByLabel('Broker name').fill('國泰複委託（示範）');
