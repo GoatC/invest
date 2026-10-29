@@ -32,6 +32,7 @@ import { benchmarkWeights, buildSeries, firstDay, type PerformanceInput } from '
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
 import { brinson, monthInputs, sectorInputs, type ClassSpec, type MonthInput, type SatelliteStock, type SectorBenchmark } from './models/attribution';
 import { MarketHistory } from './models/market';
+import { fiveFactor, portfolioReturns, readFactorSettings, REGIONS, seriesName, type FactorFit, type FactorMonth, type FactorSettings, type Region } from './models/five-factor';
 import { readFrontierSettings, type FrontierSettings } from './models/frontier';
 import { readStressSettings, type ClassValue, type StressSettings } from './models/stress';
 import { readTimelineSettings } from './models/timeline';
@@ -437,7 +438,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
     rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
     Promise.all(
-      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES), ...Object.values(CAPM_SERIES)].map((name) =>
+      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES), ...Object.values(CAPM_SERIES), ...REGIONS.map((region) => seriesName(region, 'mkt'))].map((name) =>
         rows<{ series: string; obs_month: string; value: number; source: string }>(
           'market_series',
           supabase.from('market_series').select('series, obs_month, value, source').eq('series', name).order('obs_month', { ascending: false }).limit(1),
@@ -2559,4 +2560,105 @@ export async function loadLastAttribution(supabase: SupabaseClient): Promise<{ p
   );
   const sum = (key: 'allocation' | 'selection' | 'interaction' | 'fx') => found.reduce((total, row) => total + Number(row[key]), 0);
   return { periodEnd: latest.period_end, savedAt: found.map((row) => row.created_at).sort().pop() ?? '', allocation: sum('allocation'), selection: sum('selection'), interaction: sum('interaction'), fx: sum('fx') };
+}
+
+// ---------------------------------------------------------------------------
+// N1 Fama-French five-factor mode (Phase 3, step 6)
+// ---------------------------------------------------------------------------
+
+/** One regression: a holding, or the whole portfolio, on a region's factors. */
+export interface FactorRow {
+  /** A ticker, or "portfolio". */
+  key: string;
+  name: string;
+  region: Region;
+  /** The weight in today's portfolio, 0 to 1; null for the portfolio itself. */
+  weight: number | null;
+  /** Undefined when there were too few months with returns and factors. */
+  fit: FactorFit | undefined;
+  /** Months with both a return and the region's factors. */
+  months: number;
+}
+
+export interface FactorData {
+  /** config factors; undefined before its migration. */
+  settings: FactorSettings | undefined;
+  rows: FactorRow[];
+  /** The newest month of each region's factors the job has loaded. */
+  loaded: Partial<Record<Region, string>>;
+  /** Held tickers left out of the portfolio's fit for want of a dollar return, and holdings with no ticker (gold, balances). */
+  left: string[];
+  noTicker: number;
+}
+
+export async function loadFactorData(supabase: SupabaseClient, today: string, years: number): Promise<FactorData> {
+  const settings = readFactorSettings((await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'factors')))[0]?.value);
+  if (!settings) return { settings, rows: [], loaded: {}, left: [], noTicker: 0 };
+  const holdings = await loadHoldingsData(supabase);
+  const held = buildPortfolio(holdings).holdings.filter((holding) => holding.ticker && holding.qty > 0 && (holding.valueTwd ?? 0) > 0);
+  const byTicker = new Map<string, number>();
+  for (const holding of held) byTicker.set(holding.ticker as string, (byTicker.get(holding.ticker as string) ?? 0) + (holding.valueTwd ?? 0));
+  const noTicker = buildPortfolio(holdings).holdings.filter((holding) => !holding.ticker && (holding.valueTwd ?? 0) > 0).length;
+  const total = [...byTicker.values()].reduce((sum, value) => sum + value, 0);
+  const tickers = [...byTicker.keys()].sort();
+
+  const factorRows = await allRows<{ series: string; obs_month: string; value: number }>('market_series', (from, to) =>
+    supabase.from('market_series').select('series, obs_month, value').like('series', 'ff5_%').order('series').order('obs_month').range(from, to),
+  );
+  const factorsByRegion = new Map<Region, Map<string, Partial<FactorMonth>>>();
+  const loaded: Partial<Record<Region, string>> = {};
+  for (const region of REGIONS) {
+    const months = new Map<string, Partial<FactorMonth>>();
+    for (const key of ['mkt', 'smb', 'hml', 'rmw', 'cma', 'rf'] as const) {
+      for (const row of factorRows.filter((entry) => entry.series === seriesName(region, key))) {
+        const month = row.obs_month.slice(0, 7);
+        months.set(month, { ...months.get(month), month, [key]: Number(row.value) });
+      }
+    }
+    factorsByRegion.set(region, months);
+    const newest = [...months.keys()].sort().pop();
+    if (newest) loaded[region] = newest;
+  }
+  const factorsOf = (region: Region): FactorMonth[] => [...(factorsByRegion.get(region)?.values() ?? [])].filter((entry): entry is FactorMonth => ['mkt', 'smb', 'hml', 'rmw', 'cma', 'rf'].every((key) => typeof entry[key as keyof FactorMonth] === 'number'));
+
+  // Monthly returns in dollars of each held ticker over the longest window.
+  const from = addDays(today, -Math.ceil(years * 366 + 62));
+  const regression = await loadRegressionData(supabase, tickers, from);
+  const usd = regression.fx.get('USD') ?? [];
+  const month = today.slice(0, 7);
+  const returns = new Map<string, ReturnPoint[]>();
+  const left: string[] = [];
+  for (const ticker of tickers) {
+    const security = regression.securities.find((entry) => entry.ticker === ticker);
+    const closes = regression.closes.get(ticker) ?? [];
+    let inUsd: SeriesClose[] | undefined;
+    if (security?.currency === 'USD') inUsd = closes;
+    else if (security?.currency === 'TWD' && usd.length > 0) {
+      // Dollars per share: the close over the day's TWD per dollar.
+      const sorted = [...usd].sort((a, b) => a.date.localeCompare(b.date));
+      let at = -1;
+      inUsd = [];
+      for (const close of closes) {
+        while (at + 1 < sorted.length && (sorted[at + 1] as SeriesClose).date <= close.date) at += 1;
+        const rate = sorted[at];
+        if (rate) inUsd.push({ date: close.date, close: close.close / rate.close });
+      }
+    }
+    const monthly = inUsd ? periodReturns(inUsd, 'monthly').filter((point) => point.date.slice(0, 7) < month) : [];
+    if (monthly.length === 0) left.push(ticker);
+    else returns.set(ticker, monthly);
+  }
+
+  const out: FactorRow[] = [];
+  const window = years * 12;
+  const portfolio = portfolioReturns(tickers.filter((ticker) => returns.has(ticker)).map((ticker) => ({ weight: (byTicker.get(ticker) ?? 0) / total, returns: returns.get(ticker) as ReturnPoint[] })));
+  const factors = factorsOf(settings.portfolio);
+  out.push({ key: 'portfolio', name: 'portfolio', region: settings.portfolio, weight: null, fit: fiveFactor(portfolio, factors, settings, window), months: portfolio.length });
+  for (const ticker of tickers) {
+    const security = regression.securities.find((entry) => entry.ticker === ticker);
+    const region = settings.regions[security?.market ?? 'US'] ?? 'us';
+    const series = returns.get(ticker) ?? [];
+    out.push({ key: ticker, name: security?.name ?? ticker, region, weight: (byTicker.get(ticker) ?? 0) / total, fit: fiveFactor(series, factorsOf(region), settings, window), months: series.length });
+  }
+  return { settings, rows: out, loaded, left, noTicker };
 }

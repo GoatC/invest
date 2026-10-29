@@ -31,6 +31,8 @@ import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
+import { frenchSeries, frenchUrl } from '../feeds/french.ts';
+import { REGIONS } from '../../../lib/models/five-factor.ts';
 import { INDICES, indexAttempts, sectorAttempts, type IndexClose, type SectorProxyFeed } from '../feeds/indices.ts';
 import { SECTOR_DAYS } from '../../../lib/models/sectors.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
@@ -93,6 +95,8 @@ export interface Store {
   historyYears(): Promise<number | undefined>;
   /** Upserts daily index closes (index_prices); fillOnly adds missing days only. */
   saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
+  /** The years of Kenneth French's factors to keep (config factors, N1's five-factor mode); undefined before its migration. */
+  factorYears(): Promise<number | undefined>;
   /** Whether config capm exists (F11, Phase 2 step 3): false before its migration. */
   capmReady(): Promise<boolean>;
   /** The single stocks whose filings to load (F12): held or watched, and their peers; undefined before config valuation exists. */
@@ -291,12 +295,13 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let proxies: Set<string>;
   let regressionYears: number | undefined;
   let capm: boolean;
+  let factorYears: number | undefined;
   let filingTickers: Array<{ ticker: string; market: string }> | undefined;
   let flagCompanies: Awaited<ReturnType<Store['redFlagCompanies']>>;
   let lookPlan: Awaited<ReturnType<Store['lookThroughPlan']>>;
   let sectorProxies: SectorProxyFeed[] | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors, modelYears] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors, modelYears, factors] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
@@ -308,6 +313,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       store.lookThroughPlan(today),
       store.sectorProxies(),
       store.historyYears(),
+      store.factorYears(),
     ]);
     sectorProxies = sectors;
     filingTickers = filers;
@@ -316,6 +322,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     securities = found;
     regressionYears = regression;
     capm = capmReady;
+    factorYears = factors;
     // Every security reaches back over the VaR's years, the Regression Lab's longest window (N1) or the models' history (F5, F7).
     start = windowStart(today, Math.max(years, regression ?? 0, modelYears ?? 0), earliestTrade);
     riskStart = riskWindowStart(today, lookbackWeeks({ lookbackYears: years }), earliestTrade);
@@ -512,6 +519,27 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       } else if (result) {
         detail.errors.push(`${name}: ${result.source} had nothing from ${since.slice(0, 7)} on`);
       }
+    }
+  }
+
+  // Kenneth French's five factors for N1's five-factor mode: one small zip a region, monthly.
+  if (factorYears !== undefined) {
+    const since = monthsBefore(today, factorYears * 12).slice(0, 7);
+    for (const region of REGIONS) {
+      const name = `ff5_${region}`;
+      const result = await firstWorking(name, [
+        {
+          source: 'french',
+          load: async () => {
+            if (!deps.getBytes) throw new FeedError('no binary fetch');
+            return frenchSeries(await deps.getBytes(frenchUrl(region)), region, since);
+          },
+        },
+      ], detail);
+      if (!result) continue;
+      const rows = unique(result.rows, (point) => `${point.series}|${point.month}`);
+      series.push(...rows);
+      (detail.series ??= {})[name] = { source: result.source, rows: rows.length, latest: rows.reduce((max, point) => (point.month > max ? point.month : max), '') };
     }
   }
 

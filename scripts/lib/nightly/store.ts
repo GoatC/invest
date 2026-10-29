@@ -2,6 +2,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { readFactorSettings } from '../../../lib/models/five-factor.ts';
 import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
@@ -87,6 +88,12 @@ export function supabaseStore(client: SupabaseClient): Store {
           .upsert(batch.map((row) => ({ series: row.series, obs_month: `${row.month}-01`, value: row.value, source: row.source })), { onConflict: 'series,obs_month' });
         check('market_series', error);
       }
+    },
+    async factorYears() {
+      const { data, error } = await client.from('config').select('value').eq('key', 'factors');
+      check('config', error);
+      const settings = readFactorSettings((data?.[0] as { value?: unknown } | undefined)?.value);
+      return settings?.keepYears;
     },
     async historyYears() {
       const { data, error } = await client.from('config').select('key, value').in('key', ['monte_carlo', 'frontier']);

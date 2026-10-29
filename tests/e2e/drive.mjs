@@ -1619,6 +1619,16 @@ await step('attribution: the portfolio against the SAA benchmark by asset class,
   check((await body()).includes('績效歸因') && (await body()).includes('層級'), 'Chinese labels');
 });
 
+await step('five factors: the factors seeded by the job, none yet in the demo, the page says what it needs (N1)', async () => {
+  await page.goto(`${BASE}/regression`);
+  await page.getByRole('link', { name: /Five-factor mode/ }).click();
+  await page.waitForURL('**/regression/factors');
+  await page.getByRole('heading', { level: 1, name: /Five factors/ }).waitFor();
+  const text = await body();
+  check(/No factor data yet/.test(text), `no factors in the demo, got ${text.slice(0, 400)}`);
+  check((await body()).includes('五因子') && (await body()).includes('尚無因子資料'), 'Chinese labels');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -1639,7 +1649,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1665,7 +1675,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1697,7 +1707,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
     if (path === '/valuation?t=AAPL') await page.locator('.chart-ranges svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1804,6 +1814,23 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const spx = await figures('#vs-SPX');
     const value = Number((spx[0] ?? '').split(' ')[0]);
     check(value > 0.6 && value < 1.3, `a plausible β for VT against the S&P 500 on live closes, got ${spx[0]}`);
+  });
+
+  await step('five factors after the job: the factors loaded live from the library, VT and the whole portfolio regressed on them (N1)', async () => {
+    await page.goto(`${BASE}/data`);
+    check(/ff5_us/.test(await page.locator('#market-series').innerText()), 'the factor series on the data status page');
+    await page.goto(`${BASE}/regression/factors`);
+    await page.locator('#factor-detail').waitFor();
+    const text = await body();
+    check(/Factors loaded through: US factors 20\d\d-\d\d/.test(text), `the factors' newest months, got ${text.slice(0, 500)}`);
+    const vt = (await page.locator('table').first().innerText()).split('\n').find((line) => line.startsWith('VT')) ?? '';
+    const loadings = [...vt.matchAll(/(-?\d\.\d\d)\s*\(/g)].map((m) => Number(m[1]));
+    check(loadings.length === 5 && loadings[0] > 0.7 && loadings[0] < 1.3, `VT's market loading is near 1 on live closes, got ${vt}`);
+    check(/Whole portfolio/.test(await page.locator('table').first().innerText()), 'the whole portfolio row');
+    await snap('five-factors');
+    await page.setViewportSize({ width: 1280, height: 1500 });
+    await docShot('five-factors', page);
+    await page.setViewportSize({ width: 1280, height: 900 });
   });
 
   await step("cost of equity after the job: the 10-year yields and Damodaran's ERP loaded live, 2330's β saved for the month (F11)", async () => {
