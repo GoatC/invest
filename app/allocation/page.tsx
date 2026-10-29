@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocation-charts';
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
@@ -52,7 +52,7 @@ export default async function AllocationPage({ searchParams }: { searchParams: P
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.allocation} />
+          <Zh {...LABELS.allocation} />
         </h1>
         {saved && (
           <p className="banner ok" role="status">

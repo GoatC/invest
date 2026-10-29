@@ -74,7 +74,7 @@ export async function updateSecurity(_previous: SecurityFormState, formData: For
     })
     .eq('ticker', ticker);
   if (error) return { errors: {}, message: saveFailed(error.message) };
-  redirect('/securities?saved=updated');
+  redirect('/holdings?securities=updated#securities');
 }
 
 const IN_USE: Bilingual = {
@@ -91,7 +91,7 @@ export async function deleteSecurity(_previous: DeleteState, formData: FormData)
   // 23503: a foreign key still points at it.
   if (error) return { message: error.code === '23503' ? IN_USE : saveFailed(error.message) };
   if (!data || data.length === 0) return { message: ACTION_MESSAGES.notFound };
-  redirect('/securities?saved=deleted');
+  redirect('/holdings?securities=deleted#securities');
 }
 
 // ---------------------------------------------------------------------------

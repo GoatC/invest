@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
@@ -6,35 +7,23 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { ValueRanges, type ValueRange } from '@/components/valuation-charts';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadRedFlagData, loadWorkbench, orDataError, type StockBench, type WorkbenchData } from '@/lib/data';
+import { DataError, loadWorkbench, type StockBench, type WorkbenchData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent } from '@/lib/format';
-import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
-import { MULTIPLES, SCENARIOS, marginOfSafety, metrics, zoneOf, type DcfResult, type ModelId, type MultipleId, type MultiplesResult, type Scenario, type Used, type ValuationSettings } from '@/lib/models/intrinsic';
-import { savedFor } from '@/lib/models/workbench';
-import type { Assessment } from '@/lib/models/red-flags';
-import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
+import { feedLabel, type Bilingual } from '@/lib/i18n';
+import { MULTIPLES, SCENARIOS, marginOfSafety, metrics, type DcfResult, type ModelId, type MultipleId, type MultiplesResult, type Scenario, type Used, type ValuationSettings } from '@/lib/models/intrinsic';
 
-import { unwatchStock, watchStock } from './actions';
-import { AssumptionsForm, ValuationSettingsForm } from './forms';
+import { unwatchStock } from './actions';
+import { AssumptionsForm } from './forms';
+import { alertBasis, MODEL, percentField, scenarioFields, ZONE } from './shared';
 
 type Params = Record<string, string | string[] | undefined>;
 
-const MODEL: Record<ModelId, Bilingual> = {
-  dcf: { en: 'DCF (FCFF)', zh: '現金流折現' },
-  ddm: { en: 'Gordon DDM', zh: '股利折現' },
-  multiples: { en: 'Multiples', zh: '倍數法' },
-};
 const SLOT: Record<ModelId, number> = { dcf: 0, ddm: 1, multiples: 2 };
 /** Short names for the chart's axis, which a phone leaves little room for. */
 const MODEL_SHORT: Record<ModelId, Bilingual> = { dcf: { en: 'DCF', zh: '現金流' }, ddm: { en: 'DDM', zh: '股利' }, multiples: { en: 'Multiples', zh: '倍數' } };
 const SCENARIO: Record<Scenario, Bilingual> = { bear: { en: 'Bear', zh: '悲觀' }, base: { en: 'Base', zh: '基本' }, bull: { en: 'Bull', zh: '樂觀' } };
 const MULTIPLE: Record<MultipleId, string> = { pe: 'P/E', pb: 'P/B', evEbitda: 'EV/EBITDA' };
-const ZONE: Record<'buy' | 'trim' | 'between', { label: Bilingual; tone: Fact['tone'] }> = {
-  buy: { label: { en: 'Buy zone', zh: '買入區' }, tone: 'watch' },
-  trim: { label: { en: 'Trim zone', zh: '減碼區' }, tone: 'alert' },
-  between: { label: { en: 'Between zones', zh: '區間內' }, tone: 'ok' },
-};
 const INPUT_PROBLEM: Record<string, Bilingual> = {
   price: { en: 'No close yet: the nightly job loads it.', zh: '尚無收盤價：每夜排程會載入。' },
   filings: { en: 'No filings yet: the nightly job loads them (US stocks need SEC_USER_AGENT); or type FCFF and shares below.', zh: '尚無財報：每夜排程會載入（美股需要 SEC_USER_AGENT）；或在下方輸入 FCFF 與股數。' },
@@ -54,17 +43,7 @@ const millions = (value: number | undefined, currency: string) => (value === und
 const rate = (value: number) => percent(value, 2);
 const multiple = (value: number | undefined) => (value === undefined ? '—' : `${value.toFixed(1)}×`);
 
-/** The model a stock's alerts use, its newest saved values, and the multiples that set its zones. */
-function alertBasis(bench: StockBench, rules: WorkbenchData['rules']) {
-  const saved = savedFor(bench.saved, bench.security.ticker, bench.assumed.model)[0];
-  const buy = bench.watch?.buy ?? rules.buy;
-  const trim = bench.watch?.trim ?? rules.trim;
-  const price = bench.input?.price ?? bench.series.closes[bench.series.closes.length - 1];
-  const zone = saved && price && buy !== null && trim !== null ? zoneOf(price.close, saved.base, { buy, trim }) : undefined;
-  return { saved, buy, trim, price, zone, margin: saved && price ? marginOfSafety(saved.base, price.close) : undefined };
-}
-
-/** F12 (PRD Module C): the watchlist, and each stock's valuation workbench. */
+/** F12 (PRD Module C): each stock's valuation workbench; the watchlist is on the holdings page. */
 export default async function ValuationPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
   const params = await searchParams;
@@ -80,181 +59,13 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
   const ticker = typeof params['t'] === 'string' ? params['t'] : undefined;
   const bench = ticker ? data.stocks.find((stock) => stock.security.ticker === ticker) : undefined;
   if (bench) return <Workbench bench={bench} data={data} settings={data.settings} saved={params['saved'] === 'assumptions'} />;
-  const flags = await orDataError(loadRedFlagData(supabase, today));
-  const lights = new Map(flags instanceof DataError ? [] : flags.companies.map((company) => [company.security.ticker, company.assessment]));
-  return <Watchlist data={data} settings={data.settings} today={today} saved={params['saved'] === 'settings'} error={typeof params['error'] === 'string' ? params['error'] : undefined} missing={ticker} lights={lights} />;
+  // The watchlist lives on the holdings page; a stock not found goes back to it, saying so.
+  const query = new URLSearchParams();
+  if (ticker) query.set('missing', ticker);
+  if (typeof params['error'] === 'string') query.set('valuation-error', params['error']);
+  redirect(`/holdings${query.size > 0 ? `?${query.toString()}` : ''}#valuation`);
 }
 
-function Watchlist({ data, settings, today, saved, error, missing, lights }: { data: WorkbenchData; settings: ValuationSettings; today: string; saved: boolean; error?: string; missing?: string; lights: ReadonlyMap<string, Assessment> }) {
-  const addable = [...data.others, ...data.stocks.filter((stock) => !stock.watch).map((stock) => stock.security)].sort((a, b) => a.ticker.localeCompare(b.ticker));
-  return (
-    <>
-      <section className="card form">
-        <h1>
-          <Bi {...LABELS.valuation} />
-        </h1>
-        <p className="equation">
-          <Bi en="Margin of safety = (value − price) ÷ value" zh="安全邊際 ＝（內在價值 − 股價）÷ 內在價值" />
-        </p>
-        {(error || missing) && (
-          <p className="banner danger" role="alert">
-            <Bi en={missing ? `${missing} is not a watched or held single stock.` : `Could not save: ${error}`} zh={missing ? `${missing} 不是觀察中或持有的個股。` : `無法儲存：${error}`} />
-          </p>
-        )}
-        {data.stocks.length === 0 ? (
-          <p className="muted">
-            <Bi en="No single stock watched or held yet." zh="尚無觀察中或持有的個股。" />
-          </p>
-        ) : (
-          <div className="table-wrap">
-            <table className="compact">
-              <thead>
-                <tr>
-                  <th>
-                    <Bi {...LABELS.ticker} />
-                  </th>
-                  <th className="num">
-                    <Bi en="Price" zh="股價" />
-                  </th>
-                  <th className="num">
-                    <Bi en="Value, base" zh="內在價值（基本）" />
-                  </th>
-                  <th className="num">
-                    <Bi en="Margin of safety" zh="安全邊際" />
-                  </th>
-                  <th>
-                    <Bi en="Zone" zh="區間" />
-                  </th>
-                  <th className="num">
-                    <Bi en="To buy / trim" zh="距買入／減碼" />
-                  </th>
-                  <th>
-                    <Bi {...LABELS.redFlags} />
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.stocks.map((bench) => {
-                  const basis = alertBasis(bench, data.rules);
-                  const zone = basis.zone ? ZONE[basis.zone.zone] : undefined;
-                  return (
-                    <tr key={bench.security.ticker}>
-                      <td>
-                        <Link href={`/valuation?t=${encodeURIComponent(bench.security.ticker)}`}>{bench.security.ticker}</Link>
-                        {bench.held && (
-                          <span className="badge">
-                            <Bi en="held" zh="持有" />
-                          </span>
-                        )}
-                        {bench.watch && !bench.watch.active && (
-                          <span className="badge warn">
-                            <Bi en="alerts off" zh="警報關閉" />
-                          </span>
-                        )}
-                        <div className="muted small">{bench.security.name}</div>
-                      </td>
-                      <td className="num">{basis.price ? money(basis.price.close, bench.security.currency) : '—'}</td>
-                      <td className="num">
-                        {basis.saved ? money(basis.saved.base, bench.security.currency) : '—'}
-                        <div className="muted small">
-                          {basis.saved ? <Bi en={`${MODEL[basis.saved.model].en} · ${basis.saved.date}`} zh={`${MODEL[basis.saved.model].zh} · ${basis.saved.date}`} /> : <Bi en="not saved" zh="尚未儲存" />}
-                        </div>
-                      </td>
-                      <td className="num">{basis.margin === undefined ? '—' : signedPercent(basis.margin)}</td>
-                      <td className="nowrap">
-                        {zone ? (
-                          <>
-                            <span className={`status-icon ${zone.tone === 'alert' ? 'rebalance' : zone.tone}`} aria-hidden="true">
-                              {zone.tone === 'ok' ? '✓' : zone.tone === 'watch' ? '!' : '✕'}
-                            </span>{' '}
-                            <Bi {...zone.label} />
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="num nowrap">{basis.zone ? `−${percent(basis.zone.toBuy)} / +${percent(basis.zone.toTrim)}` : '—'}</td>
-                      <td className="nowrap">
-                        {(() => {
-                          const flag = lights.get(bench.security.ticker);
-                          if (!flag) return '—';
-                          const icon = LIGHT_ICON[flag.light ?? 'none'];
-                          return (
-                            <Link href={`/red-flags?t=${encodeURIComponent(bench.security.ticker)}`}>
-                              <span className={`status-icon ${icon.className}`} aria-hidden="true">
-                                {icon.icon}
-                              </span>
-                              <Bi {...lightText(flag.light)} />
-                              <div className="muted small">{percent(flag.coverage / 100, 0)}</div>
-                            </Link>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Info>
-          <Bi
-            en="Each stock is valued a share, bear / base / bull, by a two-stage DCF of its free cash flow to the firm at WACC, Gordon's dividend model and its P/E, P/B and EV/EBITDA against its peers and its own five years. The alerts read the base value of the model chosen for the stock, as last saved; the nightly job saves it again after each new quarter's filing."
-            zh="每檔個股以三種方法估算每股內在價值（悲觀／基本／樂觀）：以 WACC 折現的兩階段公司自由現金流 DCF、Gordon 股利折現，以及相對同業與自身五年的本益比、股價淨值比、EV/EBITDA。警報採用該股所選模型最後儲存的基本情境數值；每夜排程在新一季財報公布後重新儲存。"
-          />
-        </Info>
-        {addable.length > 0 && (
-          <form action={watchStock} className="row">
-            <select name="ticker" aria-label="Stock 個股" defaultValue={addable[0]?.ticker}>
-              {addable.map((security) => (
-                <option key={security.ticker} value={security.ticker}>
-                  {security.ticker} {security.name}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className="button">
-              <Bi en="Watch" zh="加入觀察清單" />
-            </button>
-          </form>
-        )}
-        <p className="muted small">
-          <Bi en="A stock not listed: add it on the Securities page as a single stock." zh="清單中沒有的個股：請先在「證券」頁以個股新增。" />
-        </p>
-      </section>
-
-      <section className="card form" id="settings">
-        <details open={saved}>
-          <summary>
-            <Bi en="Defaults" zh="預設值" />
-          </summary>
-          {saved && (
-            <p className="banner ok" role="status">
-              <Bi en="Defaults saved." zh="已儲存預設值。" />
-            </p>
-          )}
-          <ValuationSettingsForm
-            markets={Object.keys(settings.taxRate)}
-            initial={{
-              model: settings.model,
-              years: String(settings.years),
-              ...scenarioFields('growth', settings.growth),
-              ...scenarioFields('terminal', settings.terminal),
-              debtSpread: percentField(settings.debtSpread),
-              ...Object.fromEntries(Object.entries(settings.taxRate).map(([market, value]) => [`tax_${market}`, percentField(value)])),
-              historyYears: String(settings.historyYears),
-              minQuarters: String(settings.minQuarters),
-            }}
-            today={today}
-            checkedOn={settings.checked}
-          />
-        </details>
-      </section>
-    </>
-  );
-}
-
-const percentField = (value: number) => String(Number((value * 100).toFixed(4)));
-const scenarioFields = (prefix: string, values: Record<Scenario, number>) => Object.fromEntries(SCENARIOS.map((scenario) => [`${prefix}_${scenario}`, percentField(values[scenario])]));
 const millionsField = (value: number | undefined) => (value === undefined ? '' : String(Number((value / 1e6).toFixed(3))));
 
 function Workbench({ bench, data, settings, saved }: { bench: StockBench; data: WorkbenchData; settings: ValuationSettings; saved: boolean }) {
@@ -304,7 +115,7 @@ function Workbench({ bench, data, settings, saved }: { bench: StockBench; data: 
     <>
       <section className="card form">
         <p className="muted small">
-          <Link href="/valuation">
+          <Link href="/holdings#valuation">
             <Bi en="← Watchlist" zh="← 觀察清單" />
           </Link>
         </p>

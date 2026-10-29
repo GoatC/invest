@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAssetClasses, loadSecurities, orDataError } from '@/lib/data';
@@ -32,7 +32,7 @@ export default async function NewSecurityPage({ searchParams }: { searchParams: 
   return (
     <section className="card">
       <h1>
-        <Bi {...LABELS.addSecurity} />
+        <Zh {...LABELS.addSecurity} />
       </h1>
       <SecurityForm
         assetClasses={assetClasses}

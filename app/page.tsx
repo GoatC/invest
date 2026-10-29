@@ -1,12 +1,14 @@
 import Link from 'next/link';
 
-import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocation-charts';
+import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi } from '@/components/bi';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
+import { ProposalsPanel } from '@/components/proposals-panel';
 import { RiskCard } from '@/components/risk-card';
+import { RiskDetails } from '@/components/risk-details';
 import { requireSession } from '@/lib/auth';
 import {
   DataError,
@@ -33,11 +35,10 @@ import {
   type WorkbenchData,
 } from '@/lib/data';
 import { addDays, taipeiToday } from '@/lib/dates';
-import { money, percent, points, signedPercent, signedTwd, twd } from '@/lib/format';
-import { DRIFT_ICON, DRIFT_STATUS, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
+import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
+import { DRIFT_ICON, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
 import { dataHealth } from '@/lib/models/data-health';
-import { orderTotals } from '@/lib/models/engine';
 import { comingWeek, readWeeklyReview, summaryLines, weeklySummary } from '@/lib/models/notify';
 import { buildSeries } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
@@ -45,18 +46,20 @@ import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection'
 import { riskReport, sparkline } from '@/lib/models/risk';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
-import { proposalTitle } from '@/lib/proposal-text';
 import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
-import { approveProposal, dismissProposal } from './proposals/actions';
+type Params = Record<string, string | string[] | undefined>;
 
 /**
- * The weekly dashboard, the home screen (PRD Section 5, Phase 1 step 10): the weekly review's three
- * lines, then rule status before profit and loss, top to bottom as the spec orders it. Each part
- * reads its own data, so one that fails to load leaves the others in place.
+ * The weekly dashboard, the home screen (PRD Section 5): the week's three lines with the portfolio's
+ * value on a band at the top, then the Value at Risk (its distribution and make-up folded under
+ * it), the watchlist, the coming week, the allocation, the windfall and the plan, and the
+ * proposals last, with a jump to them from the band whenever one waits. Each part reads its own
+ * data, so one that fails to load leaves the others in place.
  */
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
+  const params = await searchParams;
   const today = taipeiToday();
   let data: AllocationData;
   try {
@@ -93,46 +96,139 @@ export default async function Dashboard() {
     ...(value instanceof DataError ? { valueTwd: null, weekAgoTwd: null } : value),
   });
 
+  const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
+  const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
+
   return (
     <>
       {!(jobs instanceof DataError) && <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />}
-      <section className="card form" id="this-week">
-        <div className="row spread">
-          <h1>
-            <Bi en="This week" zh="本週" />
-          </h1>
-          <Link href="/notifications">
+      <Hero
+        today={today}
+        summary={summary}
+        regularTwd={portfolio.pool.totalTwd}
+        windfallTwd={windfallTwd}
+        driftStatus={drifts.find((row) => summary.largestDrift && row.assetClass.nameEn === summary.largestDrift.name.en)?.status}
+      />
+      <div className="dash-row">
+        <div className="dash-main">
+          {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
+        </div>
+        <div className="dash-side">
+          {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} flags={flags instanceof DataError ? undefined : flags} />}
+          <ComingWeek
+            today={today}
+            settings={settings}
+            rules={rules}
+            tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
+            filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
+              const due = nextFiling(bench.security.market, bench.series.quarters);
+              return due ? [{ ticker: bench.security.ticker, ...due }] : [];
+            })}
+          />
+        </div>
+      </div>
+      <div className="dash-row">
+        <div className="dash-main">
+          <Donut data={data} portfolio={portfolio} />
+        </div>
+        <div className="dash-side">
+          <Windfall portfolio={portfolio} plan={windfall} today={today} />
+          {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
+        </div>
+      </div>
+      {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
+      {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
+      {proposals instanceof DataError ? (
+        <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} />
+      ) : (
+        <ProposalsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
+      )}
+    </>
+  );
+}
+
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+
+/** "2026 年 10 月 29 日 · 週四" for a Taipei date. */
+function longDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+  return `${year} 年 ${month} 月 ${day} 日 · 週${WEEKDAYS[weekday]}`;
+}
+
+/**
+ * The band at the top: the portfolio's value (both pools), the weekly review's three lines, each
+ * with its status icon, and a jump to the proposals at the foot of the page when one waits.
+ */
+function Hero({
+  today,
+  summary,
+  regularTwd,
+  windfallTwd,
+  driftStatus,
+}: {
+  today: string;
+  summary: ReturnType<typeof weeklySummary>;
+  regularTwd: number;
+  windfallTwd: number;
+  driftStatus: string | undefined;
+}) {
+  const [rulesLine, driftLine, valueLine] = summaryLines(summary);
+  const waiting = summary.openProposals + summary.approvedProposals;
+  const drift = driftStatus === 'watch' || driftStatus === 'rebalance' ? driftStatus : 'ok';
+  const lines: Array<{ line: Bilingual | undefined; icon: string; tone: string; href?: string; link?: Bilingual }> = [
+    { line: rulesLine, icon: waiting > 0 ? '!' : '✓', tone: waiting > 0 ? 'watch' : 'ok' },
+    { line: driftLine, icon: summary.largestDrift ? DRIFT_ICON[drift] : '…', tone: summary.largestDrift ? drift : 'idle', href: '/allocation', link: LABELS.allocation },
+    { line: valueLine, icon: summary.valueTwd === null ? '…' : '✓', tone: summary.valueTwd === null ? 'idle' : 'ok' },
+  ];
+  return (
+    <section className="hero" id="this-week">
+      <div className="hero-figure">
+        <span className="muted small">{longDate(today)}</span>
+        <h1>本週</h1>
+        <strong className="hero-value">{twd(regularTwd + windfallTwd)}</strong>
+        <span className="muted small">
+          <Bi en="Portfolio value, both pools" zh="總市值（兩個資金池）" />
+        </span>
+        <span className="muted small">
+          <Bi en={`Regular ${twd(regularTwd)} · windfall ${twd(windfallTwd)}`} zh={`一般 ${twd(regularTwd)} · 大額 ${twd(windfallTwd)}`} />
+        </span>
+      </div>
+      <div className="hero-lines">
+        <ul className="summary-lines">
+          {lines.map(({ line, icon, tone, href, link }) =>
+            line ? (
+              <li key={line.en}>
+                <span className={`hero-icon ${tone}`} aria-hidden="true">
+                  {icon}
+                </span>
+                <span>
+                  <Bi {...line} />
+                  {href && link && (
+                    <>
+                      {' · '}
+                      <Link href={href}>
+                        <Bi {...link} />
+                      </Link>
+                    </>
+                  )}
+                </span>
+              </li>
+            ) : null,
+          )}
+        </ul>
+        <div className="row">
+          {waiting > 0 && (
+            <Link href={`/${summary.openProposals === 0 ? '?p=approved' : ''}#proposals`} className="button primary pill">
+              <Bi en={`${waiting} proposal${waiting === 1 ? '' : 's'} waiting`} zh={`${waiting} 份提案待處理`} /> ↓
+            </Link>
+          )}
+          <Link href="/notifications" className="small">
             <Bi en="Notifications" zh="推播設定" />
           </Link>
         </div>
-        <ul className="summary-lines">
-          {summaryLines(summary).map((line) => (
-            <li key={line.en}>
-              <Bi {...line} />
-            </li>
-          ))}
-        </ul>
-      </section>
-      {proposals instanceof DataError ? <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} /> : <Proposals list={list} rules={rules} />}
-      <Drift data={data} portfolio={portfolio} />
-      {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
-      <Donut data={data} portfolio={portfolio} />
-      <Windfall portfolio={portfolio} plan={windfall} today={today} />
-      {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} flags={flags instanceof DataError ? undefined : flags} />}
-      <ComingWeek
-        today={today}
-        settings={settings}
-        rules={rules}
-        tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
-        filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
-          const due = nextFiling(bench.security.market, bench.series.quarters);
-          return due ? [{ ticker: bench.security.ticker, ...due }] : [];
-        })}
-      />
-      {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
-      {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
-      {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
-    </>
+      </div>
+    </section>
   );
 }
 
@@ -189,7 +285,7 @@ function Watchlist({ data, flags }: { data: WorkbenchData; flags: RedFlagData | 
     if (!assessment) return null;
     const icon = LIGHT_ICON[assessment.light ?? 'none'];
     return (
-      <Link href={`/red-flags?t=${encodeURIComponent(ticker)}`} className="nowrap">
+      <Link href={`/red-flags?t=${encodeURIComponent(ticker)}`}>
         <span className={`status-icon ${icon.className}`} aria-hidden="true">
           {icon.icon}
         </span>
@@ -203,13 +299,13 @@ function Watchlist({ data, flags }: { data: WorkbenchData; flags: RedFlagData | 
         <h2>
           <Bi en="Watchlist" zh="觀察清單" />
         </h2>
-        <Link href="/valuation">
+        <Link href="/holdings#valuation">
           <Bi en="Valuation" zh="估值" />
         </Link>
       </div>
       {watched.length === 0 ? (
         <p className="muted">
-          <Bi en="No stock watched: add one on the Valuation page." zh="尚無觀察中的個股：請在「估值」頁加入。" />
+          <Bi en="No stock watched: add one under Holdings → Valuation." zh="尚無觀察中的個股：請在「持倉 → 估值」加入。" />
         </p>
       ) : (
         <ul className="summary-lines">
@@ -258,135 +354,15 @@ function Unavailable({ what, error }: { what: Bilingual; error: DataError }) {
   );
 }
 
-/** 1. Open proposals, with approve and dismiss (a reason can be given on the proposals page). */
-function Proposals({ list, rules }: { list: readonly Proposal[]; rules: readonly RuleRecord[] }) {
-  const open = list.filter((proposal) => proposal.status === 'open');
-  const approved = list.filter((proposal) => proposal.status === 'approved');
-  const byId = new Map(rules.map((rule) => [rule.id, rule]));
-  return (
-    <section className="card form" id="dashboard-proposals">
-      <div className="row spread">
-        <h2>
-          <Bi en={`Open proposals (${open.length})`} zh={`待處理提案（${open.length}）`} />
-        </h2>
-        <Link href="/proposals">
-          <Bi en="All proposals" zh="所有提案" />
-        </Link>
-      </div>
-      {open.length === 0 && (
-        <p className="muted">
-          <Bi en="Nothing to decide." zh="沒有需要決定的事。" />
-        </p>
-      )}
-      {open.map((proposal) => {
-        const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
-        const { sold, bought } = orderTotals(proposal.orders);
-        return (
-          <article key={proposal.id} className="proposal form">
-            <h3>
-              <Bi {...proposalTitle(rule)} />
-            </h3>
-            <p className="muted small">
-              {proposal.orders.length === 0 ? (
-                <Bi en="No orders" zh="無下單" />
-              ) : (
-                <Bi
-                  en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'} · out ${twd(sold)} · in ${twd(bought)}`}
-                  zh={`${proposal.orders.length} 筆 · 轉出 ${twd(sold)} · 買進 ${twd(bought)}`}
-                />
-              )}{' '}
-              <Link href={`/proposals#proposal-${proposal.id}`}>
-                <Bi en="Details" zh="詳細" />
-              </Link>
-            </p>
-            <div className="row">
-              <form action={approveProposal}>
-                <input type="hidden" name="id" value={proposal.id} />
-                <button type="submit" className="button primary">
-                  <Bi en="Approve" zh="核准" />
-                </button>
-              </form>
-              <form action={dismissProposal}>
-                <input type="hidden" name="id" value={proposal.id} />
-                <button type="submit" className="button">
-                  <Bi en="Dismiss" zh="略過" />
-                </button>
-              </form>
-            </div>
-          </article>
-        );
-      })}
-      {approved.length > 0 && (
-        <p className="banner info">
-          <Bi en={`${approved.length} approved, waiting for your trades.`} zh={`${approved.length} 份已核准，等待你下單。`} />{' '}
-          <Link href="/proposals">
-            <Bi en="Execution checklist" zh="執行清單" />
-          </Link>
-        </p>
-      )}
-    </section>
-  );
-}
-
-/** 2. SAA drift bars, coloured by the 5/25 rule, each status also with its icon and words. */
-function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio }) {
-  const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
-  const rows: DriftRow[] = drifts.map((row) => ({
-    id: row.assetClass.id,
-    label: { en: row.assetClass.nameEn, zh: row.assetClass.nameZh },
-    target: row.assetClass.targetWeight,
-    weight: row.weight,
-    drift: row.drift,
-    band: row.band,
-    status: row.status,
-  }));
-  const flagged = drifts.filter((row) => row.status === 'watch' || row.status === 'rebalance');
-  return (
-    <section className="card form">
-      <div className="row spread">
-        <h2>
-          <Bi en="Drift from the targets" zh="與目標權重的偏離" />
-        </h2>
-        <Link href="/allocation">
-          <Bi en="Allocation, with the table" zh="資產配置（含表格）" />
-        </Link>
-      </div>
-      {portfolio.pool.totalTwd <= 0 ? (
-        <p className="muted">
-          <Bi en="The regular pool holds nothing priced yet." zh="一般資金池目前沒有已計價的持有。" />
-        </p>
-      ) : (
-        <>
-          <DriftChart rows={rows} label={{ en: 'Each asset class’s drift from its target, coloured by status; the list below and the Allocation page give the values.', zh: '各資產類別與目標權重的偏離，依狀態上色；下方清單與資產配置頁列出數值。' }} />
-          <ul className="compact-list">
-            {flagged.length === 0 ? (
-              <li>
-                <span className="status-icon ok" aria-hidden="true">
-                  {DRIFT_ICON.ok}
-                </span>{' '}
-                <Bi en="Every core class is within its band." zh="所有核心類別都在門檻內。" />
-              </li>
-            ) : (
-              flagged.map((row) => (
-                <li key={row.assetClass.id}>
-                  <span className={`status-icon ${row.status}`} aria-hidden="true">
-                    {DRIFT_ICON[row.status]}
-                  </span>{' '}
-                  <Bi en={`${row.assetClass.nameEn} ${points(row.drift)}`} zh={`${row.assetClass.nameZh} ${points(row.drift)}`} /> · <Bi {...DRIFT_STATUS[row.status]} />
-                </li>
-              ))
-            )}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
 /** 3. The VaR card. */
 function Risk({ risk, portfolio, today }: { risk: RiskData; portfolio: Portfolio; today: string }) {
   const report = riskReport(portfolio.holdings, risk.input, today);
-  return <RiskCard report={report} line={sparkline(risk.saved, today, report)} details />;
+  const line = sparkline(risk.saved, today, report);
+  return (
+    <RiskCard report={report} line={line}>
+      <RiskDetails report={report} line={line} />
+    </RiskCard>
+  );
 }
 
 /** 4. The allocation donut, regular pool, with its three lenses and the 80/20 target ring. */

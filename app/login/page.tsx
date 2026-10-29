@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { LABELS } from '@/lib/i18n';
 
 import { LoginForm } from './login-form';
@@ -7,7 +7,7 @@ export default function LoginPage() {
   return (
     <section className="card narrow">
       <h1>
-        <Bi {...LABELS.signIn} />
+        <Zh {...LABELS.signIn} />
       </h1>
       <p className="muted">
         <Bi

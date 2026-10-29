@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { TaipeiTime } from '@/components/history';
@@ -57,7 +57,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.notifications} />
+          <Zh {...LABELS.notifications} />
         </h1>
         <Info>
           <Bi

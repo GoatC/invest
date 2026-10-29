@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadProposal, loadRules, type Proposal, type RuleRecord } from '@/lib/data';
@@ -29,7 +29,7 @@ export default async function EditProposalPage({ params }: { params: Promise<{ i
   return (
     <section className="card form">
       <h1>
-        <Bi en="Edit the orders" zh="修改下單清單" />
+        <Zh en="Edit the orders" zh="修改下單清單" />
       </h1>
       <p className="muted">
         <Bi {...proposalTitle(rule)} /> · #{proposal.id}
@@ -39,7 +39,7 @@ export default async function EditProposalPage({ params }: { params: Promise<{ i
           <p className="banner warn">
             <Bi en="Only an open proposal can be edited; this one is:" zh="只有待處理的提案可以修改；這份提案目前是：" /> <Bi {...STATUS[proposal.status]} />
           </p>
-          <Link href="/proposals">
+          <Link href="/#proposals">
             <Bi en="Back to the proposals" zh="回到提案" />
           </Link>
         </>

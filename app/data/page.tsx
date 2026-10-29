@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataHealthBanner, RunStatusBadge } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
@@ -40,7 +40,7 @@ export default async function DataStatusPage() {
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.dataStatus} />
+          <Zh {...LABELS.dataStatus} />
         </h1>
         <Info>
           <Bi
@@ -109,7 +109,7 @@ function LatestRun({ run }: { run: JobRun }) {
             en={`Checked the rules: ${detail.rules.created} new proposal${detail.rules.created === 1 ? '' : 's'}, ${detail.rules.closed} closed.`}
             zh={`已檢查規則：新增 ${detail.rules.created} 份提案，關閉 ${detail.rules.closed} 份。`}
           />{' '}
-          <Link href="/proposals">
+          <Link href="/#proposals">
             <Bi en="Proposals" zh="提案" />
           </Link>
         </p>

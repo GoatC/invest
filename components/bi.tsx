@@ -9,3 +9,8 @@ export function Bi({ en, zh }: Bilingual) {
     </span>
   );
 }
+
+/** A page title: Chinese only (the bilingual rule's one exception, with the navigation). Takes a bilingual label as is. */
+export function Zh({ zh }: Bilingual) {
+  return <span lang="zh-Hant">{zh}</span>;
+}

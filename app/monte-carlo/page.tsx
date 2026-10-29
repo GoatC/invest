@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
 import { Info } from '@/components/info';
@@ -46,7 +46,7 @@ export default async function MonteCarloPage({ searchParams }: { searchParams: P
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.monteCarlo} />
+          <Zh {...LABELS.monteCarlo} />
         </h1>
         <Info>
           <Bi

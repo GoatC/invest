@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { CumulativeChart, QuadrantChart, WaterfallChart, type QuadrantPoint, type WaterfallStep } from '@/components/attribution-charts';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
@@ -70,7 +70,7 @@ export default async function AttributionPage({ searchParams }: { searchParams: 
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.attribution} />
+          <Zh {...LABELS.attribution} />
         </h1>
         <Info>
           <Bi

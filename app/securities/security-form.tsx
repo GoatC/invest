@@ -171,7 +171,7 @@ export function SecurityForm({
         <button type="submit" className="button primary" disabled={pending}>
           <Bi {...(pending ? LABELS.saving : LABELS.save)} />
         </button>
-        <Link href={editing ? '/securities' : next && next.startsWith('/holdings/') ? next : '/holdings'} className="button">
+        <Link href={editing ? '/holdings#securities' : next && next.startsWith('/holdings/') ? next : '/holdings'} className="button">
           <Bi {...LABELS.cancel} />
         </Link>
       </div>

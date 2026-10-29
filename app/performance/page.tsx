@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
@@ -111,7 +111,7 @@ function Header({ scope, range }: { scope: Scope; range: Period }) {
   return (
     <section className="card form">
       <h1>
-        <Bi {...LABELS.performance} />
+        <Zh {...LABELS.performance} />
       </h1>
       <Info>
         <Bi
@@ -150,7 +150,7 @@ function Empty() {
     <section className="card">
       <p>
         <Bi en="Nothing to measure yet: performance starts with the first trade or non-listed asset." zh="尚無可計算的資料：績效從第一筆交易或非上市資產開始。" />{' '}
-        <Link href="/holdings/new">
+        <Link href="/holdings#add-trade">
           <Bi {...LABELS.addTrade} />
         </Link>
       </p>

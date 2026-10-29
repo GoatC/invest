@@ -5,22 +5,26 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
-import { RiskCard } from '@/components/risk-card';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadHoldingsData, loadJobRuns, loadProposals, loadRiskData, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RiskData } from '@/lib/data';
+import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadJobRuns, loadProposals, orDataError, type CashFlowRecord, type HoldingsData, type Proposal } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { money, percent, points, quantity, twd } from '@/lib/format';
-import { FLOW_TYPE, LABELS, POOL, SIDE, SLEEVE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { money, percent, quantity, twd } from '@/lib/format';
+import { FLOW_TYPE, LABELS, POOL, SIDE, SOURCE, type Bilingual } from '@/lib/i18n';
 import { flowTotals } from '@/lib/models/cash-flows';
 import { dataHealth } from '@/lib/models/data-health';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
-import { riskReport, sparkline } from '@/lib/models/risk';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
+import type { FxQuote } from '@/lib/models/types';
 import type { Holding } from '@/lib/models/valuation';
 import { stateText } from '@/lib/proposal-text';
+
+import { SecuritiesMaster } from '../securities/master';
+import { ValuationOverview } from '../valuation/overview';
+import { TradeForm } from './trade-form';
+import { tradeInitial } from './trade-initial';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -76,17 +80,17 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   let data: HoldingsData;
   let flows: CashFlowRecord[];
-  // The job status and the VaR only add to the page, so a failed read of them does not hide the holdings.
+  let rates: FxQuote[];
+  // The job status and the proposals only add to the page, so a failed read of them does not hide the holdings.
   let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
-  let risk: RiskData | DataError;
   let proposals: Proposal[] | DataError;
   const today = taipeiToday();
   try {
-    [data, flows, jobs, risk, proposals] = await Promise.all([
+    [data, flows, rates, jobs, proposals] = await Promise.all([
       loadHoldingsData(supabase),
       loadCashFlows(supabase),
+      loadFxHistory(supabase),
       orDataError(loadJobRuns(supabase)),
-      orDataError(loadRiskData(supabase, today)),
       orDataError(loadProposals(supabase, today)),
     ]);
   } catch (err) {
@@ -96,11 +100,22 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const portfolio = buildPortfolio(data);
   const saved = savedMessage(params);
   const empty = data.trades.length === 0 && data.manualAssets.length === 0;
+  const priced = new Set(data.prices.map((price) => price.ticker));
+  const savedTicker = param(params, 'saved') === 'added' || param(params, 'saved') === 'updated' ? data.securities.find((security) => security.ticker === param(params, 't')) : undefined;
+  const { initial, proposal } = tradeInitial(data, rates, today, {
+    ticker: param(params, 'ticker'),
+    side: param(params, 'side'),
+    qty: param(params, 'qty'),
+    pool: param(params, 'pool'),
+    proposal: param(params, 'proposal'),
+    fee: param(params, 'fee'),
+    tax: param(params, 'tax'),
+  });
 
   return (
     <>
       {saved && (
-        <p className="banner ok" role="status">
+        <div className="banner ok" role="status">
           <Bi {...saved} />
           {param(params, 'saved')?.endsWith('deleted') && (
             <>
@@ -110,7 +125,8 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
               </Link>
             </>
           )}
-        </p>
+          {savedTicker && <NextSteps ticker={savedTicker.ticker} productType={savedTicker.productType} waiting={!priced.has(savedTicker.ticker)} />}
+        </div>
       )}
       {jobs instanceof DataError ? (
         <p className="banner info" role="status">
@@ -135,47 +151,101 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           </ul>
         </div>
       )}
-      <section className="card form">
+      <section className="card form" id="add-trade">
         <div className="row spread">
-          <h1>
-            <Bi {...LABELS.holdings} />
-          </h1>
-          <div className="row">
-            <Link href="/holdings/new" className="button primary">
-              <Bi {...LABELS.addTrade} />
-            </Link>
-            <Link href="/import" className="button">
+          <h1>持倉</h1>
+          <div className="row small">
+            <Link href="/import">
               <Bi {...LABELS.importCsv} />
             </Link>
-            <Link href="/assets/new" className="button">
+            <Link href="/assets/new">
               <Bi {...LABELS.addAsset} />
             </Link>
-            <Link href="/cash-flows/new" className="button">
+            <Link href="/cash-flows/new">
               <Bi {...LABELS.addCashFlow} />
             </Link>
           </div>
         </div>
-        {empty ? (
+        <h2>
+          <Bi {...LABELS.addTrade} />
+        </h2>
+        {proposal !== undefined && (
           <p className="muted">
-            <Bi en="Nothing recorded yet." zh="尚無任何紀錄。" />
+            <Bi
+              en={`Filled in from proposal #${proposal}: change the price, fee and FX rate to what your broker's confirmation says.`}
+              zh={`已依提案 #${proposal} 填入：請把價格、手續費與匯率改成券商成交單上的數字。`}
+            />
           </p>
-        ) : (
-          <Summary data={data} portfolio={portfolio} />
         )}
+        <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} {...(proposal === undefined ? {} : { proposal })} compact />
       </section>
       {!empty && (
         <>
+          <section className="card form" aria-label="Summary 總覽">
+            <Summary data={data} portfolio={portfolio} />
+          </section>
           <RulesStatus data={data} portfolio={portfolio} />
-          <ClassWeights portfolio={portfolio} />
-          <Risk risk={risk} portfolio={portfolio} today={today} />
-          <ListedHoldings data={data} portfolio={portfolio} />
+          <ListedHoldings data={data} portfolio={portfolio} priced={priced} />
         </>
       )}
+      <ValuationOverview supabase={supabase} today={today} params={params} />
       <ManualAssets data={data} portfolio={portfolio} />
       {data.trades.length > 0 && <Trades data={data} showAll={param(params, 'trades') === 'all'} />}
       <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} />
+      <SecuritiesMaster data={data} saved={param(params, 'securities')} />
       {!empty && <Footnotes />}
     </>
+  );
+}
+
+/** Where to look at a ticker next: the analyses that read it, by what kind of security it is. */
+function tickerLinks(ticker: string, productType: Holding['productType']): Array<{ href: string; label: Bilingual }> {
+  const t = encodeURIComponent(ticker);
+  const regression = { href: `/regression?t=${t}`, label: LABELS.regression };
+  const security = { href: `/securities/${t}`, label: { en: 'Security and splits', zh: '證券資料與分割' } };
+  if (productType === 'stock') {
+    return [
+      { href: `/valuation?t=${t}`, label: { en: 'Valuation workbench', zh: '估值工作台' } },
+      { href: `/red-flags?t=${t}`, label: LABELS.redFlags },
+      regression,
+      { href: '/capm', label: LABELS.costOfEquity },
+      security,
+    ];
+  }
+  if (productType === 'equity_etf' || productType === 'theme_etf') {
+    return [{ href: '/look-through', label: LABELS.lookThrough }, regression, { href: '/costs', label: LABELS.costs }, security];
+  }
+  return [regression, { href: '/costs', label: LABELS.costs }, security];
+}
+
+/** After a trade is saved: this ticker's analyses, and whether they must wait for tonight's prices. */
+function NextSteps({ ticker, productType, waiting }: { ticker: string; productType: Holding['productType']; waiting: boolean }) {
+  return (
+    <div className="next-steps">
+      {waiting && (
+        <p>
+          <span className="status-icon idle" aria-hidden="true">
+            …
+          </span>{' '}
+          <Bi
+            en={`${ticker} has no close yet: the analyses list it once tonight's job loads its prices.`}
+            zh={`${ticker} 尚無收盤價：今晚排程載入價格後，各分析頁才會列入。`}
+          />
+        </p>
+      )}
+      <div className="row">
+        <strong>
+          <Bi en="Next" zh="下一步" />
+        </strong>
+        {tickerLinks(ticker, productType)
+          .slice(0, -1)
+          .map((link) => (
+            <Link key={link.href} href={link.href} className="chip">
+              <Bi {...link.label} />
+            </Link>
+          ))}
+      </div>
+    </div>
   );
 }
 
@@ -196,7 +266,7 @@ function OpenProposals({ proposals }: { proposals: readonly Proposal[] }) {
       {approved.length > 0 && (
         <Bi en={`${approved.length} approved, to trade: ${names(approved)}.`} zh={`${approved.length} 份已核准、待下單：${names(approved)}。`} />
       )}{' '}
-      <Link href="/proposals">
+      <Link href={`/${open.length === 0 ? '?p=approved' : ''}#proposals`}>
         <Bi en="Open the proposals" zh="查看提案" />
       </Link>
     </p>
@@ -263,7 +333,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
       {breaches.length > 0 ? (
         <div className="form">
           <Facts facts={breaches.map((breach) => breachFact(breach, data.caps))} />
-          <Link href="/proposals">
+          <Link href="/#proposals">
             <Bi en="The rules engine drafts the trim as a proposal" zh="規則引擎會把減碼擬成提案" />
           </Link>
         </div>
@@ -283,100 +353,6 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
   );
 }
 
-function ClassWeights({ portfolio }: { portfolio: Portfolio }) {
-  const totalTarget = sum(portfolio.classes.map((row) => row.assetClass.targetWeight));
-  return (
-    <section className="card form">
-      <h2>
-        <Bi en="Actual vs target weight" zh="實際與目標權重" />
-      </h2>
-      <Info>
-        <Bi
-          en="Actual = class value ÷ regular pool (windfall money is not counted); drift = actual − target, in percentage points (pp)."
-          zh="實際權重 = 類別市值 ÷ 一般投入資金池（不含大額資金）；偏離 = 實際 − 目標，單位為百分點（pp）。"
-        />{' '}
-        <Link href="/allocation">
-          <Bi {...LABELS.allocation} />
-        </Link>
-      </Info>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>
-                <Bi {...LABELS.assetClass} />
-              </th>
-              <th>
-                <Bi {...LABELS.sleeve} />
-              </th>
-              <th className="num">
-                <Bi {...LABELS.valueTwd} />
-              </th>
-              <th className="num">
-                <Bi {...LABELS.target} />
-              </th>
-              <th className="num">
-                <Bi {...LABELS.actual} />
-              </th>
-              <th className="num">
-                <Bi {...LABELS.drift} />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {portfolio.classes.map((row) => (
-              <tr key={row.assetClass.id}>
-                <td>
-                  <Bi en={row.assetClass.nameEn} zh={row.assetClass.nameZh} />
-                </td>
-                <td>
-                  <Bi {...SLEEVE[row.assetClass.sleeve]} />
-                </td>
-                <td className="num">{twd(row.valueTwd)}</td>
-                <td className="num">{percent(row.assetClass.targetWeight)}</td>
-                <td className="num">{percent(row.weight)}</td>
-                <td className="num">{portfolio.pool.totalTwd > 0 ? points(row.drift) : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td>
-                <strong>
-                  <Bi en="Total" zh="合計" />
-                </strong>
-              </td>
-              <td />
-              <td className="num">
-                <strong>{twd(portfolio.pool.totalTwd)}</strong>
-              </td>
-              <td className="num">{percent(totalTarget)}</td>
-              <td className="num">{portfolio.pool.totalTwd > 0 ? percent(1) : '—'}</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-/** The N4 VaR card, worked out from the holdings above (PRD Section 5: the dashboard's third card). */
-function Risk({ risk, portfolio, today }: { risk: RiskData | DataError; portfolio: Portfolio; today: string }) {
-  if (risk instanceof DataError) {
-    return (
-      <p className="banner info" role="status">
-        <Bi
-          en={`Could not read the Value at Risk inputs (${risk.table}: ${risk.detail}); if the app was just updated, run npx supabase db push.`}
-          zh={`無法讀取風險值所需資料（${risk.table}：${risk.detail}）；如果剛更新過程式，請執行 npx supabase db push。`}
-        />
-      </p>
-    );
-  }
-  const report = riskReport(portfolio.holdings, risk.input, today);
-  return <RiskCard report={report} line={sparkline(risk.saved, today, report)} details />;
-}
-
 function Estimated({ holding }: { holding: Holding }) {
   return holding.estimated && holding.valueTwd !== null ? (
     <span className="estimate" title="Estimated 估計值">
@@ -385,7 +361,7 @@ function Estimated({ holding }: { holding: Holding }) {
   ) : null;
 }
 
-function ListedHoldings({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio }) {
+function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portfolio: Portfolio; priced: ReadonlySet<string> }) {
   const classes = new Map(data.assetClasses.map((assetClass) => [assetClass.id, assetClass]));
   const positions = new Map(portfolio.positions.map((position) => [positionKey(position.pool, position.ticker), position]));
   const listed = portfolio.holdings
@@ -400,9 +376,14 @@ function ListedHoldings({ data, portfolio }: { data: HoldingsData; portfolio: Po
   const total = portfolio.pool.totalTwd;
   return (
     <section className="card form">
-      <h2>
-        <Bi en="Listed holdings" zh="上市持股" />
-      </h2>
+      <div className="row spread">
+        <h2>
+          <Bi en="Listed holdings" zh="上市持股" />
+        </h2>
+        <span className="muted small">
+          <Bi en="Tap a ticker for its analyses" zh="點代號看這檔的分析" />
+        </span>
+      </div>
       <div className="table-wrap">
         <table>
           <thead>
@@ -440,8 +421,31 @@ function ListedHoldings({ data, portfolio }: { data: HoldingsData; portfolio: Po
               return (
                 <tr key={holding.key}>
                   <td className="name">
-                    <strong>{holding.ticker}</strong>
+                    {holding.ticker && (
+                      <details className="ticker-menu">
+                        <summary aria-label={`${holding.ticker}: analyses 分析`}>
+                          <strong>{holding.ticker}</strong>
+                        </summary>
+                        <ul>
+                          {tickerLinks(holding.ticker, holding.productType).map((link) => (
+                            <li key={link.href}>
+                              <Link href={link.href}>
+                                <Bi {...link.label} />
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                     <div className="muted small">{holding.label}</div>
+                    {holding.ticker && !priced.has(holding.ticker) && (
+                      <div className="small">
+                        <span className="status-icon idle" aria-hidden="true">
+                          …
+                        </span>
+                        <Bi en="waiting for tonight's prices" zh="等待今晚排程" />
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className={holding.pool === 'windfall' ? 'badge warn' : 'badge'}>

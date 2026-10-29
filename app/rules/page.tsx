@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { ChangeList, HistorySection, TaipeiTime } from '@/components/history';
@@ -48,7 +48,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.rules} />
+          <Zh {...LABELS.rules} />
         </h1>
         {saved && (
           <p className="banner ok" role="status">
@@ -56,7 +56,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
           </p>
         )}
         <p>
-          <Link href="/proposals">
+          <Link href="/#proposals">
             <Bi en="Go to the proposals" zh="前往提案" />
           </Link>
         </p>
@@ -141,7 +141,7 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           {live && (
             <>
               {' '}
-              <Link href={`/proposals#proposal-${live.id}`}>
+              <Link href={`/${live.status === 'approved' ? '?p=approved' : ''}#proposal-${live.id}`}>
                 <Bi en={`Proposal #${live.id}`} zh={`提案 #${live.id}`} />
               </Link>{' '}
               <span className="small">

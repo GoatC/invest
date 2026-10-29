@@ -1,37 +1,47 @@
+/* The light theme is the Long-View design system's "mist" (勿忘草晨霧): an off-white ground, cards
+   one step lighter and lifted by a soft shadow instead of a border, forget-me-not blue for links,
+   the selected state and decoration. --accent-soft is the "selected / look here" ground; --sky is
+   decoration only (under 3:1 on --surface, it never carries text or a figure alone). */
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --text: #1c2430;
-  --muted: #5d6b7e;
-  --border: #d9dee6;
-  --accent: #1f5fbf;
+  --bg: #f5f7fb;
+  --surface: #fbfcfe;
+  --text: #1f2a3a;
+  --muted: #55647a;
+  --border: #dbe4ef;
+  --border-strong: #8294ad;
+  --accent: #34689c;
   --accent-text: #ffffff;
-  --ok-bg: #e8f5ec;
-  --ok-text: #1d6b36;
-  --warn-bg: #fff4dc;
-  --warn-text: #7a4b00;
-  --danger-bg: #fdecea;
-  --danger-text: #a3271b;
-  --info-bg: #e9f1fc;
-  --info-text: #1d4f94;
+  --accent-soft: #dce9f7;
+  --sky: #8db4e2;
+  --ok-bg: #e5f2ea;
+  --ok-text: #1c6a43;
+  --warn-bg: #fbf0d8;
+  --warn-text: #74500a;
+  --danger-bg: #fbe8e6;
+  --danger-text: #a02f27;
+  --info-bg: #e2edf8;
+  --info-text: #2c5d93;
   --radius: 10px;
+  --radius-lg: 16px;
+  --shadow-soft: 0 1px 2px rgba(31, 42, 58, 0.05), 0 4px 16px rgba(31, 42, 58, 0.06);
+  --card-border: none;
+  --tap-min: 44px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-  /* Chart series: the eight categorical slots of the dataviz reference palette, checked on this
-     surface with its validator (scripts/validate_palette.js); slots 3, 4 and 5 sit below 3:1 on
-     white, so every chart has its table and labels. --chart-context is the de-emphasis gray; the
-     status colours mean good, watch and act, and always come with an icon and a label. */
-  --chart-1: #2a78d6;
-  --chart-2: #eb6834;
-  --chart-3: #1baf7a;
-  --chart-4: #eda100;
-  --chart-5: #e87ba4;
-  --chart-6: #008300;
-  --chart-7: #6250d6;
-  --chart-8: #e34948;
-  --chart-context: #898781;
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-critical: #d03b3b;
+  /* Chart series: the design system's eight categorical slots for mist, each at least 3:1 on
+     --surface; every chart still has its table and labels. --chart-context is the de-emphasis gray;
+     the status colours mean good, watch and act, and always come with an icon and a label. */
+  --chart-1: #4a86c5;
+  --chart-2: #d9693a;
+  --chart-3: #1f9a74;
+  --chart-4: #b8860b;
+  --chart-5: #c9628f;
+  --chart-6: #4f8a2b;
+  --chart-7: #6c5fc4;
+  --chart-8: #cf4f4f;
+  --chart-context: #8a93a0;
+  --status-good: #2a8a4a;
+  --status-warning: #b87d00;
+  --status-critical: #c8453d;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -60,6 +70,15 @@
     --chart-7: #9085e9;
     --chart-8: #e66767;
     --chart-context: #898781;
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-critical: #d03b3b;
+    /* Dark mode keeps its earlier look: cards with a border, no shadow. */
+    --border-strong: #3d4a5c;
+    --accent-soft: #142640;
+    --sky: #3987e5;
+    --shadow-soft: none;
+    --card-border: 1px solid var(--border);
   }
 }
 
@@ -94,32 +113,280 @@ h2 {
 
 /* Layout */
 
+/* Header and navigation (components/site-nav.tsx): the brand, four pages as pills on a shared
+   track, then four groups that open a short list below their button. Under 760px the pills give
+   way to a bottom tab bar. */
+
 .site-header {
+  position: relative;
+  z-index: 20;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--border);
+}
+
+.site-header-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  padding: 0.75rem 1rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: 0.5rem 1.25rem;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap-min);
   font-weight: 700;
+  font-size: 1.1rem;
   color: var(--text);
   text-decoration: none;
 }
 
 .site-nav {
+  flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 1rem;
+  gap: 0.5rem 0.75rem;
 }
 
-.site-nav a {
+.nav-pills {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg);
+  border-radius: 999px;
+}
+
+.nav-pill,
+.nav-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--tap-min);
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  color: var(--text);
+  font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms, color 150ms;
+}
+
+.nav-drop {
+  padding: 0 0.9rem 0 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.nav-pill:hover,
+.nav-drop:hover,
+.nav-drop.open {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.nav-pill.current,
+.nav-drop.current {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.nav-chevron {
+  transition: transform 150ms;
+}
+
+.nav-chevron.open {
+  transform: rotate(180deg);
+}
+
+.nav-group {
+  position: relative;
+}
+
+.nav-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  min-width: 12rem;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(31, 42, 58, 0.08), 0 12px 32px rgba(31, 42, 58, 0.14);
+}
+
+.nav-menu a,
+.sheet-group a {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 0.9rem;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-menu a:hover,
+.nav-menu a.current,
+.sheet-group a:hover,
+.sheet-group a.current {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sign-out {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 0 0.5rem;
+}
+
+.sign-out:hover,
+.sheet-close:hover,
+.tab-bar button:hover {
+  background: none;
+}
+
+.tab-bar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-pill,
+  .nav-drop,
+  .nav-chevron {
+    transition: none;
+  }
+}
+
+/* A phone: the header keeps the brand and sign-out; the pages move to a tab bar at the bottom. */
+@media (max-width: 759px) {
+  .site-nav,
+  .nav-signout {
+    display: none;
+  }
+
+  .site-header-inner {
+    justify-content: space-between;
+  }
+
+  body.signed-in {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .tab-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 6px 4px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    box-shadow: 0 -1px 0 var(--border);
+  }
+
+  .tab-bar a,
+  .tab-bar button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 56px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .tab-bar .tab-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 30px;
+    border-radius: 999px;
+  }
+
+  .tab-bar .current {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .tab-bar .current .tab-icon {
+    background: var(--accent-soft);
+  }
+
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(31, 42, 58, 0.42);
+  }
+
+  .sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem 1rem;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 32px rgba(31, 42, 58, 0.18);
+  }
+
+  .sheet h2 {
+    margin: 0;
+  }
+
+  .sheet-close {
+    border: none;
+    background: none;
+    width: var(--tap-min);
+    padding: 0;
+    color: var(--muted);
+  }
+
+  .sheet-group h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .sheet-group ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .sheet-group a {
+    background: var(--bg);
+    border-radius: 12px;
+    font-weight: 600;
+  }
 }
 
 .page {
@@ -145,9 +412,10 @@ h2 {
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
+  border: var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 1.1rem 1.25rem;
   min-width: 0;
 }
 
@@ -204,8 +472,7 @@ th .bi > [lang='zh-Hant'],
 legend .bi > [lang='zh-Hant'],
 .button .bi > [lang='zh-Hant'],
 button .bi > [lang='zh-Hant'],
-.badge .bi > [lang='zh-Hant'],
-.site-nav .bi > [lang='zh-Hant'] {
+.badge .bi > [lang='zh-Hant'] {
   white-space: nowrap;
 }
 
@@ -267,6 +534,8 @@ tr:last-child td {
 
 .form {
   display: grid;
+  /* One column that never grows past its container, even around a line that cannot wrap. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.9rem;
 }
 
@@ -299,18 +568,31 @@ textarea {
   font: inherit;
   color: var(--text);
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 0.5rem 0.6rem;
   width: 100%;
   min-width: 0;
 }
 
+/* Every field and button is at least a fingertip tall (44px); checkboxes and radios keep their size. */
+input:not([type='checkbox']):not([type='radio']),
+select {
+  min-height: var(--tap-min);
+}
+
 input:focus,
 select:focus,
 textarea:focus {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input[readonly] {
@@ -342,12 +624,18 @@ button {
   font: inherit;
   cursor: pointer;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
-  padding: 0.5rem 0.9rem;
+  padding: 0.6rem 0.9rem;
+  min-height: var(--tap-min);
   text-decoration: none;
   display: inline-block;
+}
+
+.button:hover,
+button:hover {
+  background: var(--accent-soft);
 }
 
 .button.primary,
@@ -355,6 +643,17 @@ button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+.button.primary:hover,
+button.primary:hover {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 34, 0.12);
+}
+
+.link-button:hover,
+.slice-button:hover {
+  background: none;
 }
 
 .button.danger,
@@ -372,6 +671,7 @@ button:disabled {
   border: none;
   background: none;
   padding: 0;
+  min-height: 0;
   color: var(--accent);
   text-decoration: underline;
 }
@@ -485,9 +785,11 @@ details ul {
 }
 
 .segmented a {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  padding: 0.2rem 0.75rem;
+  padding: 0.6rem 0.9rem;
+  min-height: var(--tap-min);
+  line-height: 1.5;
   text-decoration: none;
   color: var(--text);
   font-size: 0.9rem;
@@ -590,9 +892,9 @@ details ul {
 /* Allocation (components/allocation-charts.tsx) */
 
 .segmented .tab {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  padding: 0.2rem 0.75rem;
+  padding: 0.6rem 0.9rem;
   background: var(--surface);
   color: var(--text);
   font-size: 0.9rem;
@@ -621,6 +923,7 @@ details ul {
   border: none;
   background: none;
   padding: 0;
+  min-height: 0;
   color: inherit;
   text-align: left;
 }
@@ -736,6 +1039,146 @@ tr.selected td {
 }
 
 /* The weekly dashboard (app/page.tsx) */
+
+/* The band at the top: forget-me-not ground with a sky stripe, the value large on the left and the
+   week's three lines, each with its status icon, on the right. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 3rem;
+  align-items: flex-start;
+  padding: 1.75rem 1.5rem 1.4rem;
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  border: var(--card-border);
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6px;
+  background: var(--sky);
+}
+
+.hero-figure {
+  flex: 1 1 260px;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.hero-figure h1 {
+  margin: 0;
+}
+
+.hero-value {
+  margin-top: 0.6rem;
+  font-size: 2.5rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.hero-lines {
+  flex: 999 1 420px;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.hero .summary-lines {
+  list-style: none;
+  padding: 0;
+  gap: 0.6rem;
+}
+
+.hero .summary-lines li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.hero-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.hero-icon.ok {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.hero-icon.watch {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.hero-icon.rebalance {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.button.pill {
+  border-radius: 999px;
+  padding-inline: 1.25rem;
+  font-weight: 700;
+}
+
+/* Two columns on a wide screen, a main card beside smaller ones; one column on a phone. */
+.dash-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.dash-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  display: grid;
+}
+
+.dash-side {
+  flex: 1 1 300px;
+  min-width: 0;
+  display: grid;
+  gap: 1.25rem;
+}
+
+/* The VaR's distribution and make-up, folded under the figure. */
+details.risk-details {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+details.risk-details > summary {
+  font-weight: 600;
+  padding-block: 0.6rem;
+}
+
+details.risk-details[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.risk-part {
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.risk-part h3 {
+  margin: 0;
+  font-size: 1rem;
+}
 
 .summary-lines {
   margin: 0;
@@ -922,4 +1365,99 @@ details.history-section > summary h2::after {
 
 details.history-section[open] > summary h2::after {
   content: ' ▾';
+}
+
+/* The holdings page (app/holdings/page.tsx) */
+
+/* The quick trade entry: date, ticker, side, quantity and price in a row; the rest folded under it. */
+.form-grid.quick-entry {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+details.more-fields > summary {
+  padding-block: 0.6rem;
+  font-weight: 600;
+}
+
+details.more-fields[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+/* A ticker in the holdings table opens its analyses in place. */
+details.ticker-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.5rem;
+  margin-left: -0.5rem;
+  border-radius: 8px;
+  list-style: none;
+}
+
+details.ticker-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.ticker-menu > summary::after {
+  content: '▾';
+  font-size: 0.75rem;
+}
+
+details.ticker-menu > summary:hover,
+details.ticker-menu[open] > summary {
+  background: var(--accent-soft);
+}
+
+details.ticker-menu ul {
+  list-style: none;
+  margin: 0.35rem 0 0.5rem;
+  padding: 0.35rem;
+  display: grid;
+  gap: 2px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
+
+details.ticker-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 0.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+details.ticker-menu a:hover {
+  background: var(--surface);
+}
+
+/* After a save: the ticker's analyses as chips. */
+.next-steps {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.next-steps p {
+  margin: 0;
+  color: var(--text);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.chip:hover {
+  background: var(--accent-soft);
 }

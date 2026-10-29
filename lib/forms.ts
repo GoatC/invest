@@ -40,7 +40,7 @@ export interface DeleteState {
 export function afterSecurityAdded(next: string | undefined, ticker: string): string {
   if (next && /^\/holdings\/\d+$/.test(next)) return next;
   if (next === 'tab') return `/securities/new?added=${encodeURIComponent(ticker)}`;
-  return `/holdings/new?ticker=${encodeURIComponent(ticker)}`;
+  return `/holdings?ticker=${encodeURIComponent(ticker)}#add-trade`;
 }
 
 /** Why a sell is impossible: it would sell more than the pool holds on that date. */

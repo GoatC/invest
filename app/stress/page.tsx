@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { Stat } from '@/components/stat';
@@ -48,7 +48,7 @@ export default async function StressPage({ searchParams }: { searchParams: Promi
   const heading = (
     <>
       <h1>
-        <Bi {...LABELS.stress} />
+        <Zh {...LABELS.stress} />
       </h1>
       <Info>
         <Bi

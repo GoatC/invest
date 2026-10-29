@@ -117,7 +117,7 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | `reading the database: Invalid API key` | `SUPABASE_SECRET_KEY` 貼錯：要 `sb_secret_` 開頭，不是 publishable key |
 | `job_runs` 找不到資料表，或持倉頁寫「無法讀取每夜排程狀態」 | 第 1 步的 `npx supabase db push` 還沒執行 |
 | `FinMind …: Your level is register …`、額度用完 | FinMind token 錯了，或這一小時的額度用完；隔天會自動重試 |
-| `Rules: proposals: …`，或資料狀態頁寫「無法檢查規則」 | 第 9 步的 `npx supabase db push`（`rules_engine`）還沒執行；執行後到提案頁按「立即檢查規則」 |
+| `Rules: proposals: …`，或資料狀態頁寫「無法檢查規則」 | 第 9 步的 `npx supabase db push`（`rules_engine`）還沒執行；執行後到儀表板最下方的「提案」按「立即檢查規則」 |
 | 資料狀態頁某一檔一直「尚未載入」 | 代號可能和 FinMind 用的不同（例如美股 ETF 已下市）；把資料狀態頁的錯誤訊息貼給 Claude |
 | 資料狀態頁「每月市場資料」的來源是 multpl.com，或「主要來源失敗」列出 `us_cape: shiller …` | Shiller 的網站暫時連不上（測試時雲端主機的連線曾被重設），已自動改用備援，數值相近，不需處理 |
 | 「大額資金」頁寫「尚未載入該月份的 CAPE」 | 排程還沒載入每月市場資料：`npx supabase db push` 之後手動執行一次排程（上面第 4 步） |
