@@ -67,6 +67,7 @@ export const LABELS = {
   allocation: { en: 'Allocation', zh: '資產配置' },
   risk: { en: 'Value at Risk', zh: '風險值' },
   calculator: { en: 'Calculator', zh: '複利計算機' },
+  monteCarlo: { en: 'Monte Carlo', zh: '蒙地卡羅' },
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },

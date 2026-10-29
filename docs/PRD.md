@@ -476,6 +476,8 @@ Phase 2, step 5 adds company\_profiles (ticker, industry\_code, industry, sic, a
 
 Phase 2, step 6 adds fund\_holdings (fund, as\_of, source, constituents, loaded\_at): each fund's newest holdings file, one row per fund with its lines as compact arrays, written by the job only; company\_profiles gains sector (GICS) for the stocks held directly. 第二階段第 6 步新增 fund\_holdings：各基金最新的成分股檔案（每檔一列），只有每夜排程能寫入；company\_profiles 新增 GICS 產業欄位。
 
+Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly job's monthly Monte Carlo re-run, the inputs and the figures at the marks, written by the job only, read by the dashboard in the week it updates. 第三階段第 1 步新增 simulation\_runs（模型、執行日、摘要）：每夜排程每月一次的蒙地卡羅重跑結果，只有排程能寫入，儀表板在更新當週讀取。
+
 ## 8. Roadmap 開發路線圖
 
 Phase 1 comes first because every alert, proposal and weekly summary depends on the nightly data job and working push. 第一階段優先，因為所有警報、提案與週報都依賴每夜資料排程與可用的推播。
@@ -552,6 +554,11 @@ Phase 2 第二階段:
 - Step 5, N3: nine indicators, thresholds in config `red_flags`; Beneish M (eight-variable, the twelve months to the newest quarter end against the year before, SG&A or else operating expenses, D&A as depreciation) red above −1.78; Altman Z for manufacturers (SIC 2000–3999, TWSE industry codes in `manufacturing`) with the market value of equity, Z″ for others or without a profile (book equity, red < 1.10, amber < 2.60), banks and insurers (`financial`) without either; operating cash flow below net income at three yearly quarter ends → amber; auditor change, going concern, restatement and penalties count events in 3 × 365.25 days, from the feeds or the owner's entries (a count as of a date, 0 for checked and none); governance from the owner's tier, bottom 35% amber; exclusion by ticker or by industry code or name; light = worst level covered, coverage = covered ÷ applicable; a Taiwan auditor change is a change of firm (a partner rotating inside it is left out); the job reads TWSE's profiles and announcements nightly and SEC or MOENV when a company is due its weekly scan (`scan_days` 7), then saves the scan before the rules; an entry saves today's scan of its company at once; RED_FLAG_WORSENS (a holding, both pools) and RED_FLAG_RED (a regular-pool satellite stock, exit = `sell_share` 1 of it into the core) fire once per run of a light, named by the day it began; a satellite stock turning red is left to RED_FLAG_RED 九項指標；Beneish、Altman Z／Z″、現金流；事件三年；燈號取最差、覆蓋率；每週掃描；兩條規則每段燈號只觸發一次
 - Step 6, F14: holdings of both pools at today's values; each fund spread over its newest issuer file (`look_through.sources`: Vanguard VT, VOO; Fubon 00692), read when `refresh_days` (28) have passed, the unnamed rest of a fund (cash, futures) kept with it; a fund without a file counts whole, in its trade currency and `fund_country`; gold as gold, a TWD balance as TWD cash; a company keyed by its ISIN's country and ticker ("TW:2330"), a direct stock by its market and ticker; country = ISIN country (the issuer's registration), currency = that country's; sector = GICS, S&P 500 members from the Select Sector SPDR files, Taiwan names by `tw_sectors`, the rest not classified, shares of the equity looked through; overlap(A, B) = Σ min(w_A, w_B) over common companies; `top_companies` (30) named, the rest one line; treemap coloured by the seven largest sectors; TER, tracking difference and domicile from F15's `fund_costs` 基金依發行商成分股展開；公司以 ISIN 國家加代號比對；重疊度取較小權重加總
 - Step 7, N7: proxies in config `sectors` (`us`: the 11 Select Sector SPDR funds by GICS sector; `tw`: 20 TWSE industry indices by FinMind id, each with its TWSE name and GICS sector; `colour` red_up or green_up), saved in `index_prices` as the fund's ticker or `TW_` and the index id; no new table; returns from the close on or before the period's start (1W, 1M, 3M, the last close of the year before, 1Y; months by calendar, the month's end when shorter) to the newest close, none when no close lies within the 10 days up to the start; a sector with several Taiwan indices takes their equal-weighted average; volatility = sample standard deviation of the last 52 weekly returns (each 7 days back from the newest close), × √52, at least 26; exposure from F14's look-through (both pools or one), split US, Taiwan and elsewhere by the company's country, unclassified kept apart; a treemap tile's colour = the exposure-weighted return of its US and Taiwan rows (elsewhere left out); the portfolio's bubble = the exposure-weighted 1-year return and volatility of the rows; display only, no rule, no push 類股代理設定於 config；報酬自期初或之前的收盤起算；多個台灣指數取等權平均；波動度為 52 週週報酬 × √52；曝險取自 F14；板塊顏色依曝險加權；僅供參考
+
+Phase 3 第三階段 (the gate for Phase 3 was passed by Hugo on 2026-10-29, which fixed its build order in Section 11 第三階段於 2026-10-29 由 Hugo 通過關卡，建置順序見第 11 節):
+
+- Step 1, F5: runs on the F2 engine (`simulate`, the same loop) with a return drawn for each month; the draws are a moving-block bootstrap (config `monte_carlo.block_months`, 3) of whole historical rows, so classes keep their correlation, from each class's `benchmark_ticker` as monthly TWD returns over `lookback_years` (5, the window the nightly job already loads) and at least `min_months` (36) common months, or no run. Each class is re-centred on its CMA expected return ÷ 12 (F2's own monthly return, so the two modes agree on the mean) and, with `scale_to_cma`, its deviations are scaled to its CMA volatility ÷ √12; the history gives the shape of the swings and the co-movement, not the level. Classes without a CMA are left out and the rest re-weighted, as F2's expected return does; the portfolio holds target weights monthly. The windfall: the saved F3 plan's remaining tranches (waiting cash at `windfall.cash_return`, deployed money in the core mix only), else an expected windfall (`monte_carlo.windfall`: amount, arrival month, equal tranches); acceleration is not simulated (F10 replays it). The goal is in today's money (`monte_carlo.target_twd`). Seeded by the run's month, so a page shows the same figures all month; the nightly job saves the month's summary in `simulation_runs`, and the dashboard shows it that week 以 F2 引擎（同一個 `simulate` 迴圈）逐月抽樣報酬；抽樣為整列歷史月份的移動區塊自助抽樣（區塊 3 個月），類別間的相關性得以保留；歷史為各類別 `benchmark_ticker` 近 5 年（排程已載入的範圍）的台幣月報酬，至少 36 個共同月份，否則不執行。各類別以資本市場假設的預期報酬 ÷ 12 為中心（與 F2 相同，兩種模式平均值一致），並預設把波動縮放到假設波動度 ÷ √12；歷史只提供波動形狀與連動，不決定水準。沒有假設的類別不計入、其餘重新加權（與 F2 相同），每月維持目標權重。大額資金：已儲存 F3 計畫的剩餘各批（等待中現金依 `windfall.cash_return`，已投入部分僅計核心類別），否則為預期大額資金（金額、入帳月份、等額分批）；加速投入不在此模擬（F10 回放）。目標以今天幣值計。以當月為亂數種子，因此整個月顯示相同數字；每夜排程每月把摘要存入 `simulation_runs`，儀表板在當週顯示
+
 
 ## 10. Glossary 雙語術語表
 
@@ -633,6 +640,15 @@ Rules:
 6. F14 combined look-through. 核心與衛星合併透視。
 7. N7 sector heatmap tab: heatmap, treemap, bubble chart, on F14's exposure (added 2026-10-28). 產業熱圖分頁：熱力圖、板塊圖、泡泡圖，曝險取自 F14（2026-10-28 加入）。
 
+**Phase 3 build order 第三階段建置順序** (set when Hugo passed Phase 2's gate, 2026-10-29 第二階段關卡通過時訂定)
+
+1. F5 Monte Carlo on the F2 engine: it needs no other Phase 3 feature, and F1 shows its fan. 蒙地卡羅（F2 引擎）：不需要其他第三階段功能，且 F1 要顯示它的扇形圖。
+2. F1 30-year life timeline, with F2 and F5 and the actuals overlaid. 30 年人生財務時間軸（疊加 F2、F5 與實際值）。
+3. F10 stress test and scenario replay, with F3's acceleration tiers. 壓力測試與情境回放（含 F3 加速級距）。
+4. F7 efficient frontier and CML, reference only. 效率前緣與資本市場線（僅供參考）。
+5. N2 Brinson attribution. Brinson 績效歸因。
+6. N1 Fama–French 5-factor mode. 回歸分析區五因子模式。
+
 **Acceptance tests 驗收測試** (computed for this check; each becomes a unit test 每項皆轉為單元測試)
 
 | Test 測試 | Input 輸入 | Expected 預期結果 |
@@ -664,6 +680,11 @@ Rules:
 | N7 returns (added in Phase 2, step 7) | Close 100 a year ago, 105 at the last year end, 110 now | 1 year +10.00%; year to date 110 ÷ 105 − 1 = +4.76% |
 | N7 volatility | 52 weekly returns, +1% and −1% in turn | Sample SD 0.01 × √(52 ÷ 51) = 1.0098% a week; × √52 = 7.28% a year |
 | N7 treemap colour | US tech +10% on NT$30,000, Taiwan tech +20% on NT$10,000 | (30,000 × 10% + 10,000 × 20%) ÷ 40,000 = +12.5% |
+| F5 degenerate paths (added in Phase 3, step 1) | No volatility; PMT NT$10,000, 6%/yr, 30 years, no step-up | Median, both band edges and the mean path all ≈ NT$10,045,000, as the F2 case |
+| F5 money | No return, no inflation; PV 50,000, PMT 1,000, 2 years | Median 74,000 = money put in; no path ends below it |
+| F5 goal | Every path alike; goal below, then above, the final value in today's money | Chance of reaching it 100%, then 0% |
+| F5 calibration | A class with CMA 8% a year and 15% volatility | Calibrated monthly mean 8% ÷ 12; monthly standard deviation 15% ÷ √12 |
+| F5 windfall | NT$400,000 pool: NT$200,000 deployed, two tranches of NT$100,000 due in months 2 and 3; core mix +1% a month, cash 0 | Month 12: 200,000 × 1.01¹² + 100,000 × 1.01¹⁰ + 100,000 × 1.01⁹ |
 
 **First prompt for Claude Code 第一個指令**
 

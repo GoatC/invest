@@ -17,6 +17,7 @@ export const RISK_ERROR = 'VaR';
 export const RULES_ERROR = 'Rules';
 /** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
 export const BETAS_ERROR = 'Betas';
+export const MONTE_CARLO_ERROR = 'Monte Carlo';
 /** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
 export const VALUATIONS_ERROR = 'Valuations';
 /** …and when the week's red-flag scan could not be saved (N3, Phase 2 step 5). */

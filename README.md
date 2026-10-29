@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phase 1 is built and its gate has passed; Phase 2 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and waits on its gate before Phase 3 starts. 第一階段已完成並通過關卡；第二階段已依 PRD 第 11 節的順序完成，待通過關卡後才開始第三階段。
+Phases 1 and 2 are built and their gates have passed; Phase 3 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一、二階段已完成並通過關卡；第三階段依 PRD 第 11 節的順序建置中。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
@@ -57,7 +57,14 @@ Phase 1 is built and its gate has passed; Phase 2 is built, in the order of [PRD
 | 6. F14 combined look-through 核心與衛星合併透視 | ✅ |
 | 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | ✅ |
 
-Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress tests, Brinson attribution and the Fama–French five factors. 第三階段加入蒙地卡羅、人生時間軸、效率前緣、壓力測試、Brinson 歸因與 Fama–French 五因子。
+| Phase 3 step 第三階段步驟 | State 狀態 |
+| --- | --- |
+| 1. F5 Monte Carlo simulation 蒙地卡羅模擬 | ✅ |
+| 2. F1 30-year life timeline 30 年人生財務時間軸 | Planned 已規劃 |
+| 3. F10 stress test and scenario replay 壓力測試與情境回放 | Planned 已規劃 |
+| 4. F7 efficient frontier and CML 效率前緣與資本市場線 | Planned 已規劃 |
+| 5. N2 Brinson attribution Brinson 績效歸因 | Planned 已規劃 |
+| 6. N1 Fama–French five-factor mode 五因子模式 | Planned 已規劃 |
 
 ## What works today 目前的功能
 
@@ -77,6 +84,7 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 - **Red flags 紅旗指標** (N3): a red / amber / green light per single stock from nine indicators (Beneish M, Altman Z or Z″, cash flow against earnings, auditor changes, going-concern opinions and restatements from SEC 8-Ks and TWSE announcements, Taiwan environmental penalties, the governance tier, your exclusion list), with the share of them data covers; scanned weekly, a holding's worse light prompts a review and a satellite stock turning red drafts its exit. Display only. 九項指標的紅黃綠燈與資料覆蓋率；每週掃描，持股燈號轉差時提醒檢視，衛星持股轉紅時準備出場清單；僅供參考。
 - **Look-through 合併透視** (F14): every fund opened up with its issuer's holdings file (Vanguard, Fubon), so each company's exposure through all the funds and held directly is one line, as a treemap; country, GICS sector and currency splits, each pair of funds' overlap, and each fund's TER, tracking difference and domicile. 以發行商成分股展開各基金，合併計算各公司曝險（矩形樹狀圖）、國家、產業與幣別分布、基金重疊度與費用。
 - **Sectors 產業熱圖** (N7): the 11 GICS sectors, priced by the Select Sector SPDR funds in the US and the TWSE industry indices in Taiwan, as a heatmap of returns over 1 week to 1 year (red up by default, or green up), a treemap of the portfolio's exposure through the look-through coloured by return with each sector's companies, and a bubble chart of 1-year return against volatility with the portfolio's own point. Display only. 以 GICS 11 個產業呈現美股 SPDR 類股 ETF 與證交所類股指數的報酬熱力圖、依穿透曝險繪製的板塊圖（可展開公司）與報酬對波動度的泡泡圖；僅供參考。
+- **Monte Carlo 蒙地卡羅** (F5): 10,000 possible futures for the saved plan, drawn month by month from how each class's benchmark ETF actually moved (blocks of three real months, so the crashes stay), re-centred on your expected returns; the median, a 10–90% band, the chance of reaching a goal in today's money, with the windfall's tranches; re-run monthly. 依各類別基準 ETF 的實際月報酬（連續三個月一組，保留崩跌）抽樣出 10,000 種可能的未來，以你的預期報酬為中心；顯示中位數、10–90% 區間、達成目標（今天幣值）的機率，並納入大額資金分批；每月重跑。
 - **Nightly data 每夜資料**: GitHub Actions loads prices, FX, gold, the market series, indices, yields and filings, each with a fallback feed, saves each day's NAV and VaR, then checks the rules; the Data status page shows every run, and two missed nights raise an alert. 每夜載入資料、存淨值與風險值、檢查規則；連續兩晚失敗即警示。
 
 ![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
@@ -104,6 +112,8 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 ![Look-through with demo holdings: each company's exposure through the funds and held directly, coloured by sector](docs/images/look-through.png)
 
 ![Sectors with demo closes: the heatmap of each sector's return by period, US and Taiwan side by side](docs/images/sectors.png)
+
+![Monte Carlo with demo data: the fan of the plan's value over 30 years and where year 30 could land](docs/images/monte-carlo.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 

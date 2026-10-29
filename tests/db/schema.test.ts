@@ -8,6 +8,7 @@ import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
+import { readMcSettings } from '../../lib/models/monte-carlo.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
@@ -22,13 +23,14 @@ const KEY_MISSING = '23503';
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
-// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings.
+// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
+// (Phase 3, step 1) adds simulation_runs.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
-  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -48,7 +50,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries and fund_holdings', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings and simulation_runs', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -885,5 +887,34 @@ describe('demo seed', () => {
             + (select count(*) from public.manual_assets where pool = 'windfall')`,
     );
     assert.equal(windfallRows, 0);
+  });
+});
+
+describe('Monte Carlo (Phase 3, step 1)', () => {
+  it('seeds the settings: 10,000 paths, three-month blocks, marks at 10, 20 and 30 years, no target and no windfall figures', async () => {
+    const settings = readMcSettings(await scalar(db, `select value from public.config where key = 'monte_carlo'`));
+    assert.ok(settings);
+    assert.equal(settings.paths, 10000);
+    assert.equal(settings.blockMonths, 3);
+    assert.deepEqual(settings.markYears, [10, 20, 30]);
+    assert.equal(settings.targetTwd, null);
+    assert.equal(settings.windfall.amountTwd, null);
+  });
+
+  it('keeps one run per model and day, for the owner to read and the job to write', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), DENIED);
+    });
+    await db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{"months": 60}')`);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), '23505');
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-02', '[]')`)), CHECK_FAILED);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('Monte', '2099-01-02', '{}')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 0);
+    });
+    await db.query(`delete from public.simulation_runs where run_date = '2099-01-01'`);
   });
 });

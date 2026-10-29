@@ -47,7 +47,8 @@ holdings files opening VT and 00692, TSMC through both and held directly, the ov
 countries, sectors and each fund's file, TER and domicile, the sector map logged), the sector tab (the
 heatmap of returns by period from the seed's invented closes, one market at a time, the treemap of
 exposure with a sector's companies, the bubbles with the portfolio's point, the colour convention
-and the index map logged), the data status page (the market series'
+and the index map logged), the Monte Carlo page (the fan around the saved plan, the median and the
+range in today's money and nominal, the chance of a goal, the goal and an expected windfall logged), the data status page (the market series'
 newest month included), a phone-width check of every page,
 and sign-out. With a `FINMIND_TOKEN` in the environment it then removes the invented weekly
 history, runs the real nightly job (`scripts/nightly.ts`, live feeds) against the stand-in

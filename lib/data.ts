@@ -30,14 +30,15 @@ import {
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
-import { readPlanSettings, type PlanSettings } from './models/projection';
+import { readMcSettings, readRunSummary, runMonteCarlo, runSummary, type McData } from './models/monte-carlo';
+import { readPlanSettings, savedPlan, type PlanSettings } from './models/projection';
 import { readQuietHours, readWeeklyReview, weeklySummary, type Message, type PlanInput, type ProposalForPush, type WeeklySummary } from './models/notify';
 import { proposalTitle } from './proposal-text';
 import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type Vapid } from './push';
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
-import { INDICES, loadFrom, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type RegressionSettings } from './models/regression';
+import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
 import { MARKET_SERIES } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
@@ -2285,4 +2286,89 @@ export async function loadSectorData(supabase: SupabaseClient, today: string, po
   const closes = new Map<string, SectorClose[]>();
   for (const row of found) closes.set(row.index_id, [...(closes.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
   return { settings, view: sectorView(settings.proxies, closes, look.result.exposures, today), exposures: look.result.exposures };
+}
+
+// ---------------------------------------------------------------------------
+// F5 Monte Carlo (Phase 3, step 1)
+// ---------------------------------------------------------------------------
+
+/** The newest saved monthly re-run (simulation_runs) of a model, if any. */
+export async function loadLastRun(supabase: SupabaseClient, model: string): Promise<ReturnType<typeof readRunSummary>> {
+  const [row] = await rows<{ summary: unknown }>('simulation_runs', supabase.from('simulation_runs').select('summary').eq('model', model).order('run_date', { ascending: false }).limit(1));
+  return row ? readRunSummary(row.summary) : null;
+}
+
+/** Each class benchmark's monthly returns in TWD over the last `years` (and a little more), the month still running left out. */
+async function loadMonthlyReturns(supabase: SupabaseClient, tickers: readonly string[], years: number, today: string): Promise<Map<string, ReturnPoint[]>> {
+  if (tickers.length === 0) return new Map();
+  const from = addDays(today, -(years * 366 + 62));
+  const securities = new Map((await loadSecurities(supabase)).map((security) => [security.ticker, security]));
+  const wanted = tickers.filter((ticker) => securities.has(ticker));
+  const currencies = [...new Set(wanted.map((ticker) => securities.get(ticker)?.currency ?? 'TWD'))].filter((currency) => currency !== 'TWD');
+  const [closeRows, rateRows] = await Promise.all([
+    Promise.all(
+      wanted.map((ticker) =>
+        allRows<{ price_date: string; close: number; adj_close: number | null }>('prices', (start, end) =>
+          supabase.from('prices').select('price_date, close, adj_close').eq('ticker', ticker).gte('price_date', from).order('price_date').range(start, end),
+        ),
+      ),
+    ),
+    Promise.all(
+      currencies.map((currency) =>
+        allRows<{ rate_date: string; rate: number }>('fx_rates', (start, end) =>
+          supabase.from('fx_rates').select('rate_date, rate').eq('pair', `${currency}/TWD`).gte('rate_date', addDays(from, -14)).order('rate_date').range(start, end),
+        ),
+      ),
+    ),
+  ]);
+  const rates = new Map(currencies.map((currency, i) => [currency, (rateRows[i] ?? []).map((row) => ({ date: row.rate_date, close: Number(row.rate) }))]));
+  const month = today.slice(0, 7);
+  return new Map(
+    wanted.map((ticker, i) => {
+      const closes = (closeRows[i] ?? []).map((row) => ({ date: row.price_date, close: Number(row.adj_close ?? row.close) }));
+      const currency = securities.get(ticker)?.currency ?? 'TWD';
+      const twd = currency === 'TWD' ? closes : inTwd(closes, rates.get(currency) ?? []);
+      return [ticker, periodReturns(twd, 'monthly').filter((point) => point.date.slice(0, 7) < month)];
+    }),
+  );
+}
+
+/** Everything a Monte Carlo run reads (config monte_carlo and projection, F6, F3, the proxies' prices). */
+export async function loadMonteCarloInput(supabase: SupabaseClient, today: string): Promise<McData> {
+  const [config, classes, assumptions, windfallPlan, holdings] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['monte_carlo', 'projection', 'windfall'])),
+    loadAssetClassSettings(supabase),
+    loadAssumptions(supabase),
+    loadWindfallPlan(supabase),
+    loadHoldingsData(supabase),
+  ]);
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const settings = readMcSettings(value('monte_carlo'));
+  const proposed = readPlanSettings(value('projection'));
+  const tickers = [...new Set(classes.filter((entry) => entry.targetWeight > 0).flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])))];
+  const history = settings ? await loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today) : new Map<string, ReturnPoint[]>();
+  const windfallValue = buildPortfolio(holdings).holdings.filter((holding) => holding.pool === 'windfall').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  return {
+    settings,
+    plan: savedPlan(proposed),
+    classes: classes.map((entry) => ({ id: entry.id, targetWeight: entry.targetWeight, sleeve: entry.sleeve, benchmarkTicker: entry.benchmarkTicker })),
+    assumptions: assumptions?.assumptions ?? {},
+    history,
+    windfallPlan: windfallPlan ?? null,
+    windfallValue,
+    cashReturn: readWindfallSettings(value('windfall')).cashReturn,
+  };
+}
+
+/** The nightly job's monthly re-run: saves this month's summary once; undefined when it is saved or cannot run yet. */
+export async function refreshMonteCarlo(supabase: SupabaseClient, today: string): Promise<{ runDate: string; median: number | null } | undefined> {
+  const [ready] = await rows<{ key: string }>('config', supabase.from('config').select('key').eq('key', 'monte_carlo'));
+  if (!ready) return undefined;
+  const [latest] = await rows<{ run_date: string }>('simulation_runs', supabase.from('simulation_runs').select('run_date').eq('model', 'monte_carlo').order('run_date', { ascending: false }).limit(1));
+  if (latest && latest.run_date.slice(0, 7) === today.slice(0, 7)) return undefined;
+  const run = runMonteCarlo(await loadMonteCarloInput(supabase, today), today);
+  if (!run.ok) return undefined;
+  const { error } = await supabase.from('simulation_runs').upsert({ model: 'monte_carlo', run_date: today, summary: runSummary(run, today) }, { onConflict: 'model,run_date' });
+  if (error) throw new DataError('simulation_runs', error.message);
+  return { runDate: today, median: run.result.marks[run.result.marks.length - 1]?.median ?? null };
 }

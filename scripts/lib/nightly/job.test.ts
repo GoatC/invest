@@ -191,6 +191,7 @@ class MemoryStore implements Store {
   indices: IndexClose[] = [];
   indexFills: IndexClose[] = [];
   betaRuns: string[] = [];
+  monteCarloRuns: string[] = [];
   fundamentals: FundamentalRow[] = [];
   /** When the watched stocks were valued again, and how many quarters were saved by then. */
   revalues: Array<{ today: string; quartersSaved: number }> = [];
@@ -210,6 +211,7 @@ class MemoryStore implements Store {
       /** config regression's longest window plus a year (N1); undefined before its migration. */
       regressionYears?: number;
       failBetas?: boolean;
+      failMonteCarlo?: boolean;
       /** Whether config capm exists (F11). */
       capm?: boolean;
       /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
@@ -316,6 +318,11 @@ class MemoryStore implements Store {
     if (this.options.failBetas) throw new Error('beta_results: permission denied');
     this.betaRuns.push(today);
     return { saved: 4, runDate: today };
+  }
+  async refreshMonteCarlo(today: string) {
+    if (this.options.failMonteCarlo) throw new Error('simulation_runs: permission denied');
+    this.monteCarloRuns.push(today);
+    return { runDate: today };
   }
   /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
   async performanceInput(end: string): Promise<PerformanceInput> {
@@ -715,6 +722,16 @@ describe('runNightly', () => {
     const run = await runNightly(deps(fakeGet().get, new MemoryStore({ regressionYears: 6, failBetas: true })));
     assert.equal(run.status, 'partial');
     assert.deepEqual(run.detail.errors, ['Betas: beta_results: permission denied']);
+  });
+
+  it("re-runs F5's Monte Carlo once a night and reports a partial run when it cannot be saved", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.monteCarloRuns, [TODAY]);
+    assert.deepEqual(run.detail.monteCarlo, { runDate: TODAY });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failMonteCarlo: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Monte Carlo: simulation_runs: permission denied']);
   });
 
   it('leaves the indices, the bill rate and the β alone before the Regression Lab migration', async () => {

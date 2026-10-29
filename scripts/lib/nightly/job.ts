@@ -20,7 +20,7 @@
  * is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
-import { BETAS_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { BETAS_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
 import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
@@ -119,6 +119,8 @@ export interface Store {
   saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>): Promise<void>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
+  /** Saves the month's Monte Carlo summary (F5) once: undefined when it is saved already or cannot run yet (refreshMonteCarlo in lib/data). */
+  refreshMonteCarlo(today: string): Promise<{ runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
   performanceInput(end: string): Promise<PerformanceInput>;
   /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data). */
@@ -152,6 +154,8 @@ export interface RunDetail {
   rules?: { created: number; closed: number };
   /** The holdings' β saved for the month (N1), on the month's first run. */
   betas?: { saved: number; runDate: string };
+  /** The Monte Carlo re-run (F5) saved for the month, on the month's first run; its figures stay in simulation_runs. */
+  monteCarlo?: { runDate: string };
   /** The watched stocks valued again after a new filing (F12). */
   valued?: string[];
   /** The red-flag indicator (N3): the companies scanned tonight, and the events the feeds found. */
@@ -752,6 +756,13 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     } catch (err) {
       detail.errors.push(`${BETAS_ERROR}: ${message(err)}`);
     }
+  }
+  // F5's monthly re-run, on the month's first night: the plan, the assumptions and the closes just saved.
+  try {
+    const monteCarlo = await store.refreshMonteCarlo(today);
+    if (monteCarlo) detail.monteCarlo = monteCarlo;
+  } catch (err) {
+    detail.errors.push(`${MONTE_CARLO_ERROR}: ${message(err)}`);
   }
   const saved = prices.length + fills.length + rates.length;
   return finish(saved === 0 ? 'failed' : detail.errors.length > 0 ? 'partial' : 'ok');

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
+import { readMcSettings } from './models/monte-carlo';
 import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
@@ -14,6 +15,7 @@ import {
   parseFeeForm,
   parseFundForm,
   parseManualAsset,
+  parseMonteCarloForm,
   parseNumber,
   fractionalShares,
   parseEngineSettings,
@@ -617,5 +619,44 @@ describe('sector form (N7)', () => {
       const parsed = parseSectorForm({ colour: 'red_up', tw }, current, names, '2026-10-28');
       assert.ok(!parsed.ok && parsed.errors.tw, tw);
     }
+  });
+});
+
+describe('parseMonteCarloForm (F5)', () => {
+  const current = readMcSettings({
+    paths: 10000,
+    lookback_years: 5,
+    block_months: 3,
+    min_months: 36,
+    scale_to_cma: true,
+    band: [0.1, 0.9],
+    mark_years: [10, 20, 30],
+    target_twd: null,
+    windfall: { amount_twd: null, month: null, tranches: 12 },
+  });
+  assert.ok(current);
+
+  it('reads the goal and an expected windfall into the row, leaving the rest as it is', () => {
+    const parsed = parseMonteCarloForm({ target: '20,000,000', windfallAmount: '5500000', windfallMonth: '2030-06', windfallTranches: '24' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, 20_000_000);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: 5_500_000, month: '2030-06', tranches: 24 });
+    assert.equal(parsed.value.paths, 10000);
+  });
+
+  it('takes blank fields as none, and keeps the tranches when left blank', () => {
+    const parsed = parseMonteCarloForm({ target: '', windfallAmount: '', windfallMonth: '', windfallTranches: '' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, null);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: null, month: null, tranches: 12 });
+  });
+
+  it('asks for the month when there is an amount, and refuses what is not whole NT$ or a month', () => {
+    const noMonth = parseMonteCarloForm({ target: '', windfallAmount: '1000000', windfallMonth: '' }, current);
+    assert.ok(!noMonth.ok);
+    assert.deepEqual(Object.keys(noMonth.errors), ['windfallMonth']);
+    const bad = parseMonteCarloForm({ target: '-5', windfallAmount: '1.5', windfallMonth: '2030-13', windfallTranches: '0' }, current);
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['target', 'windfallAmount', 'windfallMonth', 'windfallTranches']);
   });
 });

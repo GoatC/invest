@@ -8,6 +8,7 @@ import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './
 import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
+import type { McSettings } from './models/monte-carlo';
 import type { SectorProxy, SectorSettings } from './models/sectors';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
@@ -87,6 +88,9 @@ export const MESSAGES = {
   topCompanies: { en: 'Enter a whole number from 5 to 100.', zh: '請輸入 5 到 100 的整數。' },
   codeSectors: { en: 'One per line: a TWSE industry code, "=", a GICS sector, e.g. 24 = Information Technology.', zh: '每行一個：證交所產業別代碼、「=」、GICS 產業，例如 24 = 資訊科技。' },
   indexSectors: { en: 'One per line: an industry index already listed, "=", a GICS sector, e.g. Electronic = Information Technology.', zh: '每行一個：清單中的類股指數、「=」、GICS 產業，例如 Electronic = 資訊科技。' },
+  mcTarget: { en: 'Enter whole NT$ above 0 (in today’s money), or leave it blank.', zh: '請輸入大於 0 的整數台幣金額（以今天幣值計），或留白。' },
+  mcWindfallMonth: { en: 'Enter the month the money arrives as YYYY-MM.', zh: '請以 YYYY-MM 輸入入帳月份。' },
+  mcWindfallAmount: { en: 'Enter whole NT$ above 0, or leave it blank.', zh: '請輸入大於 0 的整數台幣金額，或留白。' },
   fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -1313,4 +1317,38 @@ export function parseSectorForm(raw: RawForm, current: SectorSettings, sectorNam
     tw.push({ ...proxy, sector });
   }
   return finish(errors, () => ({ ...current, colour: colour as SectorSettings['colour'], proxies: [...current.proxies.filter((proxy) => proxy.market === 'US'), ...tw], lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw) }));
+}
+
+// ---------------------------------------------------------------------------
+// Monte Carlo (F5)
+// ---------------------------------------------------------------------------
+
+export type McField = 'target' | 'windfallAmount' | 'windfallMonth' | 'windfallTranches';
+
+/** config monte_carlo's goal in today's money and the expected windfall; the rest of the row stays as it is. */
+export function parseMonteCarloForm(raw: RawForm, current: McSettings): Parsed<McSettings, McField> {
+  const errors: FieldErrors<McField> = {};
+  const blank = (name: string) => text(raw[name]) === '';
+  let target: number | null = null;
+  if (!blank('target')) {
+    const value = wholeTwd(raw['target']);
+    if (value === undefined || value <= 0) errors.target = MESSAGES.mcTarget;
+    else target = value;
+  }
+  let amount: number | null = null;
+  if (!blank('windfallAmount')) {
+    const value = wholeTwd(raw['windfallAmount']);
+    if (value === undefined || value <= 0) errors.windfallAmount = MESSAGES.mcWindfallAmount;
+    else amount = value;
+  }
+  const month = text(raw['windfallMonth']);
+  if (amount !== null && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
+  if (amount === null && month !== '' && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
+  const tranches = blank('windfallTranches') ? current.windfall.tranches : parseNumber(raw['windfallTranches']);
+  if (tranches === undefined || !Number.isInteger(tranches) || tranches < 1 || tranches > 120) errors.windfallTranches = MESSAGES.trancheCount;
+  return finish(errors, () => ({
+    ...current,
+    targetTwd: target,
+    windfall: { amountTwd: amount, month: isMonth(month) ? month : null, tranches: tranches ?? current.windfall.tranches },
+  }));
 }
