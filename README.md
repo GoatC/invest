@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phases 1 and 2 are built and their gates have passed; Phase 3 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一、二階段已完成並通過關卡；第三階段依 PRD 第 11 節的順序建置中。
+Phases 1 and 2 are built and their gates have passed; Phase 3 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and is the last: the app is complete once its gate passes. 第一、二階段已完成並通過關卡；第三階段已依 PRD 第 11 節的順序建置完成，這是最後一個階段：通過關卡後整個 App 即完成。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
@@ -64,7 +64,7 @@ Phases 1 and 2 are built and their gates have passed; Phase 3 is under way, in t
 | 3. F10 stress test and scenario replay 壓力測試與情境回放 | ✅ |
 | 4. F7 efficient frontier and CML 效率前緣與資本市場線 | ✅ |
 | 5. N2 Brinson attribution Brinson 績效歸因 | ✅ |
-| 6. N1 Fama–French five-factor mode 五因子模式 | Planned 已規劃 |
+| 6. N1 Fama–French five-factor mode 五因子模式 | ✅ |
 
 ## What works today 目前的功能
 
@@ -89,6 +89,7 @@ Phases 1 and 2 are built and their gates have passed; Phase 3 is under way, in t
 - **Stress test 壓力測試** (F10): 2008, 2020 and 2022 replayed on what you hold today by asset class, month by month in TWD: the deepest fall in % and NT$, how long the climb back took, and which of the windfall planner's acceleration tiers (15% / 25% / 35%) would have fired; or a shock of your own, with an underwater chart. 把 2008、2020、2022 依資產類別套用在你今天的持股，逐月以台幣計算：最大回撤（百分比與台幣）、爬回所需月數，以及大額資金加速級距（15%／25%／35%）會被觸發的情況；也可自訂衝擊，附回撤圖。
 - **Efficient frontier 效率前緣** (F7): the portfolios your asset classes could make that earn the most for their risk, from your capital market assumptions and ten years of how the classes moved together, with the capital market line, the tangent (best Sharpe) portfolio, your current and target mixes as points, the weights along the curve and a correlation heatmap; weight bounds and the risk-free rate are settings; reference only, it never changes your targets. 依你的資本市場假設與十年的類別連動，畫出各資產類別能組成、風險下報酬最高的配置，附資本市場線、切線（夏普比率最高）組合、你目前與目標配置的位置、沿曲線的權重與相關係數熱力圖；權重上下限與無風險利率可設定；僅供參考，不會改變你的目標。
 - **Attribution 績效歸因** (N2): why the regular pool beat or trailed the benchmark set by your targets, month by month and linked (Carino): allocation, selection, interaction and currency by asset class, a waterfall from the benchmark's return to yours, a quadrant of active weight against relative return, cumulative effects over time, and for the satellite's stocks by sector against the core equity fund's sector weights; saved monthly. 一般投入資金池為什麼勝過或落後你的目標所訂的基準：逐月並連結（Carino），依資產類別拆成配置、選擇、交互與匯率效果，附從基準到你的報酬的瀑布圖、主動權重對相對報酬的象限圖、累積效果走勢，並有衛星個股依產業對照核心股票基金產業權重的第二層；每月存檔。
+- **Five factors 五因子** (N1, Phase 3): what drives each holding's and the whole portfolio's return beyond the market, by the Fama–French five factors (market, size, value, profitability, investment) on Kenneth French's free monthly data: each loading with its t-statistic and 95% interval, alpha, R², over 2 to 10 years; a mode of the Regression Lab. 以 Kenneth French 的免費月資料，用 Fama–French 五因子（市場、規模、價值、獲利能力、投資）說明每檔持股與整體投資組合除了大盤之外的報酬來源：各因子係數附 t 值與 95% 信賴區間、阿爾法、R²，期間 2 到 10 年；為回歸分析區的一個模式。
 - **Nightly data 每夜資料**: GitHub Actions loads prices, FX, gold, the market series, indices, yields and filings, each with a fallback feed, saves each day's NAV and VaR, then checks the rules; the Data status page shows every run, and two missed nights raise an alert. 每夜載入資料、存淨值與風險值、檢查規則；連續兩晚失敗即警示。
 
 ![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
@@ -126,6 +127,8 @@ Phases 1 and 2 are built and their gates have passed; Phase 3 is under way, in t
 ![Efficient frontier with demo data: the curve, the capital market line, the tangent portfolio and the current and target mixes](docs/images/frontier.png)
 
 ![Attribution with demo data: the waterfall from the benchmark's return to the portfolio's, effects by asset class](docs/images/attribution.png)
+
+![Five-factor mode with demo holdings on live factors: each holding's and the whole portfolio's loadings with t-statistics, alpha and R², and the 95% intervals](docs/images/five-factors.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 

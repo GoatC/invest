@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { strToU8, zipSync } from 'fflate';
 import * as XLSX from 'xlsx';
 
 import type { ProfileRecord } from '../../../lib/data.ts';
@@ -153,7 +154,13 @@ function sectorWorkbook(url: string): Uint8Array {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'holdings');
   return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
 }
-const getBytes: GetBytes = async (url) => (url.includes('ssga.com') ? sectorWorkbook(url) : url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
+/** A region's Ken French zip with two months: September and October 2026. */
+function frenchZip(url: string): Uint8Array {
+  const name = url.split('/').pop()?.replace(/\.zip$/, '') ?? 'x';
+  const csv = ['Made for the tests.', '', ',Mkt-RF,SMB,HML,RMW,CMA,RF', '202609 ,1.00,-0.50,0.25,0.10,-0.05,0.30', '202610 ,-2.00,0.40,0.30,-0.20,0.10,0.30', '', ' Annual ', '2026,5,5,5,5,5,5', ''].join('\n');
+  return zipSync({ [`${name}.csv`]: strToU8(csv) });
+}
+const getBytes: GetBytes = async (url) => (url.includes('ssga.com') ? sectorWorkbook(url) : url.includes('adamodar') ? erpWorkbook() : url.includes('ken.french') ? frenchZip(url) : shillerWorkbook());
 const bytesDown: GetBytes = async () => {
   throw new FeedError('HTTP 403 from img1.wsimg.com');
 };
@@ -212,6 +219,7 @@ class MemoryStore implements Store {
       /** config regression's longest window plus a year (N1); undefined before its migration. */
       regressionYears?: number;
       historyYears?: number;
+      factorYears?: number;
       failBetas?: boolean;
       failMonteCarlo?: boolean;
       failAttribution?: boolean;
@@ -296,6 +304,9 @@ class MemoryStore implements Store {
   }
   async saveSeries(rows: readonly MonthlyPoint[]) {
     this.series.push(...rows);
+  }
+  async factorYears() {
+    return this.options.factorYears;
   }
   async historyYears() {
     return this.options.historyYears;
@@ -760,6 +771,22 @@ describe('runNightly', () => {
     const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failAttribution: true })));
     assert.equal(failed.status, 'partial');
     assert.deepEqual(failed.detail.errors, ['Attribution: attribution: permission denied']);
+  });
+
+  it("keeps Kenneth French's five factors for every region once the factors setting exists (N1), and leaves them alone before", async () => {
+    const store = new MemoryStore({ factorYears: 11 });
+    const run = await runNightly(deps(fakeGet().get, store));
+    for (const region of ['us', 'developed', 'emerging']) {
+      assert.deepEqual(run.detail.series?.[`ff5_${region}`], { source: 'french', rows: 12, latest: '2026-10' });
+      assert.deepEqual(store.series.filter((point) => point.series === `ff5_${region}_mkt`).map((point) => [point.month, point.value]), [['2026-09', 0.01], ['2026-10', -0.02]]);
+    }
+    assert.equal(run.status, 'ok');
+    const without = await runNightly(deps(fakeGet().get, new MemoryStore()));
+    assert.equal(without.detail.series?.['ff5_us'], undefined);
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ factorYears: 11 }), undefined, async () => {
+      throw new FeedError('HTTP 503 from mba.tuck.dartmouth.edu');
+    }));
+    assert.match(failed.detail.errors.join('\n'), /ff5_us: french: HTTP 503/);
   });
 
   it('leaves the indices, the bill rate and the β alone before the Regression Lab migration', async () => {

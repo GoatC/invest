@@ -85,9 +85,14 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
   return (
     <>
       <section className="card form">
-        <h1>
-          <Bi {...LABELS.regression} />
-        </h1>
+        <div className="row spread">
+          <h1>
+            <Bi {...LABELS.regression} />
+          </h1>
+          <Link href="/regression/factors">
+            <Bi en="Five-factor mode" zh="五因子模式" />
+          </Link>
+        </div>
         <p className="equation">
           R<sub>i</sub> − R<sub>f</sub> = α + β (R<sub>m</sub> − R<sub>f</sub>) + ε
         </p>

@@ -110,7 +110,7 @@ describe('dollars and the portfolio', () => {
 });
 
 describe('settings', () => {
-  const valid = { regions: { US: 'us', TW: 'emerging', UK: 'developed', bogus: 'mars' }, portfolio: 'global', windows: [5, 3, 1], default_window: 3, confidence: 0.95, min_months: 24, keep_years: 12 };
+  const valid = { regions: { US: 'us', TW: 'emerging', UK: 'developed', bogus: 'mars' }, portfolio: 'developed', windows: [5, 3, 1], default_window: 3, confidence: 0.95, min_months: 24, keep_years: 12 };
 
   it('reads the row, leaving out a market mapped to an unknown region, and names the series', () => {
     const settings = readFactorSettings(valid);

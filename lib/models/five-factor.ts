@@ -9,7 +9,8 @@
  * - Returns are in US dollars, as the factors are: a Taiwan return is converted with the month's
  *   USD/TWD move. A holding's factors come from its market (config factors.regions): US-listed on
  *   the US factors, Taiwan on the emerging markets', London on the developed markets'; the whole
- *   portfolio, today's holdings held through the window at today's weights, on the global factors.
+ *   portfolio, today's holdings held through the window at today's weights, on the developed markets'
+ *   (the library's global file stops in 2019).
  * - Months where a factor is missing (-99.99 in the library) are left out.
  * - Each loading comes with its standard error, t-statistic (t = coefficient ÷ standard error) and
  *   a confidence interval, and the fit with R² and its adjusted R²; α is monthly and × 12.
@@ -31,7 +32,7 @@ export const FACTOR_NAMES: Record<Factor, { en: string; zh: string }> = {
 };
 
 /** The regions the nightly job loads and the series each is saved under: ff5_<region>_<factor>. */
-export const REGIONS = ['us', 'developed', 'emerging', 'global'] as const;
+export const REGIONS = ['us', 'developed', 'emerging'] as const;
 export type Region = (typeof REGIONS)[number];
 
 export function seriesName(region: Region, factor: Factor | 'rf'): string {
