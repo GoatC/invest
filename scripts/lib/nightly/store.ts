@@ -1,7 +1,9 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { readFrontierSettings } from '../../../lib/models/frontier.ts';
+import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
@@ -86,6 +88,16 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('market_series', error);
       }
     },
+    async historyYears() {
+      const { data, error } = await client.from('config').select('key, value').in('key', ['monte_carlo', 'frontier']);
+      check('config', error);
+      const found = (data ?? []) as Array<{ key: string; value: unknown }>;
+      const years = found.flatMap((row) => {
+        const settings = row.key === 'monte_carlo' ? readMcSettings(row.value) : readFrontierSettings(row.value);
+        return settings ? [settings.lookbackYears] : [];
+      });
+      return years.length > 0 ? Math.max(...years) + 1 : undefined;
+    },
     async regressionYears() {
       const { data, error } = await client.from('config').select('value').eq('key', 'regression');
       check('config', error);
@@ -159,6 +171,7 @@ export function supabaseStore(client: SupabaseClient): Store {
     },
     revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
+    refreshAttribution: (today) => refreshAttribution(client, today),
     refreshMonteCarlo: async (today) => {
       const saved = await refreshMonteCarlo(client, today);
       return saved ? { runDate: saved.runDate } : undefined;

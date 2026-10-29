@@ -12,6 +12,7 @@ import {
   DataError,
   loadAllocationData,
   loadJobRuns,
+  loadLastAttribution,
   loadLastRun,
   loadPlanData,
   loadProposals,
@@ -64,7 +65,7 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags, simulation] = await Promise.all([
+  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags, simulation, attribution] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -81,6 +82,7 @@ export default async function Dashboard() {
     orDataError(loadWorkbench(supabase, today)),
     orDataError(loadRedFlagData(supabase, today, undefined, data)),
     orDataError(loadLastRun(supabase, 'monte_carlo')),
+    orDataError(loadLastAttribution(supabase)),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -129,6 +131,7 @@ export default async function Dashboard() {
       />
       {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
       {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
+      {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
     </>
   );
 }
@@ -151,6 +154,27 @@ function MonteCarloUpdate({ run, today }: { run: NonNullable<Awaited<ReturnType<
         />{' '}
         <Link href="/monte-carlo">
           <Bi {...LABELS.monteCarlo} />
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+/** N2's monthly run, in the week it updates only (PRD Section 5): the month's effects, level 1. */
+function AttributionUpdate({ last, today }: { last: NonNullable<Awaited<ReturnType<typeof loadLastAttribution>>>; today: string }) {
+  if (last.savedAt.slice(0, 10) <= addDays(today, -7)) return null;
+  return (
+    <section className="card form" id="dashboard-attribution">
+      <h2>
+        <Bi en="Attribution, updated this month" zh="績效歸因，本月更新" />
+      </h2>
+      <p>
+        <Bi
+          en={`${last.periodEnd.slice(0, 7)} against the benchmark: allocation ${signedPercent(last.allocation, 2)}, selection ${signedPercent(last.selection, 2)}, interaction ${signedPercent(last.interaction, 2)}, currency ${signedPercent(last.fx, 2)}.`}
+          zh={`${last.periodEnd.slice(0, 7)} 相對基準：配置 ${signedPercent(last.allocation, 2)}、選擇 ${signedPercent(last.selection, 2)}、交互 ${signedPercent(last.interaction, 2)}、匯率 ${signedPercent(last.fx, 2)}。`}
+        />{' '}
+        <Link href="/attribution">
+          <Bi {...LABELS.attribution} />
         </Link>
       </p>
     </section>

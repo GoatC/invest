@@ -8,6 +8,7 @@ import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './
 import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
+import type { FrontierSettings } from './models/frontier';
 import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
@@ -94,6 +95,8 @@ export const MESSAGES = {
   mcWindfallAmount: { en: 'Enter whole NT$ above 0, or leave it blank.', zh: '請輸入大於 0 的整數台幣金額，或留白。' },
   goals: { en: 'One per line: month | amount in today’s money (blank for none) | name, e.g. 2045-06 | 3,000,000 | House.', zh: '每行一個：月份 | 以今天幣值計的金額（留白代表沒有）| 名稱，例如 2045-06 | 3,000,000 | 購屋頭期款。' },
   goalCount: { en: `At most ${MAX_GOALS} goals.`, zh: `最多 ${MAX_GOALS} 個目標。` },
+  frontierBounds: { en: 'One per line: an asset class id, "=", the minimum and maximum in percent, e.g. us_global_equity = 0 - 50; the minimums must not exceed 100% nor the maximums fall short of it.', zh: '每行一個：資產類別代號、「=」、最小與最大百分比，例如 us_global_equity = 0 - 50；最小值合計不得超過 100%，最大值合計不得低於 100%。' },
+  frontierYears: { en: 'Enter whole years from 1 to 30.', zh: '請輸入 1 到 30 的整數年數。' },
   fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -1379,4 +1382,41 @@ export function parseTimelineForm(raw: RawForm): Parsed<TimelineSettings, Timeli
     goals.push({ month, amountTwd: value, name });
   }
   return finish(errors, () => ({ goals: goals.sort((a, b) => a.month.localeCompare(b.month)) }));
+}
+
+// ---------------------------------------------------------------------------
+// Efficient frontier (F7)
+// ---------------------------------------------------------------------------
+
+export type FrontierField = 'riskFree' | 'lookbackYears' | 'bounds';
+
+/** config frontier: the risk-free rate, the years of history and each class's weight bounds, "us_global_equity = 0 - 50" per line. */
+export function parseFrontierForm(raw: RawForm, current: FrontierSettings, classIds: readonly string[], today: string): Parsed<FrontierSettings, FrontierField> {
+  const errors: FieldErrors<FrontierField> = {};
+  const riskFree = percentField(raw['riskFree'], -5, 30);
+  if (riskFree === undefined) errors.riskFree = MESSAGES.riskFree;
+  const years = parseNumber(raw['lookbackYears']);
+  if (years === undefined || !Number.isInteger(years) || years < 1 || years > 30) errors.lookbackYears = MESSAGES.frontierYears;
+  const known = new Set(classIds);
+  const bounds: Record<string, [number, number]> = {};
+  for (const line of (raw['bounds'] ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([a-z0-9_]+)\s*[=:：]\s*([\d.]+)\s*[-–—]\s*([\d.]+)$/.exec(line);
+    const id = match?.[1];
+    const min = match ? percentField(match[2], 0, 100) : undefined;
+    const max = match ? percentField(match[3], 0, 100) : undefined;
+    if (!id || !known.has(id) || min === undefined || max === undefined || min > max) {
+      errors.bounds = MESSAGES.frontierBounds;
+      break;
+    }
+    bounds[id] = [min, max];
+  }
+  const entries = Object.values(bounds);
+  if (!errors.bounds && (entries.length === 0 || entries.reduce((sum, bound) => sum + bound[0], 0) > 1 + 1e-9 || entries.reduce((sum, bound) => sum + bound[1], 0) < 1 - 1e-9)) errors.bounds = MESSAGES.frontierBounds;
+  return finish(errors, () => ({
+    ...current,
+    riskFree: riskFree ?? current.riskFree,
+    lookbackYears: years ?? current.lookbackYears,
+    bounds,
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
 }

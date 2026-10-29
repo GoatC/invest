@@ -28,8 +28,12 @@ import {
   type WindfallTranche,
 } from './models/engine';
 import { manualHistories } from './models/manual-history';
-import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
+import { benchmarkWeights, buildSeries, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
+import { brinson, monthInputs, sectorInputs, type ClassSpec, type MonthInput, type SatelliteStock, type SectorBenchmark } from './models/attribution';
+import { MarketHistory } from './models/market';
+import { readFrontierSettings, type FrontierSettings } from './models/frontier';
+import { readStressSettings, type ClassValue, type StressSettings } from './models/stress';
 import { readTimelineSettings } from './models/timeline';
 import { readMcSettings, readRunSummary, runMonteCarlo, runSummary, type McData } from './models/monte-carlo';
 import { readPlanSettings, savedPlan, type PlanSettings } from './models/projection';
@@ -40,7 +44,7 @@ import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type Risk
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
 import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
-import { MARKET_SERIES } from './models/windfall';
+import { MARKET_SERIES, readAcceleration, type Acceleration } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 import type { Figures, Quarter } from './models/fundamentals';
@@ -2300,7 +2304,7 @@ export async function loadLastRun(supabase: SupabaseClient, model: string): Prom
 }
 
 /** Each class benchmark's monthly returns in TWD over the last `years` (and a little more), the month still running left out. */
-async function loadMonthlyReturns(supabase: SupabaseClient, tickers: readonly string[], years: number, today: string): Promise<Map<string, ReturnPoint[]>> {
+export async function loadMonthlyReturns(supabase: SupabaseClient, tickers: readonly string[], years: number, today: string): Promise<Map<string, ReturnPoint[]>> {
   if (tickers.length === 0) return new Map();
   const from = addDays(today, -(years * 366 + 62));
   const securities = new Map((await loadSecurities(supabase)).map((security) => [security.ticker, security]));
@@ -2382,4 +2386,177 @@ export async function refreshMonteCarlo(supabase: SupabaseClient, today: string)
 export async function loadTimelineSettings(supabase: SupabaseClient) {
   const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'timeline'));
   return readTimelineSettings(row?.value);
+}
+
+// ---------------------------------------------------------------------------
+// F10 stress test (Phase 3, step 3)
+// ---------------------------------------------------------------------------
+
+export interface StressData {
+  /** config stress; undefined before its migration. */
+  settings: StressSettings | undefined;
+  /** Today's holdings by asset class, both pools, TWD. */
+  classes: ClassValue[];
+  classNames: AssetClass[];
+  /** The capital market assumptions' expected return by class id. */
+  expected: Record<string, number>;
+  /** F3's tiers and window from the rule; null when missing or malformed. */
+  acceleration: Acceleration | null;
+}
+
+export async function loadStressData(supabase: SupabaseClient): Promise<StressData> {
+  const [config, holdings, assumptions, rules, classNames] = await Promise.all([
+    rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'stress')),
+    loadHoldingsData(supabase),
+    loadAssumptions(supabase),
+    loadRules(supabase),
+    loadAssetClasses(supabase),
+  ]);
+  const totals = new Map<string, number>();
+  for (const holding of buildPortfolio(holdings).holdings) {
+    if (holding.assetClassId) totals.set(holding.assetClassId, (totals.get(holding.assetClassId) ?? 0) + (holding.valueTwd ?? 0));
+  }
+  const rule = rules.find((entry) => entry.id === 'WINDFALL_ACCELERATION');
+  return {
+    settings: readStressSettings(config[0]?.value, config[0]?.last_verified ?? null),
+    classes: [...totals].map(([id, valueTwd]) => ({ id, valueTwd })),
+    classNames,
+    expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
+    acceleration: rule ? readAcceleration(rule.threshold) : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// F7 efficient frontier (Phase 3, step 4)
+// ---------------------------------------------------------------------------
+
+export interface FrontierData {
+  /** config frontier; undefined before its migration. */
+  settings: FrontierSettings | undefined;
+  classes: AssetClassSettings[];
+  /** Expected yearly return by class id (the CMA). */
+  expected: Record<string, number>;
+  /** Each class benchmark's monthly returns in TWD. */
+  history: Map<string, ReturnPoint[]>;
+  /** The regular pool's actual share of each class, 0 to 1. */
+  current: Record<string, number>;
+}
+
+export async function loadFrontierData(supabase: SupabaseClient, today: string): Promise<FrontierData> {
+  const [config, classes, assumptions, holdings] = await Promise.all([
+    rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'frontier')),
+    loadAssetClassSettings(supabase),
+    loadAssumptions(supabase),
+    loadHoldingsData(supabase),
+  ]);
+  const settings = readFrontierSettings(config[0]?.value, config[0]?.last_verified ?? null);
+  const tickers = [...new Set(classes.flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])))];
+  const history = settings ? await loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today) : new Map<string, ReturnPoint[]>();
+  const portfolio = buildPortfolio(holdings);
+  return {
+    settings,
+    classes,
+    expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
+    history,
+    current: Object.fromEntries(portfolio.classes.map((entry) => [entry.assetClass.id, entry.weight])),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// N2 Brinson attribution (Phase 3, step 5)
+// ---------------------------------------------------------------------------
+
+export interface AttributionData {
+  input: PerformanceInput;
+  classes: ClassSpec[];
+  /** The satellite's single stocks and their GICS sectors (level 2). */
+  stocks: SatelliteStock[];
+  /** The core equity fund's sector weights and the fund pricing each sector (level 2); empty without them. */
+  sectorBenchmark: SectorBenchmark[];
+  /** The fund level 2's benchmark weights come from, and the date of its holdings file. */
+  coreFund: { ticker: string; asOf: string } | null;
+  /** The sector funds' closes, as index_prices holds them. */
+  sectorPrices: Array<{ ticker: string; date: string; close: number; adjClose: number | null }>;
+}
+
+export async function loadAttributionData(supabase: SupabaseClient, today: string): Promise<AttributionData> {
+  const [input, classes, sectorSettings, profiles] = await Promise.all([
+    loadPerformanceInput(supabase, today),
+    loadAssetClassSettings(supabase),
+    loadSectorSettings(supabase),
+    rows<{ ticker: string; sector: string | null }>('company_profiles', supabase.from('company_profiles').select('ticker, sector')),
+  ]);
+  const currency = new Map(input.securities.map((security) => [security.ticker, security.currency]));
+  const specs: ClassSpec[] = classes.map((entry) => ({ id: entry.id, targetWeight: entry.targetWeight, benchmarkTicker: entry.benchmarkTicker, benchmarkCurrency: (entry.benchmarkTicker ? currency.get(entry.benchmarkTicker) : undefined) ?? 'USD' }));
+  const sectorOf = new Map(profiles.map((row) => [row.ticker, row.sector]));
+  const stocks = input.securities.filter((security) => security.productType === 'stock' && security.sleeve === 'satellite').map((security) => ({ ticker: security.ticker, currency: security.currency, sector: sectorOf.get(security.ticker) ?? null }));
+
+  const fund = classes.find((entry) => entry.id === 'us_global_equity')?.benchmarkTicker ?? null;
+  const [file] = fund ? await rows<{ fund: string; as_of: string; constituents: unknown }>('fund_holdings', supabase.from('fund_holdings').select('fund, as_of, constituents').eq('fund', fund)) : [];
+  const proxies = new Map((sectorSettings?.proxies ?? []).filter((proxy) => proxy.market === 'US').map((proxy) => [proxy.sector, proxy.id]));
+  const weights = new Map<string, number>();
+  for (const constituent of file ? unpackConstituents(file.constituents) : []) {
+    if (constituent.sector && constituent.assetType === 'equity' && proxies.has(constituent.sector)) weights.set(constituent.sector, (weights.get(constituent.sector) ?? 0) + constituent.weight);
+  }
+  const total = [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+  const sectorBenchmark: SectorBenchmark[] = total > 0 ? [...weights].map(([sector, weight]) => ({ sector, weight: weight / total, proxy: proxies.get(sector) as string, currency: 'USD' })) : [];
+  const ids = sectorBenchmark.map((entry) => entry.proxy);
+  const found = ids.length
+    ? await allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (from, to) => supabase.from('index_prices').select('index_id, price_date, close').in('index_id', ids).order('index_id').order('price_date').range(from, to))
+    : [];
+  return {
+    input,
+    classes: specs,
+    stocks,
+    sectorBenchmark,
+    coreFund: file ? { ticker: file.fund, asOf: file.as_of } : null,
+    sectorPrices: found.map((row) => ({ ticker: row.index_id, date: row.price_date, close: Number(row.close), adjClose: null })),
+  };
+}
+
+/** The effects of each complete month by segment, ready for the attribution table (level 1 by class, 2 by sector). */
+export function attributionRows(level: 1 | 2, month: MonthInput): Array<Record<string, unknown>> {
+  const result = brinson(month.segments);
+  return result.segments.map((row) => ({
+    period_start: `${month.month}-01`,
+    period_end: month.to,
+    level,
+    segment: row.id,
+    allocation: row.allocation,
+    selection: row.selection,
+    interaction: row.interaction,
+    fx: row.currency,
+  }));
+}
+
+/**
+ * The nightly job's monthly run: saves each complete month's effects, both levels, that the table
+ * does not have yet; undefined when there is nothing new or no history to attribute.
+ */
+export async function refreshAttribution(supabase: SupabaseClient, today: string): Promise<{ months: number } | undefined> {
+  const saved = await rows<{ period_end: string }>('attribution', supabase.from('attribution').select('period_end').eq('level', 1));
+  const done = new Set(saved.map((row) => row.period_end));
+  const data = await loadAttributionData(supabase, today);
+  const days = buildSeries(data.input);
+  const market = new MarketHistory([...data.input.prices, ...data.sectorPrices], data.input.rates);
+  const complete = monthInputs(days, market, data.classes).filter((month) => month.complete);
+  const fresh = complete.filter((month) => !done.has(month.to));
+  if (fresh.length === 0) return undefined;
+  const level2 = sectorInputs(fresh, days, market, data.stocks, data.sectorBenchmark);
+  const out = [...fresh.flatMap((month) => attributionRows(1, month)), ...level2.flatMap((month) => attributionRows(2, month))];
+  const { error } = await supabase.from('attribution').upsert(out, { onConflict: 'period_start,period_end,level,segment' });
+  if (error) throw new DataError('attribution', error.message);
+  return { months: fresh.length };
+}
+
+/** The newest month saved by the monthly run: its date, when it was saved and level 1's effects summed. */
+export async function loadLastAttribution(supabase: SupabaseClient): Promise<{ periodEnd: string; savedAt: string; allocation: number; selection: number; interaction: number; fx: number } | null> {
+  const [latest] = await rows<{ period_end: string }>('attribution', supabase.from('attribution').select('period_end').eq('level', 1).order('period_end', { ascending: false }).limit(1));
+  if (!latest) return null;
+  const found = await rows<{ allocation: number; selection: number; interaction: number; fx: number; created_at: string }>(
+    'attribution',
+    supabase.from('attribution').select('allocation, selection, interaction, fx, created_at').eq('level', 1).eq('period_end', latest.period_end),
+  );
+  const sum = (key: 'allocation' | 'selection' | 'interaction' | 'fx') => found.reduce((total, row) => total + Number(row[key]), 0);
+  return { periodEnd: latest.period_end, savedAt: found.map((row) => row.created_at).sort().pop() ?? '', allocation: sum('allocation'), selection: sum('selection'), interaction: sum('interaction'), fx: sum('fx') };
 }

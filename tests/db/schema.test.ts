@@ -9,6 +9,8 @@ import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
 import { readMcSettings } from '../../lib/models/monte-carlo.ts';
+import { readFrontierSettings } from '../../lib/models/frontier.ts';
+import { readStressSettings } from '../../lib/models/stress.ts';
 import { readTimelineSettings } from '../../lib/models/timeline.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
@@ -924,5 +926,37 @@ describe('life timeline (Phase 3, step 2)', () => {
   it('seeds the settings with no goals: they are the owner’s own, not for git', async () => {
     const settings = readTimelineSettings(await scalar(db, `select value from public.config where key = 'timeline'`));
     assert.deepEqual(settings, { goals: [] });
+  });
+});
+
+describe('efficient frontier (Phase 3, step 4)', () => {
+  it('seeds the settings: ten years, a bound for every asset class that can hold 100%, a 1.7% rate', async () => {
+    const settings = readFrontierSettings(await scalar(db, `select value from public.config where key = 'frontier'`));
+    assert.ok(settings);
+    assert.equal(settings.lookbackYears, 10);
+    assert.equal(settings.riskFree, 0.017);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.bounds).sort(), classes.rows.map((row) => row.id));
+    const high = Object.values(settings.bounds).reduce((sum, bound) => sum + bound[1], 0);
+    assert.ok(high >= 1);
+  });
+});
+
+describe('stress test (Phase 3, step 3)', () => {
+  it('seeds three scenarios of public market history whose series line up, every asset class mapped', async () => {
+    const settings = readStressSettings(await scalar(db, `select value from public.config where key = 'stress'`));
+    assert.ok(settings);
+    assert.deepEqual(settings.scenarios.map((scenario) => [scenario.id, scenario.from, scenario.returns['us_equity']?.length]), [
+      ['gfc_2008', '2007-10', 39],
+      ['covid_2020', '2020-01', 15],
+      ['rates_2022', '2022-01', 24],
+    ]);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.map).sort(), classes.rows.map((row) => row.id));
+    assert.equal(settings.gauge, 'us_equity');
+    // History says what it said: the S&P 500 fell by about half from October 2007 to March 2009.
+    const gfc = settings.scenarios[0]?.returns['us_equity'] ?? [];
+    const level = gfc.slice(0, 18).reduce((acc, value) => acc * (1 + value), 1);
+    assert.ok(level < 0.65 && level > 0.45, `${level}`);
   });
 });

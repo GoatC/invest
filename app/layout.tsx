@@ -69,6 +69,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/monte-carlo">
                 <Bi {...LABELS.monteCarlo} />
               </Link>
+              <Link href="/stress">
+                <Bi {...LABELS.stress} />
+              </Link>
+              <Link href="/frontier">
+                <Bi {...LABELS.frontier} />
+              </Link>
+              <Link href="/attribution">
+                <Bi {...LABELS.attribution} />
+              </Link>
               <Link href="/costs">
                 <Bi {...LABELS.costs} />
               </Link>

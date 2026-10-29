@@ -69,6 +69,9 @@ export const LABELS = {
   calculator: { en: 'Calculator', zh: '複利計算機' },
   monteCarlo: { en: 'Monte Carlo', zh: '蒙地卡羅' },
   timeline: { en: 'Life timeline', zh: '人生時間軸' },
+  stress: { en: 'Stress test', zh: '壓力測試' },
+  frontier: { en: 'Efficient frontier', zh: '效率前緣' },
+  attribution: { en: 'Attribution', zh: '績效歸因' },
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },
@@ -223,4 +226,12 @@ export const RUN_STATUS = {
   ok: { en: 'OK', zh: '正常' },
   partial: { en: 'Partly loaded', zh: '部分載入' },
   failed: { en: 'Failed', zh: '失敗' },
+} as const satisfies Record<string, Bilingual>;
+
+/** The four Brinson effects (N2): names shared by the page and its client charts. */
+export const EFFECT = {
+  allocation: { en: 'Allocation', zh: '配置效果' },
+  selection: { en: 'Selection', zh: '選擇效果' },
+  interaction: { en: 'Interaction', zh: '交互效果' },
+  currency: { en: 'Currency', zh: '匯率效果' },
 } as const satisfies Record<string, Bilingual>;

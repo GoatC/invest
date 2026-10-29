@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
+import { readFrontierSettings } from './models/frontier';
 import { readMcSettings } from './models/monte-carlo';
 import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
@@ -15,6 +16,7 @@ import {
   parseFeeForm,
   parseFundForm,
   parseManualAsset,
+  parseFrontierForm,
   parseMonteCarloForm,
   parseNumber,
   parseTimelineForm,
@@ -686,5 +688,32 @@ describe('parseTimelineForm (F1)', () => {
     }
     const many = Array.from({ length: 13 }, (_, i) => `2040-${String((i % 12) + 1).padStart(2, '0')} | | g${i}`).join('\n');
     assert.ok(!parseTimelineForm({ goals: many }).ok);
+  });
+});
+
+describe('parseFrontierForm (F7)', () => {
+  const current = readFrontierSettings({ lookback_years: 10, min_months: 36, points: 40, risk_free: 0.017, bounds: { a: [0, 0.5], b: [0, 0.6] } });
+  assert.ok(current);
+  const raw = { riskFree: '1.5', lookbackYears: '8', bounds: 'a = 0 - 50\nb = 10 - 60.5', checked: 'on' };
+
+  it('reads the rate, the years and the bounds, and stamps the check', () => {
+    const parsed = parseFrontierForm(raw, current, ['a', 'b'], '2026-10-29');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.riskFree, 0.015);
+    assert.equal(parsed.value.lookbackYears, 8);
+    assert.deepEqual(parsed.value.bounds, { a: [0, 0.5], b: [0.1, 0.605] });
+    assert.equal(parsed.value.lastVerified, '2026-10-29');
+    assert.equal(parsed.value.points, 40);
+  });
+
+  it('refuses an unknown class, a minimum above its maximum, bounds that cannot sum to 100% and bad numbers', () => {
+    for (const bounds of ['z = 0 - 50', 'a = 60 - 50', 'a = 0 - 40\nb = 0 - 40', 'a = 60 - 70\nb = 50 - 60', 'a = x', '']) {
+      const parsed = parseFrontierForm({ ...raw, bounds }, current, ['a', 'b'], '2026-10-29');
+      assert.ok(!parsed.ok, bounds);
+      assert.deepEqual(Object.keys(parsed.errors), ['bounds']);
+    }
+    const bad = parseFrontierForm({ ...raw, riskFree: 'x', lookbackYears: '0' }, current, ['a', 'b'], '2026-10-29');
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['lookbackYears', 'riskFree']);
   });
 });

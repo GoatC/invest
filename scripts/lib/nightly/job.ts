@@ -20,7 +20,7 @@
  * is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
-import { BETAS_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { ATTRIBUTION_ERROR, BETAS_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
 import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
@@ -89,6 +89,8 @@ export interface Store {
   saveSeries(rows: readonly MonthlyPoint[]): Promise<void>;
   /** The Regression Lab's longest window in years (config regression); undefined before its migration. */
   regressionYears(): Promise<number | undefined>;
+  /** The years of history the Monte Carlo (F5) and the frontier (F7) read, plus one to spare; undefined before their migrations. */
+  historyYears(): Promise<number | undefined>;
   /** Upserts daily index closes (index_prices); fillOnly adds missing days only. */
   saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
   /** Whether config capm exists (F11, Phase 2 step 3): false before its migration. */
@@ -119,6 +121,8 @@ export interface Store {
   saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>): Promise<void>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
+  /** Saves each complete month's Brinson effects (N2) not yet saved; undefined when there is nothing new (refreshAttribution in lib/data). */
+  refreshAttribution(today: string): Promise<{ months: number } | undefined>;
   /** Saves the month's Monte Carlo summary (F5) once: undefined when it is saved already or cannot run yet (refreshMonteCarlo in lib/data). */
   refreshMonteCarlo(today: string): Promise<{ runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -156,6 +160,8 @@ export interface RunDetail {
   betas?: { saved: number; runDate: string };
   /** The Monte Carlo re-run (F5) saved for the month, on the month's first run; its figures stay in simulation_runs. */
   monteCarlo?: { runDate: string };
+  /** The months of Brinson effects (N2) saved tonight. */
+  attribution?: { months: number };
   /** The watched stocks valued again after a new filing (F12). */
   valued?: string[];
   /** The red-flag indicator (N3): the companies scanned tonight, and the events the feeds found. */
@@ -290,7 +296,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let lookPlan: Awaited<ReturnType<Store['lookThroughPlan']>>;
   let sectorProxies: SectorProxyFeed[] | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors, modelYears] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
@@ -301,6 +307,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       store.redFlagCompanies(today),
       store.lookThroughPlan(today),
       store.sectorProxies(),
+      store.historyYears(),
     ]);
     sectorProxies = sectors;
     filingTickers = filers;
@@ -309,8 +316,8 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     securities = found;
     regressionYears = regression;
     capm = capmReady;
-    // Every security reaches back over the VaR's years or the Regression Lab's longest window (N1).
-    start = windowStart(today, Math.max(years, regression ?? 0), earliestTrade);
+    // Every security reaches back over the VaR's years, the Regression Lab's longest window (N1) or the models' history (F5, F7).
+    start = windowStart(today, Math.max(years, regression ?? 0, modelYears ?? 0), earliestTrade);
     riskStart = riskWindowStart(today, lookbackWeeks({ lookbackYears: years }), earliestTrade);
     proxies = new Set(riskProxies);
   } catch (err) {
@@ -763,6 +770,13 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     if (monteCarlo) detail.monteCarlo = monteCarlo;
   } catch (err) {
     detail.errors.push(`${MONTE_CARLO_ERROR}: ${message(err)}`);
+  }
+  // N2's monthly run: each complete month's effects, from the closes just saved.
+  try {
+    const attribution = await store.refreshAttribution(today);
+    if (attribution) detail.attribution = attribution;
+  } catch (err) {
+    detail.errors.push(`${ATTRIBUTION_ERROR}: ${message(err)}`);
   }
   const saved = prices.length + fills.length + rates.length;
   return finish(saved === 0 ? 'failed' : detail.errors.length > 0 ? 'partial' : 'ok');
