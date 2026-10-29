@@ -345,10 +345,15 @@ export interface SplitRecord extends Split {
 
 const SPLIT_COLUMNS = 'id, ticker, ex_date, ratio, note';
 
-/** Every split entered, oldest first. */
+/**
+ * Every split entered, oldest first. Nearly every page reads it, so before its migration is
+ * applied (the Data API's PGRST205, table not found) it reads as no splits rather than an error.
+ */
 export async function loadSplits(supabase: SupabaseClient): Promise<SplitRecord[]> {
-  const found = await rows<SplitRow>('splits', supabase.from('splits').select(SPLIT_COLUMNS).order('ex_date').order('id'));
-  return found.map((row) => ({ id: row.id, ticker: row.ticker, exDate: row.ex_date, ratio: Number(row.ratio), note: row.note }));
+  const { data, error } = await supabase.from('splits').select(SPLIT_COLUMNS).order('ex_date').order('id');
+  if (error && (error as { code?: string }).code === 'PGRST205') return [];
+  if (error) throw new DataError('splits', error.message);
+  return ((data ?? []) as SplitRow[]).map((row) => ({ id: row.id, ticker: row.ticker, exDate: row.ex_date, ratio: Number(row.ratio), note: row.note }));
 }
 
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */

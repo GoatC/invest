@@ -1443,12 +1443,13 @@ export const SPLIT_MESSAGES = {
 };
 
 /**
- * A split as N old shares become M new ones on its ex-date; ratio M ÷ N. Not in the future, since
+ * A split as N old shares become M new ones on its ex-date; ratio M ÷ N. The form names the
+ * security `security`, as the security's own form on the same page holds `ticker`. Not in the future, since
  * the closes before the ex-date are still in old shares, and one split per security a day.
  */
 export function parseSplitForm(raw: RawForm, tickers: readonly string[], taken: readonly { ticker: string; exDate: string }[], today: string): Parsed<SplitInput, SplitField> {
   const errors: FieldErrors<SplitField> = {};
-  const ticker = oneOf(text(raw['ticker']).toUpperCase(), tickers);
+  const ticker = oneOf(text(raw['security']).toUpperCase(), tickers);
   if (!ticker) errors.ticker = MESSAGES.unknownTicker;
   const exDate = text(raw['exDate']);
   if (!isIsoDate(exDate)) errors.exDate = MESSAGES.date;

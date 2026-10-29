@@ -16,7 +16,7 @@ export function SplitForm({ ticker, today }: { ticker: string; today: string }) 
   const error = (name: string) => state.errors[name as keyof SplitFormState['errors']] ?? null;
   return (
     <form action={action} className="form">
-      <input type="hidden" name="ticker" value={ticker} />
+      <input type="hidden" name="security" value={ticker} />
       {state.message && (
         <p className="banner danger" role="alert">
           <Bi {...state.message} />

@@ -722,7 +722,7 @@ describe('parseFrontierForm (F7)', () => {
 
 describe('parseSplitForm', () => {
   const tickers = ['0050', 'AAPL'];
-  const raw = { ticker: '0050', exDate: '2025-06-18', oldShares: '1', newShares: '4', note: ' 1 拆 4 ' };
+  const raw = { security: '0050', exDate: '2025-06-18', oldShares: '1', newShares: '4', note: ' 1 拆 4 ' };
 
   it('reads N old shares becoming M new ones as the ratio M ÷ N', () => {
     assert.deepEqual(parseSplitForm(raw, tickers, [], '2026-10-29'), { ok: true, value: { ticker: '0050', exDate: '2025-06-18', ratio: 4, note: '1 拆 4' } });
@@ -731,7 +731,7 @@ describe('parseSplitForm', () => {
   });
 
   it('refuses an unknown ticker, a future ex-date, a second split that day, no change and zero shares', () => {
-    const unknown = parseSplitForm({ ...raw, ticker: 'NOPE' }, tickers, [], '2026-10-29');
+    const unknown = parseSplitForm({ ...raw, security: 'NOPE' }, tickers, [], '2026-10-29');
     assert.ok(!unknown.ok && unknown.errors.ticker === MESSAGES.unknownTicker);
     const future = parseSplitForm(raw, tickers, [], '2025-06-17');
     assert.ok(!future.ok && future.errors.exDate === SPLIT_MESSAGES.future);
