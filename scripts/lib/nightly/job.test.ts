@@ -191,6 +191,8 @@ class MemoryStore implements Store {
   indices: IndexClose[] = [];
   indexFills: IndexClose[] = [];
   betaRuns: string[] = [];
+  monteCarloRuns: string[] = [];
+  attributionRuns: string[] = [];
   fundamentals: FundamentalRow[] = [];
   /** When the watched stocks were valued again, and how many quarters were saved by then. */
   revalues: Array<{ today: string; quartersSaved: number }> = [];
@@ -209,7 +211,10 @@ class MemoryStore implements Store {
       failRules?: boolean;
       /** config regression's longest window plus a year (N1); undefined before its migration. */
       regressionYears?: number;
+      historyYears?: number;
       failBetas?: boolean;
+      failMonteCarlo?: boolean;
+      failAttribution?: boolean;
       /** Whether config capm exists (F11). */
       capm?: boolean;
       /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
@@ -292,6 +297,9 @@ class MemoryStore implements Store {
   async saveSeries(rows: readonly MonthlyPoint[]) {
     this.series.push(...rows);
   }
+  async historyYears() {
+    return this.options.historyYears;
+  }
   async regressionYears() {
     return this.options.regressionYears;
   }
@@ -316,6 +324,16 @@ class MemoryStore implements Store {
     if (this.options.failBetas) throw new Error('beta_results: permission denied');
     this.betaRuns.push(today);
     return { saved: 4, runDate: today };
+  }
+  async refreshAttribution(today: string) {
+    if (this.options.failAttribution) throw new Error('attribution: permission denied');
+    this.attributionRuns.push(today);
+    return { months: 2 };
+  }
+  async refreshMonteCarlo(today: string) {
+    if (this.options.failMonteCarlo) throw new Error('simulation_runs: permission denied');
+    this.monteCarloRuns.push(today);
+    return { runDate: today };
   }
   /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
   async performanceInput(end: string): Promise<PerformanceInput> {
@@ -715,6 +733,33 @@ describe('runNightly', () => {
     const run = await runNightly(deps(fakeGet().get, new MemoryStore({ regressionYears: 6, failBetas: true })));
     assert.equal(run.status, 'partial');
     assert.deepEqual(run.detail.errors, ['Betas: beta_results: permission denied']);
+  });
+
+  it("re-runs F5's Monte Carlo once a night and reports a partial run when it cannot be saved", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.monteCarloRuns, [TODAY]);
+    assert.deepEqual(run.detail.monteCarlo, { runDate: TODAY });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failMonteCarlo: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Monte Carlo: simulation_runs: permission denied']);
+  });
+
+  it("loads every security back over the years the Monte Carlo and the frontier read (F5, F7)", async () => {
+    const without = await runNightly(deps(fakeGet().get, new MemoryStore()));
+    const longer = await runNightly(deps(fakeGet().get, new MemoryStore({ historyYears: 11 })));
+    assert.ok(longer.detail.window.start < without.detail.window.start, `${longer.detail.window.start} is before ${without.detail.window.start}`);
+    assert.equal(longer.detail.window.start, windowStart(TODAY, 11));
+  });
+
+  it("saves N2's Brinson months once a night and reports a partial run when it cannot", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.attributionRuns, [TODAY]);
+    assert.deepEqual(run.detail.attribution, { months: 2 });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failAttribution: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Attribution: attribution: permission denied']);
   });
 
   it('leaves the indices, the bill rate and the β alone before the Regression Lab migration', async () => {

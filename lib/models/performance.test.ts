@@ -570,6 +570,7 @@ describe('snapshots', () => {
       held: { 'regular:VT': 20000, 'manual:1': 10000, 'windfall:VT': 21000.004 },
       ret: { all: null, regular: null, windfall: null },
       local: { all: null, regular: null, windfall: null },
+      classDay: {},
       benchmark: null,
       estimated: false,
     };
@@ -585,6 +586,7 @@ describe('snapshots', () => {
       held: { 'regular:VT': 1000 },
       ret: { all: null, regular: null, windfall: null },
       local: { all: null, regular: null, windfall: null },
+      classDay: {},
       benchmark: null,
       estimated: false,
     });

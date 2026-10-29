@@ -122,7 +122,7 @@ describe('project', () => {
 /** A day of the regular pool: its value at the close and the money put in that day. */
 function dayPoint(date: string, value: number, putIn = 0): DayPoint {
   const perScope = (amount: number) => ({ all: amount, regular: amount, windfall: 0 });
-  return { date, value: perScope(value), flow: perScope(-putIn), classValue: {}, held: {}, ret: { all: null, regular: null, windfall: null }, local: { all: null, regular: null, windfall: null }, benchmark: null, estimated: false };
+  return { date, value: perScope(value), flow: perScope(-putIn), classValue: {}, held: {}, ret: { all: null, regular: null, windfall: null }, local: { all: null, regular: null, windfall: null }, classDay: {}, benchmark: null, estimated: false };
 }
 
 /** Every day from `from` to `to`, worth `value(date)`, with money put in on the given dates. */

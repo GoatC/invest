@@ -48,8 +48,8 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         </h1>
         <Info>
           <Bi
-            en="Where monthly investing could take the regular pool (F2): the value year by year in nominal TWD and in today's money, what you put in against what it grows, and how the pool is doing against the plan you save. A projection at one steady return, not a forecast: real returns swing, and the Monte Carlo in Phase 3 will show how widely."
-            zh="每月定期投入可以讓一般投入資金池成長到多少（F2）：逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長，以及資金池與已儲存計畫的對照。這是以固定報酬計算的預測，不是預言：實際報酬會起伏，第三階段的蒙地卡羅模擬會顯示起伏的範圍。"
+            en="Where monthly investing could take the regular pool (F2): the value year by year in nominal TWD and in today's money, what you put in against what it grows, and how the pool is doing against the plan you save. A projection at one steady return, not a forecast: real returns swing, and the Monte Carlo page shows how widely."
+            zh="每月定期投入可以讓一般投入資金池成長到多少（F2）：逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長，以及資金池與已儲存計畫的對照。這是以固定報酬計算的預測，不是預言：實際報酬會起伏，「蒙地卡羅」頁會顯示起伏的範圍。"
           />
         </Info>
         {params['saved'] === 'plan' && (

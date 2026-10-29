@@ -12,6 +12,8 @@ import {
   DataError,
   loadAllocationData,
   loadJobRuns,
+  loadLastAttribution,
+  loadLastRun,
   loadPlanData,
   loadProposals,
   loadRedFlagData,
@@ -30,7 +32,7 @@ import {
   type WindfallPlanRecord,
   type WorkbenchData,
 } from '@/lib/data';
-import { taipeiToday } from '@/lib/dates';
+import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, points, signedPercent, signedTwd, twd } from '@/lib/format';
 import { DRIFT_ICON, DRIFT_STATUS, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
@@ -63,7 +65,7 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags] = await Promise.all([
+  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags, simulation, attribution] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -79,6 +81,8 @@ export default async function Dashboard() {
     orDataError(loadWindfallPlan(supabase)),
     orDataError(loadWorkbench(supabase, today)),
     orDataError(loadRedFlagData(supabase, today, undefined, data)),
+    orDataError(loadLastRun(supabase, 'monte_carlo')),
+    orDataError(loadLastAttribution(supabase)),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -126,11 +130,57 @@ export default async function Dashboard() {
         })}
       />
       {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
+      {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
+      {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
     </>
   );
 }
 
 /** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12), and its red-flag light (N3). */
+/** F5's monthly re-run, in the week it updates only (PRD Section 5): the median at the last mark and the chance of the goal. */
+function MonteCarloUpdate({ run, today }: { run: NonNullable<Awaited<ReturnType<typeof loadLastRun>>>; today: string }) {
+  if (run.runDate <= addDays(today, -7)) return null;
+  const mark = run.marks[run.marks.length - 1];
+  if (!mark) return null;
+  return (
+    <section className="card form" id="dashboard-monte-carlo">
+      <h2>
+        <Bi en="Monte Carlo, re-run this month" zh="蒙地卡羅，本月重跑" />
+      </h2>
+      <p>
+        <Bi
+          en={`Year ${mark.year} median ${twd(mark.realMedian)} in today's money${mark.reaching === null ? '' : `; ${percent(mark.reaching, 0)} of paths reach the goal`}.`}
+          zh={`第 ${mark.year} 年中位數 ${twd(mark.realMedian)}（今天幣值）${mark.reaching === null ? '' : `；${percent(mark.reaching, 0)} 的路徑達成目標`}。`}
+        />{' '}
+        <Link href="/monte-carlo">
+          <Bi {...LABELS.monteCarlo} />
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+/** N2's monthly run, in the week it updates only (PRD Section 5): the month's effects, level 1. */
+function AttributionUpdate({ last, today }: { last: NonNullable<Awaited<ReturnType<typeof loadLastAttribution>>>; today: string }) {
+  if (last.savedAt.slice(0, 10) <= addDays(today, -7)) return null;
+  return (
+    <section className="card form" id="dashboard-attribution">
+      <h2>
+        <Bi en="Attribution, updated this month" zh="績效歸因，本月更新" />
+      </h2>
+      <p>
+        <Bi
+          en={`${last.periodEnd.slice(0, 7)} against the benchmark: allocation ${signedPercent(last.allocation, 2)}, selection ${signedPercent(last.selection, 2)}, interaction ${signedPercent(last.interaction, 2)}, currency ${signedPercent(last.fx, 2)}.`}
+          zh={`${last.periodEnd.slice(0, 7)} 相對基準：配置 ${signedPercent(last.allocation, 2)}、選擇 ${signedPercent(last.selection, 2)}、交互 ${signedPercent(last.interaction, 2)}、匯率 ${signedPercent(last.fx, 2)}。`}
+        />{' '}
+        <Link href="/attribution">
+          <Bi {...LABELS.attribution} />
+        </Link>
+      </p>
+    </section>
+  );
+}
+
 function Watchlist({ data, flags }: { data: WorkbenchData; flags: RedFlagData | undefined }) {
   const watched = data.stocks.filter((stock) => stock.watch?.active);
   const lightOf = new Map((flags?.companies ?? []).map((company) => [company.security.ticker, company.assessment]));

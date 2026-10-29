@@ -65,6 +65,11 @@ export interface DayPoint {
   ret: MaybePerScope;
   /** The same with foreign holdings in their own currency, before the currency's move. */
   local: MaybePerScope;
+  /**
+   * The regular pool's return by asset class that day (N2): the value held at the previous close
+   * and its sum of value × return in TWD and in own currencies; a class held nothing of is absent.
+   */
+  classDay: Record<string, { base: number; twd: number; local: number }>;
   /** The SAA benchmark's TWD return that day; null when a proxy has no price yet. */
   benchmark: number | null;
   /** Some value rests on a trade price or a hand-entered value instead of a close. */
@@ -168,11 +173,18 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
     const base = perScope(0);
     const twdSum = perScope(0);
     const localSum = perScope(0);
-    const add = (pool: Pool, value: number, twd: number, local: number) => {
+    const classDay: DayPoint['classDay'] = {};
+    const add = (pool: Pool, value: number, twd: number, local: number, assetClassId: string) => {
       for (const scope of ['all', pool] as const) {
         base[scope] += value;
         twdSum[scope] += value * twd;
         localSum[scope] += value * local;
+      }
+      if (pool === 'regular') {
+        const row = (classDay[assetClassId] ??= { base: 0, twd: 0, local: 0 });
+        row.base += value;
+        row.twd += value * twd;
+        row.local += value * local;
       }
     };
     if (before !== undefined) {
@@ -185,7 +197,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
         const price = market.growth(held.ticker, then, date) ?? (close === undefined ? 1 : close / held.lastPrice);
         const rate = market.fx(held.currency, date);
         const fx = market.fxGrowth(held.currency, then, date) ?? (rate === undefined ? 1 : rate / held.lastFx);
-        add(held.pool, value, price * fx - 1, price - 1);
+        add(held.pool, value, price * fx - 1, price - 1, held.assetClassId);
       }
       for (const { id, was, wasPrice } of assets) {
         const value = closing.get(`manual:${id}`);
@@ -193,7 +205,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
         const twd = (was.quantity * wasPrice.price) / value - 1;
         // Gold is priced in US dollars (XAU/USD × USD/TWD): its local return leaves the dollar's move out.
         const usd = was.unit === 'grams' ? market.fxGrowth('USD', then, date) : undefined;
-        add(was.pool, value, twd, usd === undefined ? twd : (1 + twd) / usd - 1);
+        add(was.pool, value, twd, usd === undefined ? twd : (1 + twd) / usd - 1, was.assetClassId);
       }
     }
     const ret = {} as MaybePerScope;
@@ -277,7 +289,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
     }
     closing = nextClosing;
     manual = nextManual;
-    days.push({ date, value, flow, classValue, held: Object.fromEntries(nextClosing), ret, local, benchmark: benchmarkReturn, estimated });
+    days.push({ date, value, flow, classValue, held: Object.fromEntries(nextClosing), ret, local, classDay, benchmark: benchmarkReturn, estimated });
   }
   return days;
 }

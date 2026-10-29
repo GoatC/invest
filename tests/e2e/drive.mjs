@@ -1474,6 +1474,151 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
 });
 
+await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings (F5)', async () => {
+  await page.goto(`${BASE}/monte-carlo`);
+  await page.getByRole('heading', { level: 1, name: /^Monte Carlo/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const text = await body();
+  check(/Median in year \d+/.test(text) && /Of 10,000 paths/.test(text), `the median and the paths, got ${text.slice(0, 400)}`);
+  check(/months drawn from 20\d\d-\d\d to 20\d\d-\d\d \(\d+ months\), 3 at a time/.test(text), 'the history the months are drawn from');
+  await page.getByText('The marks, as a table').click();
+  check(await page.locator('details table').first().isVisible(), 'the marks table');
+  await snap('monte-carlo');
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await docShot('monte-carlo', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Nominal values are larger than today's money (inflation over the plan's years).
+  const real = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(text) ?? [])[1]?.replace(/,/g, ''));
+  await page.getByRole('group', { name: /Values/ }).getByRole('link', { name: /Nominal/ }).click();
+  await page.waitForURL('**/monte-carlo?basis=nominal');
+  const nominal = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(await body()) ?? [])[1]?.replace(/,/g, ''));
+  check(real > 0 && nominal > real, `nominal ${nominal} above today's money ${real}`);
+
+  // A goal gives the chance of reaching it; a blank one takes it away.
+  await page.goto(`${BASE}/monte-carlo`);
+  await page.locator('#settings input[name=target]').fill('1');
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/monte-carlo?saved=settings**');
+  check(/Chance of reaching the goal[^%]*100\.0%/.test(await body()), 'every path reaches NT$1');
+  check(await page.locator('#settings input[name=target]').inputValue() === '1', 'the goal kept');
+  await page.locator('#settings input[name=windfallAmount]').fill('1200000');
+  await page.locator('#settings button[type=submit]').click();
+  await page.locator('#settings [role=alert]').first().waitFor();
+  check((await page.locator('#settings').innerText()).includes('YYYY-MM'), 'the month asked for with an amount');
+  check((await body()).includes('蒙地卡羅') && (await body()).includes('達成目標的機率'), 'Chinese labels');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*monte_carlo/.test(await body()), 'the setting in the edit history');
+});
+
+await step('timeline: the plan, the Monte Carlo band and the actuals on one chart, the phases and a later goal with its chance, the goals logged (F1)', async () => {
+  await page.goto(`${BASE}/timeline`);
+  await page.getByRole('heading', { level: 1, name: /^Life timeline/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const text = await body();
+  check(/Actual now[^]*Plan this month \(F2\)/.test(text), `the actual and the plan, got ${text.slice(0, 500)}`);
+  check(/Accumulation 累積期/.test(text), 'the accumulation phase');
+  await snap('timeline');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('timeline', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // A goal with an amount gets the plan's value and the chance of reaching it that month.
+  await page.locator('#goals textarea[name=goals]').fill('2046-05 | 3000000 | House 購屋頭期款\n2040-01 |  | Milestone 里程碑');
+  await page.locator('#goals button[type=submit]').click();
+  await page.waitForURL('**/timeline?saved=goals**');
+  const goals = await page.locator('section', { has: page.getByRole('heading', { name: /Goals against the plan/ }) }).first().innerText();
+  check(/2040-01\s+Milestone/.test(goals) && /2046-05\s+House[^]*NT\$3,000,000/.test(goals), `both goals in date order, got ${goals}`);
+  check(/\d+%/.test((await page.locator('table').filter({ hasText: 'Chance' }).first().innerText())), 'the chance of the goal');
+  // A line that is not a goal is refused with the format shown.
+  await page.locator('#goals textarea[name=goals]').fill('soon | x');
+  await page.locator('#goals button[type=submit]').click();
+  await page.locator('#goals [role=alert]').first().waitFor();
+  check((await page.locator('#goals').innerText()).includes('YYYY') || (await page.locator('#goals').innerText()).includes('month'), 'the format asked for');
+  check((await body()).includes('人生時間軸') && (await body()).includes('目標與計畫對照'), 'Chinese labels');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*timeline/.test(await body()), 'the setting in the edit history');
+});
+
+await step('stress test: three historical scenarios on today\'s holdings with the deepest fall in % and NT$, months to recover and the F3 tiers; a shock of your own (F10)', async () => {
+  await page.goto(`${BASE}/stress`);
+  await page.getByRole('heading', { level: 1, name: /^Stress test/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const summary = await page.locator('table').first().innerText();
+  check(/2008 global financial crisis[^\n]*[−-]\d+\.\d%/.test(summary) && /2020 COVID crash/.test(summary) && /2022 rate shock/.test(summary), `three scenarios with their falls, got ${summary}`);
+  const gfc = /2008 global financial crisis[^\n]*/.exec(summary)?.[0] ?? '';
+  const fall = Number((/[−-](\d+\.\d)%/.exec(gfc) ?? [])[1]);
+  check(fall > 5 && fall < 60, `2008's fall is plausible for a core-satellite mix, got ${gfc}`);
+  check(/15%/.test(gfc), `the 2008 gauge fall fires F3's 15% tier, got ${gfc}`);
+  await snap('stress');
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await docShot('stress', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('group', { name: /Scenario/ }).getByRole('link', { name: /2022 rate shock/ }).click();
+  await page.waitForURL('**/stress?s=rates_2022');
+  await page.locator('#stress-detail .chart-figure svg').waitFor();
+  check((await page.locator('#stress-detail').innerText()).includes('F3 tier'), 'the tiers table');
+  // A shock of your own: all stocks fall 30%, then the expected returns bring the portfolio back.
+  await page.getByRole('group', { name: /Scenario/ }).getByRole('link', { name: /Your own/ }).click();
+  await page.waitForURL('**/stress?s=custom');
+  await page.locator('#custom input[name=shock_us_global_equity]').fill('-60');
+  await page.locator('#custom button[type=submit]').click();
+  await page.waitForURL('**/stress?s=custom&shock_*');
+  check(/Your own shock[^\n]*[−-]\d+\.\d%/.test(await page.locator('table').first().innerText()), 'the custom row');
+  check((await body()).includes('壓力測試') && (await body()).includes('最大回撤'), 'Chinese labels');
+});
+
+await step('efficient frontier: the curve, the capital market line and the tangent portfolio, the current and target mixes, weights along the curve, correlations; the rate and bounds logged (F7)', async () => {
+  await page.goto(`${BASE}/frontier`);
+  await page.getByRole('heading', { level: 1, name: /^Efficient frontier/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const text = await body();
+  check(/Tangent \(best Sharpe\)/.test(text) && /Minimum variance/.test(text) && /Current mix/.test(text) && /Target mix/.test(text), `the four portfolios, got ${text.slice(0, 600)}`);
+  const weights = await page.locator('#frontier-weights table').first().innerText();
+  check(/US \/ global equity/.test(weights) && /\d+\.\d%/.test(weights), `the weights by class, got ${weights}`);
+  await page.locator('#frontier-correlation svg').waitFor();
+  check((await page.locator('#frontier-correlation').innerText()).includes('1.00'), 'the correlation of a class with itself');
+  await snap('frontier');
+  await page.setViewportSize({ width: 1280, height: 1900 });
+  await docShot('frontier', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Bounds that cannot sum to 100% are refused; a valid change is saved, checked and logged.
+  await page.locator('#settings textarea[name=bounds]').fill('us_global_equity = 0 - 30\ntw_market_cap = 0 - 30');
+  await page.locator('#settings button[type=submit]').click();
+  await page.locator('#settings [role=alert]').first().waitFor();
+  await page.goto(`${BASE}/frontier`);
+  await page.locator('#settings input[name=riskFree]').fill('2');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/frontier?saved=settings**');
+  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`) && (await page.locator('#settings input[name=riskFree]').inputValue()) === '2', 'saved and checked today');
+  check((await body()).includes('效率前緣') && (await body()).includes('切線組合'), 'Chinese labels');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*frontier/.test(await body()), 'the setting in the edit history');
+});
+
+await step('attribution: the portfolio against the SAA benchmark by asset class, the effects adding up, the waterfall, the quadrant and the months; level 2 by sector (N2)', async () => {
+  await page.goto(`${BASE}/attribution`);
+  await page.getByRole('heading', { level: 1, name: /^Attribution/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const text = await body();
+  check(/Portfolio return[^]*Benchmark return[^]*(Ahead of|Behind) the benchmark/.test(text), `the return, the benchmark and the gap, got ${text.slice(0, 600)}`);
+  const table = await page.locator('table').first().innerText();
+  check(/Allocation 配置效果/.test(table) && /US \/ global equity/.test(table) && /All 全部/.test(table), `the effects by class, got ${table}`);
+  // The four effects of the last row add up to the gap shown above.
+  const row = (/All 全部\s+([^\n]*)/.exec(table) ?? [])[1] ?? '';
+  const numbers = [...row.matchAll(/([+−-]?\d+\.\d+)%/g)].map((m) => Number(m[1].replace('−', '-')));
+  check(numbers.length === 5 && Math.abs(numbers.slice(0, 4).reduce((a, b) => a + b, 0) - numbers[4]) < 0.03, `the effects add up, got ${row}`);
+  await snap('attribution');
+  await page.setViewportSize({ width: 1280, height: 1800 });
+  await docShot('attribution', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('group', { name: /Period/ }).getByRole('link', { name: /Last 3 months/ }).click();
+  await page.waitForURL('**/attribution?range=3m');
+  await page.getByRole('group', { name: /Level/ }).getByRole('link', { name: /Satellite by sector/ }).click();
+  await page.waitForURL('**/attribution?range=3m&level=2');
+  check((await body()).includes('衛星') || (await body()).includes('Level 2 needs') || (await body()).includes('No satellite'), 'level 2 answers, with sectors or with what it needs');
+  check((await body()).includes('績效歸因') && (await body()).includes('層級'), 'Chinese labels');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -1494,7 +1639,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1520,7 +1665,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1552,7 +1697,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
     if (path === '/valuation?t=AAPL') await page.locator('.chart-ranges svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

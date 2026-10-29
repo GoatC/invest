@@ -8,6 +8,10 @@ import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
+import { readMcSettings } from '../../lib/models/monte-carlo.ts';
+import { readFrontierSettings } from '../../lib/models/frontier.ts';
+import { readStressSettings } from '../../lib/models/stress.ts';
+import { readTimelineSettings } from '../../lib/models/timeline.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
@@ -22,13 +26,14 @@ const KEY_MISSING = '23503';
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
-// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings.
+// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
+// (Phase 3, step 1) adds simulation_runs.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
-  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -48,7 +53,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries and fund_holdings', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings and simulation_runs', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -885,5 +890,73 @@ describe('demo seed', () => {
             + (select count(*) from public.manual_assets where pool = 'windfall')`,
     );
     assert.equal(windfallRows, 0);
+  });
+});
+
+describe('Monte Carlo (Phase 3, step 1)', () => {
+  it('seeds the settings: 10,000 paths, three-month blocks, marks at 10, 20 and 30 years, no target and no windfall figures', async () => {
+    const settings = readMcSettings(await scalar(db, `select value from public.config where key = 'monte_carlo'`));
+    assert.ok(settings);
+    assert.equal(settings.paths, 10000);
+    assert.equal(settings.blockMonths, 3);
+    assert.deepEqual(settings.markYears, [10, 20, 30]);
+    assert.equal(settings.targetTwd, null);
+    assert.equal(settings.windfall.amountTwd, null);
+  });
+
+  it('keeps one run per model and day, for the owner to read and the job to write', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), DENIED);
+    });
+    await db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{"months": 60}')`);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), '23505');
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-02', '[]')`)), CHECK_FAILED);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('Monte', '2099-01-02', '{}')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 0);
+    });
+    await db.query(`delete from public.simulation_runs where run_date = '2099-01-01'`);
+  });
+});
+
+describe('life timeline (Phase 3, step 2)', () => {
+  it('seeds the settings with no goals: they are the owner’s own, not for git', async () => {
+    const settings = readTimelineSettings(await scalar(db, `select value from public.config where key = 'timeline'`));
+    assert.deepEqual(settings, { goals: [] });
+  });
+});
+
+describe('efficient frontier (Phase 3, step 4)', () => {
+  it('seeds the settings: ten years, a bound for every asset class that can hold 100%, a 1.7% rate', async () => {
+    const settings = readFrontierSettings(await scalar(db, `select value from public.config where key = 'frontier'`));
+    assert.ok(settings);
+    assert.equal(settings.lookbackYears, 10);
+    assert.equal(settings.riskFree, 0.017);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.bounds).sort(), classes.rows.map((row) => row.id));
+    const high = Object.values(settings.bounds).reduce((sum, bound) => sum + bound[1], 0);
+    assert.ok(high >= 1);
+  });
+});
+
+describe('stress test (Phase 3, step 3)', () => {
+  it('seeds three scenarios of public market history whose series line up, every asset class mapped', async () => {
+    const settings = readStressSettings(await scalar(db, `select value from public.config where key = 'stress'`));
+    assert.ok(settings);
+    assert.deepEqual(settings.scenarios.map((scenario) => [scenario.id, scenario.from, scenario.returns['us_equity']?.length]), [
+      ['gfc_2008', '2007-10', 39],
+      ['covid_2020', '2020-01', 15],
+      ['rates_2022', '2022-01', 24],
+    ]);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.map).sort(), classes.rows.map((row) => row.id));
+    assert.equal(settings.gauge, 'us_equity');
+    // History says what it said: the S&P 500 fell by about half from October 2007 to March 2009.
+    const gfc = settings.scenarios[0]?.returns['us_equity'] ?? [];
+    const level = gfc.slice(0, 18).reduce((acc, value) => acc * (1 + value), 1);
+    assert.ok(level < 0.65 && level > 0.45, `${level}`);
   });
 });

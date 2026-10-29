@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
+import { readFrontierSettings } from './models/frontier';
+import { readMcSettings } from './models/monte-carlo';
 import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
@@ -14,7 +16,10 @@ import {
   parseFeeForm,
   parseFundForm,
   parseManualAsset,
+  parseFrontierForm,
+  parseMonteCarloForm,
   parseNumber,
+  parseTimelineForm,
   fractionalShares,
   parseEngineSettings,
   parseOrderSizes,
@@ -617,5 +622,98 @@ describe('sector form (N7)', () => {
       const parsed = parseSectorForm({ colour: 'red_up', tw }, current, names, '2026-10-28');
       assert.ok(!parsed.ok && parsed.errors.tw, tw);
     }
+  });
+});
+
+describe('parseMonteCarloForm (F5)', () => {
+  const current = readMcSettings({
+    paths: 10000,
+    lookback_years: 5,
+    block_months: 3,
+    min_months: 36,
+    scale_to_cma: true,
+    band: [0.1, 0.9],
+    mark_years: [10, 20, 30],
+    target_twd: null,
+    windfall: { amount_twd: null, month: null, tranches: 12 },
+  });
+  assert.ok(current);
+
+  it('reads the goal and an expected windfall into the row, leaving the rest as it is', () => {
+    const parsed = parseMonteCarloForm({ target: '20,000,000', windfallAmount: '5500000', windfallMonth: '2030-06', windfallTranches: '24' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, 20_000_000);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: 5_500_000, month: '2030-06', tranches: 24 });
+    assert.equal(parsed.value.paths, 10000);
+  });
+
+  it('takes blank fields as none, and keeps the tranches when left blank', () => {
+    const parsed = parseMonteCarloForm({ target: '', windfallAmount: '', windfallMonth: '', windfallTranches: '' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, null);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: null, month: null, tranches: 12 });
+  });
+
+  it('asks for the month when there is an amount, and refuses what is not whole NT$ or a month', () => {
+    const noMonth = parseMonteCarloForm({ target: '', windfallAmount: '1000000', windfallMonth: '' }, current);
+    assert.ok(!noMonth.ok);
+    assert.deepEqual(Object.keys(noMonth.errors), ['windfallMonth']);
+    const bad = parseMonteCarloForm({ target: '-5', windfallAmount: '1.5', windfallMonth: '2030-13', windfallTranches: '0' }, current);
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['target', 'windfallAmount', 'windfallMonth', 'windfallTranches']);
+  });
+});
+
+describe('parseTimelineForm (F1)', () => {
+  it('reads one goal per line, in date order, an amount being optional', () => {
+    const parsed = parseTimelineForm({ goals: '2045-06 | 3,000,000 | House\n\n2040-01 |  | Children’s university 子女大學' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, [
+      { month: '2040-01', amountTwd: null, name: 'Children’s university 子女大學' },
+      { month: '2045-06', amountTwd: 3_000_000, name: 'House' },
+    ]);
+  });
+
+  it('takes an empty box as no goals', () => {
+    const parsed = parseTimelineForm({ goals: '  \n' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, []);
+  });
+
+  it('refuses a line without a valid month, a whole-NT$ amount above 0 or a name, and too many goals', () => {
+    for (const goals of ['2045-13 | 1 | x', '2045-06 | 1.5 | x', '2045-06 | 0 | x', '2045-06 | 100 | ', '2045-06 only']) {
+      const parsed = parseTimelineForm({ goals });
+      assert.ok(!parsed.ok, goals);
+      assert.deepEqual(Object.keys(parsed.errors), ['goals']);
+    }
+    const many = Array.from({ length: 13 }, (_, i) => `2040-${String((i % 12) + 1).padStart(2, '0')} | | g${i}`).join('\n');
+    assert.ok(!parseTimelineForm({ goals: many }).ok);
+  });
+});
+
+describe('parseFrontierForm (F7)', () => {
+  const current = readFrontierSettings({ lookback_years: 10, min_months: 36, points: 40, risk_free: 0.017, bounds: { a: [0, 0.5], b: [0, 0.6] } });
+  assert.ok(current);
+  const raw = { riskFree: '1.5', lookbackYears: '8', bounds: 'a = 0 - 50\nb = 10 - 60.5', checked: 'on' };
+
+  it('reads the rate, the years and the bounds, and stamps the check', () => {
+    const parsed = parseFrontierForm(raw, current, ['a', 'b'], '2026-10-29');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.riskFree, 0.015);
+    assert.equal(parsed.value.lookbackYears, 8);
+    assert.deepEqual(parsed.value.bounds, { a: [0, 0.5], b: [0.1, 0.605] });
+    assert.equal(parsed.value.lastVerified, '2026-10-29');
+    assert.equal(parsed.value.points, 40);
+  });
+
+  it('refuses an unknown class, a minimum above its maximum, bounds that cannot sum to 100% and bad numbers', () => {
+    for (const bounds of ['z = 0 - 50', 'a = 60 - 50', 'a = 0 - 40\nb = 0 - 40', 'a = 60 - 70\nb = 50 - 60', 'a = x', '']) {
+      const parsed = parseFrontierForm({ ...raw, bounds }, current, ['a', 'b'], '2026-10-29');
+      assert.ok(!parsed.ok, bounds);
+      assert.deepEqual(Object.keys(parsed.errors), ['bounds']);
+    }
+    const bad = parseFrontierForm({ ...raw, riskFree: 'x', lookbackYears: '0' }, current, ['a', 'b'], '2026-10-29');
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['lookbackYears', 'riskFree']);
   });
 });
