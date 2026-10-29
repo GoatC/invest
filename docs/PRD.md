@@ -522,7 +522,7 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 - [ ] 複委託 broker: pick on the Costs page; confirm its prices, London fees and London ETFs with the broker (starting values from a 2026-09-27 public comparison) 選定複委託券商並向券商確認費率
 - [ ] Foreign-currency cash after a USD-settled sale has no place (manual_assets is grams or TWD): settle in TWD, or add FX balances 外幣交割後的外幣現金無處登錄
 - [x] Splits: done after Phase 3 — entered on each security's page (table `splits`), trades before the ex-date read in the new shares 股票分割：第三階段後完成，在各證券頁登錄
-- [ ] Irish ETFs other than AGGU (VWRA, CSPX, IB01, IGLN) have no price feed; add one before a swap 其他愛爾蘭 ETF 尚無價格來源
+- [ ] Irish ETFs: CSPX, IB01 and IGLN priced from iShares daily NAVs since after Phase 3, like AGGU; VWRA (Vanguard) still has only Alpha Vantage's weekly closes, which refuse cloud requests: add a daily source before a swap into it 愛爾蘭 ETF：CSPX、IB01、IGLN 已改用 iShares 每日淨值；VWRA 仍只有 Alpha Vantage 週線，轉換前需先加入每日來源
 - [ ] US–Taiwan double-tax bill (US withholding 30% → 15%): change `tax.withholding.US` once in force 台美租稅協定生效後修改預扣稅率
 - [ ] TWD risk-free rate for N1 is a setting (1.7%); Central Bank EG41M01 (money-market rates) is a candidate monthly series, after a source check 台幣無風險利率為設定值，EG41M01 待檢查
 - [ ] F11 starting inputs: ERP 4.23%, Taiwan CRP 0.78% (Damodaran, 2026-01-05, updated Jan / Jul); tick "checked" on the Cost of equity page 確認 F11 起始輸入值
@@ -573,6 +573,7 @@ Phase 3 第三階段 (the gate for Phase 3 was passed by Hugo on 2026-10-29, whi
 After Phase 3 第三階段之後 (open questions closed in code 以程式解決的待決問題):
 
 - Splits, N5: a split is entered on its security's page as N old shares becoming M new ones on the ex-date (table `splits`, ratio M ÷ N; a reverse split below 1); not in the future, as closes before the ex-date are still in old shares, and refused when it would leave a sell larger than the holding. Trades stay saved as traded; every model reads them restated in today's units (quantity × ratio, price ÷ ratio, amounts unchanged), so quantity, average cost a share, value and R1 / R2 are right; F18's day-by-day replay restates quoted closes the same way, so the ex-date moves no value, and returns still come from adjusted closes 股票分割：在證券頁以「N 股舊股變為 M 股新股」登錄（`splits` 表，比例 M ÷ N，反分割小於 1）；不可登錄未來日期，若會使某筆賣出超過持有數量則拒絕。交易維持原紀錄，所有模型以今天的股數讀取（數量 × 比例、價格 ÷ 比例，金額不變）；F18 逐日重算也以相同方式換算原始收盤價，生效日不會產生價值跳動，報酬仍取自還原收盤價
+- Prices, Irish swaps: CSPX (253743), IB01 (307243) and IGLN (258441, the USD line of SGLN) join AGGU on the iShares daily NAV, so a swap the US estate-tax check suggests is priced from the first night; VWRA stays on Alpha Vantage weekly. The product page's NAV is read from its own data at full precision, as the page since October 2026 runs the figure into the 52-week range in its text (which had left AGGU on its 25 MB download every night). A NAV that moves to about a whole multiple of the day before (within 3%) is a consolidation or split, and the adjusted NAVs before it are scaled: IB01 consolidated about 20 into 1 on 2021-07-26 愛爾蘭替代 ETF 價格：CSPX、IB01、IGLN 與 AGGU 一樣讀取 iShares 每日淨值，VWRA 維持 Alpha Vantage 週線；產品頁淨值改由頁面資料讀取完整精度（2026 年 10 月起頁面文字把淨值與 52 週區間連在一起，使 AGGU 每晚都要下載 25 MB 檔案）；單日淨值變為前一日約整數倍（3% 內）視為合併或分割，之前的還原淨值依比例調整（IB01 於 2021-07-26 約 20 合 1）
 
 ## 10. Glossary 雙語術語表
 

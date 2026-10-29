@@ -8,7 +8,7 @@ import { avDaily, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
 import { fredRates } from './fred.ts';
 import { makeGet } from './get.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, finmindRows, goldCloses, splitFactors, taiwanPrices, usPrices } from './finmind.ts';
-import { navFromProductPage, navHistory } from './ishares.ts';
+import { adjustForSplits, ISHARES_FUNDS, navFromProductPage, navHistory } from './ishares.ts';
 import { rocDateToIso, twseCloses } from './twse.ts';
 import { FeedError } from './types.ts';
 
@@ -144,6 +144,38 @@ describe('iShares', () => {
     assert.equal(navFromProductPage('<p>no price here</p>', 'AGGU'), undefined);
   });
 
+  it('reads the full-precision NAV from the page data, and the text where the figure runs into the 52-week range (October 2026 page)', () => {
+    const data =
+      '<script>{&quot;navAmount&quot;:{&quot;name&quot;:&quot;navAmount&quot;,&quot;asOfDate&quot;:20261028,&quot;formattedAsOfDate&quot;:&quot;28/Oct/2026&quot;,' +
+      '&quot;formattedValue&quot;:&quot;5.79&quot;,&quot;prefix&quot;:&quot;USD &quot;,&quot;value&quot;:5.786162,&quot;fullName&quot;:&quot;fundHeader.fundNav.navAmount&quot;}}</script>';
+    assert.deepEqual(navFromProductPage(data, 'AGGU'), { ticker: 'AGGU', date: '2026-10-28', close: 5.786162, adjClose: 5.786162, source: 'ishares_nav' });
+    const text = '<span>NAV as of 28/Oct/2026</span><span>NAV as of</span><span>28/Oct/2026</span><div>USD 835.69</div><span>52 WK: 681.22 - 843.55</span>';
+    assert.deepEqual(navFromProductPage(text, 'CSPX'), { ticker: 'CSPX', date: '2026-10-28', close: 835.69, adjClose: 835.69, source: 'ishares_nav' });
+  });
+
+  it('prices the Irish swaps the estate-tax check suggests from iShares too', () => {
+    assert.deepEqual(Object.keys(ISHARES_FUNDS).sort(), ['AGGU', 'CSPX', 'IB01', 'IGLN']);
+    assert.ok(ISHARES_FUNDS['IB01']?.download.includes('portfolioId=307243'));
+  });
+
+  it('scales the NAVs before a consolidation, as IB01’s about 20 into 1 on 2021-07-26, and leaves a market move alone', () => {
+    const price = (date: string, close: number) => ({ ticker: 'IB01', date, close, adjClose: close, source: 'ishares_nav' });
+    const adjusted = adjustForSplits([price('2021-07-26', 102.11), price('2021-07-22', 5.14), price('2021-07-23', 5.15), price('2021-07-27', 102.12)]);
+    assert.deepEqual(
+      adjusted.map((p) => [p.date, p.close, p.adjClose]),
+      [
+        ['2021-07-22', 5.14, 5.14 * 20],
+        ['2021-07-23', 5.15, 5.15 * 20],
+        ['2021-07-26', 102.11, 102.11],
+        ['2021-07-27', 102.12, 102.12],
+      ],
+    );
+    const crash = adjustForSplits([price('2020-03-13', 270.44), price('2020-03-16', 238.04)]);
+    assert.deepEqual(crash.map((p) => p.adjClose), [270.44, 238.04]);
+    const split = adjustForSplits([price('2026-01-01', 100), price('2026-01-02', 25.2)]);
+    assert.deepEqual(split.map((p) => p.adjClose), [25, 25.2]);
+  });
+
   it('reads the NAV history from the fund download', () => {
     const xml = `<Workbook><ss:Worksheet ss:Name="Holdings"><ss:Table><ss:Row><ss:Cell><ss:Data ss:Type="String">x</ss:Data></ss:Cell></ss:Row></ss:Table></ss:Worksheet>
       <ss:Worksheet ss:Name="Historical NAVs"><ss:Table>
@@ -154,8 +186,8 @@ describe('iShares', () => {
     assert.deepEqual(
       navHistory(xml, 'AGGU').map((p) => [p.date, p.close]),
       [
-        ['2026-10-20', 5.77],
         ['2026-10-19', 5.76],
+        ['2026-10-20', 5.77],
       ],
     );
   });
