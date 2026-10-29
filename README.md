@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phases 1 and 2 are built and their gates have passed; Phase 3 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and is the last: the app is complete once its gate passes. 第一、二階段已完成並通過關卡；第三階段已依 PRD 第 11 節的順序建置完成，這是最後一個階段：通過關卡後整個 App 即完成。
+All three phases are built and their gates have passed: the app is complete. Phase 3 followed [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code)'s order. 三個階段都已建置完成並通過關卡：App 建置完成。第三階段依 PRD 第 11 節的順序建置。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
