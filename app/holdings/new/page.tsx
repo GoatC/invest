@@ -5,6 +5,7 @@ import { DataError, loadFxHistory, loadHoldingsData, type HoldingsData } from '@
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
 import { rateHistory, suggestedRate } from '@/lib/models/fx';
+import { restateTrades } from '@/lib/models/splits';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx, latestPrices } from '@/lib/models/valuation';
 import { parseId } from '@/lib/forms';
@@ -33,7 +34,7 @@ export default async function NewTradePage({ searchParams }: { searchParams: Pro
   const security = data.securities.find((candidate) => candidate.ticker === requested?.toUpperCase());
   const rate = security ? suggestedRate(security.currency, today, rateHistory(rates), data.fxMaxAgeDays, latestFx(data.fx, data.trades)) : undefined;
   const shares = parseNumber(qty);
-  const close = security ? latestPrices(data.prices, data.trades).get(security.ticker) : undefined;
+  const close = security ? latestPrices(data.prices, restateTrades(data.trades, data.splits)).get(security.ticker) : undefined;
   const fromProposal = parseId(proposal);
   const estimate = (value: string | undefined) => {
     const amount = fromProposal !== undefined ? parseNumber(value) : undefined;

@@ -576,8 +576,8 @@ describe('runNightly', () => {
       '0050 2026-10-21 108.15 108.15 finmind',
       'VT 2026-10-20 157.8 157.8 finmind',
       // The fund download fills AGGU's history, inside the window only.
-      'AGGU 2026-10-20 5.77 5.77 ishares_nav',
       'AGGU 2026-10-19 5.76 5.76 ishares_nav',
+      'AGGU 2026-10-20 5.77 5.77 ishares_nav',
     ]);
     assert.deepEqual(
       store.rates.map((r) => `${r.pair} ${r.date} ${r.rate}`),

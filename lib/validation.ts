@@ -1420,3 +1420,49 @@ export function parseFrontierForm(raw: RawForm, current: FrontierSettings, class
     lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Stock splits (N5)
+// ---------------------------------------------------------------------------
+
+export interface SplitInput {
+  ticker: string;
+  exDate: string;
+  ratio: number;
+  note: string | null;
+}
+
+export type SplitField = 'ticker' | 'exDate' | 'oldShares' | 'newShares' | 'note';
+
+export const SPLIT_MESSAGES = {
+  shares: { en: 'Enter a number of shares above 0.', zh: '請輸入大於 0 的股數。' },
+  noChange: { en: 'A split changes the share count: the two numbers cannot be equal.', zh: '分割會改變股數：兩個數字不能相同。' },
+  range: { en: 'A split of more than 1 into 100 is unlikely: check the two numbers.', zh: '分割超過 1 拆 100 不太可能，請檢查兩個數字。' },
+  taken: { en: 'This security already has a split on that date.', zh: '這檔證券在這一天已有分割紀錄。' },
+  future: { en: 'Enter the split once its ex-date arrives: until then the prices are still in old shares.', zh: '請在除權（分割生效）日當天或之後再登錄：在那之前價格仍以舊股計。' },
+};
+
+/**
+ * A split as N old shares become M new ones on its ex-date; ratio M ÷ N. The form names the
+ * security `security`, as the security's own form on the same page holds `ticker`. Not in the future, since
+ * the closes before the ex-date are still in old shares, and one split per security a day.
+ */
+export function parseSplitForm(raw: RawForm, tickers: readonly string[], taken: readonly { ticker: string; exDate: string }[], today: string): Parsed<SplitInput, SplitField> {
+  const errors: FieldErrors<SplitField> = {};
+  const ticker = oneOf(text(raw['security']).toUpperCase(), tickers);
+  if (!ticker) errors.ticker = MESSAGES.unknownTicker;
+  const exDate = text(raw['exDate']);
+  if (!isIsoDate(exDate)) errors.exDate = MESSAGES.date;
+  else if (exDate > today) errors.exDate = SPLIT_MESSAGES.future;
+  else if (ticker && taken.some((split) => split.ticker === ticker && split.exDate === exDate)) errors.exDate = SPLIT_MESSAGES.taken;
+  const oldShares = parseNumber(raw['oldShares']);
+  if (oldShares === undefined || oldShares <= 0) errors.oldShares = SPLIT_MESSAGES.shares;
+  const newShares = parseNumber(raw['newShares']);
+  if (newShares === undefined || newShares <= 0) errors.newShares = SPLIT_MESSAGES.shares;
+  const ratio = oldShares && newShares ? newShares / oldShares : undefined;
+  if (ratio !== undefined && Math.abs(ratio - 1) < 1e-9) errors.newShares = SPLIT_MESSAGES.noChange;
+  else if (ratio !== undefined && (ratio > 100 || ratio < 0.01)) errors.newShares = SPLIT_MESSAGES.range;
+  const note = text(raw['note']);
+  if (note.length > 300) errors.note = MESSAGES.tooLong;
+  return finish(errors, () => ({ ticker: ticker as string, exDate, ratio: ratio as number, note: note === '' ? null : note }));
+}

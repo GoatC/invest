@@ -8,6 +8,8 @@ import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
+  SPLIT_MESSAGES,
+  parseSplitForm,
   MESSAGES,
   parseAssumptionForm,
   parseAssumptionsForm,
@@ -715,5 +717,31 @@ describe('parseFrontierForm (F7)', () => {
     const bad = parseFrontierForm({ ...raw, riskFree: 'x', lookbackYears: '0' }, current, ['a', 'b'], '2026-10-29');
     assert.ok(!bad.ok);
     assert.deepEqual(Object.keys(bad.errors).sort(), ['lookbackYears', 'riskFree']);
+  });
+});
+
+describe('parseSplitForm', () => {
+  const tickers = ['0050', 'AAPL'];
+  const raw = { security: '0050', exDate: '2025-06-18', oldShares: '1', newShares: '4', note: ' 1 拆 4 ' };
+
+  it('reads N old shares becoming M new ones as the ratio M ÷ N', () => {
+    assert.deepEqual(parseSplitForm(raw, tickers, [], '2026-10-29'), { ok: true, value: { ticker: '0050', exDate: '2025-06-18', ratio: 4, note: '1 拆 4' } });
+    const reverse = parseSplitForm({ ...raw, oldShares: '10', newShares: '1', note: '' }, tickers, [], '2026-10-29');
+    assert.ok(reverse.ok && reverse.value.ratio === 0.1 && reverse.value.note === null);
+  });
+
+  it('refuses an unknown ticker, a future ex-date, a second split that day, no change and zero shares', () => {
+    const unknown = parseSplitForm({ ...raw, security: 'NOPE' }, tickers, [], '2026-10-29');
+    assert.ok(!unknown.ok && unknown.errors.ticker === MESSAGES.unknownTicker);
+    const future = parseSplitForm(raw, tickers, [], '2025-06-17');
+    assert.ok(!future.ok && future.errors.exDate === SPLIT_MESSAGES.future);
+    const taken = parseSplitForm(raw, tickers, [{ ticker: '0050', exDate: '2025-06-18' }], '2026-10-29');
+    assert.ok(!taken.ok && taken.errors.exDate === SPLIT_MESSAGES.taken);
+    const same = parseSplitForm({ ...raw, newShares: '1' }, tickers, [], '2026-10-29');
+    assert.ok(!same.ok && same.errors.newShares === SPLIT_MESSAGES.noChange);
+    const zero = parseSplitForm({ ...raw, oldShares: '0' }, tickers, [], '2026-10-29');
+    assert.ok(!zero.ok && zero.errors.oldShares === SPLIT_MESSAGES.shares);
+    const huge = parseSplitForm({ ...raw, newShares: '1000' }, tickers, [], '2026-10-29');
+    assert.ok(!huge.ok && huge.errors.newShares === SPLIT_MESSAGES.range);
   });
 });

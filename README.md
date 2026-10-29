@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phases 1 and 2 are built and their gates have passed; Phase 3 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and is the last: the app is complete once its gate passes. 第一、二階段已完成並通過關卡；第三階段已依 PRD 第 11 節的順序建置完成，這是最後一個階段：通過關卡後整個 App 即完成。
+All three phases are built and their gates have passed: the app is complete. Phase 3 followed [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code)'s order. 三個階段都已建置完成並通過關卡：App 建置完成。第三階段依 PRD 第 11 節的順序建置。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
@@ -70,7 +70,7 @@ Phases 1 and 2 are built and their gates have passed; Phase 3 is built, in the o
 
 - **Weekly dashboard 每週儀表板** (home): three lines (rules, largest drift, value and weekly change), open proposals to approve or dismiss, drift bars, VaR, allocation donut, windfall progress, the coming week, actual vs plan. 三行摘要、待處理提案、偏離、風險值、配置、大額資金、下週事件、實際對計畫。
 - **Web Push 推播**: only when a decision is due (new proposal, weekly review, data failure), never a price move; quiet hours 23:00–08:00. 只在需要決定時推播；安靜時段暫停。
-- **Holdings and entry 持倉與登錄**: both pools, R1 / R2 status with the trim needed, actual vs target weights, average cost, TWD value and gain; trade entry fills the currency and the trade date's Bank of Taiwan rate and warns on R1 / R2; broker CSV import (UTF-8 or Big5, ROC dates, mapping remembered per broker, dividends as cash flows, duplicates skipped); cash flows, gold in grams and TWD balances; every edit logged. 持倉、交易登錄、CSV 匯入、現金流與非上市資產，修改皆留紀錄。
+- **Holdings and entry 持倉與登錄**: both pools, R1 / R2 status with the trim needed, actual vs target weights, average cost, TWD value and gain; trade entry fills the currency and the trade date's Bank of Taiwan rate and warns on R1 / R2; broker CSV import (UTF-8 or Big5, ROC dates, mapping remembered per broker, dividends as cash flows, duplicates skipped); cash flows, gold in grams and TWD balances; stock splits on each security's page, so shares bought before one count in the new shares; every edit logged. 持倉、交易登錄、CSV 匯入、現金流、非上市資產與股票分割，修改皆留紀錄。
 - **Performance 績效**: TWR against the SAA benchmark, XIRR, and the TWD return split into local, currency and cross terms. 時間加權與資金加權報酬、匯率拆解。
 - **Allocation 資產配置**: drift coloured by the 5/25 rule (satellite by R2), targets and capital market assumptions edited in the app, donuts by product type, listing country and active vs passive. 偏離、目標與資本市場假設、三種圓餅圖。
 - **Value at Risk 風險值**: 95% 1-week (or 1-month) parametric VaR of the whole portfolio from three years of weekly TWD returns of each class's proxy, with a 52-week line and its distribution. 參數法風險值與走勢、分布。

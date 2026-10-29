@@ -56,4 +56,9 @@ describe('describeRow', () => {
     assert.deepEqual(describeRow('windfall_tranches', { due_date: '2026-11-28', amount_twd: 50000, status: 'done' }, '2'), { en: '2026-11-28 NT$50,000 done', zh: '2026-11-28 NT$50,000 已完成' });
     assert.ok(TABLE_LABELS['windfall_plan'] && TABLE_LABELS['windfall_tranches']);
   });
+
+  it('names a split by its ticker, ratio and ex-date', () => {
+    assert.deepEqual(describeRow('splits', { ticker: '0050', ex_date: '2025-06-18', ratio: 4 }, '1'), { en: '0050 split ×4 from 2025-06-18', zh: '0050 自 2025-06-18 起分割 ×4' });
+    assert.ok(TABLE_LABELS['splits']);
+  });
 });

@@ -28,6 +28,7 @@ import { maxBuyClasses } from '@/lib/models/engine';
 import { buildPortfolio } from '@/lib/models/portfolio';
 import type { Plan } from '@/lib/models/projection';
 import { regularPool } from '@/lib/models/rules';
+import { restateTrades } from '@/lib/models/splits';
 import { overseasIncome, supplementaryPremiums, usSitusExposure, type OverseasIncome, type Premiums, type SitusExposure, type TaxSecurity } from '@/lib/models/tax';
 import { latestFx } from '@/lib/models/valuation';
 import { LSE_CHOICES, TAX_FIELDS, withholdingField } from '@/lib/validation';
@@ -136,7 +137,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
   const limitUsd = typeof limitValue === 'number' ? limitValue : null;
   const exposure = usSitusExposure(portfolio.holdings, (ticker) => securities.get(ticker)?.domicile, usdTwd);
   const year = today.slice(0, 4);
-  const overseas = config.tax ? overseasIncome(data.trades, data.flows, securities, year, config.tax.amt.overseasFloorTwd) : null;
+  const overseas = config.tax ? overseasIncome(restateTrades(data.trades, data.splits), data.flows, securities, year, config.tax.amt.overseasFloorTwd) : null;
   const premiums = config.tax ? supplementaryPremiums(data.flows, securities, year, config.tax.nhi) : null;
   const held = new Set(portfolio.holdings.filter((holding) => holding.ticker !== null && (holding.valueTwd ?? 0) > 0).map((holding) => holding.ticker as string));
   const core = data.classSettings.filter((assetClass) => assetClass.sleeve === 'core');

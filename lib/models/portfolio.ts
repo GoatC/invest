@@ -1,4 +1,5 @@
 import { buildPositions, type Position, type Shortfall } from './positions';
+import { restateTrades, type Split } from './splits';
 import { capBreaches, classWeights, regularPool, satelliteValue, type CapBreach, type Caps, type ClassWeight, type PoolView } from './rules';
 import type { AssetClass, FxQuote, ManualAsset, PriceQuote, Security, Trade } from './types';
 import { latestFx, latestPrices, valueHoldings, type Holding } from './valuation';
@@ -11,6 +12,8 @@ export interface PortfolioData {
   prices: PriceQuote[];
   fx: FxQuote[];
   manualAssets: ManualAsset[];
+  /** Stock splits: trades before one are read in today's units (lib/models/splits). */
+  splits?: readonly Split[];
 }
 
 export interface Portfolio {
@@ -22,13 +25,14 @@ export interface Portfolio {
 }
 
 export function buildPortfolio(data: PortfolioData): Portfolio {
-  const { positions, shortfalls } = buildPositions(data.trades);
+  const trades = restateTrades(data.trades, data.splits);
+  const { positions, shortfalls } = buildPositions(trades);
   const holdings = valueHoldings({
     positions,
     securities: new Map(data.securities.map((security) => [security.ticker, security])),
     assetClasses: new Map(data.assetClasses.map((assetClass) => [assetClass.id, assetClass])),
-    prices: latestPrices(data.prices, data.trades),
-    fx: latestFx(data.fx, data.trades),
+    prices: latestPrices(data.prices, trades),
+    fx: latestFx(data.fx, trades),
     manualAssets: data.manualAssets,
   });
   const pool = regularPool(holdings);

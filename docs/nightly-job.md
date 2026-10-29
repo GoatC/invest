@@ -29,7 +29,8 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 | --- | --- | --- |
 | 台股、台股 ETF | FinMind 每日收盤價，加上除權息結果與股票分割（由收盤價判斷）算出還原收盤價 | 證交所 OpenAPI（只有最新一天） |
 | 美股、美國 ETF | FinMind 美股價格（含還原收盤價） | Alpha Vantage，只補缺的日子（選填） |
-| AGGU（倫敦） | iShares 官網的每日淨值 | Alpha Vantage AGGU.LON 週線（選填） |
+| AGGU、CSPX、IB01、IGLN（倫敦） | iShares 官網的每日淨值（基金股數合併或分割會自動還原） | Alpha Vantage `<代號>.LON` 週線（選填） |
+| VWRA 等其他倫敦 ETF | 尚無免費每日來源 | Alpha Vantage `<代號>.LON` 週線（選填） |
 | 美元匯率 USD/TWD | 臺灣銀行牌告（經 FinMind），即期買入與賣出的中間值 | FRED（每週公布、晚幾天） |
 | 黃金（台幣） | 國際金價（FinMind，每盎司美元）× 當天臺銀美元匯率 | 你在 App 手動輸入的估值 |
 | S&P 500 CAPE、價格、股息殖利率（每月，第二階段） | Shiller 教授的 `ie_data.xls`（shillerdata.com） | multpl.com 的每月表格 |
