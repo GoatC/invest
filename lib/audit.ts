@@ -1,6 +1,8 @@
 /** Describing audit-log rows (N5: every entry can be edited or deleted, with an audit log). */
 import { quantity, twd } from './format';
 import { FLOW_TYPE, SIDE, TRANCHE_STATUS, type Bilingual } from './i18n';
+import type { Indicator } from './models/red-flags';
+import { INDICATOR } from './red-flag-text';
 
 /** The tables whose edits and deletes the database logs, by what they hold. */
 export const TABLE_LABELS: Record<string, Bilingual> = {
@@ -14,6 +16,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   proposals: { en: 'Proposal', zh: '提案' },
   windfall_plan: { en: 'Windfall plan', zh: '大額資金計畫' },
   windfall_tranches: { en: 'Windfall tranche', zh: '大額資金分批' },
+  red_flag_entries: { en: 'Red flag entry', zh: '紅旗紀錄' },
 };
 
 function text(value: unknown): string {
@@ -70,6 +73,10 @@ export function describeRow(table: string, row: Record<string, unknown> | null, 
       const amount = Number.isFinite(planned) ? twd(planned) : text(row['amount_twd']);
       const status = TRANCHE_STATUS[text(row['status'])] ?? same(text(row['status']));
       return { en: `${text(row['due_date'])} ${amount} ${status.en.toLowerCase()}`, zh: `${text(row['due_date'])} ${amount} ${status.zh}` };
+    }
+    case 'red_flag_entries': {
+      const indicator = INDICATOR[text(row['indicator']) as Indicator] ?? same(text(row['indicator']));
+      return { en: `${text(row['ticker'])} ${indicator.en} ${text(row['as_of'])}: ${text(row['value'])}`, zh: `${text(row['ticker'])} ${indicator.zh} ${text(row['as_of'])}：${text(row['value'])}` };
     }
     default:
       return same(text(row['ticker']) || rowKey);

@@ -6,6 +6,7 @@
 import { money, percent, points, quantity, twd } from './format';
 import type { Bilingual } from './i18n';
 import type { Check, ClosedReason, DraftOrder, ProposalDetail, ProposalStatus } from './models/engine';
+import { flagLine } from './red-flag-text';
 
 /** A rule as the text needs it. */
 export interface RuleLike {
@@ -25,6 +26,8 @@ const TITLES: Record<string, Bilingual> = {
   price_at_or_below_value_multiple: { en: 'Buy zone', zh: '進入買入區' },
   price_at_or_above_value_multiple: { en: 'Trim zone', zh: '進入減碼區' },
   value_change_exceeds: { en: 'Valuation updated', zh: '估值更新' },
+  red_flag_worsens: { en: 'Red flag worsens', zh: '紅旗惡化' },
+  satellite_red_flag: { en: 'Red flag turns red', zh: '紅旗轉紅' },
 };
 
 /** "R1 · Single-stock trim". */
@@ -198,6 +201,16 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       }
       lines.push({ en: 'Review the assumptions on the Valuation page · No orders drafted', zh: '請到「估值」頁檢視假設 · 不產生下單清單' });
       break;
+    case 'red_flag_worsens':
+      for (const row of detail.flags ?? []) lines.push(flagLine(row));
+      lines.push({ en: 'Review the indicators on the Red flags page · No orders drafted', zh: '請到「紅旗指標」頁檢視指標 · 不產生下單清單' });
+      break;
+    case 'satellite_red_flag':
+      for (const row of detail.flags ?? []) {
+        lines.push(flagLine(row));
+        if (row.soldTwd !== undefined) lines.push({ en: `Exit option: sell ${twd(row.soldTwd)} of ${twd(row.heldTwd ?? 0)}`, zh: `出場選項：賣出 ${twd(row.heldTwd ?? 0)} 中的 ${twd(row.soldTwd)}` });
+      }
+      break;
     default:
       break;
   }
@@ -237,6 +250,13 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
       ];
     case 'price_at_or_above_value_multiple':
       return [{ en: 'Selling a share of the holding takes profit while the price is well above value; the proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '股價明顯高於內在價值時賣出部分持股以實現獲利；所得留在一般投入資金池，買進最低於目標的核心類別。' }];
+    case 'red_flag_worsens':
+      return [{ en: "A weekly scan found the stock's light worse than before. A light is display only: check what fired, then dismiss with a reason or keep watching.", zh: '每週掃描發現該股燈號比之前差。燈號只供參考：請檢視觸發的指標，再略過（可附理由）或持續觀察。' }];
+    case 'satellite_red_flag':
+      return [
+        { en: 'A satellite stock turned red: look at what fired again. The exit is drafted so it is ready; edit or dismiss it if the case still holds.', zh: '衛星持股轉為紅燈：請重新檢視觸發的指標。出場清單已先準備好；若投資理由仍成立，可修改或略過。' },
+        { en: 'The proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '賣出所得留在一般投入資金池，買進最低於目標的核心類別。' },
+      ];
     case 'value_change_exceeds':
       return [{ en: 'A new quarter changed the figures the value is worked out from. Check the growth rates and any typed figures still fit, then save the valuation again.', zh: '新一季財報改變了計算內在價值的數字。請確認成長率與自訂數字是否仍合適，再重新儲存估值。' }];
     default:
@@ -275,6 +295,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
       if (check.why === 'windfall_cash') return { en: "Waiting for the windfall's cash", zh: '尚無大額資金的現金' };
       if (check.why === 'gauge') return { en: "Waiting for ACWI's closes", zh: '等待 ACWI 的收盤價' };
       if (check.why === 'valuation') return { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' };
+      if (check.why === 'red_flags') return { en: 'Waiting for a red-flag scan', zh: '尚無紅旗掃描' };
       return { en: 'Nothing to measure yet', zh: '尚無可衡量的持股' };
     case 'unreadable':
       return { en: 'Threshold missing or malformed', zh: '門檻缺漏或格式錯誤' };

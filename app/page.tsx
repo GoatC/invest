@@ -14,6 +14,7 @@ import {
   loadJobRuns,
   loadPlanData,
   loadProposals,
+  loadRedFlagData,
   loadRiskData,
   loadRules,
   loadValueWeek,
@@ -23,6 +24,7 @@ import {
   type AllocationData,
   type PlanData,
   type Proposal,
+  type RedFlagData,
   type RiskData,
   type RuleRecord,
   type WindfallPlanRecord,
@@ -42,6 +44,7 @@ import { riskReport, sparkline } from '@/lib/models/risk';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
 import { proposalTitle } from '@/lib/proposal-text';
+import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
 import { approveProposal, dismissProposal } from './proposals/actions';
 
@@ -60,7 +63,7 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall, workbench] = await Promise.all([
+  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -75,6 +78,7 @@ export default async function Dashboard() {
     ),
     orDataError(loadWindfallPlan(supabase)),
     orDataError(loadWorkbench(supabase, today)),
+    orDataError(loadRedFlagData(supabase, today, undefined, data)),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -110,7 +114,7 @@ export default async function Dashboard() {
       {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
       <Donut data={data} portfolio={portfolio} />
       <Windfall portfolio={portfolio} plan={windfall} today={today} />
-      {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} />}
+      {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} flags={flags instanceof DataError ? undefined : flags} />}
       <ComingWeek
         today={today}
         settings={settings}
@@ -126,9 +130,23 @@ export default async function Dashboard() {
   );
 }
 
-/** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12); red flags come with N3. */
-function Watchlist({ data }: { data: WorkbenchData }) {
+/** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12), and its red-flag light (N3). */
+function Watchlist({ data, flags }: { data: WorkbenchData; flags: RedFlagData | undefined }) {
   const watched = data.stocks.filter((stock) => stock.watch?.active);
+  const lightOf = new Map((flags?.companies ?? []).map((company) => [company.security.ticker, company.assessment]));
+  const light = (ticker: string) => {
+    const assessment = lightOf.get(ticker);
+    if (!assessment) return null;
+    const icon = LIGHT_ICON[assessment.light ?? 'none'];
+    return (
+      <Link href={`/red-flags?t=${encodeURIComponent(ticker)}`} className="nowrap">
+        <span className={`status-icon ${icon.className}`} aria-hidden="true">
+          {icon.icon}
+        </span>
+        <Bi en={`${lightText(assessment.light).en}, ${Math.round(assessment.coverage)}% covered`} zh={`${lightText(assessment.light).zh}，覆蓋 ${Math.round(assessment.coverage)}%`} />
+      </Link>
+    );
+  };
   return (
     <section className="card form" id="dashboard-watchlist">
       <div className="row spread">
@@ -153,7 +171,7 @@ function Watchlist({ data }: { data: WorkbenchData }) {
             if (!saved || !price || buy === null || trim === null) {
               return (
                 <li key={bench.security.ticker}>
-                  <Bi en={`${bench.security.ticker}: no saved value yet`} zh={`${bench.security.ticker}：尚無已儲存的估值`} />
+                  <Bi en={`${bench.security.ticker}: no saved value yet`} zh={`${bench.security.ticker}：尚無已儲存的估值`} /> {light(bench.security.ticker)}
                 </li>
               );
             }
@@ -168,7 +186,8 @@ function Watchlist({ data }: { data: WorkbenchData }) {
             return (
               <li key={bench.security.ticker}>
                 <Link href={`/valuation?t=${encodeURIComponent(bench.security.ticker)}`}>{bench.security.ticker}</Link>{' '}
-                <Bi en={`${money(price.close, bench.security.currency)} vs ${money(saved.base, bench.security.currency)} (${margin}): ${where.en}`} zh={`${money(price.close, bench.security.currency)} 對 ${money(saved.base, bench.security.currency)}（${margin}）：${where.zh}`} />
+                <Bi en={`${money(price.close, bench.security.currency)} vs ${money(saved.base, bench.security.currency)} (${margin}): ${where.en}`} zh={`${money(price.close, bench.security.currency)} 對 ${money(saved.base, bench.security.currency)}（${margin}）：${where.zh}`} />{' '}
+                {light(bench.security.ticker)}
               </li>
             );
           })}

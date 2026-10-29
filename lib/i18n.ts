@@ -72,6 +72,9 @@ export const LABELS = {
   regression: { en: 'Regression', zh: '回歸分析' },
   costOfEquity: { en: 'Cost of equity', zh: '權益成本' },
   valuation: { en: 'Valuation', zh: '估值' },
+  redFlags: { en: 'Red flags', zh: '紅旗指標' },
+  lookThrough: { en: 'Look-through', zh: '合併透視' },
+  sectors: { en: 'Sectors', zh: '產業熱圖' },
   proposals: { en: 'Proposals', zh: '提案' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
@@ -143,6 +146,10 @@ export const FEED: Record<string, Bilingual> = {
   cbc: { en: 'Central Bank of the ROC', zh: '中央銀行' },
   damodaran: { en: 'Damodaran Online', zh: 'Damodaran Online' },
   sec: { en: 'SEC EDGAR', zh: 'SEC EDGAR' },
+  moenv: { en: 'Ministry of Environment', zh: '環境部' },
+  manual: { en: 'Your entry', zh: '自行登錄' },
+  vanguard: { en: 'Vanguard', zh: 'Vanguard' },
+  fubon: { en: 'Fubon', zh: '富邦投信' },
   demo: { en: 'Demo data', zh: '示範資料' },
 };
 

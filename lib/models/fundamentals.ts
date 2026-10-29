@@ -12,10 +12,16 @@
  * Pure functions; the nightly job's SEC EDGAR and FinMind feeds turn their replies into facts.
  */
 
-/** Flows: summed over the twelve months to a quarter end. */
-export const FLOW_ITEMS = ['revenue', 'ebit', 'pretax', 'tax', 'netIncome', 'da', 'capex', 'ocf', 'dividendsPaid', 'dps', 'interest'] as const;
-/** Balances: as at a quarter end. shares is the diluted count (the quarter's weighted average where reported). */
-export const BALANCE_ITEMS = ['currentAssets', 'currentLiabilities', 'cash', 'debt', 'shortDebt', 'equity', 'shares'] as const;
+/**
+ * Flows: summed over the twelve months to a quarter end. grossProfit, cogs and sga (SG&A, else
+ * operating expenses) are the red-flag indicator's (N3, Phase 2 step 5).
+ */
+export const FLOW_ITEMS = ['revenue', 'ebit', 'pretax', 'tax', 'netIncome', 'da', 'capex', 'ocf', 'dividendsPaid', 'dps', 'interest', 'grossProfit', 'cogs', 'sga'] as const;
+/**
+ * Balances: as at a quarter end. shares is the diluted count (the quarter's weighted average where
+ * reported). receivables, ppe, totalAssets, totalLiabilities and retainedEarnings are N3's.
+ */
+export const BALANCE_ITEMS = ['currentAssets', 'currentLiabilities', 'cash', 'debt', 'shortDebt', 'equity', 'shares', 'receivables', 'ppe', 'totalAssets', 'totalLiabilities', 'retainedEarnings'] as const;
 
 export type FlowItem = (typeof FLOW_ITEMS)[number];
 export type BalanceItem = (typeof BALANCE_ITEMS)[number];
@@ -132,7 +138,7 @@ export function quarterFigures(facts: readonly Fact[]): Quarter[] {
   const ends = new Set<string>();
   for (const spans of flows.values()) for (const one of quartersOf(spans)) ends.add(one.end);
   for (const spans of flows.values()) for (const one of spans) if (isYear(span(one.start, one.end))) ends.add(one.end);
-  for (const item of ['equity', 'currentAssets'] as const) for (const end of balances.get(item)?.keys() ?? []) ends.add(end);
+  for (const item of ['equity', 'currentAssets', 'totalAssets'] as const) for (const end of balances.get(item)?.keys() ?? []) ends.add(end);
   const out: Quarter[] = [];
   for (const end of [...ends].sort()) {
     const figures: Figures = {};

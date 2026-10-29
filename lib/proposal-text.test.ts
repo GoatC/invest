@@ -96,6 +96,24 @@ describe('proposal text', () => {
     assert.deepEqual(checkText({ ruleId: 'BUY_ZONE', outcome: 'waiting', why: 'valuation' }), { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' });
   });
 
+  it('explains the red-flag prompts (N3): the light before and now, what fired, and the exit drafted', () => {
+    const worse = whyLines(
+      { id: 'RED_FLAG_WORSENS', condition: 'red_flag_worsens' },
+      { poolTwd: 100_000, flags: [{ ticker: 'AAPL', before: 'green', light: 'amber', since: '2026-10-14', fired: ['altman_z', 'auditor_change'] }], cashTwd: 0, leftTwd: 0 },
+      NAMES,
+    );
+    assert.deepEqual(worse[0], { en: 'AAPL: green → amber since 2026-10-14 · Altman Z-Score, Auditor change', zh: 'AAPL：綠燈 → 黃燈，自 2026-10-14 · 財務危機（Altman Z）、更換會計師' });
+    const exit = whyLines(
+      { id: 'RED_FLAG_RED', condition: 'satellite_red_flag' },
+      { poolTwd: 100_000, flags: [{ ticker: '2330', before: null, light: 'red', since: '2026-10-21', fired: ['going_concern'], heldTwd: 8_000, soldTwd: 8_000 }], sellShare: 1, cashTwd: 8_000, leftTwd: 0 },
+      NAMES,
+    );
+    assert.equal(exit[0]?.en, '2330: first scan → red since 2026-10-21 · Going-concern opinion');
+    assert.equal(exit[1]?.en, 'Exit option: sell NT$8,000 of NT$8,000');
+    assert.deepEqual(proposalTitle({ id: 'RED_FLAG_RED', condition: 'satellite_red_flag' }), { en: 'RED_FLAG_RED · Red flag turns red', zh: 'RED_FLAG_RED · 紅旗轉紅' });
+    assert.equal(checkText({ ruleId: 'RED_FLAG_RED', outcome: 'waiting', why: 'red_flags' }).en, 'Waiting for a red-flag scan');
+  });
+
   it('says when a whole share sells much more than the trim', () => {
     const lines = whyLines(
       { id: 'R1', condition: 'single_stock_weight_above' },

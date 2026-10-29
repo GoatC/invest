@@ -1,14 +1,16 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadPerformanceInput, loadRiskInput, refreshBetas, revalueOnFilings, runRules } from '../../../lib/data.ts';
+import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
-import type { FundamentalRow, JobRun, Security, Store } from './job.ts';
+import { packConstituent } from '../../../lib/models/look-through.ts';
+import type { FundamentalRow, FundFileRow, JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
 const BATCH = 500;
@@ -118,6 +120,41 @@ export function supabaseStore(client: SupabaseClient): Store {
           { onConflict: 'ticker,period_end' },
         );
         check('fundamentals', error);
+      }
+    },
+    redFlagCompanies: (today) => loadRedFlagCompanies(client, today),
+    async saveProfiles(rows) {
+      const { error } = await client.from('company_profiles').upsert(rows.map(profileColumns), { onConflict: 'ticker' });
+      check('company_profiles', error);
+    },
+    async saveFlagEvents(rows: readonly FeedEvent[]) {
+      for (const batch of batches(rows)) {
+        const { error } = await client.from('red_flag_events').upsert(
+          batch.map((row) => ({ ticker: row.ticker, indicator: row.indicator, event_date: row.date, source: row.source, ref: row.ref, title: row.title, url: row.url, value: row.value })),
+          { onConflict: 'ticker,indicator,source,ref', ignoreDuplicates: true },
+        );
+        check('red_flag_events', error);
+      }
+    },
+    scanRedFlags: (today, tickers) => scanRedFlags(client, today, tickers),
+    lookThroughPlan: (today) => loadLookThroughPlan(client, today),
+    async sectorProxies() {
+      const settings = await loadSectorSettings(client);
+      return settings?.proxies.map((proxy) => ({ id: proxy.id, market: proxy.market, symbol: proxy.symbol, name: proxy.name }));
+    },
+    async saveFundFile(file: FundFileRow) {
+      const { error } = await client
+        .from('fund_holdings')
+        .upsert({ fund: file.fund, as_of: file.asOf, source: file.source, constituents: file.constituents.map(packConstituent), loaded_at: new Date().toISOString() }, { onConflict: 'fund' });
+      check('fund_holdings', error);
+    },
+    async saveSectors(rows) {
+      for (const row of rows) {
+        const { data, error } = await client.from('company_profiles').update({ sector: row.sector }).eq('ticker', row.ticker).select('ticker');
+        check('company_profiles', error);
+        if ((data ?? []).length > 0) continue;
+        const { error: insertError } = await client.from('company_profiles').insert({ ticker: row.ticker, sector: row.sector, source: row.market === 'TW' ? 'twse' : 'ssga' });
+        check('company_profiles', insertError);
       }
     },
     revalue: (today) => revalueOnFilings(client, today),

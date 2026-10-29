@@ -35,6 +35,12 @@
  *   value × the trim multiple → sell sell_share of it, the proceeds into the core.
  * - value_change_exceeds (VALUATION_UPDATED): a filing moved a watched stock's base value by more
  *   than `change` from the value saved before it → a prompt to review, with no orders.
+ * - red_flag_worsens (RED_FLAG_WORSENS, Phase 2 step 5): a held stock's red-flag light (N3) is worse
+ *   than it was before its current run of weekly scans (green → amber, amber → red) → a prompt to
+ *   review, with no orders. A satellite stock turning red is left to the next rule.
+ * - satellite_red_flag (RED_FLAG_RED): a satellite stock in the regular pool turns red → a prompt to
+ *   review again, with the exit drafted: selling sell_share of it (all, by default), the proceeds
+ *   into the core. Both fire once per run of a light: dismissed or filled, not again until it changes.
  *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
@@ -54,6 +60,7 @@ import { classWeights, regularPool, type PoolView } from './rules';
 import { usSitusExposure } from './tax';
 import type { AssetClass, Pool, Side } from './types';
 import type { Holding } from './valuation';
+import { currentRun, worse, type Indicator, type Level, type Scan } from './red-flags';
 import { drawdownOf, readAcceleration, tierAmount, tierToFire, type Close } from './windfall';
 
 /** Floating-point sums a hair over a limit are not over it. */
@@ -125,6 +132,8 @@ export interface EngineInput {
   windfall?: WindfallInput;
   /** The watched stocks' saved values (F12); without them the three valuation rules wait. */
   watch?: readonly WatchInput[];
+  /** Each single stock's saved red-flag scans (N3), newest first; without them the two N3 rules wait. */
+  redFlags?: ReadonlyArray<{ ticker: string; scans: readonly Scan[] }>;
 }
 
 /** A watched single stock's newest saved value a share (F12), for the zone rules. */
@@ -259,6 +268,18 @@ export interface ProposalDetail {
   sellShare?: number;
   /** VALUATION_UPDATED: each stock whose value a filing moved. */
   changes?: Array<{ ticker: string; value: number; previous: number; valuedOn: string; previousOn: string; change: number }>;
+  /** RED_FLAG_WORSENS and RED_FLAG_RED: each stock, its light before and now, since when, what fired, and (exit) what is sold. */
+  flags?: FlagRow[];
+}
+
+export interface FlagRow {
+  ticker: string;
+  before: Level | null;
+  light: Level;
+  since: string;
+  fired: Indicator[];
+  heldTwd?: number;
+  soldTwd?: number;
 }
 
 export interface ZoneRow {
@@ -294,7 +315,7 @@ export interface Check {
   ruleId: string;
   outcome: CheckOutcome;
   draft?: Draft;
-  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd', 'plan', 'windfall_cash', 'gauge', 'valuation'. */
+  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd', 'plan', 'windfall_cash', 'gauge', 'valuation', 'red_flags'. */
   why?: string;
   /** For a firing rule: held back by its cooldown until this date. */
   cooldownUntil?: string;
@@ -1118,6 +1139,77 @@ function evaluateValueChange(rule: EngineRule, context: Context): Result {
   };
 }
 
+/** Each held stock's current run of red-flag lights (N3), when it has scans. */
+function flagRuns(context: Context): Map<string, NonNullable<ReturnType<typeof currentRun>>> {
+  const out = new Map<string, NonNullable<ReturnType<typeof currentRun>>>();
+  for (const entry of context.input.redFlags ?? []) {
+    const run = currentRun(entry.scans);
+    if (run) out.set(entry.ticker, run);
+  }
+  return out;
+}
+
+/** A satellite stock of the regular pool whose light turned red: RED_FLAG_RED's, when that rule is on. */
+function turnsRed(holding: Holding, run: NonNullable<ReturnType<typeof currentRun>>): boolean {
+  return holding.pool === 'regular' && holding.sleeve === 'satellite' && run.light === 'red' && run.before !== 'red';
+}
+
+function evaluateFlagWorsens(rule: EngineRule, context: Context): Result {
+  if (!context.input.redFlags) return { outcome: 'waiting', why: 'red_flags' };
+  const runs = flagRuns(context);
+  const exitOn = context.input.rules.some((other) => other.condition === 'satellite_red_flag' && other.enabled);
+  const seen = new Set<string>();
+  const flags: FlagRow[] = [];
+  for (const holding of context.input.holdings) {
+    const run = holding.ticker && holding.qty > 0 ? runs.get(holding.ticker) : undefined;
+    if (!run || !holding.ticker || seen.has(holding.ticker) || run.before === null || !worse(run.light, run.before)) continue;
+    if (exitOn && turnsRed(holding, run)) continue;
+    seen.add(holding.ticker);
+    flags.push({ ticker: holding.ticker, before: run.before, light: run.light, since: run.since, fired: run.fired });
+  }
+  if (flags.length === 0) return { outcome: 'quiet' };
+  flags.sort((a, b) => a.ticker.localeCompare(b.ticker));
+  return {
+    outcome: 'fires',
+    draft: { ruleId: rule.id, state: flags.map((row) => `${row.ticker}:${row.since}`).join(','), orders: [], detail: { poolTwd: context.pool.totalTwd, flags, cashTwd: 0, leftTwd: 0 } },
+  };
+}
+
+function evaluateFlagRed(rule: EngineRule, context: Context): Result {
+  const threshold = record(rule.threshold);
+  const share = threshold['sell_share'] === undefined ? 1 : threshold['sell_share'];
+  if (typeof share !== 'number' || !(share > 0) || share > 1) return { outcome: 'unreadable' };
+  if (!context.input.redFlags) return { outcome: 'waiting', why: 'red_flags' };
+  const runs = flagRuns(context);
+  const red = context.pool.holdings
+    .flatMap((holding) => {
+      const run = holding.ticker ? runs.get(holding.ticker) : undefined;
+      return run && turnsRed(holding, run) ? [{ holding, run }] : [];
+    })
+    .sort((a, b) => (a.holding.ticker ?? '').localeCompare(b.holding.ticker ?? ''));
+  if (red.length === 0) return { outcome: 'quiet' };
+  const book = newBook(context);
+  const sells: DraftOrder[] = [];
+  const flags: FlagRow[] = red.map(({ holding, run }) => {
+    // What R1's live proposal sells of it already is not sold twice.
+    const left = Math.max(0, (holding.valueTwd ?? 0) - (context.r1Trims.get(holding.key) ?? 0));
+    book.values.set(holding.key, left);
+    const order = book.sell(holding, left * share);
+    if (order) sells.push(order);
+    return { ticker: holding.ticker as string, before: run.before, light: run.light, since: run.since, fired: run.fired, heldTwd: holding.valueTwd ?? 0, ...(order ? { soldTwd: order.amountTwd } : {}) };
+  });
+  const result = invest(context, book, sells, 0);
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: flags.map((row) => `${row.ticker}:${row.since}`).join(','),
+      orders: result.orders,
+      detail: { poolTwd: context.pool.totalTwd, flags, sellShare: share, cashTwd: result.cashTwd, leftTwd: result.leftTwd, ...(result.noFund.length ? { noFund: result.noFund } : {}) },
+    },
+  };
+}
+
 /** The conditions this engine evaluates, in the order it runs them (R2 counts what R1 sells). */
 export const CONDITIONS = [
   'single_stock_weight_above',
@@ -1132,10 +1224,15 @@ export const CONDITIONS = [
   'index_drawdown_tier',
   'price_at_or_above_value_multiple',
   'value_change_exceeds',
+  'satellite_red_flag',
+  'red_flag_worsens',
 ] as const;
 
-/** Conditions that fire once per period: their state is (or starts with) the month or the year. */
-const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month', 'price_at_or_below_value_multiple'];
+/**
+ * Conditions that fire once per state: a period (their state is or starts with the month or the
+ * year), or a run of a red-flag light (its state names the day the run began).
+ */
+const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month', 'price_at_or_below_value_multiple', 'satellite_red_flag', 'red_flag_worsens'];
 
 // ---------------------------------------------------------------------------
 // Deciding what to save
@@ -1187,6 +1284,8 @@ export function evaluate(input: EngineInput): Outcome {
     else if (rule.condition === 'price_at_or_below_value_multiple') result = evaluateBuyZone(rule, context);
     else if (rule.condition === 'price_at_or_above_value_multiple') result = evaluateTrimZone(rule, context);
     else if (rule.condition === 'value_change_exceeds') result = evaluateValueChange(rule, context);
+    else if (rule.condition === 'red_flag_worsens') result = evaluateFlagWorsens(rule, context);
+    else if (rule.condition === 'satellite_red_flag') result = evaluateFlagRed(rule, context);
     else result = evaluateAnnual(rule, context, drift);
     const check: Check = { ruleId: rule.id, ...result };
     checks.push(check);

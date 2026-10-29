@@ -10,10 +10,19 @@
  * cost of equity's (F11) 10-year yields and Damodaran's implied ERP. Since step 4 it loads the
  * filings of the single stocks held or watched (F12): SEC EDGAR's company facts for US stocks,
  * FinMind's three statements for Taiwan ones, and values a watched stock again once a new quarter
- * is in, before the rules read it. Everything outside this file
+ * is in, before the rules read it. Since step 5 it reads the red-flag indicator's feeds (N3): each
+ * night the TWSE company profiles and material announcements, and on a company's scan day its SEC
+ * 8-K items and going-concern search, or its Ministry of Environment penalties; then it saves the
+ * week's scan of each company due one, before the rules read it. Since step 6, once a month, it
+ * reads each held fund's holdings file from its issuer and the GICS sectors of the companies in
+ * them, for the combined look-through (F14). Since step 7 it loads the sector tab's proxies (N7):
+ * the Select Sector SPDR funds' and the TWSE industry indices' daily closes. Everything outside this file
  * is injected, so the whole run can be tested without a network or a database.
  */
-import { BETAS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import type { ProfileRecord } from '../../../lib/data.ts';
+import { BETAS_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
+import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
@@ -22,13 +31,16 @@ import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
 import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
-import { INDICES, indexAttempts, type IndexClose } from '../feeds/indices.ts';
+import { INDICES, indexAttempts, sectorAttempts, type IndexClose, type SectorProxyFeed } from '../feeds/indices.ts';
+import { SECTOR_DAYS } from '../../../lib/models/sectors.ts';
 import { downloadLink, ISHARES_FUNDS, navFromProductPage, navHistory } from '../feeds/ishares.ts';
 import { multplMonthly, multplUrl } from '../feeds/multpl.ts';
 import { SHILLER_PAGE, shillerLink, shillerSeries } from '../feeds/shiller.ts';
 import { CBC_CAPITAL_MARKET_RATES, cbcTenYear, DAMODARAN_ERP, damodaranErp, fredTenYear, treasuryTenYear, treasuryUrl, TW_GOVT_10Y, US_IMPLIED_ERP, US_TREASURY_10Y } from '../feeds/yields.ts';
 import { companyFactsUrl, SEC_TICKERS, secCiks, secFacts } from '../feeds/sec.ts';
 import { finmindStatements, STATEMENT_DATASETS } from '../feeds/statements.ts';
+import { fubonHoldings, fubonUrl, sectorFundUrl, sectorMembers, vanguardPage, vanguardUrl, vanguardWeights, VANGUARD_PAGE, withSectors, type VanguardLine } from '../feeds/holdings.ts';
+import { auditorChange, fullTextUrl, moenvPenalties, moenvUrl, secGoingConcern, secSubmissions, submissionsUrl, TWSE_MATERIAL, TWSE_PROFILES, twseMaterial, twseProfiles, type FeedEvent } from '../feeds/redflags.ts';
 import { STOCK_DAY_ALL, twseCloses } from '../feeds/twse.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
 
@@ -42,6 +54,14 @@ export interface Security {
   ticker: string;
   market: string;
   currency: string;
+}
+
+/** A fund's holdings file, as fund_holdings keeps it. */
+export interface FundFileRow {
+  fund: string;
+  asOf: string;
+  source: string;
+  constituents: Constituent[];
 }
 
 /** One quarter end of a stock's filings, as the fundamentals table keeps it. */
@@ -79,6 +99,24 @@ export interface Store {
   saveFundamentals(rows: readonly FundamentalRow[]): Promise<void>;
   /** Values every watched stock with a quarter newer than its last value (revalueOnFilings in lib/data). */
   revalue(today: string): Promise<{ valued: string[] } | undefined>;
+  /** The single stocks the red-flag indicator lights (N3), their profiles and whether each is due a scan; undefined before config red_flags. */
+  redFlagCompanies(today: string): Promise<{ settings: RedFlagSettings; companies: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }> } | undefined>;
+  /** Upserts each company's profile (company_profiles). */
+  saveProfiles(rows: readonly ProfileRecord[]): Promise<void>;
+  /** Adds the events the feeds found (red_flag_events); one already saved is left as it is. */
+  saveFlagEvents(rows: readonly FeedEvent[]): Promise<void>;
+  /** Saves today's scan of each company asked for (scanRedFlags in lib/data). */
+  scanRedFlags(today: string, tickers: readonly string[]): Promise<{ scanned: string[] }>;
+  /** The held funds whose holdings file is due, and the held single stocks (F14); undefined before config look_through. */
+  lookThroughPlan(today: string): Promise<
+    { settings: LookThroughSettings; due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> } | undefined
+  >;
+  /** The sector tab's proxies (N7, config sectors); undefined before its migration. */
+  sectorProxies(): Promise<SectorProxyFeed[] | undefined>;
+  /** Replaces a fund's saved holdings file (fund_holdings). */
+  saveFundFile(file: FundFileRow): Promise<void>;
+  /** Sets the GICS sector of single stocks held (company_profiles.sector). */
+  saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>): Promise<void>;
   /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -116,6 +154,10 @@ export interface RunDetail {
   betas?: { saved: number; runDate: string };
   /** The watched stocks valued again after a new filing (F12). */
   valued?: string[];
+  /** The red-flag indicator (N3): the companies scanned tonight, and the events the feeds found. */
+  redFlags?: { scanned: string[]; events: number };
+  /** The funds' holdings files read tonight (F14); `rows` is the lines, `latest` the file's date. */
+  holdings?: Record<string, Loaded>;
 }
 
 export interface JobRun {
@@ -135,6 +177,8 @@ export interface Deps {
   alphaVantageKey?: string;
   /** The User-Agent SEC EDGAR is sent: a name and a contact email (its fair-access policy); without it US filings are skipped. */
   secUserAgent?: string;
+  /** The Ministry of Environment open-data key (N3); without it Taiwan penalties are not checked. */
+  moenvKey?: string;
   /** Today's date in Taipei. */
   today: string;
   now: () => Date;
@@ -238,8 +282,11 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   let regressionYears: number | undefined;
   let capm: boolean;
   let filingTickers: Array<{ ticker: string; market: string }> | undefined;
+  let flagCompanies: Awaited<ReturnType<Store['redFlagCompanies']>>;
+  let lookPlan: Awaited<ReturnType<Store['lookThroughPlan']>>;
+  let sectorProxies: SectorProxyFeed[] | undefined;
   try {
-    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers] = await Promise.all([
+    const [found, years, earliestTrade, riskProxies, regression, capmReady, filers, flagged, plan, sectors] = await Promise.all([
       store.securities(),
       store.lookbackYears(),
       store.earliestTradeDate(),
@@ -247,8 +294,14 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       store.regressionYears(),
       store.capmReady(),
       store.filingTickers(),
+      store.redFlagCompanies(today),
+      store.lookThroughPlan(today),
+      store.sectorProxies(),
     ]);
+    sectorProxies = sectors;
     filingTickers = filers;
+    flagCompanies = flagged;
+    lookPlan = plan;
     securities = found;
     regressionYears = regression;
     capm = capmReady;
@@ -400,6 +453,19 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   }
 
+  // The sector tab (N7): each sector proxy's daily closes over a little more than a year.
+  if (sectorProxies && sectorProxies.length > 0) {
+    const span = { start: addDays(today, -SECTOR_DAYS), end: today };
+    for (const proxy of sectorProxies) {
+      const result = await firstWorking(proxy.id, sectorAttempts(proxy, finmind, get, span, avKey), detail);
+      const rows = unique(result?.rows ?? [], (row) => row.date);
+      if (result && rows.length > 0) {
+        (result.fillOnly ? indexFills : indexRows).push(...rows);
+        (detail.indices ??= {})[proxy.id] = { source: result.source, rows: rows.length, latest: latest(rows) };
+      }
+    }
+  }
+
   // The cost of equity (F11): each market's 10-year yield behind R_f, and Damodaran's implied ERP.
   if (capm) {
     const since = monthsBefore(today, CAPM_MONTHS);
@@ -440,22 +506,23 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
 
   // The filings of the single stocks held or watched (F12), each quarter end's figures.
   const fundamentals: FundamentalRow[] = [];
+  const secHeaders = deps.secUserAgent ? { 'User-Agent': deps.secUserAgent } : undefined;
+  let ciks: Promise<Map<string, number>> | undefined;
+  const cikOf = async (ticker: string) => {
+    ciks ??= get(SEC_TICKERS, secHeaders).then(secCiks);
+    const cik = (await ciks).get(ticker);
+    if (cik === undefined) throw new FeedError(`no SEC filer for ${ticker}`);
+    return cik;
+  };
   if (filingTickers && filingTickers.length > 0) {
     const since = `${Number(today.slice(0, 4)) - FILING_YEARS}${today.slice(4)}`;
-    const secHeaders = deps.secUserAgent ? { 'User-Agent': deps.secUserAgent } : undefined;
-    let ciks: Promise<Map<string, number>> | undefined;
     if (!secHeaders && filingTickers.some((stock) => stock.market === 'US')) detail.errors.push('US filings: SEC_USER_AGENT is not set (a name and a contact email); see docs/nightly-job.md');
     for (const { ticker, market } of filingTickers) {
       const attempts: Array<Attempt<Fact>> = [];
       if (market === 'US' && secHeaders) {
         attempts.push({
           source: 'sec',
-          load: async () => {
-            ciks ??= get(SEC_TICKERS, secHeaders).then(secCiks);
-            const cik = (await ciks).get(ticker);
-            if (cik === undefined) throw new FeedError(`no SEC filer for ${ticker}`);
-            return secFacts(await get(companyFactsUrl(cik), secHeaders)).facts;
-          },
+          load: async () => secFacts(await get(companyFactsUrl(await cikOf(ticker)), secHeaders)).facts,
         });
       } else if (market === 'TW') {
         attempts.push({
@@ -483,6 +550,130 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
   }
 
+  // The red-flag indicator's feeds (N3): each night TWSE's profiles and the day's announcements,
+  // and on a company's scan day its SEC 8-K items and going-concern search, or its penalties.
+  const flagEvents: FeedEvent[] = [];
+  const profiles: ProfileRecord[] = [];
+  if (flagCompanies && flagCompanies.companies.length > 0) {
+    const { settings, companies } = flagCompanies;
+    const since = flagWindow(today, settings.lookbackYears);
+    const check = (profile: ProfileRecord, indicators: readonly EventIndicator[], forwardOnly: boolean) => {
+      for (const indicator of indicators) profile.checked[indicator] = { on: today, ...(forwardOnly ? { since: profile.checked[indicator]?.since ?? today } : {}) };
+    };
+    const taiwan = companies.filter((company) => company.market === 'TW');
+    const twTickers = new Set(taiwan.map((company) => company.ticker));
+    let twProfiles: ReturnType<typeof twseProfiles> | undefined;
+    let material: FeedEvent[] | undefined;
+    if (taiwan.length > 0) {
+      try {
+        twProfiles = twseProfiles(await get(TWSE_PROFILES), twTickers);
+      } catch (err) {
+        detail.errors.push(`red flags: TWSE company profiles: ${message(err)}`);
+      }
+      try {
+        material = twseMaterial(await get(TWSE_MATERIAL), twTickers);
+      } catch (err) {
+        detail.errors.push(`red flags: TWSE material announcements: ${message(err)}`);
+      }
+    }
+    for (const company of companies) {
+      const profile: ProfileRecord = company.profile
+        ? { ...company.profile, checked: { ...company.profile.checked } }
+        : { ticker: company.ticker, industryCode: null, industry: null, sic: null, auditor: null, businessId: null, checked: {}, source: company.market === 'US' ? 'sec' : 'twse' };
+      let touched = false;
+      if (company.market === 'TW') {
+        const found = twProfiles?.get(company.ticker);
+        if (found) {
+          const changed = auditorChange(company.ticker, profile.auditor, found.auditor, today);
+          if (changed) flagEvents.push(changed);
+          Object.assign(profile, { industryCode: found.industryCode ?? profile.industryCode, industry: found.industry ?? profile.industry, auditor: found.auditor ?? profile.auditor, businessId: found.businessId ?? profile.businessId });
+          touched = true;
+        }
+        if (material) {
+          flagEvents.push(...material.filter((event) => event.ticker === company.ticker));
+          check(profile, ['auditor_change', 'going_concern', 'restatement'], true);
+          touched = true;
+        }
+        if (company.due && deps.moenvKey && profile.businessId) {
+          try {
+            flagEvents.push(...moenvPenalties(await get(moenvUrl(deps.moenvKey, profile.businessId)), company.ticker, since));
+            check(profile, ['environmental_penalties'], false);
+            touched = true;
+          } catch (err) {
+            detail.errors.push(`${company.ticker} red flags: MOENV penalties: ${message(err)}`);
+          }
+        }
+      } else if (company.market === 'US' && company.due && secHeaders) {
+        try {
+          const cik = await cikOf(company.ticker);
+          const found = secSubmissions(await get(submissionsUrl(cik), secHeaders), company.ticker, since);
+          flagEvents.push(...found.events);
+          Object.assign(profile, { sic: found.sic ?? profile.sic, industryCode: found.sic !== null ? String(found.sic) : profile.industryCode, industry: found.industry ?? profile.industry });
+          check(profile, ['auditor_change', 'restatement'], false);
+          touched = true;
+          flagEvents.push(...secGoingConcern(await get(fullTextUrl(cik, since, today), secHeaders), company.ticker, cik));
+          check(profile, ['going_concern'], false);
+        } catch (err) {
+          detail.errors.push(`${company.ticker} red flags: SEC: ${message(err)}`);
+        }
+      }
+      if (touched) profiles.push(profile);
+    }
+    if (taiwan.some((company) => company.due) && !deps.moenvKey) detail.warnings.push('red flags: MOENV_API_KEY is not set, so Taiwan environmental penalties are not checked; see docs/nightly-job.md');
+  }
+
+  // The combined look-through (F14): once a month each held fund's holdings file from its issuer,
+  // with the GICS sectors of the companies in it; and the sectors of the stocks held directly.
+  const fundFiles: FundFileRow[] = [];
+  const stockSectors: Array<{ ticker: string; market: string; sector: string }> = [];
+  if (lookPlan && (lookPlan.due.length > 0 || lookPlan.stocks.some((stock) => stock.sector === null))) {
+    const { settings } = lookPlan;
+    const usSectors = new Map<string, string>();
+    if (deps.getBytes) {
+      for (const [fund, sector] of Object.entries(SECTOR_FUNDS)) {
+        try {
+          for (const ticker of sectorMembers(await deps.getBytes(sectorFundUrl(fund)))) if (!usSectors.has(ticker)) usSectors.set(ticker, sector);
+        } catch (err) {
+          detail.warnings.push(`look-through: ${fund} sector members: ${message(err)}`);
+        }
+      }
+    }
+    const twIndustries = new Map<string, string>();
+    try {
+      for (const [ticker, profile] of twseProfiles(await get(TWSE_PROFILES), { has: () => true })) if (profile.industryCode) twIndustries.set(ticker, profile.industryCode);
+    } catch (err) {
+      detail.warnings.push(`look-through: TWSE industries: ${message(err)}`);
+    }
+    for (const { fund, source, id } of lookPlan.due) {
+      try {
+        let asOf: string | null = null;
+        let constituents: Constituent[] = [];
+        if (source === 'vanguard') {
+          const lines: VanguardLine[] = [];
+          // Page by page until the fund's line count is reached; a cap of 60 pages (30,000 lines) guards a bad count.
+          for (let start = 1, page = 0; page < 60; start += VANGUARD_PAGE, page++) {
+            const reply = vanguardPage(await get(vanguardUrl(id, start)));
+            asOf ??= reply.asOf;
+            lines.push(...reply.constituents);
+            if (reply.lines === 0 || start + VANGUARD_PAGE > reply.size) break;
+          }
+          constituents = vanguardWeights(lines);
+        } else {
+          ({ asOf, constituents } = fubonHoldings(await get(fubonUrl(id))));
+        }
+        if (constituents.length === 0) throw new FeedError('no lines in the file');
+        fundFiles.push({ fund, asOf: asOf ?? today, source, constituents: withSectors(constituents, usSectors, twIndustries, settings.twSectors) });
+        (detail.holdings ??= {})[fund] = { source, rows: constituents.length, latest: asOf ?? today };
+      } catch (err) {
+        detail.errors.push(`${fund} holdings: ${source}: ${message(err)}`);
+      }
+    }
+    for (const stock of lookPlan.stocks) {
+      const sector = stock.market === 'US' ? usSectors.get(stock.ticker) : stock.market === 'TW' ? settings.twSectors[twIndustries.get(stock.ticker) ?? ''] : undefined;
+      if (sector && sector !== stock.sector) stockSectors.push({ ticker: stock.ticker, market: stock.market, sector });
+    }
+  }
+
   try {
     await store.savePrices(unique(prices, (row) => `${row.ticker}|${row.date}`));
     await store.savePrices(unique(fills, (row) => `${row.ticker}|${row.date}`), { fillOnly: true });
@@ -491,6 +682,10 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     if (indexRows.length > 0) await store.saveIndexPrices(unique(indexRows, (row) => `${row.index}|${row.date}`));
     if (indexFills.length > 0) await store.saveIndexPrices(unique(indexFills, (row) => `${row.index}|${row.date}`), { fillOnly: true });
     if (fundamentals.length > 0) await store.saveFundamentals(fundamentals);
+    if (profiles.length > 0) await store.saveProfiles(profiles);
+    if (flagEvents.length > 0) await store.saveFlagEvents(unique(flagEvents, (event) => `${event.ticker}|${event.indicator}|${event.source}|${event.ref}`));
+    for (const file of fundFiles) await store.saveFundFile(file);
+    if (stockSectors.length > 0) await store.saveSectors(stockSectors);
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
@@ -529,6 +724,17 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       if (revalued && revalued.valued.length > 0) detail.valued = revalued.valued;
     } catch (err) {
       detail.errors.push(`${VALUATIONS_ERROR}: ${message(err)}`);
+    }
+  }
+
+  // The week's red-flag scan of each company due one (N3), so the two N3 rules read it.
+  if (flagCompanies) {
+    const due = flagCompanies.companies.filter((company) => company.due).map((company) => company.ticker);
+    try {
+      const { scanned } = due.length > 0 ? await store.scanRedFlags(today, due) : { scanned: [] };
+      detail.redFlags = { scanned, events: flagEvents.length };
+    } catch (err) {
+      detail.errors.push(`${RED_FLAGS_ERROR}: ${message(err)}`);
     }
   }
 

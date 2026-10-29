@@ -2,7 +2,7 @@
 
 每晚自動把收盤價、匯率、金價、市場資料與財報寫進你的 Supabase，存下每一天的淨值快照與風險值，再檢查規則。每次執行的結果記在 `job_runs`，App 的「資料狀態」頁看得到。
 
-Every night GitHub Actions loads closes, FX, gold, the monthly market series, index closes, yields and the single stocks' filings into Supabase, saves each day's NAV snapshot and VaR, re-values watched stocks after a new filing, then checks the rules. Each run is in `job_runs` and on the Data status page.
+Every night GitHub Actions loads closes, FX, gold, the monthly market series, index closes, yields and the single stocks' filings into Supabase, saves each day's NAV snapshot and VaR, re-values watched stocks after a new filing, reads the red-flag feeds and saves each company's weekly scan, then checks the rules. Each run is in `job_runs` and on the Data status page.
 
 ## 它怎麼運作 How it works
 
@@ -11,6 +11,9 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 - **淨值快照與風險值**：重算第一筆交易到今天每一天的市值、類別權重與一週風險值，存進 `nav_snapshots`。修改過去的交易或晚到的收盤價都會自動更正。
 - **每月與每日市場資料**：大額資金用的 CAPE、S&P 500 價格與殖利率（`market_series`）；回歸分析用的標普 500、加權報酬指數（`index_prices`）與美國 3 個月國庫券；權益成本用的美國與台灣 10 年期公債殖利率、Damodaran 風險溢酬。每月第一次執行另存持股 β。
 - **財報**（第二階段第 4 步，F12）：持有或觀察中的個股與其同業，每晚載入近 7 年的季報（美股 SEC EDGAR、台股 FinMind），存入 `fundamentals`；觀察中的個股有新一季財報時自動重新估值，再檢查規則。**美股需要 `SEC_USER_AGENT` secret**（下面第 3 步），沒有時只略過美股財報。
+- **紅旗指標**（第二階段第 5 步，N3）：持有或觀察中的個股，每晚讀取證交所的公司基本資料（產業、簽證會計師事務所、統一編號）與當天的重大訊息（財報重編、繼續經營疑慮、更換會計師）；每家公司每週一次另查美股的 SEC 8-K（4.01 更換會計師、4.02 財報重編）與 10-K 繼續經營全文搜尋，或台股的環境部裁罰（**需要 `MOENV_API_KEY` secret**，沒有時只略過台股環境裁罰），再存下該週的紅旗掃描。
+- **成分股**（第二階段第 6 步，F14）：每月一次讀取持有基金的成分股（VT、VOO 來自 Vanguard，00692 來自富邦投信），以及 S&P 500 成分股的 GICS 產業（State Street Select Sector SPDR 持股檔）與台股產業別，存入 `fund_holdings`。不需要金鑰。
+- **類股價格**（第二階段第 7 步，N7）：每晚讀取 11 檔 Select Sector SPDR 類股 ETF 與 20 個證交所類股指數約一年（400 天）的收盤價，存入 `index_prices`（ETF 代號，或 `TW_` 加指數代號）。來源是 FinMind；美股備援為 Alpha Vantage（有 `ALPHAVANTAGE_API_KEY` 時），台股備援為證交所 OpenAPI（只有最近一天）。
 - **規則與推播**：最後以剛載入的資料檢查規則、產生提案，並送出推播（[推播通知](web-push.md)）。
 - **失敗時**：App 沿用最後一次成功的資料；連續 2 晚失敗（`DATA_FAILURE`）就顯示警示並推播一次。公開的執行紀錄只寫數量，不寫代號與提案內容。
 
@@ -66,7 +69,8 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 | `SUPABASE_SECRET_KEY` | `sb_secret_...` | 第 2 步複製的 |
 | `FINMIND_TOKEN` | FinMind 的 token | `.env.local` 裡同名的那一行（第 1 步資料來源檢查用過） |
 | `ALPHAVANTAGE_API_KEY` | Alpha Vantage 的 key | 選填：只在 FinMind 或 iShares 失敗時當備援 |
-| `SEC_USER_AGENT` | 例如 `LongViewInvest hugo@example.com`（名稱加你的 email） | 美股財報（F12）需要：SEC 要求程式註明聯絡 email，沒有就拒絕連線。只存在 GitHub secrets，不會出現在公開紀錄 |
+| `SEC_USER_AGENT` | 例如 `LongViewInvest hugo@example.com`（名稱加你的 email） | 美股財報（F12）與 8-K（N3）需要：SEC 要求程式註明聯絡 email，沒有就拒絕連線。只存在 GitHub secrets，不會出現在公開紀錄 |
+| `MOENV_API_KEY` | 環境部資料開放平臺的 API key | 台股環境裁罰（N3）需要：`.env.local` 裡同名的那一行（第 1 步資料來源檢查用過），或到 <https://data.moenv.gov.tw/> 免費註冊會員後在「會員專區」取得 |
 
 - 存進去之後 GitHub 不會再顯示內容（只能覆蓋），執行紀錄裡也會自動遮住。
 - repo 是公開的，但 secrets 不公開：只有這個 repo 自己的排程用得到，別人 fork 你的 repo 也拿不到。
@@ -114,6 +118,10 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | 「大額資金」頁寫「尚未載入該月份的 CAPE」 | 排程還沒載入每月市場資料：`npx supabase db push` 之後手動執行一次排程（上面第 4 步） |
 | `US filings: SEC_USER_AGENT is not set` | 第 3 步加上 `SEC_USER_AGENT`；台股財報不受影響 |
 | `AAPL filings: sec: HTTP 403 …` | `SEC_USER_AGENT` 沒有 email，或格式不對：改成「名稱 空格 email」 |
+| `red flags: MOENV_API_KEY is not set …`（警告） | 第 3 步加上 `MOENV_API_KEY`；其他紅旗指標不受影響 |
+| `VT holdings: vanguard: …` 或 `00692 holdings: fubon: …` | 發行商網站暫時連不上或改版；合併透視沿用上次的成分股，隔天會再試。持續失敗請把錯誤訊息貼給 Claude |
+| `red flags: TWSE …: HTTP …` | 證交所 OpenAPI 暫時連不上；隔天會自動再讀，重大訊息只會漏掉那一天（可到公開資訊觀測站查詢後在「紅旗指標」頁自行登錄） |
+| `XLK: finmind: …` 或 `TW_ELECTRONIC: finmind returned no data` | FinMind 暫時沒有該類股的資料；產業熱圖沿用已存的收盤價，隔天會再試。若同一個台股指數一直沒有資料，可能是 FinMind 改了代號：先在「產業熱圖」頁的設定刪除那一行，再把錯誤訊息貼給 Claude |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 

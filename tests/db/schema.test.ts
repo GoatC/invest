@@ -6,6 +6,9 @@ import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
+import { readLookThroughSettings } from '../../lib/models/look-through.ts';
+import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
+import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
@@ -18,12 +21,14 @@ const KEY_MISSING = '23503';
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
-// and the valuation workbench (step 4) fundamentals.
+// the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
+// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -43,7 +48,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices and fundamentals', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries and fund_holdings', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -298,10 +303,10 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1, F12 since step 4)', async () => {
+  it('loads every Section 4 push rule, each enabled once its step is built (F3 since Phase 2, step 1, F12 since step 4, N3 since step 5)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
     assert.equal(rows.length, 14);
-    for (const row of rows) assert.equal(row.enabled, row.feature !== 'N3', row.id);
+    for (const row of rows) assert.equal(row.enabled, true, row.id);
   });
 
   it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
@@ -577,6 +582,121 @@ describe('valuation workbench (Phase 2, step 4)', () => {
   });
 });
 
+describe('red-flag indicator (Phase 2, step 5)', () => {
+  it('keeps the profiles and events for the owner to read and the job to write, and the scans for both to write', async () => {
+    const scan = `('AAPL', '2099-06-30', 'beneish_m', -2.4, 'green', 87.5, '{"periodEnd": "2099-03-31"}')`;
+    for (const statement of [
+      `insert into public.company_profiles (ticker, source) values ('AAPL', 'sec')`,
+      `insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-01-01', 'sec', 'x', '8-K')`,
+    ]) {
+      await as(db, 'owner', async (tx) => {
+        assert.equal(await errorCode(tx.query(statement)), DENIED, statement);
+      });
+    }
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.red_flags (ticker, flag_date, indicator, value, level, coverage_pct, detail) values ${scan}`);
+    });
+    await db.query(`insert into public.red_flags (ticker, flag_date, indicator, value, level, coverage_pct, detail) values ${scan}`);
+    await db.query(`insert into public.red_flags (ticker, flag_date, indicator, level, coverage_pct) values ('AAPL', '2099-06-30', 'governance_rating', 'na', 87.5)`);
+    assert.equal(await errorCode(db.query(`insert into public.red_flags (ticker, flag_date, indicator, level) values ('AAPL', '2099-06-30', 'altman_z', 'blue')`)), CHECK_FAILED);
+    // The seed has AAPL's profile: overwrite it here, and put it back at the end.
+    const seeded = await scalar(db, `select to_jsonb(p) from public.company_profiles p where ticker = 'AAPL'`);
+    await db.query(`delete from public.company_profiles where ticker = 'AAPL'`);
+    await db.query(`insert into public.company_profiles (ticker, industry_code, industry, sic, checked, source) values ('AAPL', '3571', 'Electronic Computers', 3571, '{"restatement": {"on": "2099-06-30"}}', 'sec')`);
+    assert.equal(await errorCode(db.query(`insert into public.company_profiles (ticker, business_id, source) values ('2330', '123', 'twse')`)), CHECK_FAILED);
+    await db.query(`insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-01-01', 'sec', '0000320193-99-000001', '8-K Item 4.02')`);
+    assert.equal(await errorCode(db.query(`insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-02-01', 'sec', '0000320193-99-000001', 'again')`)), '23505');
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.red_flags where flag_date = '2099-06-30'`), 2);
+      assert.equal(await scalar(tx, `select industry from public.company_profiles where ticker = 'AAPL'`), 'Electronic Computers');
+    });
+    await as(db, 'stranger', async (tx) => {
+      for (const table of ['red_flags', 'company_profiles', 'red_flag_events', 'red_flag_entries']) assert.equal(await scalar(tx, `select count(*) from public.${table}`), 0, table);
+    });
+    await db.query(`delete from public.red_flags where flag_date = '2099-06-30'`);
+    await db.query(`delete from public.red_flag_events where event_date = '2099-01-01'`);
+    await db.query(`delete from public.company_profiles where ticker = 'AAPL'`);
+    await db.query(`insert into public.company_profiles select * from jsonb_populate_record(null::public.company_profiles, $1)`, [seeded]);
+  });
+
+  it("lets the owner write their own entries, a count of events or a governance tier, and logs each edit", async () => {
+    for (const [indicator, value] of [['governance_rating', 33], ['environmental_penalties', 1.5], ['beneish_m', 0]] as const) {
+      await as(db, 'owner', async (tx) => {
+        assert.equal(await errorCode(tx.query(`insert into public.red_flag_entries (ticker, indicator, as_of, value) values ('2330', '${indicator}', '2099-05-01', ${value})`)), CHECK_FAILED, indicator);
+      });
+    }
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(`insert into public.red_flag_entries (ticker, indicator, as_of, value, note) values ('2330', 'governance_rating', '2099-05-01', 5, '第 12 屆') returning id`);
+      const id = rows[0]?.id;
+      await tx.query(`update public.red_flag_entries set value = 20 where id = ${id}`);
+      await tx.query(`delete from public.red_flag_entries where id = ${id}`);
+      const { rows: log } = await tx.query<{ action: string }>(`select action from public.audit_log where table_name = 'red_flag_entries' and row_key = '${id}' order by id`);
+      assert.deepEqual(log.map((row) => row.action), ['update', 'delete']);
+    });
+  });
+
+  it('seeds the settings, and turns the two N3 rules on, RED_FLAG_RED selling all of the stock', async () => {
+    const settings = readRedFlagSettings(await scalar(db, `select value from public.config where key = 'red_flags'`));
+    assert.ok(settings);
+    assert.equal(settings.beneish.redAbove, -1.78);
+    assert.deepEqual(settings.altman, { z: { redBelow: 1.81, amberBelow: 2.99 }, z2: { redBelow: 1.1, amberBelow: 2.6 } });
+    assert.ok(settings.manufacturing.twIndustries.includes('24'));
+    assert.deepEqual(settings.excluded, { industries: [], tickers: [] });
+    const { rows } = await db.query<{ id: string; enabled: boolean; threshold: unknown }>(`select id, enabled, threshold from public.rules where feature = 'N3' order by id`);
+    assert.deepEqual(rows, [
+      { id: 'RED_FLAG_RED', enabled: true, threshold: { sell_share: 1 } },
+      { id: 'RED_FLAG_WORSENS', enabled: true, threshold: {} },
+    ]);
+  });
+});
+
+describe('look-through (Phase 2, step 6)', () => {
+  it('keeps each fund\'s holdings file for the owner to read and the job to write, as an array', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[]')`)), DENIED);
+    });
+    assert.equal(await errorCode(db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '{}')`)), CHECK_FAILED);
+    await db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[["US:X", "X", "X", "US", "USD", null, "bond", 1]]')`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select jsonb_array_length(constituents) from public.fund_holdings where fund = 'BNDW'`), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.fund_holdings'), 0);
+    });
+    await db.query(`delete from public.fund_holdings where fund = 'BNDW'`);
+    assert.equal(await errorCode(db.query(`update public.company_profiles set sector = 'Chips' where ticker = 'AAPL'`)), CHECK_FAILED);
+  });
+
+  it('seeds the settings: VT and VOO from Vanguard, 00692 from Fubon, a GICS sector for every TWSE industry', async () => {
+    const settings = readLookThroughSettings(await scalar(db, `select value from public.config where key = 'look_through'`));
+    assert.ok(settings);
+    assert.deepEqual(Object.keys(settings.sources).sort(), ['00692', 'VOO', 'VT']);
+    assert.equal(settings.twSectors['24'], 'Information Technology');
+    assert.equal(settings.twSectors['17'], 'Financials');
+    assert.equal(Object.keys(settings.twSectors).length, 36);
+  });
+});
+
+describe('sector tab (Phase 2, step 7)', () => {
+  it('seeds the settings: Taiwan red up, an SPDR fund for each of the 11 GICS sectors, 20 TWSE industry indices', async () => {
+    const settings = readSectorSettings(await scalar(db, `select value from public.config where key = 'sectors'`));
+    assert.ok(settings);
+    assert.equal(settings.colour, 'red_up');
+    const us = settings.proxies.filter((proxy) => proxy.market === 'US');
+    assert.equal(us.length, 11);
+    assert.equal(new Set(us.map((proxy) => proxy.sector)).size, 11);
+    assert.equal(settings.proxies.filter((proxy) => proxy.market === 'TW').length, 20);
+    assert.equal(settings.proxies.find((proxy) => proxy.id === 'TW_ELECTRONIC')?.name, '電子工業類指數');
+  });
+
+  it('invents 61 weekly closes for every proxy, to 2026-10-23', async () => {
+    const { rows } = await db.query<{ proxies: string; closes: string; last: string }>(
+      `select count(distinct index_id) as proxies, count(*) as closes, max(price_date)::text as last from public.index_prices where index_id like 'X%' or index_id like 'TW\\_%'`,
+    );
+    assert.deepEqual(rows.map((row) => [Number(row.proxies), Number(row.closes), row.last]), [[31, 31 * 61, '2026-10-23']]);
+  });
+});
+
 describe('windfall planner (Phase 2, step 1)', () => {
   it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
     await as(db, 'owner', async (tx) => {
@@ -697,6 +817,22 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.index_prices where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.fundamentals where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.company_profiles where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.red_flag_events where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.fund_holdings where source <> 'demo'`), 0);
+  });
+
+  it('invents two green weekly red-flag scans (N3), and an auditor change for AAPL after them', async () => {
+    const { rows } = await db.query<{ ticker: string; flag_date: string; levels: string; rows: string }>(
+      `select ticker, flag_date::text, string_agg(distinct level, ',' order by level) as levels, count(*) as rows from public.red_flags group by ticker, flag_date order by ticker, flag_date`,
+    );
+    assert.deepEqual(rows.map((row) => [row.ticker, row.flag_date, row.levels, Number(row.rows)]), [
+      ['2330', '2026-10-11', 'green', 9],
+      ['2330', '2026-10-18', 'green', 9],
+      ['AAPL', '2026-10-11', 'green,na,none', 9],
+      ['AAPL', '2026-10-18', 'green,na,none', 9],
+    ]);
+    assert.equal(await scalar(db, `select event_date::text from public.red_flag_events where ticker = 'AAPL'`), '2026-10-20');
   });
 
   it("invents thirteen quarters of filings for the two demo stocks (F12), AAPL's with the day it filed", async () => {

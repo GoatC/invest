@@ -14,3 +14,4 @@ Rules:
 - All UI text bilingual: English + 繁體中文.
 - Every model function ships with unit tests using the acceptance values in PRD Section 11.
 - Explain each setup step to Hugo in plain Traditional Chinese before running it; he is new to deployment.
+- When a build step is finished, tested and pushed, open a pull request to main without asking; Hugo merges it.

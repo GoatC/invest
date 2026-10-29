@@ -7,6 +7,9 @@ import type { Bilingual } from './i18n';
 import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './models/costs';
 import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
+import type { LookThroughSettings } from './models/look-through';
+import type { SectorProxy, SectorSettings } from './models/sectors';
+import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
 export type RawForm = Record<string, string | undefined>;
@@ -78,6 +81,13 @@ export const MESSAGES = {
   trimMultiple: { en: 'Enter a multiple above 1, e.g. 1.25, or leave it blank.', zh: '請輸入大於 1 的倍數，例如 1.25，或留白。' },
   quarters: { en: 'Enter whole quarters from 1 to 40.', zh: '請輸入 1 到 40 的整數季數。' },
   historyYears: { en: 'Enter whole years from 1 to 10.', zh: '請輸入 1 到 10 的整數年數。' },
+  scanDays: { en: 'Enter whole days from 1 to 90.', zh: '請輸入 1 到 90 的整數天數。' },
+  score: { en: 'Enter a score, e.g. −1.78 or 2.99.', zh: '請輸入分數，例如 −1.78 或 2.99。' },
+  industryCodes: { en: 'List two-digit TWSE industry codes, e.g. 24, 28.', zh: '請列出兩位數的證交所產業別代碼，例如 24、28。' },
+  topCompanies: { en: 'Enter a whole number from 5 to 100.', zh: '請輸入 5 到 100 的整數。' },
+  codeSectors: { en: 'One per line: a TWSE industry code, "=", a GICS sector, e.g. 24 = Information Technology.', zh: '每行一個：證交所產業別代碼、「=」、GICS 產業，例如 24 = 資訊科技。' },
+  indexSectors: { en: 'One per line: an industry index already listed, "=", a GICS sector, e.g. Electronic = Information Technology.', zh: '每行一個：清單中的類股指數、「=」、GICS 產業，例如 Electronic = 資訊科技。' },
+  fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -1119,4 +1129,188 @@ export function parseValuationSettingsForm(raw: RawForm, markets: readonly strin
     minQuarters: minQuarters ?? 8,
     checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// The red-flag indicator (N3, Phase 2 step 5)
+// ---------------------------------------------------------------------------
+
+export interface FlagEntryInput {
+  ticker: string;
+  indicator: ManualIndicator;
+  asOf: string;
+  value: number;
+  note: string;
+}
+
+export type FlagEntryField = keyof FlagEntryInput;
+
+/** An owner's entry: events found as of a date (0 for checked, none), or the governance evaluation tier. */
+export function parseFlagEntryForm(raw: RawForm, tickers: readonly string[], today: string): Parsed<FlagEntryInput, FlagEntryField> {
+  const errors: FieldErrors<FlagEntryField> = {};
+  const ticker = oneOf(raw['ticker'], tickers);
+  if (!ticker) errors.ticker = MESSAGES.choice;
+  const indicator = oneOf(raw['indicator'], MANUAL_INDICATORS);
+  if (!indicator) errors.indicator = MESSAGES.choice;
+  const asOf = text(raw['asOf']);
+  if (!isIsoDate(asOf)) errors.asOf = MESSAGES.date;
+  else if (asOf > today) errors.asOf = MESSAGES.future;
+  const value = parseNumber(raw['value']);
+  if (indicator === 'governance_rating') {
+    if (value === undefined || !(GOVERNANCE_TIERS as readonly number[]).includes(value)) errors.value = MESSAGES.choice;
+  } else if (value === undefined || !Number.isInteger(value) || value < 0 || value > 999) {
+    errors.value = MESSAGES.wholeNumber;
+  }
+  const note = text(raw['note']);
+  if (note.length > 300) errors.note = MESSAGES.tooLong;
+  return finish(errors, () => ({ ticker: ticker as string, indicator: indicator as ManualIndicator, asOf, value: value as number, note }));
+}
+
+/** A list typed one per line or separated by commas, blanks dropped. */
+export function listField(raw: string | undefined): string[] {
+  return [...new Set((raw ?? '').split(/[\n,，、]/).map((entry) => entry.trim()).filter(Boolean))];
+}
+
+export type FlagSettingsField =
+  | 'lookbackYears'
+  | 'scanDays'
+  | 'beneish'
+  | 'zRed'
+  | 'zAmber'
+  | 'z2Red'
+  | 'z2Amber'
+  | 'cashFlowYears'
+  | 'governance'
+  | 'manufacturing'
+  | 'financial'
+  | 'industries'
+  | 'tickers';
+
+function score(raw: string | undefined, min: number, max: number): number | undefined {
+  const value = parseNumber(raw);
+  return value !== undefined && value >= min && value <= max ? Math.round(value * 1000) / 1000 : undefined;
+}
+
+/** config red_flags: thresholds, the Taiwan industries counted as manufacturers and as financial, and the exclusion list. */
+export function parseFlagSettingsForm(raw: RawForm, current: RedFlagSettings, today: string): Parsed<RedFlagSettings, FlagSettingsField> {
+  const errors: FieldErrors<FlagSettingsField> = {};
+  const lookbackYears = wholeIn(raw['lookbackYears'], 1, 10);
+  if (lookbackYears === undefined) errors.lookbackYears = MESSAGES.historyYears;
+  const scanDays = wholeIn(raw['scanDays'], 1, 90);
+  if (scanDays === undefined) errors.scanDays = MESSAGES.scanDays;
+  const beneish = score(raw['beneish'], -10, 10);
+  if (beneish === undefined) errors.beneish = MESSAGES.score;
+  const zone = (redKey: FlagSettingsField, amberKey: FlagSettingsField) => {
+    const [red, amber] = [score(raw[redKey], 0, 10), score(raw[amberKey], 0, 10)];
+    if (red === undefined) errors[redKey] = MESSAGES.score;
+    if (amber === undefined) errors[amberKey] = MESSAGES.score;
+    else if (red !== undefined && amber < red) errors[amberKey] = MESSAGES.ascending;
+    return { redBelow: red ?? 0, amberBelow: amber ?? 0 };
+  };
+  const z = zone('zRed', 'zAmber');
+  const z2 = zone('z2Red', 'z2Amber');
+  const cashFlowYears = wholeIn(raw['cashFlowYears'], 1, 10);
+  if (cashFlowYears === undefined) errors.cashFlowYears = MESSAGES.historyYears;
+  const bottom = percentField(raw['governance'], 1, 99);
+  if (bottom === undefined) errors.governance = MESSAGES.percent;
+  const codes = (key: FlagSettingsField) => {
+    const list = listField(raw[key]).map((code) => code.padStart(2, '0'));
+    if (list.some((code) => !/^\d{2}$/.test(code))) errors[key] = MESSAGES.industryCodes;
+    return list;
+  };
+  const manufacturing = codes('manufacturing');
+  const financial = codes('financial');
+  const industries = listField(raw['industries']);
+  if (industries.some((entry) => entry.length > 60) || industries.length > 50) errors.industries = MESSAGES.tooLong;
+  const tickers = listField(raw['tickers']).map((ticker) => ticker.toUpperCase());
+  if (tickers.some((ticker) => !/^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(ticker))) errors.tickers = MESSAGES.tickerFormat;
+  return finish(errors, () => ({
+    ...current,
+    lookbackYears: lookbackYears as number,
+    scanDays: scanDays as number,
+    beneish: { redAbove: beneish as number },
+    altman: { z, z2 },
+    cashFlowYears: cashFlowYears as number,
+    governanceBottomShare: bottom as number,
+    manufacturing: { ...current.manufacturing, twIndustries: manufacturing },
+    financial: { ...current.financial, twIndustries: financial },
+    excluded: { industries, tickers },
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// The combined look-through (F14, Phase 2 step 6)
+// ---------------------------------------------------------------------------
+
+export type LookThroughField = 'topCompanies' | 'refreshDays' | 'twSectors' | 'fundCountry';
+
+/** "24 = Information Technology", one per line, to {"24": "Information Technology"}; the Chinese sector names are read too. */
+export function parseCodeSectors(raw: string | undefined, sectors: ReadonlyMap<string, string>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^(\d{1,2})\s*[=:：]\s*(.+)$/.exec(line);
+    const sector = match ? sectors.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!match || !sector) return undefined;
+    out[(match[1] as string).padStart(2, '0')] = sector;
+  }
+  return out;
+}
+
+/** "BIL = US", one per line, to {"BIL": "US"}. */
+export function parseFundCountries(raw: string | undefined): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z0-9.-]{1,12})\s*[=:：]\s*([A-Za-z]{2})$/.exec(line);
+    if (!match) return undefined;
+    out[(match[1] as string).toUpperCase()] = (match[2] as string).toUpperCase();
+  }
+  return out;
+}
+
+/** config look_through: companies named, days between holdings files, each TWSE industry's sector, each whole fund's country. */
+export function parseLookThroughForm(raw: RawForm, current: LookThroughSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<LookThroughSettings, LookThroughField> {
+  const errors: FieldErrors<LookThroughField> = {};
+  const topCompanies = wholeIn(raw['topCompanies'], 5, 100);
+  if (topCompanies === undefined) errors.topCompanies = MESSAGES.topCompanies;
+  const refreshDays = wholeIn(raw['refreshDays'], 1, 90);
+  if (refreshDays === undefined) errors.refreshDays = MESSAGES.scanDays;
+  const twSectors = parseCodeSectors(raw['twSectors'], sectorNames);
+  if (!twSectors) errors.twSectors = MESSAGES.codeSectors;
+  const fundCountry = parseFundCountries(raw['fundCountry']);
+  if (!fundCountry) errors.fundCountry = MESSAGES.fundCountries;
+  return finish(errors, () => ({
+    ...current,
+    topCompanies: topCompanies as number,
+    refreshDays: refreshDays as number,
+    twSectors: twSectors as Record<string, string>,
+    fundCountry: fundCountry as Record<string, string>,
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// The sector tab (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+export type SectorField = 'colour' | 'tw';
+
+/** config sectors: the colour convention and each Taiwan industry index's GICS sector, "Electronic = Information Technology" per line. */
+export function parseSectorForm(raw: RawForm, current: SectorSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<SectorSettings, SectorField> {
+  const errors: FieldErrors<SectorField> = {};
+  const colour = oneOf(raw['colour'], ['red_up', 'green_up'] as const);
+  if (!colour) errors.colour = MESSAGES.choice;
+  const known = new Map(current.proxies.filter((proxy) => proxy.market === 'TW').map((proxy) => [proxy.symbol.toLowerCase(), proxy]));
+  const tw: SectorProxy[] = [];
+  for (const line of (raw['tw'] ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z]+)\s*[=:：]\s*(.+)$/.exec(line);
+    const proxy = match ? known.get((match[1] as string).toLowerCase()) : undefined;
+    const sector = match ? sectorNames.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!proxy || !sector) {
+      errors.tw = MESSAGES.indexSectors;
+      break;
+    }
+    tw.push({ ...proxy, sector });
+  }
+  return finish(errors, () => ({ ...current, colour: colour as SectorSettings['colour'], proxies: [...current.proxies.filter((proxy) => proxy.market === 'US'), ...tw], lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw) }));
 }

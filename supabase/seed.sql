@@ -217,15 +217,18 @@ select c.ticker,
          'netIncome', round(r * c.margin * 1.02 * (1 - c.tax)), 'da', round(r * c.da), 'capex', round(r * c.capex), 'ocf', round(r * c.margin * 1.15),
          'dividendsPaid', round(c.dps * c.shares * power(c.buyback, q.i)), 'dps', round((c.dps * power(1.01, q.i))::numeric, 4), 'interest', round(c.debt * 0.04),
          'currentAssets', round(r * 0.35), 'cash', round(r * c.cash), 'currentLiabilities', round(r * 0.33), 'shortDebt', round(c.debt * 0.15),
-         'debt', round(c.debt * power(0.99, q.i)), 'equity', round(r * c.equity), 'shares', round(c.shares * power(c.buyback, q.i))
+         'debt', round(c.debt * power(0.99, q.i)), 'equity', round(r * c.equity), 'shares', round(c.shares * power(c.buyback, q.i)),
+         -- The red-flag indicator's lines (N3): fixed shares of revenue too.
+         'grossProfit', round(r * (c.margin + 0.15)), 'sga', round(r * 0.10), 'receivables', round(r * 0.08), 'ppe', round(r * c.ppe),
+         'totalAssets', round(r * c.assets), 'totalLiabilities', round(r * (c.assets - c.equity)), 'retainedEarnings', round(r * c.retained)
        ),
        c.currency,
        case when c.ticker = 'AAPL' then q.period_end + 33 else null end,
        'demo'
 from (values
-  ('AAPL', 'USD', 380e9::float8, 0.31, 0.15, 0.03, 0.028, 0.09, 0.20, 0.96, 106e9::float8, 15.6e9::float8, 0.995),
-  ('2330', 'TWD', 2.1e12::float8, 0.45, 0.16, 0.25, 0.34, 0.80, 1.60, 14.0, 9.5e11::float8, 25.93e9::float8, 1.0)
-) as c (ticker, currency, revenue, margin, tax, da, capex, cash, equity, dps, debt, shares, buyback)
+  ('AAPL', 'USD', 380e9::float8, 0.31, 0.15, 0.03, 0.028, 0.09, 0.20, 0.96, 106e9::float8, 15.6e9::float8, 0.995, 0.12, 0.94, 0.0),
+  ('2330', 'TWD', 2.1e12::float8, 0.45, 0.16, 0.25, 0.34, 0.80, 1.60, 14.0, 9.5e11::float8, 25.93e9::float8, 1.0, 1.0, 2.1, 1.3)
+) as c (ticker, currency, revenue, margin, tax, da, capex, cash, equity, dps, debt, shares, buyback, ppe, assets, retained)
 cross join lateral (
   select i, (date '2023-07-01' + make_interval(months => 3 * i) - interval '1 day')::date as period_end, c.revenue * power(1.02, i) as r
   from generate_series(0, 12) as i
@@ -238,3 +241,71 @@ insert into public.market_series (series, obs_month, value, source) values
   ('us_treasury_10y', '2026-08-01', 0.0475, 'demo'), ('us_treasury_10y', '2026-09-01', 0.0529, 'demo'), ('us_treasury_10y', '2026-10-01', 0.0500, 'demo'),
   ('tw_govt_10y', '2026-06-01', 0.0177, 'demo'), ('tw_govt_10y', '2026-07-01', 0.0190, 'demo'), ('tw_govt_10y', '2026-08-01', 0.0196, 'demo'),
   ('us_implied_erp', '2026-08-01', 0.0414, 'demo'), ('us_implied_erp', '2026-09-01', 0.0409, 'demo'), ('us_implied_erp', '2026-10-01', 0.0370, 'demo');
+
+-- The red-flag indicator (N3): the two demo stocks' profiles, one invented event, one entry, and
+-- two weekly scans, both green. AAPL's invented 8-K auditor change, dated after them, turns its
+-- light amber at the next scan, so RED_FLAG_WORSENS then has a review to prompt; 2330 stays green.
+-- All invented, labelled demo; 2330's audit firm is left for the TWSE profile to fill.
+insert into public.company_profiles (ticker, industry_code, industry, sic, auditor, business_id, checked, source, sector) values
+  ('AAPL', '3571', 'Electronic Computers', 3571, null, null,
+   '{"auditor_change": {"on": "2026-10-18"}, "restatement": {"on": "2026-10-18"}, "going_concern": {"on": "2026-10-18"}}', 'demo', 'Information Technology'),
+  ('2330', '24', '半導體業', null, null, null,
+   '{"auditor_change": {"on": "2026-10-18", "since": "2026-10-11"}, "restatement": {"on": "2026-10-18", "since": "2026-10-11"}, "going_concern": {"on": "2026-10-18", "since": "2026-10-11"}, "environmental_penalties": {"on": "2026-10-18"}}', 'demo', 'Information Technology');
+
+insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values
+  ('AAPL', 'auditor_change', '2026-10-20', 'demo', 'demo-8k-401', '8-K Item 4.01 (demo, invented 示範虛構)');
+
+insert into public.red_flag_entries (ticker, indicator, as_of, value, note) values
+  ('2330', 'governance_rating', '2026-05-01', 5, 'demo 示範');
+
+insert into public.red_flags (ticker, flag_date, indicator, level, coverage_pct)
+select s.ticker, s.flag_date, i.indicator,
+       case
+         when i.indicator = 'governance_rating' and s.ticker = 'AAPL' then 'na'
+         when i.indicator = 'environmental_penalties' and s.ticker = 'AAPL' then 'none'
+         else 'green'
+       end,
+       case when s.ticker = 'AAPL' then 87.5 else 100 end
+from (values ('AAPL', date '2026-10-11'), ('AAPL', date '2026-10-18'), ('2330', date '2026-10-11'), ('2330', date '2026-10-18')) as s (ticker, flag_date)
+cross join unnest(array['beneish_m', 'altman_z', 'cash_flow_vs_earnings', 'auditor_change', 'going_concern', 'restatement', 'governance_rating', 'environmental_penalties', 'excluded_business']) as i (indicator);
+
+-- The look-through (F14): invented holdings files for the two demo funds with one, cut down to a
+-- few lines each (weights as fractions; the rest of each fund is left unnamed), so TSMC shows
+-- through VT, through 00692 and held directly. Real files come from the nightly job.
+insert into public.fund_holdings (fund, as_of, source, constituents) values
+  ('VT', '2026-09-30', 'demo', '[
+     ["US:NVDA", "NVIDIA Corp. (demo)", "NVDA", "US", "USD", "Information Technology", "equity", 0.045],
+     ["US:AAPL", "Apple Inc. (demo)", "AAPL", "US", "USD", "Information Technology", "equity", 0.04],
+     ["US:MSFT", "Microsoft Corp. (demo)", "MSFT", "US", "USD", "Information Technology", "equity", 0.038],
+     ["US:AMZN", "Amazon.com Inc. (demo)", "AMZN", "US", "USD", "Consumer Discretionary", "equity", 0.022],
+     ["US:JPM", "JPMorgan Chase & Co. (demo)", "JPM", "US", "USD", "Financials", "equity", 0.009],
+     ["TW:2330", "Taiwan Semiconductor Manufacturing (demo)", "2330", "TW", "TWD", "Information Technology", "equity", 0.016],
+     ["JP:7203", "Toyota Motor Corp. (demo)", "7203", "JP", "JPY", null, "equity", 0.003],
+     ["GB:AZN", "AstraZeneca plc (demo)", "AZN", "GB", "GBP", null, "equity", 0.004]
+   ]'),
+  ('00692', '2026-10-28', 'demo', '[
+     ["TW:2330", "台積電（示範）", "2330", "TW", "TWD", "Information Technology", "equity", 0.525],
+     ["TW:2454", "聯發科（示範）", "2454", "TW", "TWD", "Information Technology", "equity", 0.057],
+     ["TW:2308", "台達電（示範）", "2308", "TW", "TWD", "Information Technology", "equity", 0.034],
+     ["TW:2881", "富邦金（示範）", "2881", "TW", "TWD", "Financials", "equity", 0.03]
+   ]');
+
+-- The sector tab (N7): invented weekly closes for each sector proxy in config sectors, the 61
+-- Fridays to 2026-10-23, each with its own drift and swing, so the heatmap, treemap and bubbles
+-- have figures to show. Real daily closes come from the nightly job.
+insert into public.index_prices (index_id, price_date, close, source)
+select p.id,
+       (date '2026-10-23' - 7 * (60 - w))::date,
+       round((100 * power(1 + p.drift, w) * (1 + p.swing * sin(w * 0.9 + p.n)))::numeric, 4),
+       'demo'
+from (
+  select id, n, ((n % 7) - 3) * 0.002 as drift, 0.01 + (n % 5) * 0.006 as swing
+  from unnest(array[
+    'XLK', 'XLF', 'XLV', 'XLY', 'XLC', 'XLI', 'XLP', 'XLE', 'XLB', 'XLU', 'XLRE',
+    'TW_ELECTRONIC', 'TW_FINANCIALINSURANCE', 'TW_BIOTECHNOLOGYMEDICALCARE', 'TW_AUTOMOBILE', 'TW_TEXTILES', 'TW_TOURISM',
+    'TW_TRADINGCONSUMERSGOODS', 'TW_RUBBER', 'TW_FOOD', 'TW_CEMENT', 'TW_PLASTICS', 'TW_CHEMICAL', 'TW_IRONSTEEL',
+    'TW_PAPERPULP', 'TW_GLASSCERAMIC', 'TW_ELECTRICMACHINERY', 'TW_ELECTRICALCABLE', 'TW_SHIPPINGTRANSPORTATION',
+    'TW_BUILDINGMATERIALCONSTRUCTION', 'TW_OILGASELECTRICITY'
+  ]) with ordinality as t (id, n)
+) as p
+cross join generate_series(0, 60) as w;

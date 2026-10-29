@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一階段已完成並通過關卡；第二階段依 PRD 第 11 節的順序進行中。
+Phase 1 is built and its gate has passed; Phase 2 is built, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code), and waits on its gate before Phase 3 starts. 第一階段已完成並通過關卡；第二階段已依 PRD 第 11 節的順序完成，待通過關卡後才開始第三階段。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
@@ -53,9 +53,9 @@ Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of 
 | 2. N1 Regression Lab, single-factor β 回歸分析區（單因子 β） | ✅ |
 | 3. F11 CAPM cost of equity CAPM 權益成本 | ✅ |
 | 4. F12 valuation workbench and alerts 估值工作台與警報 | ✅ |
-| 5. N3 red-flag indicator 紅旗指標 | |
-| 6. F14 combined look-through 核心與衛星合併透視 | |
-| 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | Planned 已規劃 ([spec 規格](docs/PRD.md#module-c--security-analysis-證券分析)) |
+| 5. N3 red-flag indicator 紅旗指標 | ✅ |
+| 6. F14 combined look-through 核心與衛星合併透視 | ✅ |
+| 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | ✅ |
 
 Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress tests, Brinson attribution and the Fama–French five factors. 第三階段加入蒙地卡羅、人生時間軸、效率前緣、壓力測試、Brinson 歸因與 Fama–French 五因子。
 
@@ -74,6 +74,9 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 - **Regression Lab 回歸分析** (N1): β against the S&P 500 and TAIEX with its interval, Blume's adjustment, α, R², rolling β and a five-ticker comparison; Dimson β for daily returns across markets. β、滾動 β 與比較。
 - **Cost of equity 權益成本** (F11): each single stock's R_f + β (ERP + CRP) in its market's currency. 個股 CAPM 權益成本。
 - **Valuation workbench 估值工作台** (F12): a single stock valued a share, bear / base / bull, by DCF (FCFF at WACC), Gordon's dividend model and P/E, P/B and EV/EBITDA against peers and its own five years, from its SEC or FinMind filings; the margin of safety and the buy (≤ 75%) and trim (≥ 125%) zones, re-run after each filing. 三種模型的內在價值、安全邊際、買入與減碼區，新財報後重算。
+- **Red flags 紅旗指標** (N3): a red / amber / green light per single stock from nine indicators (Beneish M, Altman Z or Z″, cash flow against earnings, auditor changes, going-concern opinions and restatements from SEC 8-Ks and TWSE announcements, Taiwan environmental penalties, the governance tier, your exclusion list), with the share of them data covers; scanned weekly, a holding's worse light prompts a review and a satellite stock turning red drafts its exit. Display only. 九項指標的紅黃綠燈與資料覆蓋率；每週掃描，持股燈號轉差時提醒檢視，衛星持股轉紅時準備出場清單；僅供參考。
+- **Look-through 合併透視** (F14): every fund opened up with its issuer's holdings file (Vanguard, Fubon), so each company's exposure through all the funds and held directly is one line, as a treemap; country, GICS sector and currency splits, each pair of funds' overlap, and each fund's TER, tracking difference and domicile. 以發行商成分股展開各基金，合併計算各公司曝險（矩形樹狀圖）、國家、產業與幣別分布、基金重疊度與費用。
+- **Sectors 產業熱圖** (N7): the 11 GICS sectors, priced by the Select Sector SPDR funds in the US and the TWSE industry indices in Taiwan, as a heatmap of returns over 1 week to 1 year (red up by default, or green up), a treemap of the portfolio's exposure through the look-through coloured by return with each sector's companies, and a bubble chart of 1-year return against volatility with the portfolio's own point. Display only. 以 GICS 11 個產業呈現美股 SPDR 類股 ETF 與證交所類股指數的報酬熱力圖、依穿透曝險繪製的板塊圖（可展開公司）與報酬對波動度的泡泡圖；僅供參考。
 - **Nightly data 每夜資料**: GitHub Actions loads prices, FX, gold, the market series, indices, yields and filings, each with a fallback feed, saves each day's NAV and VaR, then checks the rules; the Data status page shows every run, and two missed nights raise an alert. 每夜載入資料、存淨值與風險值、檢查規則；連續兩晚失敗即警示。
 
 ![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
@@ -95,6 +98,12 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 ![Cost of equity with demo data: each market's 10-year yield and Damodaran's ERP, every stock's β and cost of equity](docs/images/capm.png)
 
 ![Valuation workbench with demo filings: AAPL valued a share by DCF, the dividend model and multiples, against its price](docs/images/valuation.png)
+
+![Red flags with demo data: each company's nine indicators by level, its light and the share covered](docs/images/red-flags.png)
+
+![Look-through with demo holdings: each company's exposure through the funds and held directly, coloured by sector](docs/images/look-through.png)
+
+![Sectors with demo closes: the heatmap of each sector's return by period, US and Taiwan side by side](docs/images/sectors.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 

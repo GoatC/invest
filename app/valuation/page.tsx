@@ -6,12 +6,14 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { ValueRanges, type ValueRange } from '@/components/valuation-charts';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadWorkbench, type StockBench, type WorkbenchData } from '@/lib/data';
+import { DataError, loadRedFlagData, loadWorkbench, orDataError, type StockBench, type WorkbenchData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent } from '@/lib/format';
 import { feedLabel, LABELS, type Bilingual } from '@/lib/i18n';
 import { MULTIPLES, SCENARIOS, marginOfSafety, metrics, zoneOf, type DcfResult, type ModelId, type MultipleId, type MultiplesResult, type Scenario, type Used, type ValuationSettings } from '@/lib/models/intrinsic';
 import { savedFor } from '@/lib/models/workbench';
+import type { Assessment } from '@/lib/models/red-flags';
+import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
 import { unwatchStock, watchStock } from './actions';
 import { AssumptionsForm, ValuationSettingsForm } from './forms';
@@ -78,10 +80,12 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
   const ticker = typeof params['t'] === 'string' ? params['t'] : undefined;
   const bench = ticker ? data.stocks.find((stock) => stock.security.ticker === ticker) : undefined;
   if (bench) return <Workbench bench={bench} data={data} settings={data.settings} saved={params['saved'] === 'assumptions'} />;
-  return <Watchlist data={data} settings={data.settings} today={today} saved={params['saved'] === 'settings'} error={typeof params['error'] === 'string' ? params['error'] : undefined} missing={ticker} />;
+  const flags = await orDataError(loadRedFlagData(supabase, today));
+  const lights = new Map(flags instanceof DataError ? [] : flags.companies.map((company) => [company.security.ticker, company.assessment]));
+  return <Watchlist data={data} settings={data.settings} today={today} saved={params['saved'] === 'settings'} error={typeof params['error'] === 'string' ? params['error'] : undefined} missing={ticker} lights={lights} />;
 }
 
-function Watchlist({ data, settings, today, saved, error, missing }: { data: WorkbenchData; settings: ValuationSettings; today: string; saved: boolean; error?: string; missing?: string }) {
+function Watchlist({ data, settings, today, saved, error, missing, lights }: { data: WorkbenchData; settings: ValuationSettings; today: string; saved: boolean; error?: string; missing?: string; lights: ReadonlyMap<string, Assessment> }) {
   const addable = [...data.others, ...data.stocks.filter((stock) => !stock.watch).map((stock) => stock.security)].sort((a, b) => a.ticker.localeCompare(b.ticker));
   return (
     <>
@@ -123,6 +127,9 @@ function Watchlist({ data, settings, today, saved, error, missing }: { data: Wor
                   </th>
                   <th className="num">
                     <Bi en="To buy / trim" zh="距買入／減碼" />
+                  </th>
+                  <th>
+                    <Bi {...LABELS.redFlags} />
                   </th>
                 </tr>
               </thead>
@@ -167,6 +174,22 @@ function Watchlist({ data, settings, today, saved, error, missing }: { data: Wor
                         )}
                       </td>
                       <td className="num nowrap">{basis.zone ? `−${percent(basis.zone.toBuy)} / +${percent(basis.zone.toTrim)}` : '—'}</td>
+                      <td className="nowrap">
+                        {(() => {
+                          const flag = lights.get(bench.security.ticker);
+                          if (!flag) return '—';
+                          const icon = LIGHT_ICON[flag.light ?? 'none'];
+                          return (
+                            <Link href={`/red-flags?t=${encodeURIComponent(bench.security.ticker)}`}>
+                              <span className={`status-icon ${icon.className}`} aria-hidden="true">
+                                {icon.icon}
+                              </span>
+                              <Bi {...lightText(flag.light)} />
+                              <div className="muted small">{percent(flag.coverage / 100, 0)}</div>
+                            </Link>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   );
                 })}

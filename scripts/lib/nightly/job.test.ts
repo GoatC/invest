@@ -3,12 +3,16 @@ import { describe, it } from 'node:test';
 
 import * as XLSX from 'xlsx';
 
+import type { ProfileRecord } from '../../../lib/data.ts';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
+import { readLookThroughSettings } from '../../../lib/models/look-through.ts';
+import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
-import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type FundFileRow, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -28,6 +32,7 @@ const REPLIES: Record<string, string> = {
   ]),
   'TaiwanStockDividendResult 0050': ok([{ date: '2026-07-21', before_price: 99.2, after_price: 98.6 }]),
   'USStockPrice VT': ok([{ date: '2026-10-20', Close: 157.8, Adj_Close: 157.8 }]),
+  'USStockPrice XLK': ok([{ date: '2026-10-20', Close: 250.5, Adj_Close: 249.8 }]),
   'TaiwanExchangeRate USD': ok([
     { date: '2026-10-20', spot_buy: 32.58, spot_sell: 32.68, cash_buy: 32.2, cash_sell: 32.9 },
     { date: '2026-10-21', spot_buy: 32.435, spot_sell: 32.535, cash_buy: 32.085, cash_sell: 32.755 },
@@ -57,6 +62,7 @@ const REPLIES: Record<string, string> = {
   MI_INDEX: JSON.stringify([
     { 日期: '1151021', 指數: '發行量加權股價指數', 收盤指數: '46096.23' },
     { 日期: '1151021', 指數: '發行量加權股價報酬指數', 收盤指數: '108,422.07' },
+    { 日期: '1151021', 指數: '半導體類指數', 收盤指數: '1,564.79' },
   ]),
   'id=TB3MS': 'observation_date,TB3MS\n2026-08-01,3.72\n2026-09-01,3.94\n',
   // The cost of equity's inputs (F11): the US 10-year from FRED, else the Treasury, and Taiwan's from the Central Bank.
@@ -70,6 +76,25 @@ const REPLIES: Record<string, string> = {
   'multpl.com': '<table id="datatable"><tr><td>Oct 1, 2026</td><td>40.81</td></tr><tr><td>Sep 1, 2026</td><td>40.42</td></tr></table>',
   // The valuation workbench's filings (F12): SEC's ticker list and a company's facts, FinMind's statements.
   company_tickers: JSON.stringify({ 0: { cik_str: 320193, ticker: 'AAPL', title: 'Apple Inc.' } }),
+  // The red-flag feeds (N3): an auditor change in AAPL's 8-Ks, no going-concern 10-K, 2330's TWSE
+  // profile with a new audit firm, a restatement among the day's announcements, one penalty.
+  'submissions/CIK': JSON.stringify({
+    cik: '320193',
+    sic: '3571',
+    sicDescription: 'Electronic Computers',
+    filings: { recent: { accessionNumber: ['0000320193-26-000100'], filingDate: ['2026-09-02'], reportDate: ['2026-09-01'], form: ['8-K'], items: ['4.01,9.01'], primaryDocument: ['a.htm'] } },
+  }),
+  'efts.sec.gov': JSON.stringify({ hits: { total: { value: 0 }, hits: [] } }),
+  t187ap03_L: JSON.stringify([{ 公司代號: '2330', 產業別: '24', 營利事業統一編號: '22099131', 簽證會計師事務所: 'B 事務所' }]),
+  t187ap04_L: JSON.stringify([{ 發言日期: '1151019', 發言時間: '170000', 公司代號: '2330', '主旨 ': '公告本公司重編財務報告', 說明: '' }]),
+  // The look-through's holdings files (F14): VT's 501 lines over two pages (cut down here), 00692 on Fubon's page.
+  'portfolio-holding/stock.json?start=1&': JSON.stringify({ size: 501, asOfDate: '2026-09-30T00:00:00-04:00', fund: { entity: [
+    { longName: 'Apple Inc.', ticker: 'AAPL', isin: 'US0378331005', percentWeight: '4.0' },
+    { longName: 'Taiwan Semiconductor Manufacturing Co. Ltd.', ticker: '2330', isin: 'TW0002330008', percentWeight: '1.5' },
+  ] } }),
+  'portfolio-holding/stock.json?start=501&': JSON.stringify({ size: 501, fund: { entity: [{ longName: 'Toyota Motor Corp.', ticker: '7203', isin: 'JP3633400001', percentWeight: '0.3' }] } }),
+  'websys.fsit.com.tw': '<p>資料日期：2026/10/28</p><table><tr><td>2330</td><td>台積電</td><td>1,000</td><td>2,000,000</td><td>52.5</td></tr></table>',
+  'data.moenv.gov.tw': JSON.stringify([{ document_no: '40-115-070014', penalty_date: '2026-07-28', penalty_money: '6000', transgress_type: '事業廢棄物', fac_name: '台積電' }]),
   companyfacts: JSON.stringify({
     entityName: 'Apple Inc.',
     facts: {
@@ -89,7 +114,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'portfolio-holding/stock.json?start=1&', 'portfolio-holding/stock.json?start=501&', 'websys.fsit.com.tw', 'submissions/CIK', 'efts.sec.gov', 't187ap03_L', 't187ap04_L', 'data.moenv.gov.tw', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -121,7 +146,14 @@ function erpWorkbook(): Uint8Array {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Start of month', 'S&P 500', 'T.Bond Rate', 'ERP (T12m)'], [44804, 7686.14, 0.0475, 0.0409], [44834, 7652, 0.0529, 0.037]]), 'Historical ERP');
   return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
 }
-const getBytes: GetBytes = async (url) => (url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
+/** A Select Sector SPDR holdings file: XLK holds AAPL; the others hold nothing the tests ask about. */
+function sectorWorkbook(url: string): Uint8Array {
+  const book = XLSX.utils.book_new();
+  const rows = [['Fund Name:', 'Select Sector SPDR'], [], ['Name', 'Ticker', 'Identifier', 'Weight'], ...(url.includes('-xlk.') ? [['APPLE INC', 'AAPL', '037833100', 14.6]] : [['OTHER', 'ZZZ', '', 1]])];
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'holdings');
+  return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
+}
+const getBytes: GetBytes = async (url) => (url.includes('ssga.com') ? sectorWorkbook(url) : url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
 const bytesDown: GetBytes = async () => {
   throw new FeedError('HTTP 403 from img1.wsimg.com');
 };
@@ -136,6 +168,20 @@ function weeklyHistory(): PriceRow[] {
     return { ticker: '0050', date, close, adjClose: close };
   });
 }
+
+/** config red_flags as seeded, the parts the job reads. */
+const RED_FLAG_SETTINGS = {
+  lookback_years: 3,
+  scan_days: 7,
+  beneish: { red_above: -1.78 },
+  altman: { z: { red_below: 1.81, amber_below: 2.99 }, z2: { red_below: 1.1, amber_below: 2.6 } },
+  cash_flow_years: 3,
+  governance: { bottom_share: 0.35 },
+  manufacturing: { sic: [[2000, 3999]], tw_industries: ['24'] },
+  financial: { sic: [[6000, 6799]], tw_industries: ['17'] },
+  excluded: { industries: [], tickers: [] },
+  last_verified: null,
+};
 
 class MemoryStore implements Store {
   prices: DailyPrice[] = [];
@@ -169,8 +215,47 @@ class MemoryStore implements Store {
       /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
       filings?: Array<{ ticker: string; market: string }>;
       failRevalue?: boolean;
+      /** The companies N3 lights (undefined before config red_flags), with the profile saved for each. */
+      flags?: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }>;
+      /** The look-through's plan (F14); undefined before config look_through. */
+      look?: { due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> };
+      /** The sector tab's proxies (N7); undefined before config sectors. */
+      sectors?: Array<{ id: string; market: 'US' | 'TW'; symbol: string; name: string }>;
     } = {},
   ) {}
+  async sectorProxies() {
+    return this.options.sectors;
+  }
+  fundFiles: FundFileRow[] = [];
+  sectors: Array<{ ticker: string; market: string; sector: string }> = [];
+  async lookThroughPlan() {
+    const settings = readLookThroughSettings({ sources: {}, fund_country: {}, refresh_days: 28, top_companies: 30, tw_sectors: { '24': 'Information Technology' }, last_verified: null });
+    return this.options.look && settings ? { settings, ...this.options.look } : undefined;
+  }
+  async saveFundFile(file: FundFileRow) {
+    this.fundFiles.push(file);
+  }
+  async saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>) {
+    this.sectors.push(...rows);
+  }
+  profiles: ProfileRecord[] = [];
+  flagEvents: FeedEvent[] = [];
+  /** When the red flags were scanned, and whether the rules had run by then. */
+  scans: Array<{ today: string; tickers: string[]; rulesRun: number }> = [];
+  async redFlagCompanies() {
+    const settings = readRedFlagSettings(RED_FLAG_SETTINGS);
+    return this.options.flags && settings ? { settings, companies: this.options.flags } : undefined;
+  }
+  async saveProfiles(rows: readonly ProfileRecord[]) {
+    this.profiles.push(...rows);
+  }
+  async saveFlagEvents(rows: readonly FeedEvent[]) {
+    this.flagEvents.push(...rows);
+  }
+  async scanRedFlags(today: string, tickers: readonly string[]) {
+    this.scans.push({ today, tickers: [...tickers], rulesRun: this.ruleRuns.length });
+    return { scanned: [...tickers] };
+  }
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
     return SECURITIES;
@@ -319,6 +404,103 @@ describe('filings (F12)', () => {
     assert.equal(run.status, 'partial');
     assert.ok(run.detail.errors.includes('Valuations: valuations: permission denied'));
     assert.equal(store.ruleRuns.length, 1);
+  });
+});
+
+describe('red flags (N3)', () => {
+  const twProfile: ProfileRecord = { ticker: '2330', industryCode: '24', industry: '半導體業', sic: null, auditor: 'A 事務所', businessId: '22099131', checked: { restatement: { on: '2026-10-19', since: '2026-10-12' } }, source: 'twse' };
+  const flags = [
+    { ticker: 'AAPL', market: 'US', due: true, profile: null },
+    { ticker: '2330', market: 'TW', due: true, profile: twProfile },
+  ];
+
+  it("reads each company's events and profile, then saves the week's scan before the rules", async () => {
+    const store = new MemoryStore({ flags });
+    const run = await runNightly({ ...deps(fakeGet().get, store), secUserAgent: 'LongViewInvest hugo@example.com', moenvKey: 'KEY' });
+    assert.deepEqual(run.detail.errors, []);
+    assert.deepEqual(
+      store.flagEvents.map((event) => [event.ticker, event.indicator, event.source, event.date]).sort(),
+      [
+        ['2330', 'auditor_change', 'twse', TODAY],
+        ['2330', 'environmental_penalties', 'moenv', '2026-07-28'],
+        ['2330', 'restatement', 'twse', '2026-10-19'],
+        ['AAPL', 'auditor_change', 'sec', '2026-09-01'],
+      ],
+    );
+    const [aapl, tw] = [store.profiles.find((row) => row.ticker === 'AAPL'), store.profiles.find((row) => row.ticker === '2330')];
+    assert.deepEqual([aapl?.sic, aapl?.industry, aapl?.source], [3571, 'Electronic Computers', 'sec']);
+    assert.deepEqual(aapl?.checked, { auditor_change: { on: TODAY }, restatement: { on: TODAY }, going_concern: { on: TODAY } });
+    // The announcements reach forward only: since keeps the first night they were read.
+    assert.deepEqual(tw?.checked, { restatement: { on: TODAY, since: '2026-10-12' }, auditor_change: { on: TODAY, since: TODAY }, going_concern: { on: TODAY, since: TODAY }, environmental_penalties: { on: TODAY } });
+    assert.equal(tw?.auditor, 'B 事務所');
+    assert.deepEqual(store.scans, [{ today: TODAY, tickers: ['AAPL', '2330'], rulesRun: 0 }]);
+    assert.deepEqual(run.detail.redFlags, { scanned: ['AAPL', '2330'], events: 4 });
+  });
+
+  it('checks SEC and the penalties only on a scan day, says when the MOENV key is missing, and does nothing before config red_flags', async () => {
+    const store = new MemoryStore({ flags: flags.map((flag) => ({ ...flag, due: flag.ticker === '2330' })) });
+    const { get, urls } = fakeGet();
+    const run = await runNightly({ ...deps(get, store), secUserAgent: 'LongViewInvest hugo@example.com' });
+    assert.ok(!urls.some((url) => url.includes('submissions') || url.includes('moenv')));
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('red flags: MOENV_API_KEY is not set')));
+    assert.deepEqual(store.scans.map((row) => row.tickers), [['2330']]);
+    const before = new MemoryStore();
+    await runNightly(deps(fakeGet().get, before));
+    assert.deepEqual([before.profiles, before.scans], [[], []]);
+  });
+});
+
+describe('look-through (F14)', () => {
+  it("reads each due fund's file from its issuer, page by page, with the sectors of its lines, and the held stocks' sectors", async () => {
+    const store = new MemoryStore({
+      look: {
+        due: [
+          { fund: 'VT', source: 'vanguard', id: 'VT' },
+          { fund: '00692', source: 'fubon', id: '00692' },
+        ],
+        stocks: [
+          { ticker: 'AAPL', market: 'US', sector: null },
+          { ticker: '2330', market: 'TW', sector: 'Information Technology' },
+        ],
+      },
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.ok(!run.detail.errors.some((line) => line.includes('holdings')), JSON.stringify(run.detail.errors));
+    const vt = store.fundFiles.find((file) => file.fund === 'VT');
+    assert.deepEqual(vt?.constituents.map((row) => [row.key, row.sector, row.weight]), [
+      ['US:AAPL', 'Information Technology', 0.04],
+      ['TW:2330', 'Information Technology', 0.015],
+      ['JP:7203', null, 0.003],
+    ]);
+    assert.equal(vt?.asOf, '2026-09-30');
+    assert.deepEqual(store.fundFiles.find((file) => file.fund === '00692')?.constituents.map((row) => [row.key, row.weight]), [['TW:2330', 0.525]]);
+    assert.deepEqual(run.detail.holdings, { VT: { source: 'vanguard', rows: 3, latest: '2026-09-30' }, '00692': { source: 'fubon', rows: 1, latest: '2026-10-28' } });
+    // 2330's sector is already saved; AAPL's is new.
+    assert.deepEqual(store.sectors, [{ ticker: 'AAPL', market: 'US', sector: 'Information Technology' }]);
+  });
+
+  it('reads nothing when no file is due and every held stock has its sector', async () => {
+    const store = new MemoryStore({ look: { due: [], stocks: [{ ticker: '2330', market: 'TW', sector: 'Information Technology' }] } });
+    const { get, urls } = fakeGet();
+    await runNightly(deps(get, store));
+    assert.ok(!urls.some((url) => url.includes('vanguard') || url.includes('fsit')));
+    assert.deepEqual([store.fundFiles, store.sectors], [[], []]);
+  });
+});
+
+describe('sector proxies (N7)', () => {
+  it("loads each Select Sector SPDR fund's and TWSE industry index's closes into the index closes, TWSE's last day filling in for FinMind", async () => {
+    const store = new MemoryStore({
+      sectors: [
+        { id: 'XLK', market: 'US', symbol: 'XLK', name: 'XLK' },
+        { id: 'TW_SEMICONDUCTOR', market: 'TW', symbol: 'Semiconductor', name: '半導體類指數' },
+      ],
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.indices.filter((row) => row.index === 'XLK').map((row) => [row.date, row.close, row.source]), [['2026-10-20', 249.8, 'finmind']]);
+    assert.deepEqual(store.indexFills.filter((row) => row.index === 'TW_SEMICONDUCTOR').map((row) => [row.date, row.close, row.source]), [['2026-10-21', 1564.79, 'twse']]);
+    assert.deepEqual(run.detail.indices?.['XLK'], { source: 'finmind', rows: 1, latest: '2026-10-20' });
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('TW_SEMICONDUCTOR: finmind')), JSON.stringify(run.detail.warnings));
   });
 });
 
