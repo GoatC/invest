@@ -241,14 +241,18 @@ describe('fundChoices', () => {
     const input = { plan: PLAN, target: 0.28, orderTwd: 5000, usdTwd: 32, broker: broker(), settings: SETTINGS, tax: TAX };
     const choices = fundChoices([fund(), fund({ ticker: 'VWRA', domicile: 'IE', market: 'UK', distribution: 'acc', ter: 0.0019, withholding: 0.09 })], input);
     assert.deepEqual(
-      choices.map((choice) => [choice.fund.ticker, choice.tradeShare]),
-      [
-        ['VWRA', null],
-        ['VT', 0.0202],
-      ],
+      choices.map((choice) => choice.fund.ticker),
+      ['VWRA', 'VT'],
     );
+    assert.equal(choices[0]?.tradeShare, null);
+    // The plan buys monthly, so the DCA price applies: US$0.1 (NT$3.2) plus 0.1% FX (NT$5) on NT$5,000.
+    const share = (0.1 * 32 + 5) / 5000;
+    assert.ok(Math.abs((choices[1]?.tradeShare ?? 0) - share) < 1e-12);
     const slice = { ...PLAN, pmt: 2800 };
-    assert.ok(Math.abs((choices[1]?.overPlan?.cost ?? 0) - costOverPlan(slice, 0.006, 0.0202).cost) < 1e-6);
+    assert.ok(Math.abs((choices[1]?.overPlan?.cost ?? 0) - costOverPlan(slice, 0.006, share).cost) < 1e-6);
+    // Without a DCA price, the ETF price applies: US$3 on NT$5,000 plus 0.1% FX.
+    const etfOnly = fundChoices([fund()], { ...input, broker: broker({ usDca: null }) });
+    assert.equal(etfOnly[0]?.tradeShare, 0.0202);
   });
 });
 
