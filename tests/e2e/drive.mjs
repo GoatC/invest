@@ -33,7 +33,10 @@ async function snap(name, target = page, fullPage = true) {
 }
 /** A README image: the visible screen, or one element, never the full page. */
 async function docShot(name, target) {
-  if (DOCS_SHOTS) await target.screenshot({ path: `${DOCS_SHOTS}/${name}.png` });
+  if (!DOCS_SHOTS) return;
+  // The status notice slides away three seconds after a load; the README images go without it.
+  await page.locator('.data-toast').waitFor({ state: 'detached', timeout: 8000 });
+  await target.screenshot({ path: `${DOCS_SHOTS}/${name}.png` });
 }
 async function step(name, fn) {
   try {
@@ -107,6 +110,32 @@ await step('the owner signs in and lands on the weekly dashboard', async () => {
   await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
 });
 
+await step('the nightly job status slides in when the app loads, stays about three seconds, and not again on the next page', async () => {
+  await page.mouse.move(5, 880);
+  await page.goto(`${BASE}/holdings`);
+  const toast = page.locator('.data-toast');
+  await toast.waitFor();
+  const shownAt = Date.now();
+  check((await toast.innerText()).includes('The nightly price job has not run yet') && (await toast.innerText()).includes('每夜價格排程尚未執行'), 'no nightly run yet, bilingual');
+  check((await page.locator('main').innerText()).includes('The nightly price job') === false, 'no banner left on the page itself');
+  await snap('data-toast', page, false);
+  await toast.waitFor({ state: 'detached', timeout: 8000 });
+  const shown = Date.now() - shownAt;
+  check(shown > 2500 && shown < 5000, `about three seconds, got ${shown} ms`);
+  // Moving to another page in the app does not bring it back; the data status page shows the line in full instead.
+  await page.getByRole('navigation', { name: /Main/ }).getByRole('link', { name: /Dashboard/ }).click();
+  await page.waitForURL(`${BASE}/`);
+  await page.getByRole('heading', { level: 1, name: '本週' }).waitFor();
+  await page.waitForTimeout(500);
+  check((await toast.count()) === 0, 'not again on the next page');
+  await page.goto(`${BASE}/data`);
+  await page.getByRole('heading', { level: 1, name: '資料狀態' }).waitFor();
+  await page.waitForTimeout(500);
+  check((await toast.count()) === 0, 'not on the data status page');
+  await page.goto(`${BASE}/holdings`);
+  await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
+});
+
 await step('holdings: demo pool total, R1 breaches with trims, satellite share, gold not valued yet', async () => {
   const text = await body();
   // Seed: seven ETFs and stocks at the demo closes and USD/TWD 32.40, plus NT$20,000 savings.
@@ -115,7 +144,6 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
   check((await fact('R1 2330')).includes('9.1% > 5% sell ≈ NT$3,255'), `R1 2330 with trim, got ${await fact('R1 2330')}`);
   check(text.includes('18.8%'), 'satellite share 18.8%');
   check(text.includes('Not valued yet') && text.includes('Gold bar (demo)'), 'gold bar listed as not valued');
-  check(text.includes('The nightly price job has not run yet'), 'no nightly run yet');
   check(text.includes('持倉') && text.includes('上市持股'), 'Chinese labels');
   check(!text.includes('Value at Risk') && !text.includes('Actual vs target weight'), 'no VaR card or target table: the dashboard and Allocation have them');
   await snap('holdings');

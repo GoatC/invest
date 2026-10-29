@@ -14,10 +14,15 @@ export function RunStatusBadge({ status }: { status: keyof typeof RUN_STATUS }) 
   );
 }
 
+/** Whether the quiet banner has anything to say: the job never ran, missed its nights, or last loaded only part. */
+export function hasNotice(health: DataHealth): boolean {
+  return !health.latest || health.alert || health.latest.status !== 'ok';
+}
+
 /**
  * Whether prices are current, from the nightly job's runs: an alert once the DATA_FAILURE rule's
  * misses in a row are reached, a note while the job has never run or last loaded only part of the
- * data. `quiet` leaves out the line for a healthy run (the holdings page shows nothing then).
+ * data. `quiet` leaves out the line for a healthy run (the notice on loading the app shows nothing then).
  */
 export function DataHealthBanner({ health, threshold, quiet = false }: { health: DataHealth; threshold: number | null; quiet?: boolean }) {
   const { latest, misses, alert } = health;

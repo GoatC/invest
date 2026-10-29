@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi } from '@/components/bi';
-import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
@@ -13,7 +12,6 @@ import { requireSession } from '@/lib/auth';
 import {
   DataError,
   loadAllocationData,
-  loadJobRuns,
   loadLastAttribution,
   loadLastRun,
   loadPlanData,
@@ -38,7 +36,6 @@ import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
 import { DRIFT_ICON, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
-import { dataHealth } from '@/lib/models/data-health';
 import { comingWeek, readWeeklyReview, summaryLines, weeklySummary } from '@/lib/models/notify';
 import { buildSeries } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
@@ -68,12 +65,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall, workbench, flags, simulation, attribution] = await Promise.all([
+  const [risk, proposals, value, plan, settings, windfall, workbench, flags, simulation, attribution] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
     orDataError(loadPlanData(supabase, today)),
-    orDataError(loadJobRuns(supabase)),
     orDataError(
       (async () => {
         const { data: rows, error } = await supabase.from('config').select('key, value').in('key', ['dca', 'weekly_review']);
@@ -101,7 +97,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      {!(jobs instanceof DataError) && <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />}
       <Hero
         today={today}
         summary={summary}
