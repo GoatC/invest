@@ -209,7 +209,7 @@ export function proposalMessage(proposal: ProposalForPush, names: ReadonlyMap<st
     key: String(proposal.id),
     title: `${proposal.title.en} ${proposal.title.zh.replace(`${proposal.ruleId} · `, '')}`,
     body: both(proposalAction(proposal.condition, proposal.state, proposal.detail, names)),
-    url: `/proposals#proposal-${proposal.id}`,
+    url: `/#proposal-${proposal.id}`,
   };
 }
 

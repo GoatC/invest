@@ -27,9 +27,9 @@ export async function watchStock(formData: FormData): Promise<void> {
   const { supabase } = await requireSession();
   const ticker = String(formData.get('ticker') ?? '');
   const security = (await loadSecurities(supabase)).find((candidate) => candidate.ticker === ticker && candidate.productType === 'stock');
-  if (!security) redirect('/valuation?error=ticker');
+  if (!security) redirect('/holdings?valuation-error=ticker#valuation');
   const { error } = await supabase.from('watchlist').upsert({ ticker, active: true }, { onConflict: 'ticker', ignoreDuplicates: true });
-  if (error) redirect(`/valuation?error=${encodeURIComponent(error.message.slice(0, 80))}`);
+  if (error) redirect(`/holdings?valuation-error=${encodeURIComponent(error.message.slice(0, 80))}#valuation`);
   redirect(pageOf(ticker));
 }
 
@@ -39,7 +39,7 @@ export async function unwatchStock(formData: FormData): Promise<void> {
   const ticker = String(formData.get('ticker') ?? '');
   const { error } = await supabase.from('watchlist').delete().eq('ticker', ticker);
   if (error) redirect(`${pageOf(ticker)}&error=${encodeURIComponent(error.message.slice(0, 80))}`);
-  redirect('/valuation');
+  redirect('/holdings#valuation');
 }
 
 /** A stock's assumptions and alert multiples, logged; then its valuation is saved as the alerts' basis. */
@@ -80,5 +80,5 @@ export async function saveValuationSettings(_previous: ValuationFormState, formD
   const value = { ...current, model, years, growth, terminal, debt_spread: debtSpread, tax_rate: taxRate, history_years: historyYears, min_quarters: minQuarters, last_verified: checked };
   const { error: saveError } = await supabase.from('config').update({ value }).eq('key', 'valuation');
   if (saveError) return { errors: {}, message: saveFailed(saveError.message) };
-  redirect('/valuation?saved=settings#settings');
+  redirect('/holdings?valuation=settings#valuation-settings');
 }

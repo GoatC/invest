@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { Facts, type Fact } from '@/components/facts';
@@ -77,7 +77,7 @@ function Overview({ data, settings, saved, missing }: { data: RedFlagData; setti
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.redFlags} />
+          <Zh {...LABELS.redFlags} />
         </h1>
         <p className="equation">
           <Bi en="Light = the worst level among the indicators covered · display only" zh="燈號 ＝ 有資料的指標中最差的等級 · 僅供參考" />

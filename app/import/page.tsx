@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
@@ -17,7 +17,7 @@ export default async function ImportPage() {
   return (
     <section className="card form">
       <h1>
-        <Bi {...LABELS.importCsv} />
+        <Zh {...LABELS.importCsv} />
       </h1>
       <Info>
         <Bi

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Bi } from '@/components/bi';
-import { LABELS } from '@/lib/i18n';
+import { SiteNav } from '@/components/site-nav';
 import { createClient } from '@/lib/supabase/server';
 
 import { signOut } from './actions';
@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   colorScheme: 'light dark',
   // The header colour (--surface in globals.css), light and dark, for the phone's status bar.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: light)', color: '#fbfcfe' },
     { media: '(prefers-color-scheme: dark)', color: '#1a2029' },
   ],
 };
@@ -38,92 +38,28 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="en">
-      <body>
+      <body className={signedIn ? 'signed-in' : undefined}>
         <header className="site-header">
-          <Link href={signedIn ? '/' : '/login'} className="brand">
-            <Bi {...LABELS.appName} />
-          </Link>
-          {signedIn && (
-            <nav className="site-nav" aria-label="Main 主選單">
-              <Link href="/">
-                <Bi {...LABELS.dashboard} />
-              </Link>
-              <Link href="/holdings">
-                <Bi {...LABELS.holdings} />
-              </Link>
-              <Link href="/performance">
-                <Bi {...LABELS.performance} />
-              </Link>
-              <Link href="/allocation">
-                <Bi {...LABELS.allocation} />
-              </Link>
-              <Link href="/risk">
-                <Bi {...LABELS.risk} />
-              </Link>
-              <Link href="/plan">
-                <Bi {...LABELS.calculator} />
-              </Link>
-              <Link href="/timeline">
-                <Bi {...LABELS.timeline} />
-              </Link>
-              <Link href="/monte-carlo">
-                <Bi {...LABELS.monteCarlo} />
-              </Link>
-              <Link href="/stress">
-                <Bi {...LABELS.stress} />
-              </Link>
-              <Link href="/frontier">
-                <Bi {...LABELS.frontier} />
-              </Link>
-              <Link href="/attribution">
-                <Bi {...LABELS.attribution} />
-              </Link>
-              <Link href="/costs">
-                <Bi {...LABELS.costs} />
-              </Link>
-              <Link href="/windfall">
-                <Bi {...LABELS.windfall} />
-              </Link>
-              <Link href="/regression">
-                <Bi {...LABELS.regression} />
-              </Link>
-              <Link href="/sectors">
-                <Bi {...LABELS.sectors} />
-              </Link>
-              <Link href="/capm">
-                <Bi {...LABELS.costOfEquity} />
-              </Link>
-              <Link href="/valuation">
-                <Bi {...LABELS.valuation} />
-              </Link>
-              <Link href="/red-flags">
-                <Bi {...LABELS.redFlags} />
-              </Link>
-              <Link href="/look-through">
-                <Bi {...LABELS.lookThrough} />
-              </Link>
-              <Link href="/proposals">
-                <Bi {...LABELS.proposals} />
-              </Link>
-              <Link href="/holdings/new">
-                <Bi {...LABELS.addTrade} />
-              </Link>
-              <Link href="/import">
-                <Bi {...LABELS.importCsv} />
-              </Link>
-              <Link href="/securities">
-                <Bi {...LABELS.securities} />
-              </Link>
-              <Link href="/data">
-                <Bi {...LABELS.dataStatus} />
-              </Link>
-              <form action={signOut}>
-                <button type="submit" className="link-button">
-                  <Bi {...LABELS.signOut} />
-                </button>
-              </form>
-            </nav>
-          )}
+          <div className="site-header-inner">
+            <Link href={signedIn ? '/' : '/login'} className="brand" aria-label="長期投資 Long-View Invest">
+              <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+                <rect width="32" height="32" rx="8" fill="var(--accent)" />
+                <polyline points="7,21 13,15 18,18 25,10" fill="none" stroke="var(--accent-text)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span lang="zh-Hant">長期投資</span>
+            </Link>
+            {signedIn && (
+              <SiteNav
+                signOut={
+                  <form action={signOut}>
+                    <button type="submit" className="sign-out" lang="zh-Hant" aria-label="登出 Sign out">
+                      登出
+                    </button>
+                  </form>
+                }
+              />
+            )}
+          </div>
         </header>
         <main className="page">{children}</main>
         <footer className="site-footer">

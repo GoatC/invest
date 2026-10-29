@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { BetaRanges, RollingBeta, ScatterFit, type Line, type Range } from '@/components/regression-charts';
 import { requireSession } from '@/lib/auth';
@@ -87,7 +87,7 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
       <section className="card form">
         <div className="row spread">
           <h1>
-            <Bi {...LABELS.regression} />
+            <Zh {...LABELS.regression} />
           </h1>
           <Link href="/regression/factors">
             <Bi en="Five-factor mode" zh="五因子模式" />

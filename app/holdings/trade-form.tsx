@@ -25,6 +25,9 @@ export type TradeValues = Record<TradeField, string>;
 
 const INITIAL_STATE: TradeFormState = { errors: {}, message: null };
 
+/** The fields a quick entry folds under "More fields": each is filled in from the security, or rarely changes. */
+const MORE_FIELDS: readonly TradeField[] = ['currency', 'fee', 'tax', 'fxRate', 'pool', 'note'];
+
 /** The add-security page, with the ticker typed so far; an edit comes back to its trade afterwards. */
 function addSecurityHref(ticker: string, id: number | undefined): string {
   const query = new URLSearchParams();
@@ -41,6 +44,7 @@ export function TradeForm({
   id,
   initial,
   proposal,
+  compact = false,
 }: {
   data: HoldingsData;
   rates: FxQuote[];
@@ -49,6 +53,8 @@ export function TradeForm({
   initial: TradeValues;
   /** The approved proposal this trade fills, to return to it once saved. */
   proposal?: number;
+  /** A quick entry at the top of the holdings page: date, ticker, side, quantity and price in a row, the rest folded. */
+  compact?: boolean;
 }) {
   const [values, setValues] = useState(initial);
   // Fields changed since the last submit: their server errors are stale, their live errors are fresh.
@@ -56,6 +62,8 @@ export function TradeForm({
   // A rate typed by hand, or saved with the trade being edited, is never replaced by a suggestion.
   const [ownRate, setOwnRate] = useState(id !== undefined);
   const [state, formAction, pending] = useActionState(saveTrade, INITIAL_STATE);
+  // A trade from a proposal shows every field, since its fee, tax and rate need checking.
+  const [moreOpen, setMoreOpen] = useState(proposal !== undefined);
 
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
@@ -93,6 +101,105 @@ export function TradeForm({
   const latestRate = foreign ? fx.get(currency) : undefined;
   const datedRate = foreign && data.fxMaxAgeDays !== null && isIsoDate(values.tradeDate) ? rateOn(history, currency, values.tradeDate, data.fxMaxAgeDays) : undefined;
   const dated = datedRate ? { value: datedRate.rate, date: datedRate.date } : undefined;
+  // A field with an error, or a ticker with no rate to suggest, opens the folded fields.
+  const moreError = compact && (MORE_FIELDS.some((field) => error(field) !== null) || (security !== undefined && values.fxRate.trim() === ''));
+
+  const tradeDateField = (
+    <Field label={LABELS.tradeDate} error={error('tradeDate')}>
+      <input type="date" name="tradeDate" value={values.tradeDate} max={today} required onChange={(e) => change('tradeDate', e.target.value)} />
+    </Field>
+  );
+  const tickerField = (
+    <Field
+      label={LABELS.ticker}
+      error={error('ticker')}
+      hint={
+        security ? (
+          security.name
+        ) : (
+          <Link href={addSecurityHref(values.ticker, id)}>
+            <Bi en="Not listed? Add a security" zh="找不到？新增證券" />
+          </Link>
+        )
+      }
+    >
+      <input name="ticker" list="ticker-options" autoComplete="off" value={values.ticker} required onChange={(e) => change('ticker', e.target.value)} />
+    </Field>
+  );
+  const datalistField = (
+    <datalist id="ticker-options">
+      {data.securities.map((option) => (
+        <option key={option.ticker} value={option.ticker}>
+          {option.name}
+        </option>
+      ))}
+    </datalist>
+  );
+  const marketField = (
+    <Field label={LABELS.market} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
+      <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
+    </Field>
+  );
+  const sideField = (
+    <Field label={LABELS.side} error={error('side')}>
+      <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
+        <option value="buy">{bi(SIDE.buy)}</option>
+        <option value="sell">{bi(SIDE.sell)}</option>
+      </select>
+    </Field>
+  );
+  const qtyField = (
+    <Field label={LABELS.qty} error={error('qty')}>
+      <input name="qty" inputMode="decimal" value={values.qty} required onChange={(e) => change('qty', e.target.value)} />
+    </Field>
+  );
+  const priceField = (
+    <Field label={LABELS.price} error={error('price')} hint={currency ? <Bi en={`In ${currency}`} zh={`以 ${currency} 計`} /> : undefined}>
+      <input name="price" inputMode="decimal" value={values.price} required onChange={(e) => change('price', e.target.value)} />
+    </Field>
+  );
+  const currencyField = (
+    <Field label={LABELS.currency} error={error('currency')}>
+      <input name="currency" maxLength={3} autoCapitalize="characters" value={values.currency} onChange={(e) => change('currency', e.target.value)} />
+    </Field>
+  );
+  const feeField = (
+    <Field label={LABELS.fee} error={error('fee')}>
+      <input name="fee" inputMode="decimal" placeholder="0" value={values.fee} onChange={(e) => change('fee', e.target.value)} />
+    </Field>
+  );
+  const taxField = (
+    <Field label={LABELS.tax} error={error('tax')}>
+      <input name="tax" inputMode="decimal" placeholder="0" value={values.tax} onChange={(e) => change('tax', e.target.value)} />
+    </Field>
+  );
+  const fxRateField = (
+    <Field
+      label={LABELS.fxRate}
+      error={error('fxRate')}
+      hint={<FxRateHint currency={currency} dated={dated} latest={latestRate} />}
+    >
+      <input name="fxRate" inputMode="decimal" value={values.fxRate} readOnly={currency === 'TWD'} required onChange={(e) => change('fxRate', e.target.value)} />
+    </Field>
+  );
+  const sleeveField = (
+    <Field label={LABELS.sleeve} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
+      <input readOnly tabIndex={-1} value={security ? bi(SLEEVE[security.sleeve]) : '—'} />
+    </Field>
+  );
+  const poolField = (
+    <Field label={LABELS.pool} error={error('pool')}>
+      <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
+        <option value="regular">{bi(POOL.regular)}</option>
+        <option value="windfall">{bi(POOL.windfall)}</option>
+      </select>
+    </Field>
+  );
+  const noteField = (
+    <Field label={LABELS.note} error={error('note')}>
+      <input name="note" maxLength={500} value={values.note} onChange={(e) => change('note', e.target.value)} />
+    </Field>
+  );
 
   return (
     <form
@@ -102,76 +209,57 @@ export function TradeForm({
     >
       {id !== undefined && <input type="hidden" name="id" value={id} />}
       {proposal !== undefined && <input type="hidden" name="proposal" value={proposal} />}
-      <div className="form-grid">
-        <Field label={LABELS.tradeDate} error={error('tradeDate')}>
-          <input type="date" name="tradeDate" value={values.tradeDate} max={today} required onChange={(e) => change('tradeDate', e.target.value)} />
-        </Field>
-        <Field
-          label={LABELS.ticker}
-          error={error('ticker')}
-          hint={
-            security ? (
-              security.name
-            ) : (
-              <Link href={addSecurityHref(values.ticker, id)}>
-                <Bi en="Not listed? Add a security" zh="找不到？新增證券" />
-              </Link>
-            )
-          }
-        >
-          <input name="ticker" list="ticker-options" autoComplete="off" value={values.ticker} required onChange={(e) => change('ticker', e.target.value)} />
-        </Field>
-        <datalist id="ticker-options">
-          {data.securities.map((option) => (
-            <option key={option.ticker} value={option.ticker}>
-              {option.name}
-            </option>
-          ))}
-        </datalist>
-        <Field label={LABELS.market} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-          <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
-        </Field>
-        <Field label={LABELS.side} error={error('side')}>
-          <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
-            <option value="buy">{bi(SIDE.buy)}</option>
-            <option value="sell">{bi(SIDE.sell)}</option>
-          </select>
-        </Field>
-        <Field label={LABELS.qty} error={error('qty')}>
-          <input name="qty" inputMode="decimal" value={values.qty} required onChange={(e) => change('qty', e.target.value)} />
-        </Field>
-        <Field label={LABELS.price} error={error('price')} hint={currency ? <Bi en={`In ${currency}`} zh={`以 ${currency} 計`} /> : undefined}>
-          <input name="price" inputMode="decimal" value={values.price} required onChange={(e) => change('price', e.target.value)} />
-        </Field>
-        <Field label={LABELS.currency} error={error('currency')}>
-          <input name="currency" maxLength={3} autoCapitalize="characters" value={values.currency} onChange={(e) => change('currency', e.target.value)} />
-        </Field>
-        <Field label={LABELS.fee} error={error('fee')}>
-          <input name="fee" inputMode="decimal" placeholder="0" value={values.fee} onChange={(e) => change('fee', e.target.value)} />
-        </Field>
-        <Field label={LABELS.tax} error={error('tax')}>
-          <input name="tax" inputMode="decimal" placeholder="0" value={values.tax} onChange={(e) => change('tax', e.target.value)} />
-        </Field>
-        <Field
-          label={LABELS.fxRate}
-          error={error('fxRate')}
-          hint={<FxRateHint currency={currency} dated={dated} latest={latestRate} />}
-        >
-          <input name="fxRate" inputMode="decimal" value={values.fxRate} readOnly={currency === 'TWD'} required onChange={(e) => change('fxRate', e.target.value)} />
-        </Field>
-        <Field label={LABELS.sleeve} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-          <input readOnly tabIndex={-1} value={security ? bi(SLEEVE[security.sleeve]) : '—'} />
-        </Field>
-        <Field label={LABELS.pool} error={error('pool')}>
-          <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
-            <option value="regular">{bi(POOL.regular)}</option>
-            <option value="windfall">{bi(POOL.windfall)}</option>
-          </select>
-        </Field>
-        <Field label={LABELS.note} error={error('note')}>
-          <input name="note" maxLength={500} value={values.note} onChange={(e) => change('note', e.target.value)} />
-        </Field>
-      </div>
+      {compact ? (
+        <>
+          <div className="form-grid quick-entry">
+            {tradeDateField}
+            {tickerField}
+            {datalistField}
+            {sideField}
+            {qtyField}
+            {priceField}
+          </div>
+          <details className="more-fields" open={moreOpen || moreError} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
+            <summary>
+              <Bi en="More fields" zh="更多欄位" />
+              <span className="muted small">
+                {' · '}
+                <Bi
+                  en={`${currency || '—'} · FX ${values.fxRate || '—'} · fee ${values.fee || '0'} · ${POOL[values.pool === 'windfall' ? 'windfall' : 'regular'].en} pool`}
+                  zh={`${currency || '—'} · 匯率 ${values.fxRate || '—'} · 手續費 ${values.fee || '0'} · ${POOL[values.pool === 'windfall' ? 'windfall' : 'regular'].zh}資金池`}
+                />
+              </span>
+            </summary>
+            <div className="form-grid">
+              {marketField}
+              {currencyField}
+              {feeField}
+              {taxField}
+              {fxRateField}
+              {sleeveField}
+              {poolField}
+              {noteField}
+            </div>
+          </details>
+        </>
+      ) : (
+        <div className="form-grid">
+          {tradeDateField}
+          {tickerField}
+          {datalistField}
+          {marketField}
+          {sideField}
+          {qtyField}
+          {priceField}
+          {currencyField}
+          {feeField}
+          {taxField}
+          {fxRateField}
+          {sleeveField}
+          {poolField}
+          {noteField}
+        </div>
+      )}
 
       <FxTypoWarning entered={Number(values.fxRate)} reference={dated ?? latestRate} maxGap={data.fxMaxGap} />
       <TradeEffect preview={preview} caps={data.caps} pool={values.pool} />
@@ -184,9 +272,11 @@ export function TradeForm({
         <button type="submit" className="button primary" disabled={pending}>
           <Bi {...(pending ? LABELS.saving : LABELS.save)} />
         </button>
-        <Link href="/holdings" className="button">
-          <Bi {...LABELS.cancel} />
-        </Link>
+        {!compact && (
+          <Link href="/holdings" className="button">
+            <Bi {...LABELS.cancel} />
+          </Link>
+        )}
       </div>
     </form>
   );

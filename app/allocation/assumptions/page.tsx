@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
@@ -18,7 +18,7 @@ export default async function AssumptionsPage() {
     <>
       <section className="card form">
         <h1>
-          <Bi en="Edit capital market assumptions" zh="修改資本市場假設" />
+          <Zh en="Edit capital market assumptions" zh="修改資本市場假設" />
         </h1>
         <Info>
           <Bi

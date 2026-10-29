@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
@@ -100,7 +100,7 @@ export default async function CapmPage({ searchParams }: { searchParams: Promise
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.costOfEquity} />
+          <Zh {...LABELS.costOfEquity} />
         </h1>
         <p className="equation">
           E(R<sub>i</sub>) = R<sub>f</sub> + β<sub>i</sub> (ERP + CRP)

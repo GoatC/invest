@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { Facts, type Fact } from '@/components/facts';
@@ -117,7 +117,7 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.windfall} />
+          <Zh {...LABELS.windfall} />
         </h1>
         {saved && (
           <p className="banner ok" role="status">

@@ -107,7 +107,7 @@ describe('messages', () => {
       key: '7',
       title: 'R1 · Single-stock trim 單一個股減碼',
       body: 'Trim 2330, NVDA back to the 5% cap.\n2330, NVDA 減碼回 5% 上限。',
-      url: '/proposals#proposal-7',
+      url: '/#proposal-7',
     });
     const drift = proposalMessage(
       { ...r1, id: 8, ruleId: 'F8_DRIFT', condition: 'class_drift_exceeds', title: { en: 'F8_DRIFT · Drift rebalance', zh: 'F8_DRIFT · 偏離再平衡' }, detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, classes: [{ id: 'global_bonds', weight: 0.091, target: 0.22, band: 0.05 }] } },

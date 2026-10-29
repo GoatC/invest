@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { CostBars, type CostBar } from '@/components/cost-charts';
@@ -165,7 +165,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.costs} />
+          <Zh {...LABELS.costs} />
         </h1>
         {saved && (
           <p className="banner ok" role="status">

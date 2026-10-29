@@ -398,14 +398,18 @@ Once a week a three-line push summary opens a dashboard that leads with rule sta
 
 **Dashboard weekly view 儀表板週檢視** (top to bottom 由上而下)
 
-1. Open proposals with approve / dismiss buttons 待處理提案（核准／略過）
-2. SAA drift bars, colour-coded green / amber / red 以綠／黃／紅標示的 SAA 偏離長條
-3. VaR card: 95% one-week Value at Risk in NT$ and % (N4) 風險值卡片：95% 一週風險值（台幣與百分比）
-4. Allocation donut with three lens tabs (N6) 資產配置圓餅圖，三種分法分頁
-5. Windfall progress: deployed vs remaining, on schedule or accelerated 大額資金進度：已投入與剩餘、依排程或加速中
-6. Watchlist: distance to buy and trim zones, and red-flag light per company 觀察清單：距離買入區與減碼區的幅度，以及紅旗燈號
-7. Coming week: DCA date, tranche dates, earnings dates of holdings 下週事件：扣款日、分批日、持股財報日
-8. Actual vs projected path (F2) 實際與預測路徑對照
+1. This week: the portfolio's value (both pools) and the three push lines, each with its status icon; when a proposal waits, a button jumps to the proposals at the foot 本週：投資組合總市值（兩個資金池）與三行摘要（各附狀態圖示）；有提案待處理時，按鈕直接跳到頁尾的提案
+2. VaR card: 95% one-week Value at Risk in NT$ and % (N4), its distribution and make-up folded under it 風險值卡片：95% 一週風險值（台幣與百分比），分布圖與組成收合在下方
+3. Watchlist: distance to buy and trim zones, and red-flag light per company 觀察清單：距離買入區與減碼區的幅度，以及紅旗燈號
+4. Coming week: DCA date, tranche dates, earnings dates of holdings 下週事件：扣款日、分批日、持股財報日
+5. Allocation donut with three lens tabs (N6) 資產配置圓餅圖，三種分法分頁
+6. Windfall progress: deployed vs remaining, on schedule or accelerated 大額資金進度：已投入與剩餘、依排程或加速中
+7. Actual vs projected path (F2) 實際與預測路徑對照
+8. Proposals: open (approve / edit / dismiss), approved and waiting for trades, decided and closed, with "check the rules now" 提案：待處理（核准／修改／略過）、已核准待下單、已關閉，以及「立即檢查規則」
+
+The SAA drift bars, colour-coded green / amber / red, sit on the Allocation page only, so the dashboard does not repeat them; the largest drift is the band's second line. 以綠／黃／紅標示的 SAA 偏離長條只放在資產配置頁，儀表板不重複；最大偏離列在本週摘要第二行。
+
+**Navigation 導覽:** four pages as buttons — Dashboard, Holdings, Performance, Allocation — and four groups that list their pages below the button: Analysis (look-through, stress test, efficient frontier, attribution, regression, sectors), Other risks (red flags, cost of equity, costs & tax), Life planning (calculator, life timeline, Monte Carlo, windfall), More (data status, CSV import). On a phone the four pages are a bottom tab bar and "More" opens the groups. Navigation buttons and page titles show Chinese only. New trades are entered at the top of Holdings, which also holds the valuation watchlist and, folded, the securities list. 四個頁面按鈕——儀表板、持倉、績效、資產配置——與四個在按鈕下方列出頁面的群組：分析區（合併透視、壓力測試、效率前緣、績效歸因、回歸分析、產業熱圖）、其他風險（紅旗指標、權益成本、費用與稅務）、人生規劃（複利計算機、人生時間軸、蒙地卡羅、大額資金）、其他（資料狀態、匯入 CSV）。手機上四個頁面改為底部分頁列，「更多」打開各群組。導覽按鈕與頁面標題只顯示中文。新增交易在持倉頁最上方；持倉頁也包含估值觀察清單，以及收合的證券主檔。
 
 Monthly and quarterly outputs (N2 attribution, F5 re-run, N1 5-factor results) appear in the weekly view only in the week they update. 每月與每季產出（N2 歸因、F5 重跑、N1 五因子結果）只在更新當週出現在週檢視。
 

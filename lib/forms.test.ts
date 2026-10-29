@@ -32,7 +32,7 @@ describe('afterSecurityAdded', () => {
 
   it('opens a new trade in the ticker otherwise, ignoring outside or odd paths', () => {
     for (const next of [undefined, '', '/holdings/new', 'https://example.com', '//example.com', '/holdings/42/../../x']) {
-      assert.equal(afterSecurityAdded(next, 'VT'), '/holdings/new?ticker=VT', String(next));
+      assert.equal(afterSecurityAdded(next, 'VT'), '/holdings?ticker=VT#add-trade', String(next));
     }
   });
 });

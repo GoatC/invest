@@ -68,7 +68,7 @@ All three phases are built and their gates have passed: the app is complete. Pha
 
 ## What works today 目前的功能
 
-- **Weekly dashboard 每週儀表板** (home): three lines (rules, largest drift, value and weekly change), open proposals to approve or dismiss, drift bars, VaR, allocation donut, windfall progress, the coming week, actual vs plan. 三行摘要、待處理提案、偏離、風險值、配置、大額資金、下週事件、實際對計畫。
+- **Weekly dashboard 每週儀表板** (home): a band with the value of both pools and three lines (rules, largest drift, value and weekly change), VaR with its distribution and make-up folded under it, the watchlist, the coming week, allocation donut, windfall progress, actual vs plan, and the proposals last, to approve, edit or dismiss, with a jump to them from the band. 本週封面帶（兩個資金池總市值與三行摘要）、風險值（分布與組成收合）、觀察清單、下週事件、配置、大額資金、實際對計畫，提案置於最下方，封面帶可直接跳到提案。
 - **Web Push 推播**: only when a decision is due (new proposal, weekly review, data failure), never a price move; quiet hours 23:00–08:00. 只在需要決定時推播；安靜時段暫停。
 - **Holdings and entry 持倉與登錄**: both pools, R1 / R2 status with the trim needed, actual vs target weights, average cost, TWD value and gain; trade entry fills the currency and the trade date's Bank of Taiwan rate and warns on R1 / R2; broker CSV import (UTF-8 or Big5, ROC dates, mapping remembered per broker, dividends as cash flows, duplicates skipped); cash flows, gold in grams and TWD balances; stock splits on each security's page, so shares bought before one count in the new shares; every edit logged. 持倉、交易登錄、CSV 匯入、現金流、非上市資產與股票分割，修改皆留紀錄。
 - **Performance 績效**: TWR against the SAA benchmark, XIRR, and the TWD return split into local, currency and cross terms. 時間加權與資金加權報酬、匯率拆解。
@@ -92,15 +92,15 @@ All three phases are built and their gates have passed: the app is complete. Pha
 - **Five factors 五因子** (N1, Phase 3): what drives each holding's and the whole portfolio's return beyond the market, by the Fama–French five factors (market, size, value, profitability, investment) on Kenneth French's free monthly data: each loading with its t-statistic and 95% interval, alpha, R², over 2 to 10 years; a mode of the Regression Lab. 以 Kenneth French 的免費月資料，用 Fama–French 五因子（市場、規模、價值、獲利能力、投資）說明每檔持股與整體投資組合除了大盤之外的報酬來源：各因子係數附 t 值與 95% 信賴區間、阿爾法、R²，期間 2 到 10 年；為回歸分析區的一個模式。
 - **Nightly data 每夜資料**: GitHub Actions loads prices, FX, gold, the market series, indices, yields and filings, each with a fallback feed, saves each day's NAV and VaR, then checks the rules; the Data status page shows every run, and two missed nights raise an alert. 每夜載入資料、存淨值與風險值、檢查規則；連續兩晚失敗即警示。
 
-![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
+![The weekly dashboard with demo data: the band with the value and this week's three lines, the Value at Risk, the watchlist and the coming week](docs/images/dashboard.png)
 
 ![Performance with demo data: TWR against the SAA benchmark, XIRR and the gain](docs/images/performance.png)
 
 ![Allocation with demo data: drift from the targets, coloured by the 5/25 rule](docs/images/allocation.png)
 
-![Value at Risk with demo holdings: the 1-week figure, its 52-week line, and where it sits among three years of weekly returns](docs/images/risk.png)
+![Value at Risk on the dashboard with demo holdings: the 1-week figure and, opened under it, where it sits among three years of weekly returns](docs/images/risk.png)
 
-![Proposals with demo data: the monthly contribution and a drift rebalance, each explained, with whole-share orders](docs/images/proposals.png)
+![Proposals at the foot of the dashboard with demo data: the monthly contribution and a drift rebalance, each explained, with whole-share orders](docs/images/proposals.png)
 
 ![Costs and tax with demo data: what each 複委託 broker would cost over the plan, a US$35 minimum fee weighing on a NT$5,000 order](docs/images/costs.png)
 

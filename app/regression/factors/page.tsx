@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { BetaRanges, type Range } from '@/components/regression-charts';
@@ -63,7 +63,7 @@ export default async function FactorPage({ searchParams }: { searchParams: Promi
       <section className="card form">
         <div className="row spread">
           <h1>
-            <Bi {...LABELS.regression} /> · <Bi en="Five factors" zh="五因子" />
+            <Zh {...LABELS.regression} /> · <Zh en="Five factors" zh="五因子" />
           </h1>
           <Link href="/regression">
             <Bi en="Back to β" zh="回到 β" />

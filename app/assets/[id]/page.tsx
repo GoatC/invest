@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { History } from '@/components/history';
@@ -35,7 +35,7 @@ export default async function EditAssetPage({ params }: { params: Promise<{ id: 
     <>
       <section className="card">
         <h1>
-          <Bi {...LABELS.editAsset} />
+          <Zh {...LABELS.editAsset} />
         </h1>
         <AssetForm
           assetClasses={assetClasses}

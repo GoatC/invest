@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadFxHistory, loadHoldingsData, orDataError } from '@/lib/data';
@@ -17,7 +17,7 @@ export default async function NewCashFlowPage() {
   return (
     <section className="card">
       <h1>
-        <Bi {...LABELS.addCashFlow} />
+        <Zh {...LABELS.addCashFlow} />
       </h1>
       <CashFlowForm
         data={data}

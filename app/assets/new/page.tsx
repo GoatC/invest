@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAssetClasses, loadGoldPrice, loadSecurities, orDataError } from '@/lib/data';
@@ -18,7 +18,7 @@ export default async function NewAssetPage() {
   return (
     <section className="card">
       <h1>
-        <Bi {...LABELS.addAsset} />
+        <Zh {...LABELS.addAsset} />
       </h1>
       <AssetForm
         assetClasses={assetClasses}

@@ -46,8 +46,9 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
   if (error) return { errors: {}, message: saveFailed(error.message) };
   // A trade recorded from an approved proposal's checklist goes back to it.
   const proposal = id === undefined ? parseId(fields['proposal']) : undefined;
-  if (proposal !== undefined) redirect(`/proposals?saved=trade#proposal-${proposal}`);
-  redirect(`/holdings?saved=${id === undefined ? 'added' : 'updated'}`);
+  if (proposal !== undefined) redirect(`/?saved=trade&p=approved#proposal-${proposal}`);
+  // The holdings page then offers this ticker's analyses as the next step.
+  redirect(`/holdings?saved=${id === undefined ? 'added' : 'updated'}&t=${encodeURIComponent(parsed.value.ticker)}`);
 }
 
 /** Deletes a trade unless a later sell depends on it; the audit log keeps the deleted row. */

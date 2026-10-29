@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { CorrelationHeatmap, FrontierChart, WeightsChart, type Curve, type Spot } from '@/components/frontier-charts';
 import { History, HistorySection } from '@/components/history';
@@ -44,7 +44,7 @@ export default async function FrontierPage({ searchParams }: { searchParams: Pro
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.frontier} />
+          <Zh {...LABELS.frontier} />
         </h1>
         <Info>
           <Bi

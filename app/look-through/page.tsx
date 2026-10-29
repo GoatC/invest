@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
 import { Info } from '@/components/info';
@@ -91,7 +91,7 @@ function View({ data, result, saved }: { data: LookThroughData; result: LookThro
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.lookThrough} />
+          <Zh {...LABELS.lookThrough} />
         </h1>
         <p className="equation">
           <Bi en="Company exposure = Σ fund value × the company's weight in the fund + the value held directly" zh="公司曝險 ＝ Σ 基金市值 × 該公司在基金中的權重 ＋ 直接持有市值" />

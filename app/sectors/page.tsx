@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { SectorBubbles, SectorHeatmap, SectorTreemap, type Bubble, type HeatRow, type SectorBox } from '@/components/sector-charts';
@@ -84,7 +84,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Prom
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.sectors} />
+          <Zh {...LABELS.sectors} />
         </h1>
         <p className="muted small">
           <Bi

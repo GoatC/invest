@@ -10,17 +10,21 @@ import type { Bilingual } from '@/lib/i18n';
 import { resized } from '@/lib/models/engine';
 import { parseOrderSizes, type FieldErrors } from '@/lib/validation';
 
-/** Where each action lands: the proposals page with what happened, at the proposal. */
+/** The proposals' tab an outcome is seen on: what was approved waits there to be traded. */
+const TAB: Record<string, string> = { approved: 'approved', filled: 'approved' };
+
+/** Where each action lands: the dashboard's proposals with what happened, at the proposal. */
 function back(saved: string, id?: number): never {
-  redirect(`/proposals?saved=${saved}${id === undefined ? '' : `#proposal-${id}`}`);
+  const tab = TAB[saved];
+  redirect(`/?saved=${saved}${tab ? `&p=${tab}` : ''}${id === undefined ? '#proposals' : `#proposal-${id}`}`);
 }
 
 /** Evaluates every rule now, as the nightly job does after its refresh (L2 step 1). */
 export async function checkRules(): Promise<void> {
   const { supabase } = await requireSession();
   const result = await orDataError(runRules(supabase, taipeiToday(), new Date().toISOString()));
-  if (result instanceof DataError) redirect(`/proposals?failed=${encodeURIComponent(result.message)}`);
-  redirect(`/proposals?saved=checked&created=${result.created}&closed=${result.closed}`);
+  if (result instanceof DataError) redirect(`/?failed=${encodeURIComponent(result.message)}#proposals`);
+  redirect(`/?saved=checked&created=${result.created}&closed=${result.closed}#proposals`);
 }
 
 /**
@@ -40,10 +44,10 @@ async function decide(formData: FormData, to: 'approved' | 'dismissed' | 'filled
       ? { status: to, filled_at: now }
       : { status: to, decided_at: now, ...(to === 'dismissed' ? { dismiss_reason: reason || null } : {}) };
   const { data, error } = await supabase.from('proposals').update(change).eq('id', id).in('status', from).select('id');
-  if (error) redirect(`/proposals?failed=${encodeURIComponent(error.message)}#proposal-${id}`);
+  if (error) redirect(`/?failed=${encodeURIComponent(error.message)}#proposal-${id}`);
   if (to === 'filled' && data && data.length > 0) {
     const failed = await settleTranches(supabase, id);
-    if (failed) redirect(`/proposals?failed=${encodeURIComponent(failed)}#proposal-${id}`);
+    if (failed) redirect(`/?failed=${encodeURIComponent(failed)}&p=approved#proposal-${id}`);
   }
   back(data && data.length > 0 ? to : 'stale', id);
 }
