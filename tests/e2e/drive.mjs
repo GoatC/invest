@@ -1510,6 +1510,34 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   check(/Setting[\s\S]*monte_carlo/.test(await body()), 'the setting in the edit history');
 });
 
+await step('timeline: the plan, the Monte Carlo band and the actuals on one chart, the phases and a later goal with its chance, the goals logged (F1)', async () => {
+  await page.goto(`${BASE}/timeline`);
+  await page.getByRole('heading', { level: 1, name: /^Life timeline/ }).waitFor();
+  await page.locator('.chart-figure svg').first().waitFor();
+  const text = await body();
+  check(/Actual now[^]*Plan this month \(F2\)/.test(text), `the actual and the plan, got ${text.slice(0, 500)}`);
+  check(/Accumulation 累積期/.test(text), 'the accumulation phase');
+  await snap('timeline');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('timeline', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // A goal with an amount gets the plan's value and the chance of reaching it that month.
+  await page.locator('#goals textarea[name=goals]').fill('2046-05 | 3000000 | House 購屋頭期款\n2040-01 |  | Milestone 里程碑');
+  await page.locator('#goals button[type=submit]').click();
+  await page.waitForURL('**/timeline?saved=goals**');
+  const goals = await page.locator('section', { has: page.getByRole('heading', { name: /Goals against the plan/ }) }).first().innerText();
+  check(/2040-01\s+Milestone/.test(goals) && /2046-05\s+House[^]*NT\$3,000,000/.test(goals), `both goals in date order, got ${goals}`);
+  check(/\d+%/.test((await page.locator('table').filter({ hasText: 'Chance' }).first().innerText())), 'the chance of the goal');
+  // A line that is not a goal is refused with the format shown.
+  await page.locator('#goals textarea[name=goals]').fill('soon | x');
+  await page.locator('#goals button[type=submit]').click();
+  await page.locator('#goals [role=alert]').first().waitFor();
+  check((await page.locator('#goals').innerText()).includes('YYYY') || (await page.locator('#goals').innerText()).includes('month'), 'the format asked for');
+  check((await body()).includes('人生時間軸') && (await body()).includes('目標與計畫對照'), 'Chinese labels');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*timeline/.test(await body()), 'the setting in the edit history');
+});
+
 await step('data status: demo prices listed with their dates, the job not run yet', async () => {
   await page.goto(`${BASE}/data`);
   await page.getByRole('heading', { name: /Data status/ }).waitFor();
@@ -1530,7 +1558,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/notifications', '/data', '/history', '/import', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1556,7 +1584,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/regression', '/capm', '/valuation', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/proposals', '/rules', '/holdings/new', '/assets/new', '/cash-flows/new', '/securities', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1588,7 +1616,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
     if (path === '/valuation?t=AAPL') await page.locator('.chart-ranges svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
+    if (['/', '/holdings', '/performance', '/allocation', '/risk', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/regression', '/capm', '/valuation?t=AAPL', '/proposals', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

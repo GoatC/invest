@@ -414,12 +414,14 @@ export interface McResult {
   marks: YearFigures[];
   /** The last year end's values of every path, ascending, nominal TWD. */
   finals: ArrayLike<number>;
+  /** Every year end's values of every path, each ascending, nominal TWD; index 0 is the start. */
+  columns: ArrayLike<number>[];
   /** Where the final value falls: the share of paths below the putIn. */
   belowPutIn: number;
 }
 
 /** Share of the ascending list that is at or above a value. */
-function shareAtLeast(sorted: ArrayLike<number>, value: number): number {
+export function shareAtLeast(sorted: ArrayLike<number>, value: number): number {
   let low = 0;
   let high = sorted.length;
   while (low < high) {
@@ -511,6 +513,7 @@ export function monteCarlo(input: McInput): McResult {
     fan,
     marks: settings.markYears.filter((year) => year <= years).map((year) => fan[year] as YearFigures),
     finals,
+    columns,
     belowPutIn: 1 - shareAtLeast(finals, last.putIn),
   };
 }

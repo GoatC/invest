@@ -476,7 +476,7 @@ Phase 2, step 5 adds company\_profiles (ticker, industry\_code, industry, sic, a
 
 Phase 2, step 6 adds fund\_holdings (fund, as\_of, source, constituents, loaded\_at): each fund's newest holdings file, one row per fund with its lines as compact arrays, written by the job only; company\_profiles gains sector (GICS) for the stocks held directly. 第二階段第 6 步新增 fund\_holdings：各基金最新的成分股檔案（每檔一列），只有每夜排程能寫入；company\_profiles 新增 GICS 產業欄位。
 
-Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly job's monthly Monte Carlo re-run, the inputs and the figures at the marks, written by the job only, read by the dashboard in the week it updates. 第三階段第 1 步新增 simulation\_runs（模型、執行日、摘要）：每夜排程每月一次的蒙地卡羅重跑結果，只有排程能寫入，儀表板在更新當週讀取。
+Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly job's monthly Monte Carlo re-run, the inputs and the figures at the marks, written by the job only, read by the dashboard in the week it updates. 第三階段第 1 步新增 simulation\_runs（模型、執行日、摘要）：每夜排程每月一次的蒙地卡羅重跑結果，只有排程能寫入，儀表板在更新當週讀取。 Step 2 adds only config rows: timeline (the later goals) 第 2 步只新增 config：timeline（後續目標）。
 
 ## 8. Roadmap 開發路線圖
 
@@ -558,7 +558,7 @@ Phase 2 第二階段:
 Phase 3 第三階段 (the gate for Phase 3 was passed by Hugo on 2026-10-29, which fixed its build order in Section 11 第三階段於 2026-10-29 由 Hugo 通過關卡，建置順序見第 11 節):
 
 - Step 1, F5: runs on the F2 engine (`simulate`, the same loop) with a return drawn for each month; the draws are a moving-block bootstrap (config `monte_carlo.block_months`, 3) of whole historical rows, so classes keep their correlation, from each class's `benchmark_ticker` as monthly TWD returns over `lookback_years` (5, the window the nightly job already loads) and at least `min_months` (36) common months, or no run. Each class is re-centred on its CMA expected return ÷ 12 (F2's own monthly return, so the two modes agree on the mean) and, with `scale_to_cma`, its deviations are scaled to its CMA volatility ÷ √12; the history gives the shape of the swings and the co-movement, not the level. Classes without a CMA are left out and the rest re-weighted, as F2's expected return does; the portfolio holds target weights monthly. The windfall: the saved F3 plan's remaining tranches (waiting cash at `windfall.cash_return`, deployed money in the core mix only), else an expected windfall (`monte_carlo.windfall`: amount, arrival month, equal tranches); acceleration is not simulated (F10 replays it). The goal is in today's money (`monte_carlo.target_twd`). Seeded by the run's month, so a page shows the same figures all month; the nightly job saves the month's summary in `simulation_runs`, and the dashboard shows it that week 以 F2 引擎（同一個 `simulate` 迴圈）逐月抽樣報酬；抽樣為整列歷史月份的移動區塊自助抽樣（區塊 3 個月），類別間的相關性得以保留；歷史為各類別 `benchmark_ticker` 近 5 年（排程已載入的範圍）的台幣月報酬，至少 36 個共同月份，否則不執行。各類別以資本市場假設的預期報酬 ÷ 12 為中心（與 F2 相同，兩種模式平均值一致），並預設把波動縮放到假設波動度 ÷ √12；歷史只提供波動形狀與連動，不決定水準。沒有假設的類別不計入、其餘重新加權（與 F2 相同），每月維持目標權重。大額資金：已儲存 F3 計畫的剩餘各批（等待中現金依 `windfall.cash_return`，已投入部分僅計核心類別），否則為預期大額資金（金額、入帳月份、等額分批）；加速投入不在此模擬（F10 回放）。目標以今天幣值計。以當月為亂數種子，因此整個月顯示相同數字；每夜排程每月把摘要存入 `simulation_runs`，儀表板在當週顯示
-
+- Step 2, F1: a page on the same F5 run (so the plan, band and windfall agree): the plan's path on F2's engine dashed, F5's median and 10–90% band, the actual value at each month end with the latest as the last point; the actual counts both pools when a windfall is in the run, else the regular pool. Year ends are the plan's own (year 1 ends twelve months after its first month) joined by straight lines. Phases: accumulation (the plan's start to end) and the windfall's deployment (the F3 plan's tranches, else the expected windfall's); later goals are config `timeline` (month, amount in today's money or none, name; at most 12), shown as lines with the plan's value, the median and the chance of the amount at the year end nearest the month (nothing is proposed from them) 同一次 F5 模擬上的頁面（計畫、區間與大額資金一致）：虛線為 F2 引擎的計畫，加上 F5 中位數與 10–90% 區間，以及每個月底的實際值（最新值為最後一點）；納入大額資金時實際值合計兩個資金池，否則為一般投入資金池。年底以計畫自己的年度為準（第 1 年在第一個月起滿十二個月時結束），以直線相連。階段：累積期（計畫起訖）與大額資金部署（F3 計畫的各批，否則為預期大額資金）；後續目標存為 config `timeline`（月份、今天幣值金額或無、名稱，最多 12 個），以直線標示，並顯示屆時的計畫、中位數與最接近該月年底達成金額的機率（不會據此提出任何建議）
 
 ## 10. Glossary 雙語術語表
 
@@ -685,6 +685,10 @@ Rules:
 | F5 goal | Every path alike; goal below, then above, the final value in today's money | Chance of reaching it 100%, then 0% |
 | F5 calibration | A class with CMA 8% a year and 15% volatility | Calibrated monthly mean 8% ÷ 12; monthly standard deviation 15% ÷ √12 |
 | F5 windfall | NT$400,000 pool: NT$200,000 deployed, two tranches of NT$100,000 due in months 2 and 3; core mix +1% a month, cash 0 | Month 12: 200,000 × 1.01¹² + 100,000 × 1.01¹⁰ + 100,000 × 1.01⁹ |
+| F1 year ends (added in Phase 3, step 2) | Plan starting 2026-05 | Year 0 ends 2026-04-30, year 1 2027-04-30, year 30 2056-04-30 |
+| F1 projection at a month | Band median 100 at year 1 and 200 at year 2; month 18 | 150 half way between the two year ends |
+| F1 goal chance | Ten paths worth 100 … 1,000 at year 2; goal 600 | 50% reach it; 100% at goal 100, 0% above 1,000 |
+| F1 phases | Tranches due 2027-09, 2028-02 and 2028-08; plan from 2026-05 for 30 years | Accumulation 2026-05 to 2056-04; windfall 2027-09 to 2028-08 |
 
 **First prompt for Claude Code 第一個指令**
 

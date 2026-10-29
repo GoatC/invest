@@ -9,6 +9,7 @@ import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
 import type { McSettings } from './models/monte-carlo';
+import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
@@ -91,6 +92,8 @@ export const MESSAGES = {
   mcTarget: { en: 'Enter whole NT$ above 0 (in today’s money), or leave it blank.', zh: '請輸入大於 0 的整數台幣金額（以今天幣值計），或留白。' },
   mcWindfallMonth: { en: 'Enter the month the money arrives as YYYY-MM.', zh: '請以 YYYY-MM 輸入入帳月份。' },
   mcWindfallAmount: { en: 'Enter whole NT$ above 0, or leave it blank.', zh: '請輸入大於 0 的整數台幣金額，或留白。' },
+  goals: { en: 'One per line: month | amount in today’s money (blank for none) | name, e.g. 2045-06 | 3,000,000 | House.', zh: '每行一個：月份 | 以今天幣值計的金額（留白代表沒有）| 名稱，例如 2045-06 | 3,000,000 | 購屋頭期款。' },
+  goalCount: { en: `At most ${MAX_GOALS} goals.`, zh: `最多 ${MAX_GOALS} 個目標。` },
   fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -1351,4 +1354,29 @@ export function parseMonteCarloForm(raw: RawForm, current: McSettings): Parsed<M
     targetTwd: target,
     windfall: { amountTwd: amount, month: isMonth(month) ? month : null, tranches: tranches ?? current.windfall.tranches },
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Life timeline (F1)
+// ---------------------------------------------------------------------------
+
+export type TimelineField = 'goals';
+
+/** config timeline: "2045-06 | 3,000,000 | House" per line. */
+export function parseTimelineForm(raw: RawForm): Parsed<TimelineSettings, TimelineField> {
+  const errors: FieldErrors<TimelineField> = {};
+  const goals: Goal[] = [];
+  const lines = (raw['goals'] ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length > MAX_GOALS) errors.goals = MESSAGES.goalCount;
+  for (const line of lines) {
+    const [month = '', amount = '', ...rest] = line.split('|').map((part) => part.trim());
+    const name = rest.join('|').trim();
+    const value = amount === '' ? null : wholeTwd(amount);
+    if (!isMonth(month) || value === undefined || value === 0 || name === '' || name.length > 60) {
+      errors.goals = MESSAGES.goals;
+      break;
+    }
+    goals.push({ month, amountTwd: value, name });
+  }
+  return finish(errors, () => ({ goals: goals.sort((a, b) => a.month.localeCompare(b.month)) }));
 }

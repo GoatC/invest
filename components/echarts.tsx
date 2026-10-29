@@ -18,7 +18,7 @@ import {
   type ScatterSeriesOption,
   type TreemapSeriesOption,
 } from 'echarts/charts';
-import { GridComponent, MarkLineComponent, TooltipComponent, type GridComponentOption, type MarkLineComponentOption, type TooltipComponentOption } from 'echarts/components';
+import { GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, type GridComponentOption, type MarkAreaComponentOption, type MarkLineComponentOption, type TooltipComponentOption } from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { SVGRenderer } from 'echarts/renderers';
 
@@ -26,12 +26,15 @@ import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, TreemapChart, GridComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, TreemapChart, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 export type Option = echarts.ComposeOption<
-  BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | TreemapSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption
+  BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | TreemapSeriesOption | GridComponentOption | MarkAreaComponentOption | MarkLineComponentOption | TooltipComponentOption
 >;
 export type Chart = echarts.ECharts;
+
+/** One stripe of a mark area: its two edges. */
+export type MarkArea = NonNullable<MarkAreaComponentOption['data']>[number];
 
 export interface Colors {
   /** The eight categorical slots, --chart-1 to --chart-8. */

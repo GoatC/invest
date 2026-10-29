@@ -17,6 +17,7 @@ import {
   parseManualAsset,
   parseMonteCarloForm,
   parseNumber,
+  parseTimelineForm,
   fractionalShares,
   parseEngineSettings,
   parseOrderSizes,
@@ -658,5 +659,32 @@ describe('parseMonteCarloForm (F5)', () => {
     const bad = parseMonteCarloForm({ target: '-5', windfallAmount: '1.5', windfallMonth: '2030-13', windfallTranches: '0' }, current);
     assert.ok(!bad.ok);
     assert.deepEqual(Object.keys(bad.errors).sort(), ['target', 'windfallAmount', 'windfallMonth', 'windfallTranches']);
+  });
+});
+
+describe('parseTimelineForm (F1)', () => {
+  it('reads one goal per line, in date order, an amount being optional', () => {
+    const parsed = parseTimelineForm({ goals: '2045-06 | 3,000,000 | House\n\n2040-01 |  | Children’s university 子女大學' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, [
+      { month: '2040-01', amountTwd: null, name: 'Children’s university 子女大學' },
+      { month: '2045-06', amountTwd: 3_000_000, name: 'House' },
+    ]);
+  });
+
+  it('takes an empty box as no goals', () => {
+    const parsed = parseTimelineForm({ goals: '  \n' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, []);
+  });
+
+  it('refuses a line without a valid month, a whole-NT$ amount above 0 or a name, and too many goals', () => {
+    for (const goals of ['2045-13 | 1 | x', '2045-06 | 1.5 | x', '2045-06 | 0 | x', '2045-06 | 100 | ', '2045-06 only']) {
+      const parsed = parseTimelineForm({ goals });
+      assert.ok(!parsed.ok, goals);
+      assert.deepEqual(Object.keys(parsed.errors), ['goals']);
+    }
+    const many = Array.from({ length: 13 }, (_, i) => `2040-${String((i % 12) + 1).padStart(2, '0')} | | g${i}`).join('\n');
+    assert.ok(!parseTimelineForm({ goals: many }).ok);
   });
 });

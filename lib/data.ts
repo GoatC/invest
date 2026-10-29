@@ -30,6 +30,7 @@ import {
 import { manualHistories } from './models/manual-history';
 import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
+import { readTimelineSettings } from './models/timeline';
 import { readMcSettings, readRunSummary, runMonteCarlo, runSummary, type McData } from './models/monte-carlo';
 import { readPlanSettings, savedPlan, type PlanSettings } from './models/projection';
 import { readQuietHours, readWeeklyReview, weeklySummary, type Message, type PlanInput, type ProposalForPush, type WeeklySummary } from './models/notify';
@@ -2371,4 +2372,14 @@ export async function refreshMonteCarlo(supabase: SupabaseClient, today: string)
   const { error } = await supabase.from('simulation_runs').upsert({ model: 'monte_carlo', run_date: today, summary: runSummary(run, today) }, { onConflict: 'model,run_date' });
   if (error) throw new DataError('simulation_runs', error.message);
   return { runDate: today, median: run.result.marks[run.result.marks.length - 1]?.median ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// F1 life timeline (Phase 3, step 2)
+// ---------------------------------------------------------------------------
+
+/** config timeline: the later goals; undefined before its migration. */
+export async function loadTimelineSettings(supabase: SupabaseClient) {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'timeline'));
+  return readTimelineSettings(row?.value);
 }

@@ -9,6 +9,7 @@ import { readValuationSettings } from '../../lib/models/intrinsic.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
 import { readMcSettings } from '../../lib/models/monte-carlo.ts';
+import { readTimelineSettings } from '../../lib/models/timeline.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
@@ -916,5 +917,12 @@ describe('Monte Carlo (Phase 3, step 1)', () => {
       assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 0);
     });
     await db.query(`delete from public.simulation_runs where run_date = '2099-01-01'`);
+  });
+});
+
+describe('life timeline (Phase 3, step 2)', () => {
+  it('seeds the settings with no goals: they are the owner’s own, not for git', async () => {
+    const settings = readTimelineSettings(await scalar(db, `select value from public.config where key = 'timeline'`));
+    assert.deepEqual(settings, { goals: [] });
   });
 });

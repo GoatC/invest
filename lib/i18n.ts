@@ -68,6 +68,7 @@ export const LABELS = {
   risk: { en: 'Value at Risk', zh: '風險值' },
   calculator: { en: 'Calculator', zh: '複利計算機' },
   monteCarlo: { en: 'Monte Carlo', zh: '蒙地卡羅' },
+  timeline: { en: 'Life timeline', zh: '人生時間軸' },
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },
