@@ -568,12 +568,21 @@ export interface ChoiceInput {
   tax: TaxSettings | undefined;
 }
 
+/**
+ * The schedule the plan's contributions pay abroad. The plan buys every month, so a broker's
+ * regular-savings (DCA) prices apply where it has them; otherwise the ETF prices do.
+ */
+export function contributionSchedule(broker: Broker, market: Market): FeeSchedule | null {
+  if (market === 'US' && broker.usDca) return broker.usDca;
+  return brokerSchedule(broker, market, 'equity_etf');
+}
+
 /** A fund order's trading cost as a share of the order: the Taiwan commission, or the broker's fee plus FX. */
 export function tradeShareOf(fund: Pick<FundCost, 'market'>, input: Pick<ChoiceInput, 'orderTwd' | 'usdTwd' | 'broker' | 'settings'>): number | null {
   if (input.orderTwd <= 0) return null;
   if (fund.market === 'TW') return input.settings.tw ? twCommission(input.orderTwd, input.settings.tw) / input.orderTwd : null;
   if (!input.broker || input.usdTwd === null) return null;
-  const quote = quoteOrder(brokerSchedule(input.broker, fund.market, 'equity_etf'), input.orderTwd, input.usdTwd, spreadOf(input.broker, input.settings));
+  const quote = quoteOrder(contributionSchedule(input.broker, fund.market), input.orderTwd, input.usdTwd, spreadOf(input.broker, input.settings));
   return quote ? quote.share : null;
 }
 
@@ -591,7 +600,7 @@ export function fundChoices(funds: readonly FundCost[], input: ChoiceInput): Fun
     .sort((a, b) => (a.overPlan?.cost ?? Number.POSITIVE_INFINITY) - (b.overPlan?.cost ?? Number.POSITIVE_INFINITY) || a.fund.ticker.localeCompare(b.fund.ticker));
 }
 
-/** A broker over the plan: its trading cost on every order abroad and its custody fee, on the plan's foreign share. */
+/** A broker over the plan: its trading cost on every monthly contribution abroad (its DCA price where it has one) and its custody fee, on the plan's foreign share. */
 export interface BrokerChoice {
   broker: Broker;
   order: BrokerQuote | null;
@@ -621,7 +630,8 @@ export function brokerChoices(brokers: readonly Broker[], input: BrokerInput): B
       const etf = usSchedule(broker, 'equity_etf');
       const order = input.usdTwd === null ? null : quoteOrder(etf, input.orderTwd, input.usdTwd, spread);
       const dca = input.usdTwd === null ? null : quoteOrder(broker.usDca, input.orderTwd, input.usdTwd, spread);
-      const overPlan = order ? costOverPlan(slice, broker.custodyRate, order.share) : null;
+      const planned = dca ?? order;
+      const overPlan = planned ? costOverPlan(slice, broker.custodyRate, planned.share) : null;
       return { broker, order, dca, minimumUpToUsd: etf ? minimumUpTo(etf) : null, overPlan, promoEnded: broker.promoUntil !== null && broker.promoUntil < input.today };
     })
     .sort((a, b) => (a.overPlan?.cost ?? Number.POSITIVE_INFINITY) - (b.overPlan?.cost ?? Number.POSITIVE_INFINITY) || a.broker.nameEn.localeCompare(b.broker.nameEn));

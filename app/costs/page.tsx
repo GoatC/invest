@@ -474,8 +474,8 @@ function FundChoices({ choices, plan, saved, orderTwd, held, broker }: { choices
           </li>
           <li>
             <Bi
-              en={`An order = the fee and FX spread on a typical order of ${twd(orderTwd)} (the monthly contribution split over the classes one month buys), as a share of it${broker ? `, with the prices of ${broker.nameEn}` : ': choose your broker below to count it'}; London orders count once their prices are entered.`}
-              zh={`每筆下單 ＝ 一筆 ${twd(orderTwd)} 典型下單（每月投入平均分到一個月買進的類別數）的手續費加換匯價差占金額的比例${broker ? `，依${broker.nameZh}的費率` : '：請在下方選擇券商才會計入'}；英股在填入費率後才會計入。`}
+              en={`An order = the fee and FX spread on a typical order of ${twd(orderTwd)} (the monthly contribution split over the classes one month buys), as a share of it${broker ? `, with the monthly-investing (DCA) prices of ${broker.nameEn} where it has them` : ': choose your broker below to count it'}; London orders count once their prices are entered.`}
+              zh={`每筆下單 ＝ 一筆 ${twd(orderTwd)} 典型下單（每月投入平均分到一個月買進的類別數）的手續費加換匯價差占金額的比例${broker ? `，依${broker.nameZh}的定期定額費率（沒有時用 ETF 費率）` : '：請在下方選擇券商才會計入'}；英股在填入費率後才會計入。`}
             />
           </li>
           <li>

@@ -453,7 +453,7 @@ describe('fee and tax drag (step 11)', () => {
     assert.deepEqual(tax?.amt, { overseasFloorTwd: 1_000_000, exemptionTwd: 7_500_000, rate: 0.2 });
     assert.deepEqual(tax?.withholding, { US: 0.3, IE: 0.15, TW: 0 });
     assert.equal((await scalar<Date>(db, `select last_verified from public.config where key = 'tax'`)).toISOString().slice(0, 10), '2026-10-22');
-    assert.deepEqual(readFeeSettings(await value('fees')), { brokerId: null, tw: { rate: 0.001425, discount: 1, minTwd: 20 }, fxSpread: 0.001 });
+    assert.deepEqual(readFeeSettings(await value('fees')), { brokerId: 'sinopac', tw: { rate: 0.001425, discount: 1, minTwd: 20 }, fxSpread: 0.001 });
     assert.deepEqual(
       readBrokers(await value('brokers')).map((broker) => broker.id),
       ['cathay', 'sinopac', 'yuanta', 'masterlink'],
