@@ -902,6 +902,10 @@ describe('Monte Carlo (Phase 3, step 1)', () => {
     assert.deepEqual(settings.markYears, [10, 20, 30]);
     assert.equal(settings.targetTwd, null);
     assert.equal(settings.windfall.amountTwd, null);
+    // F5 paces an expected windfall by F3's CAPE pace, and accelerates on the global equity class.
+    assert.equal(settings.windfall.tranches, null);
+    assert.equal(settings.gaugeClass, 'us_global_equity');
+    assert.equal(await scalar(db, `select count(*) from public.asset_classes where id = 'us_global_equity'`), 1);
   });
 
   it('keeps one run per model and day, for the owner to read and the job to write', async () => {

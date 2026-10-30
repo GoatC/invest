@@ -62,6 +62,7 @@ export default async function MonteCarloPage({ searchParams }: { searchParams: P
         {run.ok ? <Toggle basis={basis} /> : <Problem run={run} />}
       </section>
       {run.ok && <Report run={run} basis={basis} names={names} lastRun={lastRun} />}
+      {run.ok && <WindfallCard run={run} basis={basis} names={names} capePercentile={data.cape?.percentile ?? null} />}
       {data.settings && (
         <section id="settings" className="card form">
           <h2>
@@ -161,7 +162,7 @@ function Report({ run, basis, names, lastRun }: { run: Ok; basis: Basis; names: 
     run.windfall.source === 'plan'
       ? { en: 'The windfall follows the saved F3 plan’s remaining tranches.', zh: '大額資金依已儲存 F3 計畫的剩餘各批。' }
       : run.windfall.source === 'expected'
-        ? { en: 'An expected windfall is included, paid in equal tranches.', zh: '已納入預期的大額資金，等額分批。' }
+        ? { en: `An expected windfall is included, in ${run.windfall.tranches?.count ?? '—'} tranches.`, zh: `已納入預期的大額資金，分 ${run.windfall.tranches?.count ?? '—'} 批。` }
         : { en: 'No windfall is included (no F3 plan, no expected windfall).', zh: '未納入大額資金（沒有 F3 計畫，也沒有預期大額資金）。' };
   return (
     <>
@@ -345,8 +346,12 @@ function Method() {
       zh: '投資組合每月維持目標權重；沒有假設的類別不計入，其餘重新加權，與計算機相同。資金使用計算機同一個迴圈：先計當月報酬，月底再加入當月投入。',
     },
     {
-      en: 'The windfall waits in cash and moves into the core classes only (never the satellite) as its tranches fall due, from the saved F3 plan, else the expected windfall below. Acceleration on a fall in ACWI is not simulated here; the stress test replays it.',
-      zh: '大額資金先以現金等待，每批到期時才轉入核心類別（不含衛星），依已儲存的 F3 計畫，否則依下方的預期大額資金。ACWI 下跌時的加速投入在此不模擬，壓力測試會回放。',
+      en: 'The windfall waits in cash and moves into the core classes only (never the satellite) as its tranches fall due, from the saved F3 plan, else the expected windfall below, paced as F3 would pace it today (6, 12 or 24 tranches by the CAPE percentile) unless you set a count. The last tranche takes whatever cash is left, interest included.',
+      zh: '大額資金先以現金等待，每批到期時才轉入核心類別（不含衛星），依已儲存的 F3 計畫，否則依下方的預期大額資金；除非自行設定批數，否則依 F3 今天的節奏（依 CAPE 百分位分 6、12 或 24 批）。最後一批投入剩下的全部現金（含利息）。',
+    },
+    {
+      en: 'F3’s acceleration runs on every path: the global equity class stands for ACWI, and its fall from the highest month end of the last twelve fires the tiers on the cash still waiting (15%: the next tranche now; 25%: half; 35%: all of it), each once per drawdown, as the rules engine does live. Month ends are smoother than days, so the tiers fire a little less often than they would live; the stress test replays them on real crashes.',
+      zh: 'F3 的加速投入在每條路徑上執行：以全球股票類別代表 ACWI，當它自近 12 個月底最高點回落時，對仍在等待的現金觸發級距（15%：下一批提前；25%：一半；35%：全部），同一波下跌每個級距只觸發一次，與規則引擎實際運作相同。月底資料比每日平滑，因此觸發次數會比實際略少；壓力測試會以真實崩盤回放。',
     },
     {
       en: 'The mean path is the plan with every month at its expected return, on the same engine. The median sits below it because losses weigh more than equal gains: the volatility drag. The numbers change when the month, the plan or an assumption changes, and are re-run monthly by the nightly job.',
@@ -367,6 +372,139 @@ function Method() {
           ))}
         </ul>
       </details>
+    </section>
+  );
+}
+
+function WindfallCard({ run, basis, names, capePercentile }: { run: Ok; basis: Basis; names: readonly AssetClass[]; capePercentile: number | null }) {
+  const { result, settings, plan, windfall } = run;
+  const real = basis === 'real';
+  if (!windfall.money) {
+    return (
+      <section className="card form" id="windfall">
+        <h2>
+          <Bi en="The windfall in it" zh="大額資金的影響" />
+        </h2>
+        <p className="banner warn">
+          <Bi
+            en="No windfall is in the simulation yet: set the expected windfall below (amount and month), or start a plan on the Windfall page once it arrives."
+            zh="模擬中尚未納入大額資金：請在下方設定預期大額資金（金額與入帳月份），或在入帳後到「大額資金」頁建立計畫。"
+          />{' '}
+          <Link href="#settings">
+            <Bi en="Set it" zh="前往設定" />
+          </Link>
+        </p>
+      </section>
+    );
+  }
+  const money = windfall.money;
+  const arrival = money.arrivals[0];
+  const tranchesLeft = money.deployments.length;
+  const pace: Bilingual | null = windfall.tranches
+    ? windfall.tranches.from === 'cape'
+      ? {
+          en: `${windfall.tranches.count} monthly tranches: F3’s pace at today’s CAPE percentile (${capePercentile === null ? '—' : capePercentile.toFixed(0)}).`,
+          zh: `分 ${windfall.tranches.count} 個月：F3 依今天 CAPE 百分位（${capePercentile === null ? '—' : capePercentile.toFixed(0)}）的節奏。`,
+        }
+      : windfall.tranches.from === 'setting'
+        ? { en: `${windfall.tranches.count} monthly tranches, as set below.`, zh: `分 ${windfall.tranches.count} 個月（下方設定）。` }
+        : { en: `${windfall.tranches.count} monthly tranches: F3’s middle pace, as no CAPE is loaded yet.`, zh: `分 ${windfall.tranches.count} 個月：尚未載入 CAPE，採 F3 的中間節奏。` }
+    : null;
+  const gauge = names.find((entry) => entry.id === windfall.gaugeClass);
+  const off: Bilingual | null =
+    windfall.accelerationOff === 'rule'
+      ? { en: 'Acceleration is off: rule WINDFALL_ACCELERATION is disabled, so tranches keep their schedule.', zh: '未加速：WINDFALL_ACCELERATION 規則已停用，各批依原排程投入。' }
+      : windfall.accelerationOff === 'gauge'
+        ? { en: 'Acceleration is off: no class is set to stand for ACWI.', zh: '未加速：尚未設定代表 ACWI 的類別。' }
+        : windfall.accelerationOff === 'gauge_class'
+          ? { en: 'Acceleration is off: the class standing for ACWI is not simulated (no assumption or no history).', zh: '未加速：代表 ACWI 的類別未納入模擬（沒有假設或沒有歷史）。' }
+          : null;
+  const rows = (result.marks.length > 0 ? result.marks : result.fan.slice(-1)).filter((point) => point.split);
+  return (
+    <section className="card form" id="windfall">
+      <h2>
+        <Bi en="The windfall in it" zh="大額資金的影響" />
+      </h2>
+      <p className="muted small">
+        {windfall.source === 'plan' ? (
+          <Bi
+            en={`The saved F3 plan: ${twd(money.waiting)} still waiting for ${tranchesLeft} tranches, ${twd(money.deployed)} of the windfall pool already in the core mix.`}
+            zh={`已儲存的 F3 計畫：${twd(money.waiting)} 仍在等待 ${tranchesLeft} 批投入，大額資金池已有 ${twd(money.deployed)} 投入核心配置。`}
+          />
+        ) : (
+          <Bi
+            en={`The expected windfall: ${twd(arrival?.amount)}, arriving at the end of ${run.settings.windfall.month ?? '—'} (month ${arrival?.month ?? '—'} of the plan), into the core classes only${money.deployed > 0 ? `; the ${twd(money.deployed)} in the windfall pool today stays in the core mix` : ''}.`}
+            zh={`預期大額資金：${twd(arrival?.amount)}，於 ${run.settings.windfall.month ?? '—'} 月底（計畫第 ${arrival?.month ?? '—'} 個月）入帳，只投入核心類別${money.deployed > 0 ? `；大額資金池目前的 ${twd(money.deployed)} 維持在核心配置` : ''}。`}
+          />
+        )}{' '}
+        {pace && <Bi {...pace} />}
+      </p>
+      {off ? (
+        <p className="banner warn">
+          <Bi {...off} />
+        </p>
+      ) : (
+        result.tiers && (
+          <div className="grid-cards">
+            {result.tiers.map((tier) => (
+              <Stat
+                key={tier.drawdown}
+                label={{ en: `Paths where the ${percent(tier.drawdown, 0)} tier fired`, zh: `觸發 ${percent(tier.drawdown, 0)} 級距的路徑` }}
+                value={percent(tier.share, 1)}
+                note={{ en: `${gauge?.nameEn ?? windfall.gaugeClass} standing for ACWI`, zh: `以${gauge?.nameZh ?? windfall.gaugeClass}代表 ACWI` }}
+              />
+            ))}
+          </div>
+        )
+      )}
+      <div className="table-wrap">
+        <table className="compact">
+          <thead>
+            <tr>
+              <th>
+                <Bi en="Year" zh="年" />
+              </th>
+              <th className="num">
+                <Bi en="Median, all" zh="中位數（合計）" />
+              </th>
+              <th className="num">
+                <Bi en="Regular pool" zh="一般投入資金池" />
+              </th>
+              <th className="num">
+                <Bi en="Windfall" zh="大額資金" />
+              </th>
+              <th className="num">
+                <Bi en="Reach goal" zh="達成目標" />
+              </th>
+              <th className="num">
+                <Bi en="Without the windfall" zh="不含大額資金" />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((point) => {
+              const f = real ? (1 + plan.inflation) ** point.year : 1;
+              const split = point.split as NonNullable<typeof point.split>;
+              return (
+                <tr key={point.year}>
+                  <td>{point.year}</td>
+                  <td className="num">{twd(point.median / f)}</td>
+                  <td className="num">{twd(split.regularMedian / f)}</td>
+                  <td className="num">{twd(split.windfallMedian / f)}</td>
+                  <td className="num">{point.reaching === null ? '—' : percent(point.reaching, 1)}</td>
+                  <td className="num">{split.reachingWithout === null ? '—' : percent(split.reachingWithout, 1)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">
+        <Bi
+          en={`Each part’s median is taken on its own, so the two need not add up to the median of the whole. ${settings.targetTwd === null ? 'Set a goal below to see what the windfall adds to its chance.' : 'The last two columns are the goal’s chance with and without the windfall.'} ${real ? 'In today’s money.' : 'Nominal TWD.'}`}
+          zh={`各部分的中位數分別計算，因此兩者相加不一定等於合計的中位數。${settings.targetTwd === null ? '在下方設定目標，即可看到大額資金對達成機率的影響。' : '最後兩欄為含與不含大額資金時達成目標的機率。'}${real ? '以今天幣值計。' : '名目台幣。'}`}
+        />
+      </p>
     </section>
   );
 }

@@ -1350,12 +1350,13 @@ export function parseMonteCarloForm(raw: RawForm, current: McSettings): Parsed<M
   const month = text(raw['windfallMonth']);
   if (amount !== null && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
   if (amount === null && month !== '' && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
-  const tranches = blank('windfallTranches') ? current.windfall.tranches : parseNumber(raw['windfallTranches']);
-  if (tranches === undefined || !Number.isInteger(tranches) || tranches < 1 || tranches > 120) errors.windfallTranches = MESSAGES.trancheCount;
+  // Blank follows F3's pace at today's CAPE percentile.
+  const tranches = blank('windfallTranches') ? null : parseNumber(raw['windfallTranches']);
+  if (tranches !== null && (tranches === undefined || !Number.isInteger(tranches) || tranches < 1 || tranches > 120)) errors.windfallTranches = MESSAGES.trancheCount;
   return finish(errors, () => ({
     ...current,
     targetTwd: target,
-    windfall: { amountTwd: amount, month: isMonth(month) ? month : null, tranches: tranches ?? current.windfall.tranches },
+    windfall: { amountTwd: amount, month: isMonth(month) ? month : null, tranches: tranches ?? null },
   }));
 }
 

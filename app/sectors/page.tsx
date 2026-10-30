@@ -31,6 +31,14 @@ const PERIOD: Record<Period, Bilingual> = {
   YTD: { en: 'Year to date', zh: '今年以來' },
   '1Y': { en: '1 year', zh: '1 年' },
 };
+/** The periods as the heatmap names them on a phone. */
+const PERIOD_SHORT: Record<Period, Bilingual> = {
+  '1W': { en: '1W', zh: '1 週' },
+  '1M': { en: '1M', zh: '1 月' },
+  '3M': { en: '3M', zh: '3 月' },
+  YTD: { en: 'YTD', zh: '今年' },
+  '1Y': { en: '1Y', zh: '1 年' },
+};
 const MARKET: Record<MarketFilter, Bilingual> = { all: { en: 'Both markets', zh: '兩個市場' }, US: { en: 'US', zh: '美國' }, TW: { en: 'Taiwan', zh: '台灣' } };
 const POOLS: Record<PoolFilter, Bilingual> = { all: { en: 'Both pools', zh: '兩個資金池' }, regular: POOL.regular, windfall: POOL.windfall };
 
@@ -125,10 +133,13 @@ export default async function SectorsPage({ searchParams }: { searchParams: Prom
 
 function Heatmap({ view, market, convention }: { view: SectorView; market: MarketFilter; convention: 'red_up' | 'green_up' }) {
   const rows = view.rows.filter((row) => market === 'all' || row.market === market);
-  const heat: HeatRow[] = rows.map((row) => ({ label: rowLabel(row), values: PERIODS.map((period) => row.returns[period]) }));
+  const heat: HeatRow[] = rows.map((row) => {
+    const sector = sectorText(row.sector);
+    return { label: rowLabel(row), lines: [sector.en, `${sector.zh} · ${row.market === 'US' ? 'US 美' : 'TW 台'}`], values: PERIODS.map((period) => row.returns[period]) };
+  });
   return (
     <>
-      <SectorHeatmap rows={heat} columns={PERIODS.map((period) => PERIOD[period])} convention={convention} label={{ en: 'Each sector’s return by period', zh: '各產業各期間報酬' }} />
+      <SectorHeatmap rows={heat} columns={PERIODS.map((period) => PERIOD[period])} shortColumns={PERIODS.map((period) => PERIOD_SHORT[period])} convention={convention} label={{ en: 'Each sector’s return by period', zh: '各產業各期間報酬' }} />
       <div className="table-wrap">
         <table className="compact" id="sector-returns">
           <thead>

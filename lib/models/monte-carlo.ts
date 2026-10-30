@@ -19,20 +19,30 @@
  *   the plain bootstrap), 10,000 paths. A seeded generator, so a page shows the same figures until
  *   the month or an input changes.
  * - Money: the regular pool runs F2's own loop (`simulate`, in projection.ts): the month's return,
- *   then the month's contribution at the month end. The windfall waits in cash (config windfall
- *   cash_return) and moves to the core mix as its tranches come due; the tranches are the saved
- *   F3 plan's, else an expected windfall's (config monte_carlo.windfall) paid in equal tranches.
- *   Acceleration is not simulated: the schedule stays the plan's. F10 replays the tiers.
+ *   then the month's contribution at the month end. The windfall (F3) waits in cash (config
+ *   windfall cash_return) and moves to the core mix as its tranches come due; the tranches are the
+ *   saved F3 plan's, else an expected windfall's (config monte_carlo.windfall) in equal tranches,
+ *   as many as F3's pace gives today's CAPE percentile unless a count is set. The last tranche
+ *   takes whatever cash is left, so the cash return's interest is invested too.
+ * - Acceleration (rule WINDFALL_ACCELERATION), on every path: the gauge class (config
+ *   monte_carlo.gauge_class, the global equity class standing for ACWI as in F10) is the path's own
+ *   market; its fall from the highest month end of the window (52 weeks as 12 month ends) fires
+ *   F3's tiers on the cash still waiting: 15% pulls the next tranche forward, 25% invests half,
+ *   35% all of it, each tier once per drawdown, as the rules engine does. Month ends are smoother
+ *   than days, so the tiers fire a little less often than they would live.
  * - Output: the band (low / median / high percentile) at each year end, in nominal TWD and in
  *   today's money, the figures at the marks (years 10, 20, 30), the share of paths reaching a
  *   target (in today's money) and the spread of the final year, with the mean path (every month
- *   at its expected return, the same engine) for comparison.
+ *   at its expected return, the same engine) for comparison. With a windfall, each year also
+ *   splits into the regular pool's and the windfall's median and gives the target's chance
+ *   without the windfall, and the run counts the paths on which each tier fired.
  *
  * Pure functions; the Monte Carlo page and the nightly job's monthly re-run use them.
  */
 import { isMonth, monthsBetween } from '../dates';
 import { monthlyReturn, monthlyStepUp, simulate, type Path, type Plan, type SavedPlan } from './projection';
 import type { Point } from './regression';
+import { tierToFire, trancheCount, type Acceleration, type Gauge, type Pace, type Tier } from './windfall';
 
 // ---------------------------------------------------------------------------
 // Settings (config monte_carlo)
@@ -42,7 +52,8 @@ export interface ExpectedWindfall {
   amountTwd: number | null;
   /** YYYY-MM the money arrives (at its end); null until set. */
   month: string | null;
-  tranches: number;
+  /** Monthly tranches; null follows F3's pace at today's CAPE percentile. */
+  tranches: number | null;
 }
 
 export interface McSettings {
@@ -59,6 +70,8 @@ export interface McSettings {
   /** The goal in today's money; null until set. */
   targetTwd: number | null;
   windfall: ExpectedWindfall;
+  /** The asset class whose simulated returns stand for ACWI, F3's acceleration gauge; null turns acceleration off. */
+  gaugeClass: string | null;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -88,8 +101,9 @@ export function readMcSettings(value: unknown): McSettings | undefined {
   const windfall = record(row['windfall']);
   const amount = windfall['amount_twd'];
   const month = windfall['month'];
-  const tranches = whole(windfall['tranches'], 1, 120);
+  const tranches = windfall['tranches'] === null ? null : whole(windfall['tranches'], 1, 120);
   if (tranches === undefined) return undefined;
+  const gauge = row['gauge_class'];
   return {
     paths,
     lookbackYears,
@@ -104,6 +118,7 @@ export function readMcSettings(value: unknown): McSettings | undefined {
       month: typeof month === 'string' && isMonth(month) ? month : null,
       tranches,
     },
+    gaugeClass: typeof gauge === 'string' && gauge.trim() !== '' ? gauge : null,
   };
 }
 
@@ -119,6 +134,7 @@ export function mcSettingsValue(settings: McSettings): Record<string, unknown> {
     mark_years: settings.markYears,
     target_twd: settings.targetTwd,
     windfall: { amount_twd: settings.windfall.amountTwd, month: settings.windfall.month, tranches: settings.windfall.tranches },
+    gauge_class: settings.gaugeClass,
   };
 }
 
@@ -197,6 +213,8 @@ export interface Calibration {
   regular: Float64Array;
   /** The core mix's, for the deployed windfall. */
   core: Float64Array;
+  /** Each simulated class's own calibrated return in each historical month, by class id. */
+  byClass: Record<string, Float64Array>;
   /** The mix's expected monthly return: the weighted means. */
   regularMean: number;
   coreMean: number;
@@ -274,6 +292,10 @@ export function calibrate(histories: readonly ClassHistory[], assumptions: Reado
   const coreMean = coreWeight > 0 ? classes.filter((entry) => entry.core).reduce((sum, entry) => sum + (entry.weight / coreWeight) * entry.mean, 0) : regularMean;
   // With no core class simulated the windfall has nowhere to go but the whole mix.
   if (coreWeight === 0) core.set(regular);
+  const byClass: Record<string, Float64Array> = {};
+  classes.forEach((entry, i) => {
+    byClass[entry.id] = Float64Array.from(columns[i] as number[]);
+  });
   return {
     from: keep[0] as string,
     to: keep[keep.length - 1] as string,
@@ -281,6 +303,7 @@ export function calibrate(histories: readonly ClassHistory[], assumptions: Reado
     classes,
     regular,
     core,
+    byClass,
     regularMean,
     coreMean,
     left,
@@ -331,41 +354,98 @@ export function windfallFromPlan(
   };
 }
 
-/** A windfall still to come: it arrives at the end of `month` and is deployed in equal tranches from then. */
-export function expectedWindfall(expected: ExpectedWindfall, start: string, poolValue: number, cashReturn: number): WindfallMoney | null {
+/** A windfall still to come: it arrives at the end of `month` and is deployed in `tranches` equal tranches from then. */
+export function expectedWindfall(expected: ExpectedWindfall, start: string, poolValue: number, cashReturn: number, tranches: number): WindfallMoney | null {
   if (expected.amountTwd === null || expected.month === null) return null;
   const first = monthNumber(start, expected.month);
-  const each = expected.amountTwd / expected.tranches;
+  const each = expected.amountTwd / tranches;
   return {
     waiting: 0,
     deployed: poolValue,
     arrivals: [{ month: first, amount: expected.amountTwd }],
-    deployments: Array.from({ length: expected.tranches }, (_, i) => ({ month: first + i, amount: each })),
+    deployments: Array.from({ length: tranches }, (_, i) => ({ month: first + i, amount: each })),
     cashReturn,
   };
 }
 
-/** What the windfall is worth at each month end given the core mix's returns; index 0 is the start. */
-function windfallPath(money: WindfallMoney, months: number, core: (month: number) => number): Float64Array {
-  const out = new Float64Array(months + 1);
+/** F3's acceleration as one path meets it: its gauge's monthly return, the tiers, and the months the high is looked for over. */
+export interface PathAcceleration {
+  gauge: (month: number) => number;
+  tiers: readonly Tier[];
+  windowMonths: number;
+}
+
+/** 52 weeks as month ends: 12. */
+export function windowMonths(weeks: number): number {
+  return Math.max(1, Math.round((weeks * 12) / 52));
+}
+
+/** One path's windfall: its value at each month end (index 0 is the start) and the tiers that fired on it. */
+export interface WindfallTrace {
+  values: Float64Array;
+  /** Each tier's drawdown, once for every time it fired. */
+  fired: number[];
+}
+
+/**
+ * What the windfall is worth at each month end given the core mix's returns. Each month the cash
+ * earns the cash return and the deployed money the core mix's; then arrivals land, the tranches
+ * due move over (the last takes all the cash left), and, with `acceleration`, a fall of the gauge
+ * from its high of the window fires the deepest tier not yet fired in that drawdown.
+ */
+export function windfallPath(money: WindfallMoney, months: number, core: (month: number) => number, acceleration: PathAcceleration | null = null): WindfallTrace {
+  const values = new Float64Array(months + 1);
   let waiting = money.waiting;
   let deployed = money.deployed;
-  out[0] = waiting + deployed;
+  values[0] = waiting + deployed;
   const cash = monthlyReturn(money.cashReturn);
   const arrive = new Map<number, number>();
-  const deploy = new Map<number, number>();
   for (const { month, amount } of money.arrivals) arrive.set(month, (arrive.get(month) ?? 0) + amount);
-  for (const { month, amount } of money.deployments) deploy.set(month, (deploy.get(month) ?? 0) + amount);
+  const pending = [...money.deployments].sort((a, b) => a.month - b.month).map((tranche) => ({ ...tranche }));
+  const level = new Float64Array(months + 1);
+  level[0] = 1;
+  const firedByPeak = new Map<number, number[]>();
+  const fired: number[] = [];
+  const invest = (amount: number) => {
+    const moved = Math.min(Math.max(amount, 0), waiting);
+    waiting -= moved;
+    deployed += moved;
+  };
   for (let month = 1; month <= months; month++) {
     waiting *= 1 + cash;
     deployed *= 1 + core(month);
     waiting += arrive.get(month) ?? 0;
-    const moved = Math.min(deploy.get(month) ?? 0, waiting);
-    waiting -= moved;
-    deployed += moved;
-    out[month] = waiting + deployed;
+    while (pending.length > 0 && (pending[0] as { month: number }).month <= month) {
+      const tranche = pending.shift() as { amount: number };
+      invest(pending.length === 0 ? waiting : tranche.amount);
+    }
+    if (acceleration) {
+      level[month] = (level[month - 1] as number) * (1 + acceleration.gauge(month));
+      // The earliest of equal highs names the drawdown, as the live gauge does.
+      let peakAt = Math.max(0, month - acceleration.windowMonths + 1);
+      for (let k = peakAt + 1; k <= month; k++) if ((level[k] as number) > (level[peakAt] as number)) peakAt = k;
+      const drawdown = 1 - (level[month] as number) / (level[peakAt] as number);
+      if (waiting > 1e-6 && pending.length > 0) {
+        const tier = tierToFire(acceleration.tiers, drawdown, firedByPeak.get(peakAt) ?? []);
+        if (tier) {
+          firedByPeak.set(peakAt, [...(firedByPeak.get(peakAt) ?? []), tier.drawdown]);
+          fired.push(tier.drawdown);
+          if (tier.deploy.kind === 'next_tranche') {
+            const next = pending.shift() as { amount: number };
+            invest(pending.length === 0 ? waiting : next.amount);
+          } else {
+            invest(waiting * tier.deploy.share);
+          }
+          // The tranches left share what cash is left, as the live plan re-spreads it.
+          const left = pending.reduce((sum, tranche) => sum + tranche.amount, 0);
+          if (waiting <= 1e-6) pending.length = 0;
+          else if (left > 0) for (const tranche of pending) tranche.amount *= waiting / left;
+        }
+      }
+    }
+    values[month] = waiting + deployed;
   }
-  return out;
+  return { values, fired };
 }
 
 /** Money put in by month `month`: the windfall's arrivals count when they arrive. */
@@ -383,6 +463,8 @@ export interface McInput {
   start: string;
   calibration: Calibration;
   windfall: WindfallMoney | null;
+  /** F3's tiers and the class whose returns stand for ACWI; null leaves the windfall to its schedule. */
+  acceleration?: { classId: string; tiers: readonly Tier[]; windowMonths: number } | null;
   settings: Pick<McSettings, 'paths' | 'blockMonths' | 'band' | 'markYears' | 'targetTwd'>;
   seed: number;
 }
@@ -403,6 +485,8 @@ export interface YearFigures {
   putIn: number;
   /** Share of paths whose value in today's money is at or above the target; null without one. */
   reaching: number | null;
+  /** With a windfall: the regular pool's and the windfall's own medians (nominal), and the target's chance without the windfall. */
+  split: { regularMedian: number; windfallMedian: number; reachingWithout: number | null } | null;
 }
 
 export interface McResult {
@@ -418,6 +502,8 @@ export interface McResult {
   columns: ArrayLike<number>[];
   /** Where the final value falls: the share of paths below the putIn. */
   belowPutIn: number;
+  /** With acceleration: each tier's share of paths on which it fired at least once, shallowest first. */
+  tiers: Array<{ drawdown: number; share: number }> | null;
 }
 
 /** Share of the ascending list that is at or above a value. */
@@ -436,15 +522,6 @@ function pathOf(plan: Plan): Path {
   return { pv: plan.pv, pmt: plan.pmt, g: monthlyStepUp(plan.stepUp), months: Math.round(plan.years * 12) };
 }
 
-/** One path's total at each year end: the regular pool on F2's loop plus the windfall. */
-function yearEnds(path: Path, regular: (month: number) => number, windfall: WindfallMoney | null, core: (month: number) => number, out: Float64Array): void {
-  const points = simulate(path, regular);
-  const extra = windfall ? windfallPath(windfall, path.months, core) : null;
-  for (let year = 0; year * 12 <= path.months; year++) {
-    out[year] = (points[year * 12] as { value: number }).value + (extra ? (extra[year * 12] as number) : 0);
-  }
-}
-
 export function monteCarlo(input: McInput): McResult {
   const { plan, calibration, windfall, settings } = input;
   const path = pathOf(plan);
@@ -452,23 +529,48 @@ export function monteCarlo(input: McInput): McResult {
   const rows = calibration.months;
   const block = Math.min(settings.blockMonths, rows);
   const random = seededRandom(input.seed);
+  const gaugeRows = input.acceleration ? calibration.byClass[input.acceleration.classId] : undefined;
+  const accelerate = input.acceleration && gaugeRows ? input.acceleration : null;
 
-  // columns[y] holds every path's value at year end y.
-  const columns = Array.from({ length: years + 1 }, () => new Float64Array(settings.paths));
+  // columns[y] holds every path's value at year end y; with a windfall, its two parts too.
+  const column = () => Array.from({ length: years + 1 }, () => new Float64Array(settings.paths));
+  const columns = column();
+  const regularColumns = windfall ? column() : null;
+  const windfallColumns = windfall ? column() : null;
+  const firedPaths = new Map<number, number>();
   const drawn = new Int32Array(path.months);
-  const one = new Float64Array(years + 1);
   for (let p = 0; p < settings.paths; p++) {
     for (let month = 0; month < path.months; ) {
       const first = Math.floor(random() * (rows - block + 1));
       for (let j = 0; j < block && month < path.months; j++) drawn[month++] = first + j;
     }
-    yearEnds(path, (month) => calibration.regular[drawn[month - 1] as number] as number, windfall, (month) => calibration.core[drawn[month - 1] as number] as number, one);
-    for (let y = 0; y <= years; y++) (columns[y] as Float64Array)[p] = one[y] as number;
+    const row = (month: number) => drawn[month - 1] as number;
+    const points = simulate(path, (month) => calibration.regular[row(month)] as number);
+    const trace = windfall
+      ? windfallPath(
+          windfall,
+          path.months,
+          (month) => calibration.core[row(month)] as number,
+          accelerate && gaugeRows ? { gauge: (month) => gaugeRows[row(month)] as number, tiers: accelerate.tiers, windowMonths: accelerate.windowMonths } : null,
+        )
+      : null;
+    for (let y = 0; y <= years; y++) {
+      const regular = (points[y * 12] as { value: number }).value;
+      const extra = trace ? (trace.values[y * 12] as number) : 0;
+      (columns[y] as Float64Array)[p] = regular + extra;
+      if (regularColumns && windfallColumns) {
+        (regularColumns[y] as Float64Array)[p] = regular;
+        (windfallColumns[y] as Float64Array)[p] = extra;
+      }
+    }
+    if (trace) for (const tier of new Set(trace.fired)) firedPaths.set(tier, (firedPaths.get(tier) ?? 0) + 1);
   }
 
   // The mean path: the same engine with every month at the mix's expected return.
-  const mean = new Float64Array(years + 1);
-  yearEnds(path, () => calibration.regularMean, windfall, () => calibration.coreMean, mean);
+  const meanPoints = simulate(path, () => calibration.regularMean);
+  const meanWindfall = windfall
+    ? windfallPath(windfall, path.months, () => calibration.coreMean, accelerate && gaugeRows ? { gauge: () => calibration.classes.find((entry) => entry.id === accelerate.classId)?.mean ?? 0, tiers: accelerate.tiers, windowMonths: accelerate.windowMonths } : null)
+    : null;
 
   const inflation = plan.inflation;
   const putInAt = (year: number) => {
@@ -485,12 +587,22 @@ export function monteCarlo(input: McInput): McResult {
   const fan: YearFigures[] = [];
   let finals: ArrayLike<number> = new Float64Array(0);
   for (let year = 0; year <= years; year++) {
-    const column = columns[year] as Float64Array;
-    column.sort();
+    const values = columns[year] as Float64Array;
+    values.sort();
     const factor = (1 + inflation) ** year;
-    const low = quantile(column, settings.band[0]);
-    const median = quantile(column, 0.5);
-    const high = quantile(column, settings.band[1]);
+    const low = quantile(values, settings.band[0]);
+    const median = quantile(values, 0.5);
+    const high = quantile(values, settings.band[1]);
+    let split: YearFigures['split'] = null;
+    if (regularColumns && windfallColumns) {
+      const regular = (regularColumns[year] as Float64Array).sort();
+      const extra = (windfallColumns[year] as Float64Array).sort();
+      split = {
+        regularMedian: quantile(regular, 0.5),
+        windfallMedian: quantile(extra, 0.5),
+        reachingWithout: settings.targetTwd === null ? null : shareAtLeast(regular, settings.targetTwd * factor),
+      };
+    }
     fan.push({
       year,
       low,
@@ -499,12 +611,13 @@ export function monteCarlo(input: McInput): McResult {
       realLow: low / factor,
       realMedian: median / factor,
       realHigh: high / factor,
-      expected: mean[year] as number,
+      expected: (meanPoints[year * 12] as { value: number }).value + (meanWindfall ? (meanWindfall.values[year * 12] as number) : 0),
       putIn: putInAt(year),
       // Real value ≥ target ⇔ nominal ≥ target × factor.
-      reaching: settings.targetTwd === null ? null : shareAtLeast(column, settings.targetTwd * factor),
+      reaching: settings.targetTwd === null ? null : shareAtLeast(values, settings.targetTwd * factor),
+      split,
     });
-    if (year === years) finals = column;
+    if (year === years) finals = values;
   }
   const last = fan[fan.length - 1] as YearFigures;
   return {
@@ -515,6 +628,7 @@ export function monteCarlo(input: McInput): McResult {
     finals,
     columns,
     belowPutIn: 1 - shareAtLeast(finals, last.putIn),
+    tiers: windfall && accelerate ? accelerate.tiers.map((tier) => ({ drawdown: tier.drawdown, share: (firedPaths.get(tier.drawdown) ?? 0) / settings.paths })) : null,
   };
 }
 
@@ -537,6 +651,23 @@ export interface McData {
   windfallValue: number;
   /** config windfall cash_return. */
   cashReturn: number;
+  /** config windfall_pace and CAPE's percentile now (F3), for an expected windfall's tranches; null when missing. */
+  pace: Pace | null;
+  cape: Gauge | null;
+  /** Rule WINDFALL_ACCELERATION's tiers when the rule is on; null when it is off or malformed. */
+  acceleration: Acceleration | null;
+}
+
+/** How the run treats the windfall, for the page to say. */
+export interface WindfallSetup {
+  source: 'plan' | 'expected' | null;
+  money: WindfallMoney | null;
+  /** An expected windfall's tranches, and where the count came from: the setting, F3's pace at today's CAPE percentile, or the pace's middle count without CAPE. */
+  tranches: { count: number; from: 'setting' | 'cape' | 'pace' } | null;
+  /** Why acceleration is off: the rule is off, no gauge class is set, or the gauge class is not simulated (no assumption or history). Null when it is on. */
+  accelerationOff: 'rule' | 'gauge' | 'gauge_class' | null;
+  /** The gauge class when acceleration is on. */
+  gaugeClass: string | null;
 }
 
 export type McRun =
@@ -546,8 +677,8 @@ export type McRun =
       calibration: Calibration;
       settings: McSettings;
       plan: SavedPlan;
-      /** Where the windfall in the run came from: the saved F3 plan, the expected one, or none. */
-      windfall: { source: 'plan' | 'expected' | null; money: WindfallMoney | null };
+      /** Where the windfall in the run came from (the saved F3 plan, the expected one, or none) and how it is paced. */
+      windfall: WindfallSetup;
     }
   | { ok: false; problem: 'settings' | 'plan' | 'assumptions' | 'classes' | { history: number; need: number } };
 
@@ -563,10 +694,29 @@ export function runMonteCarlo(data: McData, today: string): McRun {
   const calibration = calibrate(histories, data.assumptions, settings, settings.lookbackYears * 12);
   if ('problem' in calibration) return { ok: false, problem: calibration.problem === 'classes' ? 'classes' : { history: calibration.months, need: calibration.need } };
   const planned = data.windfallPlan ? windfallFromPlan(data.windfallPlan, data.windfallValue, plan.start, data.cashReturn) : null;
-  const expected = planned ? null : expectedWindfall(settings.windfall, plan.start, data.windfallValue, data.cashReturn);
+  // An expected windfall is paced as F3 would pace it today: CAPE's percentile sets the count.
+  const tranches: WindfallSetup['tranches'] =
+    settings.windfall.tranches !== null
+      ? { count: settings.windfall.tranches, from: 'setting' }
+      : data.pace && data.cape
+        ? { count: trancheCount(data.cape.percentile, data.pace), from: 'cape' }
+        : { count: data.pace?.tranches[1] ?? 12, from: 'pace' };
+  const expected = planned ? null : expectedWindfall(settings.windfall, plan.start, data.windfallValue, data.cashReturn, tranches.count);
   const money = planned ?? expected;
-  const result = monteCarlo({ plan, start: plan.start, calibration, windfall: money, settings, seed: monthSeed(today.slice(0, 7)) });
-  return { ok: true, result, calibration, settings, plan, windfall: { source: planned ? 'plan' : expected ? 'expected' : null, money } };
+  const accelerationOff: WindfallSetup['accelerationOff'] = !data.acceleration ? 'rule' : !settings.gaugeClass ? 'gauge' : !calibration.byClass[settings.gaugeClass] ? 'gauge_class' : null;
+  const acceleration =
+    accelerationOff === null && data.acceleration && settings.gaugeClass
+      ? { classId: settings.gaugeClass, tiers: data.acceleration.tiers, windowMonths: windowMonths(data.acceleration.windowWeeks) }
+      : null;
+  const result = monteCarlo({ plan, start: plan.start, calibration, windfall: money, acceleration, settings, seed: monthSeed(today.slice(0, 7)) });
+  return {
+    ok: true,
+    result,
+    calibration,
+    settings,
+    plan,
+    windfall: { source: planned ? 'plan' : expected ? 'expected' : null, money, tranches: expected ? tranches : null, accelerationOff, gaugeClass: acceleration?.classId ?? null },
+  };
 }
 
 /** What the monthly re-run saves (simulation_runs.summary): the inputs and the marks' figures. */
@@ -578,6 +728,8 @@ export function runSummary(run: Extract<McRun, { ok: true }>, today: string): Re
     plan: { start: plan.start, years: plan.years, pv: plan.pv, pmt: plan.pmt, step_up: plan.stepUp, inflation: plan.inflation },
     history: { from: calibration.from, to: calibration.to, months: calibration.months, block_months: settings.blockMonths, scale_to_cma: settings.scaleToCma },
     windfall: run.windfall.source,
+    windfall_tranches: run.windfall.tranches?.count ?? null,
+    accelerated: result.tiers?.map((tier) => ({ drawdown: tier.drawdown, share: tier.share })) ?? null,
     target_twd: settings.targetTwd,
     marks: result.marks.map((mark) => ({
       year: mark.year,
@@ -586,6 +738,8 @@ export function runSummary(run: Extract<McRun, { ok: true }>, today: string): Re
       high: Math.round(mark.high),
       real_median: Math.round(mark.realMedian),
       reaching: mark.reaching,
+      windfall_median: mark.split ? Math.round(mark.split.windfallMedian) : null,
+      reaching_without_windfall: mark.split?.reachingWithout ?? null,
     })),
   };
 }

@@ -10,12 +10,18 @@ import {
   valueBins,
   quantile,
   readMcSettings,
+  runMonteCarlo,
   seededRandom,
   windfallFromPlan,
+  windfallPath,
+  windowMonths,
   type Calibration,
   type ClassHistory,
+  type McData,
   type McInput,
+  type WindfallMoney,
 } from './monte-carlo';
+import type { Tier } from './windfall';
 import { futureValue, monthlyReturn, type Plan } from './projection';
 
 function near(actual: number | undefined, expected: number, tolerance = 1e-9): void {
@@ -46,6 +52,7 @@ function flat(rows: number, perMonth: number): Calibration {
     classes: [],
     regular: new Float64Array(rows).fill(perMonth),
     core: new Float64Array(rows).fill(perMonth),
+    byClass: {},
     regularMean: perMonth,
     coreMean: perMonth,
     left: [],
@@ -230,7 +237,7 @@ describe('the windfall', () => {
   });
 
   it('keeps all the money when nothing earns: an expected windfall appears at its month, then the total holds', () => {
-    const money = expectedWindfall({ amountTwd: 1_200_000, month: '2027-01', tranches: 12 }, '2026-11', 0, 0);
+    const money = expectedWindfall({ amountTwd: 1_200_000, month: '2027-01', tranches: 12 }, '2026-11', 0, 0, 12);
     assert.ok(money);
     assert.deepEqual(money.arrivals, [{ month: 3, amount: 1_200_000 }]);
     assert.equal(money.deployments.length, 12);
@@ -242,8 +249,148 @@ describe('the windfall', () => {
   });
 
   it('is nothing until an amount and a month are set', () => {
-    assert.equal(expectedWindfall({ amountTwd: null, month: '2027-01', tranches: 12 }, '2026-11', 0, 0), null);
-    assert.equal(expectedWindfall({ amountTwd: 1, month: null, tranches: 12 }, '2026-11', 0, 0), null);
+    assert.equal(expectedWindfall({ amountTwd: null, month: '2027-01', tranches: 12 }, '2026-11', 0, 0, 12), null);
+    assert.equal(expectedWindfall({ amountTwd: 1, month: null, tranches: 12 }, '2026-11', 0, 0, 12), null);
+  });
+});
+
+/** F3's tiers as seeded (rule WINDFALL_ACCELERATION). */
+const TIERS: Tier[] = [
+  { drawdown: 0.15, deploy: { kind: 'next_tranche' } },
+  { drawdown: 0.25, deploy: { kind: 'share', share: 0.5 } },
+  { drawdown: 0.35, deploy: { kind: 'share', share: 1 } },
+];
+
+/** NT$1,200,000 waiting, twelve tranches of NT$100,000 from month 1, cash and the core mix earning nothing. */
+function twelveTranches(): WindfallMoney {
+  return { waiting: 1_200_000, deployed: 0, arrivals: [], deployments: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, amount: 100_000 })), cashReturn: 0 };
+}
+
+/** A gauge whose level is `levels[m]` at month end m (level 1 at the start), as monthly returns. */
+function gaugeOf(levels: readonly number[]): (month: number) => number {
+  return (month) => (levels[month] ?? levels[levels.length - 1] ?? 1) / (levels[month - 1] ?? levels[levels.length - 1] ?? 1) - 1;
+}
+
+describe('the windfall’s acceleration (F3 on every path)', () => {
+  it('follows the F3 acceptance case: ACWI −16% pulls the next tranche forward, then −26% invests half the rest, each tier once', () => {
+    // Levels: 1, 1, 0.84 (−16%), 0.74 (−26%), 0.74, then the core mix doubles in month 5 to read what was invested.
+    const levels = [1, 1, 0.84, 0.74, 0.74, 0.74];
+    const trace = windfallPath(twelveTranches(), 5, (month) => (month === 5 ? 1 : 0), { gauge: gaugeOf(levels), tiers: TIERS, windowMonths: 12 });
+    assert.deepEqual(trace.fired, [0.15, 0.25]);
+    // Month 1: 100,000 in. Month 2: its 100,000 and month 3's pulled forward → 300,000 in, 900,000 waiting.
+    // Month 3: half of 900,000 → 750,000 in; the nine tranches left share 450,000: 50,000 each.
+    // Month 4: 50,000 → 800,000 in, 400,000 waiting. Month 5: 800,000 doubles, then 50,000 more.
+    near(trace.values[4], 1_200_000, 1e-6);
+    near(trace.values[5], 350_000 + 1_600_000 + 50_000, 1e-6);
+  });
+
+  it('invests everything at a 35% fall, counting the shallower tiers as fired, and nothing more after', () => {
+    const trace = windfallPath(twelveTranches(), 6, (month) => (month === 6 ? 1 : 0), { gauge: gaugeOf([1, 1, 0.6, 0.6, 0.6, 0.6, 0.6]), tiers: TIERS, windowMonths: 12 });
+    assert.deepEqual(trace.fired, [0.35]);
+    // All 1,200,000 is in by month 2, so the month-6 doubling doubles all of it.
+    near(trace.values[6], 2_400_000, 1e-6);
+  });
+
+  it('fires again in a new drawdown, once the high of the window is a new one', () => {
+    // −16%, back above the old high (a new peak), then −16% again.
+    const trace = windfallPath(twelveTranches(), 6, () => 0, { gauge: gaugeOf([1, 1, 0.84, 1.1, 1.1, 0.92, 0.92]), tiers: TIERS, windowMonths: 12 });
+    assert.deepEqual(trace.fired, [0.15, 0.15]);
+  });
+
+  it('keeps to the schedule without a gauge, the last tranche taking the cash’s interest', () => {
+    const money = { ...twelveTranches(), cashReturn: 0.12 };
+    const trace = windfallPath(money, 14, () => 0);
+    assert.deepEqual(trace.fired, []);
+    // Nothing waits after month 12, so the cash return stops adding: what went in plus its interest on the way.
+    const values = trace.values;
+    near(values[14], values[12] as number, 1e-6);
+    assert.ok((values[12] as number) > (values[11] as number) && (values[12] as number) > 1_200_000);
+  });
+
+  it('reads 52 weeks as twelve month ends', () => {
+    assert.equal(windowMonths(52), 12);
+    assert.equal(windowMonths(26), 6);
+  });
+});
+
+describe('the windfall in the run', () => {
+  const plan: Plan = { pv: 0, pmt: 0, stepUp: 0, expectedReturn: 0, inflation: 0, years: 2 };
+
+  it('splits each year into the regular pool and the windfall, and gives the goal’s chance without it', () => {
+    const calibration = { ...flat(36, 0.01), byClass: { us_global_equity: new Float64Array(36).fill(0.01) } };
+    const money = expectedWindfall({ amountTwd: 1_000_000, month: '2026-11', tranches: null }, '2026-11', 0, 0, 1) as WindfallMoney;
+    const result = run({ plan: { ...plan, pv: 500_000 }, calibration, windfall: money, settings: { ...SETTINGS, markYears: [1, 2], targetTwd: 1_000_000 } });
+    const year1 = result.fan[1];
+    assert.ok(year1?.split);
+    near(year1.split.regularMedian, 500_000 * 1.01 ** 12, 1e-6);
+    near(year1.split.windfallMedian, 1_000_000 * 1.01 ** 11, 1e-6);
+    near(year1.median, year1.split.regularMedian + year1.split.windfallMedian, 1e-6);
+    assert.equal(year1.reaching, 1);
+    assert.equal(year1.split.reachingWithout, 0);
+    assert.equal(run({ calibration }).fan[1]?.split, null);
+  });
+
+  it('counts the paths on which each tier fired, from the gauge class’s own months', () => {
+    // Half the history's months fall 20%: a path drawing one fires the 15% tier.
+    const gauge = Float64Array.from({ length: 36 }, (_, i) => (i % 2 === 0 ? -0.2 : 0.25));
+    const calibration = { ...flat(36, 0), byClass: { us_global_equity: gauge } };
+    const result = run({ plan, calibration, windfall: twelveTranches(), acceleration: { classId: 'us_global_equity', tiers: TIERS, windowMonths: 12 }, settings: { ...SETTINGS, markYears: [1] } });
+    assert.ok(result.tiers);
+    assert.equal(result.tiers.length, 3);
+    assert.ok((result.tiers[0]?.share ?? 0) > 0.9, `15% tier on ${result.tiers[0]?.share}`);
+    assert.equal(run({ plan, calibration, windfall: twelveTranches(), settings: { ...SETTINGS, markYears: [1] } }).tiers, null);
+  });
+});
+
+describe('runMonteCarlo with an expected windfall (F3 pace and acceleration)', () => {
+  const settings = readMcSettings({
+    paths: 200,
+    lookback_years: 5,
+    block_months: 3,
+    min_months: 36,
+    scale_to_cma: true,
+    band: [0.1, 0.9],
+    mark_years: [10],
+    target_twd: null,
+    windfall: { amount_twd: 5_500_000, month: '2027-06', tranches: null },
+    gauge_class: 'us_global_equity',
+  });
+  const data = (overrides: Partial<McData> = {}): McData => ({
+    settings,
+    plan: { start: '2026-11', pv: 0, pmt: 10_000, stepUp: 0, expectedReturn: 0.06, inflation: 0.02, years: 10 },
+    classes: [{ id: 'us_global_equity', targetWeight: 1, sleeve: 'core', benchmarkTicker: 'VT' }],
+    assumptions: { us_global_equity: { expectedReturn: 0.06, volatility: 0.15 } },
+    history: new Map([['VT', history('us_global_equity', 1, true, [0.03, -0.02, 0.01, -0.05, 0.04]).returns]]),
+    windfallPlan: null,
+    windfallValue: 0,
+    cashReturn: 0.015,
+    pace: { cutoffs: [30, 70], tranches: [6, 12, 24] },
+    cape: { month: '2026-09', cape: 38, percentile: 75, months: 1749 },
+    acceleration: { windowWeeks: 52, tiers: TIERS },
+    ...overrides,
+  });
+
+  it('paces NT$5.5M at CAPE percentile 75 in 24 tranches of ≈ NT$229,000 (F3 acceptance), with acceleration on', () => {
+    const run = runMonteCarlo(data(), '2026-10-30');
+    assert.ok(run.ok);
+    assert.deepEqual(run.windfall.tranches, { count: 24, from: 'cape' });
+    assert.equal(run.windfall.money?.deployments.length, 24);
+    near(run.windfall.money?.deployments[0]?.amount, 5_500_000 / 24);
+    assert.equal(Math.round((run.windfall.money?.deployments[0]?.amount ?? 0) / 1000), 229);
+    assert.equal(run.windfall.accelerationOff, null);
+    assert.equal(run.windfall.gaugeClass, 'us_global_equity');
+    assert.ok(run.result.tiers);
+  });
+
+  it('takes a set tranche count over the pace, the pace’s middle count without CAPE, and says why acceleration is off', () => {
+    const set = runMonteCarlo(data({ settings: settings && { ...settings, windfall: { ...settings.windfall, tranches: 6 } } }), '2026-10-30');
+    assert.ok(set.ok && set.windfall.tranches?.from === 'setting' && set.windfall.tranches.count === 6);
+    const noCape = runMonteCarlo(data({ cape: null }), '2026-10-30');
+    assert.ok(noCape.ok && noCape.windfall.tranches?.from === 'pace' && noCape.windfall.tranches.count === 12);
+    const ruleOff = runMonteCarlo(data({ acceleration: null }), '2026-10-30');
+    assert.ok(ruleOff.ok && ruleOff.windfall.accelerationOff === 'rule' && ruleOff.result.tiers === null);
+    const noGauge = runMonteCarlo(data({ settings: settings && { ...settings, gaugeClass: 'tw_market_cap' } }), '2026-10-30');
+    assert.ok(noGauge.ok && noGauge.windfall.accelerationOff === 'gauge_class');
   });
 });
 
@@ -258,6 +405,7 @@ describe('settings', () => {
     mark_years: [30, 10, 20],
     target_twd: 20_000_000,
     windfall: { amount_twd: null, month: null, tranches: 12 },
+    gauge_class: 'us_global_equity',
   };
 
   it('reads the config row, sorting the marks, and writes it back', () => {
@@ -276,6 +424,12 @@ describe('settings', () => {
     assert.equal(readMcSettings({ ...valid, mark_years: [] }), undefined);
     assert.equal(readMcSettings({ ...valid, scale_to_cma: 'yes' }), undefined);
     assert.equal(readMcSettings({ ...valid, windfall: { tranches: 0 } }), undefined);
+  });
+
+  it('reads blank tranches as F3\u2019s pace and a missing gauge class as no acceleration', () => {
+    assert.equal(readMcSettings({ ...valid, windfall: { amount_twd: null, month: null, tranches: null } })?.windfall.tranches, null);
+    assert.equal(readMcSettings({ ...valid, gauge_class: undefined })?.gaugeClass, null);
+    assert.equal(readMcSettings(valid)?.gaugeClass, 'us_global_equity');
   });
 
   it('treats a bad target or windfall as unset', () => {
