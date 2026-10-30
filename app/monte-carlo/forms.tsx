@@ -39,8 +39,17 @@ export function MonteCarloForm({ settings }: { settings: McSettings }) {
       <Field label={{ en: 'It arrives in (YYYY-MM)', zh: '入帳月份（YYYY-MM）' }} error={error('windfallMonth')}>
         <input name="windfallMonth" placeholder="2030-06" defaultValue={settings.windfall.month ?? ''} />
       </Field>
-      <Field label={{ en: 'Monthly tranches', zh: '分批月數' }} hint={<Bi en="Equal tranches from the month it arrives; the waiting cash earns the windfall cash return." zh="自入帳月份起等額分批；等待中的現金以大額資金的現金報酬計算。" />} error={error('windfallTranches')}>
-        <input name="windfallTranches" inputMode="numeric" defaultValue={settings.windfall.tranches} />
+      <Field
+        label={{ en: 'Monthly tranches', zh: '分批月數' }}
+        hint={
+          <Bi
+            en="Blank follows F3's pace: 6, 12 or 24 by today's CAPE percentile. Equal tranches from the month it arrives; the waiting cash earns the windfall cash return, and a fall in the market brings tranches forward as F3 would."
+            zh="留白則依 F3 的節奏：依今天 CAPE 百分位分 6、12 或 24 批。自入帳月份起等額分批；等待中的現金以大額資金的現金報酬計算，市場下跌時依 F3 規則提前投入。"
+          />
+        }
+        error={error('windfallTranches')}
+      >
+        <input name="windfallTranches" inputMode="numeric" defaultValue={settings.windfall.tranches ?? ''} placeholder="CAPE" />
       </Field>
       <div className="row">
         <button type="submit" className="button primary" disabled={pending}>

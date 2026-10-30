@@ -861,7 +861,8 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   // The VT dividends recorded and the gain on the AAPL sale: far under the floor.
   check(/✓ ?Overseas income \(minimum tax\)[^\n]*NT\$[\d,]+ \/ NT\$1,000,000/.test(await tile('Overseas income (minimum tax)')), 'overseas income');
   check((await tile('Supplementary premium')).includes('NT$0'), 'no supplementary premium');
-  check(/! ?Order fees[\s\S]*choose your broker below/.test(await tile('Order fees')), 'no broker chosen yet');
+  // Orders are priced with SinoPac until another broker is chosen (config fees.broker).
+  check((await tile('Order fees priced with')).includes('SinoPac'), `SinoPac by default, got ${await tile('Order fees priced with')}`);
   const row = (ticker) => page.locator('#fund-choices tbody tr').filter({ has: page.locator('strong', { hasText: new RegExp(`^${ticker}$`) }) });
   // VT: TER 0.06% + 1.8% × 30% withheld; VWRA: TER 0.19% + 1.8% × 9% inside the fund.
   check((await row('VT').innerText()).includes('0.6%') && (await row('VWRA').innerText()).includes('0.352%'), `the drags, got ${await row('VT').innerText()} / ${await row('VWRA').innerText()}`);
@@ -871,8 +872,8 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   await page.locator('#fee-settings + form button[type=submit]').click();
   await page.waitForURL('**/costs?saved=fees*');
   check((await page.locator('.fact', { hasText: 'Order fees priced with' }).innerText()).includes('Cathay Securities'), 'the broker chosen');
-  // A typical order is NT$5,000 (NT$10,000 over two classes): US$3 at 32.4 plus 0.1% FX is 2.044% of it.
-  check((await row('VT').innerText()).includes('2.044%'), `VT's order cost, got ${await row('VT').innerText()}`);
+  // A typical order is NT$5,000 (NT$10,000 over two classes), a monthly contribution, so at Cathay's DCA price (since PR #25), not its US$3 minimum.
+  check((await row('VT').innerText()).includes('0.1648%'), `VT's order cost, got ${await row('VT').innerText()}`);
   const brokers = await page.locator('#brokers table').innerText();
   check(/Cathay Securities[\s\S]*yours/.test(brokers) && brokers.includes('35.00 USD · 22.78%'), `the minimum fee on a small order, got ${brokers}`);
   await page.setViewportSize({ width: 1280, height: 1400 });
@@ -1528,7 +1529,7 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
 });
 
-await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings (F5)', async () => {
+await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings, the windfall paced and accelerated as F3 runs it (F5)', async () => {
   await page.goto(`${BASE}/monte-carlo`);
   await page.getByRole('heading', { level: 1, name: '蒙地卡羅' }).waitFor();
   await page.locator('.chart-figure svg').first().waitFor();
@@ -1560,6 +1561,25 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.locator('#settings [role=alert]').first().waitFor();
   check((await page.locator('#settings').innerText()).includes('YYYY-MM'), 'the month asked for with an amount');
   check((await body()).includes('蒙地卡羅') && (await body()).includes('達成目標的機率'), 'Chinese labels');
+
+  // An expected windfall runs as F3 runs it: paced by CAPE when the tranches are blank, its own part of the median, the goal with and without it.
+  // The refused form starts afresh, so the amount is typed again.
+  await page.locator('#settings input[name=windfallAmount]').fill('1200000');
+  await page.locator('#settings input[name=windfallMonth]').fill('2027-06');
+  await page.locator('#settings input[name=windfallTranches]').fill('');
+  await page.locator('#settings button[type=submit]').click();
+  await page.locator('#windfall').getByText(/The expected windfall: NT\$/).waitFor();
+  const windfall = await page.locator('#windfall').innerText();
+  check(/The expected windfall: NT\$1,200,000/.test(windfall), `the expected windfall named, got ${windfall.slice(0, 300)}`);
+  check(/\d+ monthly tranches: F3’s (pace at today’s CAPE percentile|middle pace)/.test(windfall), `paced by F3, got ${windfall.slice(0, 400)}`);
+  check(/Paths where the 15% tier fired/.test(windfall) || /Acceleration is off/.test(windfall), 'acceleration shown, or why it is off');
+  check(windfall.includes('Without the windfall') && windfall.includes('不含大額資金'), 'the goal without the windfall');
+  await snap('monte-carlo-windfall');
+  // Put the demo back for the steps that follow: no expected windfall.
+  await page.locator('#settings input[name=windfallAmount]').fill('');
+  await page.locator('#settings input[name=windfallMonth]').fill('');
+  await page.locator('#settings button[type=submit]').click();
+  await page.locator('#windfall').getByText('No windfall is in the simulation yet').waitFor();
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*monte_carlo/.test(await body()), 'the setting in the edit history');
 });

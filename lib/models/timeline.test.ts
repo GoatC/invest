@@ -10,7 +10,7 @@ function near(actual: number | null | undefined, expected: number, tolerance = 1
 }
 
 function figures(year: number, median: number): YearFigures {
-  return { year, low: median / 2, median, high: median * 2, realLow: 0, realMedian: 0, realHigh: 0, expected: median * 1.1, putIn: 0, reaching: null };
+  return { year, low: median / 2, median, high: median * 2, realLow: 0, realMedian: 0, realHigh: 0, expected: median * 1.1, putIn: 0, reaching: null, split: null };
 }
 
 const FAN = [figures(0, 0), figures(1, 100), figures(2, 200), figures(3, 400)];

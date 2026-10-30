@@ -649,11 +649,11 @@ describe('parseMonteCarloForm (F5)', () => {
     assert.equal(parsed.value.paths, 10000);
   });
 
-  it('takes blank fields as none, and keeps the tranches when left blank', () => {
+  it('takes blank fields as none, and blank tranches as following F3\u2019s CAPE pace', () => {
     const parsed = parseMonteCarloForm({ target: '', windfallAmount: '', windfallMonth: '', windfallTranches: '' }, current);
     assert.ok(parsed.ok);
     assert.equal(parsed.value.targetTwd, null);
-    assert.deepEqual(parsed.value.windfall, { amountTwd: null, month: null, tranches: 12 });
+    assert.deepEqual(parsed.value.windfall, { amountTwd: null, month: null, tranches: null });
   });
 
   it('asks for the month when there is an amount, and refuses what is not whole NT$ or a month', () => {

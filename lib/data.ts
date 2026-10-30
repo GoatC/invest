@@ -46,7 +46,7 @@ import { capsFromRules, type Caps, type RuleRow } from './models/rules';
 import { latestFx, latestPrices } from './models/valuation';
 import { restateCloses, restateTrades, type Split } from './models/splits';
 import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
-import { MARKET_SERIES, readAcceleration, type Acceleration } from './models/windfall';
+import { capePercentile, MARKET_SERIES, readAcceleration, readPace, type Acceleration } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
 import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 import type { Figures, Quarter } from './models/fundamentals';
@@ -2382,12 +2382,14 @@ export async function loadMonthlyReturns(supabase: SupabaseClient, tickers: read
 
 /** Everything a Monte Carlo run reads (config monte_carlo and projection, F6, F3, the proxies' prices). */
 export async function loadMonteCarloInput(supabase: SupabaseClient, today: string): Promise<McData> {
-  const [config, classes, assumptions, windfallPlan, holdings] = await Promise.all([
-    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['monte_carlo', 'projection', 'windfall'])),
+  const [config, classes, assumptions, windfallPlan, holdings, rules, capes] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['monte_carlo', 'projection', 'windfall', 'windfall_pace'])),
     loadAssetClassSettings(supabase),
     loadAssumptions(supabase),
     loadWindfallPlan(supabase),
     loadHoldingsData(supabase),
+    rows<{ threshold: unknown; enabled: boolean }>('rules', supabase.from('rules').select('threshold, enabled').eq('id', 'WINDFALL_ACCELERATION')),
+    allRows<{ obs_month: string; value: number }>('market_series', (from, to) => supabase.from('market_series').select('obs_month, value').eq('series', 'us_cape').order('obs_month').range(from, to)),
   ]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const settings = readMcSettings(value('monte_carlo'));
@@ -2404,6 +2406,10 @@ export async function loadMonteCarloInput(supabase: SupabaseClient, today: strin
     windfallPlan: windfallPlan ?? null,
     windfallValue,
     cashReturn: readWindfallSettings(value('windfall')).cashReturn,
+    // F3's pace for an expected windfall, at today's CAPE percentile; its acceleration only while the rule is on.
+    pace: readPace(value('windfall_pace')),
+    cape: capePercentile(capes.map((row) => ({ month: row.obs_month.slice(0, 7), value: Number(row.value) }))),
+    acceleration: rules[0]?.enabled ? readAcceleration(rules[0].threshold) : null,
   };
 }
 
