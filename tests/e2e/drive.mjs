@@ -1780,7 +1780,8 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
     if (path === '/windfall') await page.locator('.chart-backtest svg').waitFor();
     if (path === '/regression') await page.locator('.chart-scatter svg').first().waitFor();
     if (path === '/valuation?t=AAPL') await page.locator('.chart-ranges svg').waitFor();
-    if (['/', '/holdings', '/performance', '/allocation', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/import'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
+    if (path === '/sectors') await page.locator('.chart-heatmap svg').waitFor();
+    if (['/', '/holdings', '/performance', '/allocation', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/import', '/sectors'].includes(path)) await snap(`phone${path.replace('/', '-').replace('?t=', '-')}`);
   }
   check(wide.length === 0, `overflows: ${wide.join(', ')}`);
   await page.setViewportSize({ width: 1280, height: 900 });

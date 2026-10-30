@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 import { percent, signedPercent, twd } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { axisPercent, Legend, mount, NARROW, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export type Convention = 'red_up' | 'green_up';
 
@@ -37,15 +37,34 @@ function legendItems(convention: Convention): Array<{ label: Bilingual; color: s
 
 export interface HeatRow {
   label: string;
+  /** The label on two lines, for a phone: the English name, then the Chinese and the market. */
+  lines?: [string, string];
   values: Array<number | null>;
 }
 
-function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], convention: Convention, colors: Colors, width: number): Option {
+/** Row height and the space above the rows for the column names, wide and on a phone (two-line labels). */
+const HEAT_ROW = { wide: 30, narrow: 40 };
+const HEAT_TOP = { wide: 28, narrow: 36 };
+
+function heatmapHeight(rows: number, narrow: boolean): number {
+  return Math.max(180, (narrow ? HEAT_TOP.narrow : HEAT_TOP.wide) + rows * (narrow ? HEAT_ROW.narrow : HEAT_ROW.wide) + 8);
+}
+
+/**
+ * The label column takes a set share of the width, so the period columns get the rest and each
+ * cell fills its own column: on a phone the long bilingual sector names wrap onto two lines and
+ * the column names shorten, rather than the cells and their figures piling into each other.
+ */
+function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], shortColumns: readonly Bilingual[] | undefined, convention: Convention, colors: Colors, width: number): Option {
   const caps = columns.map((_, x) => Math.max(0.01, ...rows.map((row) => Math.abs(row.values[x] ?? 0))));
-  const cell = Math.max(30, Math.min(64, Math.floor((width - 150) / columns.length) - 6));
+  const narrow = width < NARROW;
+  const labelWidth = narrow ? Math.min(136, Math.round(width * 0.36)) : Math.min(300, Math.round(width * 0.36));
+  const band = (width - labelWidth - 8) / Math.max(1, columns.length);
+  const cell = Math.max(20, Math.min(96, Math.floor(band) - 3));
+  const fontSize = narrow ? 10 : 11;
   return {
     textStyle: { fontFamily: colors.font },
-    grid: { left: 4, right: 8, top: 28, bottom: 4, containLabel: true },
+    grid: { left: labelWidth, right: 8, top: narrow ? HEAT_TOP.narrow : HEAT_TOP.wide, bottom: 8, containLabel: false },
     tooltip: {
       ...tooltipStyle(colors, 'item'),
       formatter: (params) => {
@@ -57,20 +76,37 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
         return tooltip(`${row.label} · ${bi(column)}`, [{ value: value === null ? '—' : signedPercent(value), label: { en: 'Return', zh: '報酬' } }]);
       },
     },
-    xAxis: { type: 'category', data: columns.map((column) => bi(column)), position: 'top', axisLabel: { color: colors.muted, fontSize: 11, interval: 0 }, axisTick: { show: false }, axisLine: { show: false } },
-    yAxis: { type: 'category', data: rows.map((row) => row.label), inverse: true, axisLabel: { color: colors.ink, fontSize: 11 }, axisTick: { show: false }, axisLine: { show: false } },
+    xAxis: {
+      type: 'category',
+      data: columns.map((column, x) => {
+        const short = narrow ? shortColumns?.[x] : undefined;
+        return short ? `${short.en}\n${short.zh}` : bi(column);
+      }),
+      position: 'top',
+      axisLabel: { color: colors.muted, fontSize, lineHeight: 12, interval: 0, width: Math.max(24, band - 2), overflow: 'break' },
+      axisTick: { show: false },
+      axisLine: { show: false },
+    },
+    yAxis: {
+      type: 'category',
+      data: rows.map((row) => (narrow && row.lines ? row.lines.join('\n') : row.label)),
+      inverse: true,
+      axisLabel: { color: colors.ink, fontSize, lineHeight: 12, width: labelWidth - 10, overflow: 'break', margin: 8 },
+      axisTick: { show: false },
+      axisLine: { show: false },
+    },
     series: [
       {
         type: 'scatter',
         symbol: 'rect',
-        symbolSize: [cell, 26],
+        symbolSize: [cell, (narrow ? HEAT_ROW.narrow : HEAT_ROW.wide) - 4],
         data: rows.flatMap((row, y) =>
           row.values.map((value, x) => {
             const fill = returnColor(colors, value, caps[x] as number, convention);
             return {
               value: [x, y],
               itemStyle: { color: fill.color, opacity: fill.opacity },
-              label: { show: true, formatter: value === null ? '—' : signedPercent(value), color: fill.opacity > 0.6 ? '#ffffff' : colors.ink, fontSize: width < 520 ? 9 : 11, fontWeight: 600 as const },
+              label: { show: true, formatter: value === null ? '—' : signedPercent(value), color: fill.opacity > 0.6 ? '#ffffff' : colors.ink, fontSize: band < 46 ? 9 : narrow ? 10 : 11, fontWeight: 600 as const },
             };
           }),
         ),
@@ -79,14 +115,22 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
   };
 }
 
-/** Sectors down, periods across, each cell its return. */
-export function SectorHeatmap({ rows, columns, convention, label }: { rows: readonly HeatRow[]; columns: readonly Bilingual[]; convention: Convention; label: Bilingual }) {
+/** Sectors down, periods across, each cell its return; `shortColumns` name the periods on a phone. */
+export function SectorHeatmap({ rows, columns, shortColumns, convention, label }: { rows: readonly HeatRow[]; columns: readonly Bilingual[]; shortColumns?: readonly Bilingual[]; convention: Convention; label: Bilingual }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => mount(ref.current, (colors, width) => heatmapOption(rows, columns, convention, colors, width)), [rows, columns, convention]);
+  useEffect(
+    () =>
+      mount(ref.current, (colors, width) => {
+        // Taller rows on a phone, for the two-line labels; the chart resizes when its height changes.
+        if (ref.current) ref.current.style.height = `${heatmapHeight(rows.length, width < NARROW)}px`;
+        return heatmapOption(rows, columns, shortColumns, convention, colors, width);
+      }),
+    [rows, columns, shortColumns, convention],
+  );
   return (
     <figure className="chart-figure">
       <Legend items={legendItems(convention)} />
-      <div ref={ref} className="chart chart-heatmap" role="img" aria-label={bi(label)} style={{ height: `${Math.max(180, 60 + rows.length * 30)}px` }} />
+      <div ref={ref} className="chart chart-heatmap" role="img" aria-label={bi(label)} style={{ height: `${heatmapHeight(rows.length, false)}px` }} />
     </figure>
   );
 }
