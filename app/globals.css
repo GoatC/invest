@@ -1461,3 +1461,70 @@ details.ticker-menu a:hover {
 .chip:hover {
   background: var(--accent-soft);
 }
+
+/* The nightly job's status (components/data-toast.tsx): slides down from the top when the app
+   loads, stays three seconds, slides away. */
+.data-toast {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 60;
+  width: min(44rem, calc(100% - 32px));
+  transform: translateX(-50%);
+  animation: toast-in 250ms ease-out both;
+}
+
+.data-toast.leaving {
+  animation: toast-out 250ms ease-in both;
+}
+
+.data-toast .banner {
+  margin: 0;
+  padding: 0.75rem 3rem 0.75rem 1rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(31, 42, 58, 0.08), 0 12px 32px rgba(31, 42, 58, 0.16);
+}
+
+.data-toast .toast-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap-min);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+.data-toast .toast-close:hover {
+  background: none;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, calc(-100% - 24px));
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(-50%, calc(-100% - 24px));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-toast,
+  .data-toast.leaving {
+    animation: none;
+  }
+}

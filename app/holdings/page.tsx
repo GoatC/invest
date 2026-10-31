@@ -3,17 +3,15 @@ import Link from 'next/link';
 import { Bi } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
-import { DataHealthBanner } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadJobRuns, loadProposals, orDataError, type CashFlowRecord, type HoldingsData, type Proposal } from '@/lib/data';
+import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, orDataError, type CashFlowRecord, type HoldingsData, type Proposal } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, twd } from '@/lib/format';
 import { FLOW_TYPE, LABELS, POOL, SIDE, SOURCE, type Bilingual } from '@/lib/i18n';
 import { flowTotals } from '@/lib/models/cash-flows';
-import { dataHealth } from '@/lib/models/data-health';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
@@ -81,16 +79,14 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   let data: HoldingsData;
   let flows: CashFlowRecord[];
   let rates: FxQuote[];
-  // The job status and the proposals only add to the page, so a failed read of them does not hide the holdings.
-  let jobs: Awaited<ReturnType<typeof loadJobRuns>> | DataError;
+  // The proposals only add to the page, so a failed read of them does not hide the holdings.
   let proposals: Proposal[] | DataError;
   const today = taipeiToday();
   try {
-    [data, flows, rates, jobs, proposals] = await Promise.all([
+    [data, flows, rates, proposals] = await Promise.all([
       loadHoldingsData(supabase),
       loadCashFlows(supabase),
       loadFxHistory(supabase),
-      orDataError(loadJobRuns(supabase)),
       orDataError(loadProposals(supabase, today)),
     ]);
   } catch (err) {
@@ -127,16 +123,6 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           )}
           {savedTicker && <NextSteps ticker={savedTicker.ticker} productType={savedTicker.productType} waiting={!priced.has(savedTicker.ticker)} />}
         </div>
-      )}
-      {jobs instanceof DataError ? (
-        <p className="banner info" role="status">
-          <Bi
-            en={`Could not read the nightly job status (${jobs.table}: ${jobs.detail}); if the app was just updated, run npx supabase db push.`}
-            zh={`無法讀取每夜排程狀態（${jobs.table}：${jobs.detail}）；如果剛更新過程式，請執行 npx supabase db push。`}
-          />
-        </p>
-      ) : (
-        <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />
       )}
       {!(proposals instanceof DataError) && <OpenProposals proposals={proposals} />}
       {portfolio.shortfalls.length > 0 && (

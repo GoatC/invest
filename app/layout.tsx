@@ -3,7 +3,12 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Bi } from '@/components/bi';
+import { DataHealthBanner, hasNotice } from '@/components/data-status';
+import { DataToast } from '@/components/data-toast';
 import { SiteNav } from '@/components/site-nav';
+import { DataError, loadJobRuns, orDataError } from '@/lib/data';
+import { taipeiToday } from '@/lib/dates';
+import { dataHealth } from '@/lib/models/data-health';
 import { createClient } from '@/lib/supabase/server';
 
 import { signOut } from './actions';
@@ -35,6 +40,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
+  // The nightly job's status, shown for a moment when the app loads (components/data-toast.tsx).
+  const jobs = signedIn ? await orDataError(loadJobRuns(supabase)) : undefined;
+  const health = jobs && !(jobs instanceof DataError) ? dataHealth(jobs.runs, jobs.threshold, taipeiToday()) : undefined;
 
   return (
     <html lang="en">
@@ -61,6 +69,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             )}
           </div>
         </header>
+        {jobs && !(jobs instanceof DataError) && health && hasNotice(health) && (
+          <DataToast>
+            <DataHealthBanner health={health} threshold={jobs.threshold} quiet />
+          </DataToast>
+        )}
         <main className="page">{children}</main>
         <footer className="site-footer">
           <Bi en="This app supports Hugo's own decisions; it is not financial advice." zh="本 App 用於輔助 Hugo 自己的決策，不構成投資建議。" />
