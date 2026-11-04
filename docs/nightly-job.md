@@ -18,6 +18,7 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 - **五因子**（第三階段第 6 步，N1）：每晚讀取 Kenneth French 資料庫的月因子（美國、已開發市場、新興市場三個 zip，各約 10 KB），存入 `market_series`（`ff5_` 開頭，保留 11 年）。來源是 mba.tuck.dartmouth.edu，不需要金鑰；暫時連不上時沿用已存的資料，隔天再試。
 - **歷史年數**（第三階段第 4 步，F7）：價格載入的範圍取風險值、回歸分析區、蒙地卡羅與效率前緣中最長者（效率前緣預設十年，所以第一次執行會載入較多資料，之後只更新新的幾天）。
 - **績效歸因**（第三階段第 5 步，N2）：每夜把尚未存入的完整月份（第一層依資產類別、第二層依產業）的 Brinson 效果存入 `attribution`；公開的執行紀錄只寫月數，不寫任何報酬。
+- **分析師預估**（2026-11-04 加入，F12 本益比診斷）：持有或觀察中的美股，每 7 天（config `pe_check.refresh_days`）向 Alpha Vantage 讀一次分析師共識預估（各會計年度 EPS 的平均、最高、最低、分析師人數、30 天前的平均與上修／下修人數，以及平均目標價與評等），存入 `analyst_estimates`。**需要 `ALPHAVANTAGE_API_KEY`**；免費 key 每天 25 次，每檔用 2 次。被拒絕（額度用完）時沿用已存的預估，不會讓當晚變成「部分失敗」，資料狀態頁會寫出來。台股沒有免費的共識來源，請在該股的估值頁自行輸入。
 - **規則與推播**：最後以剛載入的資料檢查規則、產生提案，並送出推播（[推播通知](web-push.md)）。
 - **失敗時**：App 沿用最後一次成功的資料；連續 2 晚失敗（`DATA_FAILURE`）就顯示警示並推播一次。公開的執行紀錄只寫數量，不寫代號與提案內容。
 
@@ -40,6 +41,8 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 | 美國 10 年期公債殖利率（每月，第二階段第 3 步） | FRED（DGS10，月底） | 美國財政部每日殖利率曲線 |
 | 台灣 10 年期公債殖利率（每月） | 中央銀行開放資料（EG43M01） | 權益成本的設定值 |
 | 隱含股票風險溢酬（每月） | Damodaran Online（ERPbymonth.xlsx） | 權益成本的設定值 |
+| 美股分析師共識預估（每週，F12 本益比診斷） | Alpha Vantage `EARNINGS_ESTIMATES` 與 `OVERVIEW` | 沿用已存的預估，或在估值頁自行輸入 |
+| 台股分析師共識預估 | 尚無免費來源 | 在估值頁自行輸入（例如券商或財經網站上的共識） |
 | 美股財報（每季，第二階段第 4 步） | SEC EDGAR company facts（10-K、10-Q） | 估值頁自行輸入的數字 |
 | 台股財報與現金股利（每季） | FinMind 三大報表與除權息結果 | 估值頁自行輸入的數字 |
 
@@ -101,6 +104,23 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 
 Run it once from the Actions tab, then check the Data status page: every security should show a recent close and its feed.
 
+### 6. （選用）讓 App 的「更新最新資料」按鈕能啟動排程 Let the refresh button run the job
+
+App 的「更多 → 其他」裡有一顆 **更新最新資料** 按鈕：按下後立刻執行一次每夜排程（約 5–10 分鐘），完成時各頁自動換成最新資料。按鈕要能叫 GitHub 執行，Vercel 需要一把**只能啟動這個 repo 的排程**的 GitHub token。沒有設定時，按鈕只會重新整理畫面。
+
+為什麼安全：這把 token 只放在 Vercel 的環境變數（伺服器端），瀏覽器拿不到；權限只有「這一個 repo 的 Actions」，不能讀寫程式碼或其他 repo；只有登入後的你按得到按鈕。
+
+1. 打開 <https://github.com/settings/personal-access-tokens/new>（GitHub → 右上頭像 → **Settings** → 最下面 **Developer settings** → **Personal access tokens → Fine-grained tokens** → **Generate new token**）。
+2. **Token name** 填 `invest-refresh-button`；**Expiration** 選最長（例如 1 年，到期前 GitHub 會寄信提醒，再做一次這幾步）。
+3. **Repository access** 選 **Only select repositories**，只勾 `GoatC/invest`。
+4. **Permissions → Repository permissions** 找到 **Actions**，改成 **Read and write**。其他全部保持 **No access**（Metadata 會自動是 Read-only，這是必要的）。
+5. 按 **Generate token**，複製以 `github_pat_` 開頭的值（只會顯示這一次）。
+6. 到 Vercel 專案 → **Settings → Environment Variables** → **Add**：Key 填 `GITHUB_DISPATCH_TOKEN`，Value 貼上剛才的值，**Type** 選 **Secret**，Environments 勾 **Production**，按 **Save**。不要加 `NEXT_PUBLIC_` 開頭，也不要放進 `.env.local` 以外的任何檔案。
+7. Vercel → **Deployments** → 最新一筆右邊 **⋯ → Redeploy**，讓新的變數生效。
+8. 在手機打開 App → **更多** → **更新最新資料**。按鈕會顯示「等待 GitHub 開始執行…」→「正在載入最新資料…」→「已更新」，GitHub 的 **Actions** 分頁也會看到一筆新的執行。
+
+The refresh button in the More menu dispatches this workflow through GitHub's API. Give Vercel a fine-grained token limited to this repository with Actions read and write, as `GITHUB_DISPATCH_TOKEN` (server side only); without it the button just reloads the page's data.
+
 ## 平常要注意的事 Things to know
 
 - **失敗通知**：失敗的執行在 Actions 分頁會是紅色，GitHub 也可能寄 email 通知；但請以 App 為準：連續 2 晚失敗時，持倉頁會顯示警示（門檻在 `rules` 表 `DATA_FAILURE` 的 `failures`，可以自己改）。
@@ -128,6 +148,9 @@ Run it once from the Actions tab, then check the Data status page: every securit
 | `VT holdings: vanguard: …` 或 `00692 holdings: fubon: …` | 發行商網站暫時連不上或改版；合併透視沿用上次的成分股，隔天會再試。持續失敗請把錯誤訊息貼給 Claude |
 | `red flags: TWSE …: HTTP …` | 證交所 OpenAPI 暫時連不上；隔天會自動再讀，重大訊息只會漏掉那一天（可到公開資訊觀測站查詢後在「紅旗指標」頁自行登錄） |
 | `XLK: finmind: …` 或 `TW_ELECTRONIC: finmind returned no data` | FinMind 暫時沒有該類股的資料；產業熱圖沿用已存的收盤價，隔天會再試。若同一個台股指數一直沒有資料，可能是 FinMind 改了代號：先在「產業熱圖」頁的設定刪除那一行，再把錯誤訊息貼給 Claude |
+
+| 「更新最新資料」顯示「排程未完成」 | 點「GitHub 上的執行紀錄」看是哪一步失敗，對照上面各列；`GitHub HTTP 401` 或 `403` 表示 `GITHUB_DISPATCH_TOKEN` 過期或權限不是 Actions「Read and write」，照第 6 步重新產生 |
+| 資料狀態頁寫「分析師預估：未能載入 … Alpha Vantage refused」 | 免費 key 當天額度用完；已存的預估照用，7 天內會再試 |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 
