@@ -1852,6 +1852,26 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
+await step('phone turned upright: charts drawn sideways shrink back to the screen', async () => {
+  const wide = [];
+  try {
+    for (const path of ['/', '/performance', '/allocation', '/risk', '/windfall', '/attribution', '/stress', '/sectors', '/look-through', '/valuation?t=AAPL', '/regression']) {
+      await page.setViewportSize({ width: 852, height: 393 });
+      await page.goto(`${BASE}${path}`);
+      // Some charts sit folded inside <details> (the dashboard's VaR histogram); wait for a shown one.
+      await page.locator('.chart svg:visible').first().waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      // The charts redraw on their ResizeObserver, a frame or two after the resize.
+      await page.waitForTimeout(400);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (overflow > 0) wide.push(`${path} by ${overflow}px`);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+  check(wide.length === 0, `overflows after turning upright: ${wide.join(', ')}`);
+});
+
 await step('navigation: four pages as pills, four groups that list their pages below, a tab bar and a "More" sheet on a phone', async () => {
   await page.goto(`${BASE}/holdings`);
   const nav = page.getByRole('navigation', { name: /Main/ });

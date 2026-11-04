@@ -810,8 +810,14 @@ details ul {
   gap: 0.5rem;
 }
 
+/* A chart takes its width from its box, never from what ECharts drew inside it: ECharts sizes its
+   canvas in pixels, so without the containment a chart drawn wide (a phone turned sideways, or
+   iOS laying the page out wider for a moment) keeps that width as its minimum, pushes the page
+   sideways, and iOS zooms the whole page out to fit. */
 .chart {
   width: 100%;
+  min-width: 0;
+  contain: inline-size;
   height: 280px;
 }
 
