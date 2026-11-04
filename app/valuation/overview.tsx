@@ -26,7 +26,8 @@ const text = (value: string | string[] | undefined) => (typeof value === 'string
  * address, which the valuation actions redirect with.
  */
 export async function ValuationOverview({ supabase, today, params }: { supabase: Supabase; today: string; params: Params }) {
-  const data = await orDataError(loadWorkbench(supabase, today));
+  // The red-flag lights load alongside the valuations, not after them.
+  const [data, flags] = await Promise.all([orDataError(loadWorkbench(supabase, today)), orDataError(loadRedFlagData(supabase, today))]);
   if (data instanceof DataError || !data.settings) {
     return (
       <p className="banner info" role="status" id="valuation">
@@ -37,7 +38,6 @@ export async function ValuationOverview({ supabase, today, params }: { supabase:
       </p>
     );
   }
-  const flags = await orDataError(loadRedFlagData(supabase, today));
   const lights = new Map(flags instanceof DataError ? [] : flags.companies.map((company) => [company.security.ticker, company.assessment]));
   return <Watchlist data={data} settings={data.settings} today={today} saved={params['valuation'] === 'settings'} error={text(params['valuation-error'])} missing={text(params['missing'])} lights={lights} />;
 }

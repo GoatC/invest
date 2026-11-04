@@ -6,10 +6,10 @@ import { Bi } from '@/components/bi';
 import { DataHealthBanner, hasNotice } from '@/components/data-status';
 import { DataToast } from '@/components/data-toast';
 import { SiteNav } from '@/components/site-nav';
+import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
-import { createClient } from '@/lib/supabase/server';
 
 import { signOut } from './actions';
 import './globals.css';
@@ -37,11 +37,9 @@ export const viewport: Viewport = {
 export const dynamic = 'force-dynamic';
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims);
+  const signedIn = (await signedInUser()) !== undefined;
   // The nightly job's status, shown for a moment when the app loads (components/data-toast.tsx).
-  const jobs = signedIn ? await orDataError(loadJobRuns(supabase)) : undefined;
+  const jobs = signedIn ? await orDataError(loadJobRuns((await requireSession()).supabase)) : undefined;
   const health = jobs && !(jobs instanceof DataError) ? dataHealth(jobs.runs, jobs.threshold, taipeiToday()) : undefined;
 
   return (

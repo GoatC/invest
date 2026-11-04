@@ -1467,3 +1467,66 @@ export function parseSplitForm(raw: RawForm, tickers: readonly string[], taken: 
   if (note.length > 300) errors.note = MESSAGES.tooLong;
   return finish(errors, () => ({ ticker: ticker as string, exDate, ratio: ratio as number, note: note === '' ? null : note }));
 }
+
+// ---------------------------------------------------------------------------
+// F12 forward P/E: the analysts' consensus typed in (Taiwan has no free feed)
+// ---------------------------------------------------------------------------
+
+export type EstimatesField = 'fy1_end' | 'fy1_eps' | 'fy1_high' | 'fy1_low' | 'fy2_end' | 'fy2_eps' | 'analysts' | 'target';
+
+export interface EstimatesInput {
+  years: Array<{ periodEnd: string; mean: number; high?: number; low?: number; analysts?: number }>;
+  targetPrice?: number;
+}
+
+const ESTIMATE_MESSAGES = {
+  eps: { en: 'Enter the EPS, e.g. 45.2 (a loss with a minus sign).', zh: '請輸入每股盈餘，例如 45.2（虧損請加負號）。' },
+  order: { en: 'The second fiscal year must end after the first.', zh: '第二個會計年度須在第一個之後結束。' },
+  both: { en: 'Give the second year its end and its EPS, or neither.', zh: '第二個會計年度的結束日與 EPS 請一起填，或都不填。' },
+  range: { en: 'Keep low ≤ mean ≤ high.', zh: '請保持最低 ≤ 平均 ≤ 最高。' },
+  analysts: { en: 'Enter a whole number of analysts from 1 to 200.', zh: '請輸入 1 到 200 之間的整數分析師人數。' },
+} satisfies Record<string, Bilingual>;
+
+/** The consensus form on a stock's Valuation page: one or two fiscal years, the analysts and the target price. */
+export function parseEstimatesForm(raw: RawForm): Parsed<EstimatesInput, EstimatesField> {
+  const errors: FieldErrors<EstimatesField> = {};
+  const text = (key: EstimatesField) => (raw[key] ?? '').trim();
+  const number = (key: EstimatesField, message: Bilingual, check: (n: number) => boolean = Number.isFinite) => {
+    const value = text(key);
+    if (value === '') return undefined;
+    const n = Number(value.replace(/,/g, ''));
+    if (!Number.isFinite(n) || !check(n)) {
+      errors[key] = message;
+      return undefined;
+    }
+    return n;
+  };
+  const date = (key: EstimatesField, required: boolean) => {
+    const value = text(key);
+    if (value === '') {
+      if (required) errors[key] = MESSAGES.required;
+      return undefined;
+    }
+    if (!isIsoDate(value)) {
+      errors[key] = MESSAGES.date;
+      return undefined;
+    }
+    return value;
+  };
+  const fy1End = date('fy1_end', true);
+  const fy1Eps = number('fy1_eps', ESTIMATE_MESSAGES.eps);
+  if (text('fy1_eps') === '') errors.fy1_eps = MESSAGES.required;
+  const high = number('fy1_high', ESTIMATE_MESSAGES.eps);
+  const low = number('fy1_low', ESTIMATE_MESSAGES.eps);
+  if (fy1Eps !== undefined && ((high !== undefined && high < fy1Eps) || (low !== undefined && low > fy1Eps))) errors[high !== undefined && high < fy1Eps ? 'fy1_high' : 'fy1_low'] = ESTIMATE_MESSAGES.range;
+  const fy2End = date('fy2_end', false);
+  const fy2Eps = number('fy2_eps', ESTIMATE_MESSAGES.eps);
+  if ((text('fy2_end') === '') !== (text('fy2_eps') === '')) errors[text('fy2_end') === '' ? 'fy2_end' : 'fy2_eps'] = ESTIMATE_MESSAGES.both;
+  else if (fy1End && fy2End && fy2End <= fy1End) errors.fy2_end = ESTIMATE_MESSAGES.order;
+  const analysts = number('analysts', ESTIMATE_MESSAGES.analysts, (n) => Number.isInteger(n) && n >= 1 && n <= 200);
+  const targetPrice = number('target', MESSAGES.positive, (n) => n > 0);
+  if (Object.keys(errors).length > 0 || !fy1End || fy1Eps === undefined) return { ok: false, errors };
+  const years: EstimatesInput['years'] = [{ periodEnd: fy1End, mean: fy1Eps, ...(high !== undefined ? { high } : {}), ...(low !== undefined ? { low } : {}), ...(analysts !== undefined ? { analysts } : {}) }];
+  if (fy2End && fy2Eps !== undefined) years.push({ periodEnd: fy2End, mean: fy2Eps, ...(analysts !== undefined ? { analysts } : {}) });
+  return { ok: true, value: { years, ...(targetPrice !== undefined ? { targetPrice } : {}) } };
+}

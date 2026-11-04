@@ -15,6 +15,7 @@ import { MULTIPLES, SCENARIOS, marginOfSafety, metrics, type DcfResult, type Mod
 
 import { unwatchStock } from './actions';
 import { AssumptionsForm } from './forms';
+import { PeCheckCard } from './pe-check';
 import { alertBasis, MODEL, percentField, scenarioFields, ZONE } from './shared';
 
 type Params = Record<string, string | string[] | undefined>;
@@ -58,7 +59,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
   if (!data.settings) return <DataProblem table="config" detail="valuation is missing or malformed" />;
   const ticker = typeof params['t'] === 'string' ? params['t'] : undefined;
   const bench = ticker ? data.stocks.find((stock) => stock.security.ticker === ticker) : undefined;
-  if (bench) return <Workbench bench={bench} data={data} settings={data.settings} saved={params['saved'] === 'assumptions'} />;
+  if (bench) return <Workbench bench={bench} data={data} settings={data.settings} saved={params['saved'] === 'assumptions'} savedWhat={typeof params['saved'] === 'string' ? params['saved'] : undefined} today={today} />;
   // The watchlist lives on the holdings page; a stock not found goes back to it, saying so.
   const query = new URLSearchParams();
   if (ticker) query.set('missing', ticker);
@@ -68,7 +69,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
 
 const millionsField = (value: number | undefined) => (value === undefined ? '' : String(Number((value / 1e6).toFixed(3))));
 
-function Workbench({ bench, data, settings, saved }: { bench: StockBench; data: WorkbenchData; settings: ValuationSettings; saved: boolean }) {
+function Workbench({ bench, data, settings, saved, savedWhat, today }: { bench: StockBench; data: WorkbenchData; settings: ValuationSettings; saved: boolean; savedWhat: string | undefined; today: string }) {
   const { security, valuation, input } = bench;
   const currency = security.currency;
   const basis = alertBasis(bench, data.rules);
@@ -178,6 +179,8 @@ function Workbench({ bench, data, settings, saved }: { bench: StockBench; data: 
           </div>
         )}
       </section>
+
+      {data.peCheck && <PeCheckCard bench={bench} settings={data.peCheck} today={today} saved={savedWhat} />}
 
       {valuation?.dcf.ok && <DcfCard result={valuation.dcf.result} currency={currency} costOfEquity={bench.cost?.ok ? bench.cost.result.rate : undefined} />}
       {valuation?.ddm.ok && (

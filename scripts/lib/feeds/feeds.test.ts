@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
 import { makeRedactor } from '../http.ts';
-import { avDaily, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
+import { avDaily, avEstimates, avOverview, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
 import { fredRates } from './fred.ts';
 import { makeGet } from './get.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, finmindRows, goldCloses, splitFactors, taiwanPrices, usPrices } from './finmind.ts';
@@ -263,5 +263,35 @@ describe('makeGet', () => {
       assert.doesNotMatch(err.message, /SECRET123/);
       return true;
     });
+  });
+});
+
+describe('Alpha Vantage analysts (F12 forward P/E)', () => {
+  // Cut down from the demo key's IBM reply, 2026-11-04.
+  const estimates = JSON.stringify({
+    symbol: 'IBM',
+    estimates: [
+      {
+        date: '2027-12-31', horizon: 'fiscal year', eps_estimate_average: '13.2353', eps_estimate_high: '13.6733', eps_estimate_low: '12.3018', eps_estimate_analyst_count: '24.0000',
+        eps_estimate_average_30_days_ago: '13.1477', eps_estimate_revision_up_trailing_30_days: '1.0000', eps_estimate_revision_down_trailing_30_days: null,
+      },
+      { date: '2026-12-31', horizon: 'fiscal year', eps_estimate_average: '12.4199', eps_estimate_analyst_count: '23.0000' },
+      { date: '2027-03-31', horizon: 'fiscal quarter', eps_estimate_average: '2.1442' },
+    ],
+  });
+
+  it('reads each fiscal year, oldest first, leaving quarters and missing figures out', () => {
+    assert.deepEqual(avEstimates(estimates), [
+      { periodEnd: '2026-12-31', mean: 12.4199, analysts: 23 },
+      { periodEnd: '2027-12-31', mean: 13.2353, high: 13.6733, low: 12.3018, analysts: 24, mean30: 13.1477, up30: 1 },
+    ]);
+    assert.throws(() => avEstimates(JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' })), /refused/);
+    assert.throws(() => avEstimates('{}'), /no "estimates"/);
+  });
+
+  it('reads the target price and ratings from OVERVIEW', () => {
+    const overview = JSON.stringify({ Symbol: 'IBM', Currency: 'USD', AnalystTargetPrice: '259.3', AnalystRatingStrongBuy: '3', AnalystRatingBuy: '9', AnalystRatingHold: '10', AnalystRatingSell: '1', AnalystRatingStrongSell: '1' });
+    assert.deepEqual(avOverview(overview), { currency: 'USD', targetPrice: 259.3, ratings: { strongBuy: 3, buy: 9, hold: 10, sell: 1, strongSell: 1 } });
+    assert.deepEqual(avOverview(JSON.stringify({ Symbol: 'X', AnalystTargetPrice: 'None' })), {});
   });
 });

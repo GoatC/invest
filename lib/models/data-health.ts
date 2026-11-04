@@ -59,6 +59,8 @@ export interface RunDetail {
   redFlags: { scanned: string[]; events: number } | null;
   /** The funds' holdings files read (F14); `latest` is the file's date. Empty before. */
   holdings: Record<string, Loaded>;
+  /** The analysts' estimates loaded (F12 forward P/E) and those refused; null when none was due. */
+  estimates: { saved: string[]; failed: string[] } | null;
 }
 
 export interface JobRun {
@@ -111,6 +113,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     valued: Array.isArray(detail['valued']) ? lines(detail['valued']) : null,
     redFlags: readRedFlagRun(detail['redFlags']),
     holdings: loadedMap(detail['holdings']),
+    estimates: detail['estimates'] === undefined ? null : { saved: lines(record(detail['estimates'])['saved']), failed: lines(record(detail['estimates'])['failed']) },
   };
 }
 

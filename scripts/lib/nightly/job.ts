@@ -28,7 +28,7 @@ import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '..
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
 import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
-import { avDaily, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
+import { avDaily, avEstimates, avOverview, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
 import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
 import { frenchSeries, frenchUrl } from '../feeds/french.ts';
@@ -138,6 +138,19 @@ export interface Store {
   /** Evaluates every rule as of `now` and saves the proposals it drafts and closes (runRules in lib/data). */
   evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
   recordRun(run: JobRun): Promise<void>;
+  /** The US single stocks whose analysts' estimates are due (F12 forward P/E, config pe_check); undefined before its migration. */
+  estimatesPlan?(today: string): Promise<Array<{ ticker: string; currency: string }> | undefined>;
+  /** Replaces each stock's saved consensus (analyst_estimates). */
+  saveEstimates?(rows: readonly EstimateRow[]): Promise<void>;
+}
+
+/** A stock's consensus as analyst_estimates keeps it. */
+export interface EstimateRow {
+  ticker: string;
+  asOf: string;
+  currency: string;
+  estimates: { years: ReturnType<typeof avEstimates>; targetPrice?: number; ratings?: ReturnType<typeof avOverview>['ratings'] };
+  source: string;
 }
 
 type Loaded = { source: string; rows: number; latest: string };
@@ -170,6 +183,8 @@ export interface RunDetail {
   valued?: string[];
   /** The red-flag indicator (N3): the companies scanned tonight, and the events the feeds found. */
   redFlags?: { scanned: string[]; events: number };
+  /** The analysts' estimates loaded tonight (F12 forward P/E), and those Alpha Vantage refused; neither changes the run's status. */
+  estimates?: { saved: string[]; failed: string[] };
   /** The funds' holdings files read tonight (F14); `rows` is the lines, `latest` the file's date. */
   holdings?: Record<string, Loaded>;
 }
@@ -728,6 +743,36 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
   } catch (err) {
     detail.errors.push(`${DATABASE_ERRORS[1]}: ${message(err)}`);
     return finish('failed');
+  }
+
+  // The analysts' consensus of the US single stocks due (F12 forward P/E): two Alpha Vantage
+  // requests a stock, every pe_check.refresh_days days. Optional data: a refusal (the free key's
+  // 25 a day) is noted and leaves the saved consensus, without marking the night partial.
+  if (avKey && store.estimatesPlan && store.saveEstimates) {
+    try {
+      const due = (await store.estimatesPlan(today)) ?? [];
+      const rows: EstimateRow[] = [];
+      const failed: string[] = [];
+      for (const { ticker, currency } of due) {
+        try {
+          const years = avEstimates(await get(avUrl('EARNINGS_ESTIMATES', ticker, avKey)));
+          if (years.length === 0) throw new FeedError('no fiscal-year estimate');
+          let overview: ReturnType<typeof avOverview> = {};
+          try {
+            overview = avOverview(await get(avUrl('OVERVIEW', ticker, avKey)));
+          } catch {
+            // The target price and ratings are extras: the EPS estimates stand without them.
+          }
+          rows.push({ ticker, asOf: today, currency: overview.currency ?? currency, estimates: { years, ...(overview.targetPrice !== undefined ? { targetPrice: overview.targetPrice } : {}), ...(overview.ratings ? { ratings: overview.ratings } : {}) }, source: 'alphavantage' });
+        } catch (err) {
+          failed.push(`${ticker}: ${message(err)}`);
+        }
+      }
+      if (rows.length > 0) await store.saveEstimates(rows);
+      if (due.length > 0) detail.estimates = { saved: rows.map((row) => row.ticker), failed };
+    } catch (err) {
+      detail.estimates = { saved: [], failed: [`${DATABASE_ERRORS[1]}: ${message(err)}`] };
+    }
   }
 
   // Every day's NAV from the first trade on, recomputed each night so that an edited trade or a

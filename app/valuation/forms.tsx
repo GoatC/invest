@@ -5,9 +5,9 @@ import { useActionState, useState, type ReactNode } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseAssumptionsForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
 
-import { saveAssumptions, saveValuationSettings, type ValuationFormState } from './actions';
+import { saveAssumptions, saveEstimates, saveValuationSettings, type ValuationFormState } from './actions';
 
 const INITIAL: ValuationFormState = { errors: {}, message: null };
 
@@ -140,6 +140,29 @@ export function ValuationSettingsForm({ markets, initial, today, checkedOn }: { 
         <Bi en={`Defaults checked today${checkedOn ? ` (last ${checkedOn})` : ''}`} zh={`今天已確認預設值${checkedOn ? `（上次 ${checkedOn}）` : ''}`} />
       </label>
       {checkedOn && <input type="hidden" name="checkedOn" value={checkedOn} />}
+      <Submit pending={pending} message={state.message} />
+    </form>
+  );
+}
+
+/** The analysts' consensus, typed in from a broker's or a news site's page (F12 forward P/E). */
+export function EstimatesForm({ ticker, currency, initial }: { ticker: string; currency: string; initial: Record<string, string> }) {
+  const [state, action, pending] = useActionState(saveEstimates, INITIAL);
+  const fields = useFields(initial, parseEstimatesForm, state);
+  const { input } = fields;
+  return (
+    <form action={action} onSubmit={fields.reset} className="form">
+      <input type="hidden" name="ticker" value={ticker} />
+      <div className="form-grid">
+        {input('fy1_end', { en: 'Fiscal year 1 ends (YYYY-MM-DD)', zh: '第一個會計年度結束日（YYYY-MM-DD）' })}
+        {input('fy1_eps', { en: `EPS, mean, ${currency}`, zh: `每股盈餘平均（${currency}）` })}
+        {input('analysts', { en: 'Analysts', zh: '分析師人數' })}
+        {input('fy1_high', { en: `EPS, highest, ${currency}`, zh: `每股盈餘最高（${currency}）` })}
+        {input('fy1_low', { en: `EPS, lowest, ${currency}`, zh: `每股盈餘最低（${currency}）` })}
+        {input('target', { en: `Target price, mean, ${currency}`, zh: `平均目標價（${currency}）` })}
+        {input('fy2_end', { en: 'Fiscal year 2 ends', zh: '第二個會計年度結束日' })}
+        {input('fy2_eps', { en: `FY2 EPS, mean, ${currency}`, zh: `第二年每股盈餘平均（${currency}）` })}
+      </div>
       <Submit pending={pending} message={state.message} />
     </form>
   );

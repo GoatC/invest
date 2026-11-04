@@ -1,15 +1,18 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { LABELS, type Bilingual } from '@/lib/i18n';
 
+import { RefreshData } from './refresh-data';
+
 /**
  * The main navigation: four pages as pills, and four groups that open a short list below their
  * button. Labels show in Chinese only; each link's accessible name adds the English. On a phone the
- * pills become a bottom tab bar whose "More" opens the four groups as a sheet.
+ * pills become a bottom tab bar whose "More" opens the four groups as a sheet. The More group also
+ * holds the button that refreshes the data now (components/refresh-data.tsx).
  */
 
 interface Page {
@@ -100,6 +103,15 @@ const TABS: ReadonlyArray<{ page: Page; short: string; icon: ReactNode }> = [
   },
 ];
 
+/**
+ * Inside a link: lights up the moment it is tapped, while the server prepares the page, so a tap
+ * always answers at once (a thin bar along the top of the screen, and the tab itself).
+ */
+function Pending() {
+  const { pending } = useLinkStatus();
+  return pending ? <span className="link-pending" data-pending aria-hidden="true" /> : null;
+}
+
 function matches(page: Page, path: string): boolean {
   const under = (base: string) => (base === '/' ? path === '/' : path === base || path.startsWith(`${base}/`));
   return under(page.href) || (page.also ?? []).some(under);
@@ -158,6 +170,7 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
             return (
               <Link key={page.href} href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={current ? 'page' : undefined} className={`nav-pill${current ? ' current' : ''}`}>
                 {page.label.zh}
+                <Pending />
               </Link>
             );
           })}
@@ -187,10 +200,16 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
                       <li key={page.href}>
                         <Link href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={here ? 'page' : undefined} className={here ? 'current' : undefined}>
                           {page.label.zh}
+                          <Pending />
                         </Link>
                       </li>
                     );
                   })}
+                  {group.key === 'more' && (
+                    <li className="nav-refresh">
+                      <RefreshData />
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
@@ -210,6 +229,7 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
                 </svg>
               </span>
               {short}
+              <Pending />
             </Link>
           );
         })}
@@ -251,11 +271,13 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
                       <li key={page.href}>
                         <Link href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={here ? 'page' : undefined} className={here ? 'current' : undefined}>
                           {page.label.zh}
+                          <Pending />
                         </Link>
                       </li>
                     );
                   })}
                 </ul>
+                {group.key === 'more' && <RefreshData />}
               </div>
             ))}
             {signOut}
