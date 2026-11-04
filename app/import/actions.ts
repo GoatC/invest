@@ -1,7 +1,6 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { mappingKey, missingColumns, parseMapping } from '@/lib/csv/mapping';

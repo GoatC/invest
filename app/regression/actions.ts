@@ -1,7 +1,6 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';

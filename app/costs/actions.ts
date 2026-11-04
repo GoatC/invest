@@ -1,7 +1,6 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAssetClasses, loadCostConfig, orDataError, type CostConfig } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';

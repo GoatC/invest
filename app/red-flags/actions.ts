@@ -1,7 +1,6 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { loadRedFlagData, loadRedFlagSettings, scanRedFlags } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';

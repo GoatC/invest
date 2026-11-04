@@ -35,7 +35,7 @@ The site is public but the data is not: only your account can sign in, and row-l
 
    Vercel 要你選 **Type** 時選 **Config**：名稱以 `NEXT_PUBLIC_` 開頭的值會放進網頁，本來就是公開的（publishable key 有資料庫的權限規則保護）。選 Secret 時 Vercel 會提醒你改成 Config。
 
-   不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。第 10 步的推播另外需要三個 VAPID 值，設定方式見 [推播通知](web-push.md)。
+   不要加 `SUPABASE_SECRET_KEY`、`FINMIND_TOKEN` 或其他金鑰：網頁用不到，放在這裡只會多一個外洩的地方。第 10 步的推播另外需要三個 VAPID 值，設定方式見 [推播通知](web-push.md)；「更新最新資料」按鈕需要的 `GITHUB_DISPATCH_TOKEN`（選用，只能啟動排程）見 [每夜排程第 6 步](nightly-job.md)。
 6. 如果接著出現 **Optional Integrations**（例如 Supabase 旁邊有 **Add** 按鈕）：**不要按 Add**，直接按 **Deploy**。你已經有自己的 Supabase 專案；這個整合會另外建立或連接一個資料庫，並把 secret key 等金鑰自動放進 Vercel。
 7. 按 **Deploy**，等 1–2 分鐘，出現恭喜畫面就完成了。
 
@@ -72,6 +72,13 @@ On an iPhone, use Safari's Share → Add to Home Screen; on Android, Chrome's me
   Vercel 不會幫你改資料庫。在你執行 `db push` 之前，網站可能會短暫顯示「無法從資料庫讀取」，執行後重新整理就好。
 
 Merging to `main` redeploys the site by itself; when a PR changes the database, run `npx supabase db push` right after merging.
+
+## 速度 Speed
+
+- **伺服器在東京**：`vercel.json` 的 `"regions": ["hnd1"]` 讓 Vercel 在東京執行網頁程式，和 Supabase 專案（Northeast Asia (Tokyo)）在同一個地區。沒有這一行時 Vercel 預設在美國華盛頓執行，每一次讀資料庫都要橫越太平洋來回一趟（約 150 毫秒），一頁要讀好幾輪就慢了一兩秒。合併後下一次部署自動生效，不用在 Vercel 設定；Hobby 方案可以選一個地區。若你的 Supabase 不在東京，請告訴 Claude 改成最近的地區代號。
+- **（選用）登入驗證不必連線**：Supabase → **Project Settings → JWT Keys**。若 **Current key** 寫的是 **Legacy JWT secret**，每次換頁伺服器都要問一次 Supabase Auth「這個登入還有效嗎」。按 **Migrate JWT secret**，再按 **Rotate keys** 讓新的 ECC (P-256) key 成為 current，之後驗證在伺服器本機完成、少一次連線。舊的登入在到期（約 1 小時）前仍有效，最多需要重新登入一次。已經是 ECC 或 RSA key 就不用做。
+
+The app runs in Tokyo (`vercel.json` regions `hnd1`), next to the Supabase project, so each database round trip is a few milliseconds rather than a Pacific crossing. Optionally, switch Supabase to asymmetric JWT signing keys so each tap verifies the session locally.
 
 ## 問題排除 Troubleshooting
 
