@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadEstimatePlan, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readFactorSettings } from '../../../lib/models/five-factor.ts';
 import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
@@ -13,7 +13,7 @@ import type { IndexClose } from '../feeds/indices.ts';
 import type { FeedEvent } from '../feeds/redflags.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
 import { packConstituent } from '../../../lib/models/look-through.ts';
-import type { FundamentalRow, FundFileRow, JobRun, Security, Store } from './job.ts';
+import type { EstimateRow, FundamentalRow, FundFileRow, JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
 const BATCH = 500;
@@ -140,6 +140,14 @@ export function supabaseStore(client: SupabaseClient): Store {
         );
         check('fundamentals', error);
       }
+    },
+    estimatesPlan: (today) => loadEstimatePlan(client, today),
+    async saveEstimates(rows: readonly EstimateRow[]) {
+      const { error } = await client.from('analyst_estimates').upsert(
+        rows.map((row) => ({ ticker: row.ticker, as_of: row.asOf, currency: row.currency, estimates: row.estimates, source: row.source })),
+        { onConflict: 'ticker' },
+      );
+      check('analyst_estimates', error);
     },
     redFlagCompanies: (today) => loadRedFlagCompanies(client, today),
     async saveProfiles(rows) {

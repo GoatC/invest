@@ -309,3 +309,16 @@ from (
   ]) with ordinality as t (id, n)
 ) as p
 cross join generate_series(0, 60) as w;
+
+-- The forward P/E check (F12): an invented consensus for AAPL, as the nightly job would load it
+-- from Alpha Vantage, dated today so it never reads stale. 2330 has none: Taiwan's consensus is
+-- typed in on its Valuation page.
+insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values
+  ('AAPL', (now() at time zone 'Asia/Taipei')::date, 'USD', '{
+     "years": [
+       {"periodEnd": "2027-09-30", "mean": 8.10, "high": 8.70, "low": 7.40, "analysts": 38, "mean30": 8.02, "up30": 6, "down30": 2},
+       {"periodEnd": "2028-09-30", "mean": 8.90, "high": 9.80, "low": 8.00, "analysts": 35, "mean30": 8.85, "up30": 4, "down30": 3}
+     ],
+     "targetPrice": 255,
+     "ratings": {"strongBuy": 14, "buy": 18, "hold": 9, "sell": 1, "strongSell": 0}
+   }', 'demo');

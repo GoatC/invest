@@ -46,6 +46,7 @@ import {
   parseSectorForm,
   parseFlagEntryForm,
   parseFlagSettingsForm,
+  parseEstimatesForm,
 } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
@@ -743,5 +744,34 @@ describe('parseSplitForm', () => {
     assert.ok(!zero.ok && zero.errors.oldShares === SPLIT_MESSAGES.shares);
     const huge = parseSplitForm({ ...raw, newShares: '1000' }, tickers, [], '2026-10-29');
     assert.ok(!huge.ok && huge.errors.newShares === SPLIT_MESSAGES.range);
+  });
+});
+
+describe('parseEstimatesForm (F12 forward P/E)', () => {
+  it('reads one or two fiscal years, the analysts and the target', () => {
+    const parsed = parseEstimatesForm({ fy1_end: '2026-12-31', fy1_eps: '62.5', fy1_high: '66', fy1_low: '58', fy2_end: '2027-12-31', fy2_eps: '75', analysts: '30', target: '1,650' });
+    assert.deepEqual(parsed, {
+      ok: true,
+      value: {
+        years: [
+          { periodEnd: '2026-12-31', mean: 62.5, high: 66, low: 58, analysts: 30 },
+          { periodEnd: '2027-12-31', mean: 75, analysts: 30 },
+        ],
+        targetPrice: 1650,
+      },
+    });
+    assert.deepEqual(parseEstimatesForm({ fy1_end: '2026-12-31', fy1_eps: '-1.2' }), { ok: true, value: { years: [{ periodEnd: '2026-12-31', mean: -1.2 }] } });
+  });
+
+  it('refuses a missing first year, a second year half given or out of order, a range out of order and a bad count', () => {
+    const errors = (raw: Record<string, string>) => {
+      const parsed = parseEstimatesForm(raw);
+      return parsed.ok ? [] : Object.keys(parsed.errors).sort();
+    };
+    assert.deepEqual(errors({}), ['fy1_end', 'fy1_eps']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy2_end: '2027-12-31' }), ['fy2_eps']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy2_end: '2026-06-30', fy2_eps: '6' }), ['fy2_end']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy1_high: '4' }), ['fy1_high']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', analysts: '2.5', target: '0' }), ['analysts', 'target']);
   });
 });

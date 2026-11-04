@@ -1255,6 +1255,43 @@ await step('valuation: the watchlist, a workbench valued by DCF, the dividend mo
   check((await page.locator('#valuation-settings').innerText()).includes(`last ${taipeiToday}`), 'the defaults checked today');
 });
 
+await step("forward P/E check: AAPL's demo consensus against its trailing and own-median P/E; 2330's typed in, refused out of order, saved, logged and removed (F12)", async () => {
+  await page.goto(`${BASE}/valuation?t=AAPL`);
+  const card = page.locator('#pe-check');
+  await card.waitFor();
+  const text = (await card.innerText()).replace(/\s+/g, ' ');
+  check(/Forward P\/E 預估本益比 [\d.]+×/.test(text) && /Trailing P\/E 目前本益比 [\d.]+×/.test(text), `both P/Es, got ${text}`);
+  check(/Leans cheap|Neutral|Leans expensive/.test(text) && /偏便宜|中性|偏貴/.test(text), `a verdict, got ${text}`);
+  check(/Analysts 分析師 35/.test(text) && text.includes('32 buy · 9 hold · 1 sell'), `the analysts and ratings, got ${text}`);
+  check(/Mean target price 平均目標價 255\.00 USD/.test(text), `the target price, got ${text}`);
+  check(/The consensus moved [+−][\d.]+% in 30 days \(10 up, 5 down\)/.test(text), `the revisions, got ${text}`);
+  check(text.includes(`Consensus as of ${taipeiToday}, Demo data`), `the source and date, got ${text}`);
+  await snap('pe-check');
+
+  // Taiwan has no feed: the form opens, refuses a second year before the first, then saves.
+  await page.goto(`${BASE}/valuation?t=2330`);
+  check((await card.innerText()).includes('No consensus yet'), 'no consensus for 2330');
+  check(await card.locator('details.more-fields').evaluate((element) => element.open), 'the form open for a Taiwan stock');
+  await card.locator('input[name=fy1_end]').fill('2026-12-31');
+  await card.locator('input[name=fy1_eps]').fill('62.5');
+  await card.locator('input[name=fy2_end]').fill('2026-06-30');
+  await card.locator('input[name=fy2_eps]').fill('75');
+  await card.getByText('The second fiscal year must end after the first.').waitFor();
+  await card.locator('input[name=fy2_end]').fill('2027-12-31');
+  await card.locator('input[name=analysts]').fill('30');
+  await card.locator('input[name=target]').fill('2800');
+  await card.locator('form.form button[type=submit]').click();
+  await page.waitForURL('**/valuation?t=2330&saved=estimates**');
+  const typed = (await card.innerText()).replace(/\s+/g, ' ');
+  check(typed.includes('Consensus saved') && /Forward P\/E 預估本益比 [\d.]+×/.test(typed) && typed.includes('typed in'), `the typed consensus read, got ${typed}`);
+  await card.locator('details.more-fields summary').click();
+  await card.getByRole('button', { name: /Remove the consensus/ }).click();
+  await page.waitForURL('**/valuation?t=2330&saved=estimates-cleared**');
+  check((await card.innerText()).includes('No consensus yet'), 'removed');
+  await page.goto(`${BASE}/history`);
+  check(/Analysts' consensus[\s\S]*2330/.test(await body()), 'the removed consensus in the edit history');
+});
+
 // A stand-in push service on local HTTPS (run.sh made its certificate, which the app and the push
 // job trust): it keeps what it receives, and says a device ending in /gone has unsubscribed.
 const pushes = [];
@@ -1848,6 +1885,10 @@ async function phoneTabs() {
   const sheet = page.getByRole('dialog', { name: /More/ });
   await sheet.getByRole('link', { name: /Data status/ }).waitFor();
   await snap('phone-more', page, false);
+  // The refresh button: without GITHUB_DISPATCH_TOKEN (as here) it reloads the page's data and says how to set it up.
+  await sheet.getByRole('button', { name: /Refresh the latest data/ }).click();
+  await sheet.getByText('GITHUB_DISPATCH_TOKEN').first().waitFor();
+  check((await sheet.innerText()).includes('已重新整理畫面'), 'the refresh note in Chinese too');
   await sheet.getByRole('link', { name: /Regression/ }).click();
   await page.waitForURL('**/regression');
   // The sheet closes once the new page renders.

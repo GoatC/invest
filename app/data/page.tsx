@@ -133,6 +133,14 @@ function LatestRun({ run }: { run: JobRun }) {
           </Link>
         </p>
       )}
+      {detail.estimates && (
+        <p className="muted small" id="estimates">
+          <Bi
+            en={`Analysts' estimates: loaded ${detail.estimates.saved.join(', ') || 'none'}${detail.estimates.failed.length > 0 ? `; not loaded, keeping the saved ones: ${detail.estimates.failed.join('; ')}` : ''}.`}
+            zh={`分析師預估：已載入 ${detail.estimates.saved.join('、') || '（無）'}${detail.estimates.failed.length > 0 ? `；未能載入、沿用已存資料：${detail.estimates.failed.join('；')}` : ''}。`}
+          />
+        </p>
+      )}
       {Object.keys(detail.holdings).length > 0 && (
         <p className="muted small" id="holdings-files">
           <Bi

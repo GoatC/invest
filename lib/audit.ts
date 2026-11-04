@@ -18,6 +18,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   windfall_tranches: { en: 'Windfall tranche', zh: '大額資金分批' },
   red_flag_entries: { en: 'Red flag entry', zh: '紅旗紀錄' },
   splits: { en: 'Stock split', zh: '股票分割' },
+  analyst_estimates: { en: "Analysts' consensus", zh: '分析師共識預估' },
 };
 
 function text(value: unknown): string {

@@ -13,7 +13,7 @@ import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts'
 import type { IndexClose } from '../feeds/indices.ts';
 import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
-import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type FundFileRow, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type EstimateRow, type FundamentalRow, type FundFileRow, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -382,6 +382,41 @@ const deps = (get: Get, store: Store, alphaVantageKey?: string, bytes: GetBytes 
   alphaVantageKey,
   today: TODAY,
   now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++)),
+});
+
+describe("analysts' estimates (F12 forward P/E)", () => {
+  const plan = [{ ticker: 'AAPL', currency: 'USD' }, { ticker: 'MSFT', currency: 'USD' }];
+  const estimatesReply = JSON.stringify({ estimates: [{ date: '2027-09-30', horizon: 'fiscal year', eps_estimate_average: '8.1', eps_estimate_analyst_count: '38' }] });
+  const overviewReply = JSON.stringify({ Currency: 'USD', AnalystTargetPrice: '255', AnalystRatingBuy: '18' });
+  const avGet = (base: Get): Get => async (url, headers) => {
+    if (url.includes('function=EARNINGS_ESTIMATES')) {
+      if (url.includes('symbol=MSFT')) return JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' });
+      return estimatesReply;
+    }
+    if (url.includes('function=OVERVIEW')) return overviewReply;
+    return base(url, headers);
+  };
+
+  it('loads the stocks due, keeps a refusal out of the status and saves the rest', async () => {
+    const store = new MemoryStore();
+    const saved: EstimateRow[] = [];
+    Object.assign(store, { estimatesPlan: async () => plan, saveEstimates: async (rows: readonly EstimateRow[]) => void saved.push(...rows) });
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(avGet(fakeGet().get), store, 'key'));
+    assert.equal(run.status, before.status);
+    assert.deepEqual(run.detail.estimates?.saved, ['AAPL']);
+    assert.match(run.detail.estimates?.failed[0] ?? '', /^MSFT: Alpha Vantage refused/);
+    assert.deepEqual(saved, [{ ticker: 'AAPL', asOf: TODAY, currency: 'USD', estimates: { years: [{ periodEnd: '2027-09-30', mean: 8.1, analysts: 38 }], targetPrice: 255, ratings: { strongBuy: 0, buy: 18, hold: 0, sell: 0, strongSell: 0 } }, source: 'alphavantage' }]);
+  });
+
+  it('needs an Alpha Vantage key', async () => {
+    const store = new MemoryStore();
+    let asked = false;
+    Object.assign(store, { estimatesPlan: async () => ((asked = true), plan), saveEstimates: async () => undefined });
+    const run = await runNightly(deps(avGet(fakeGet().get), store));
+    assert.equal(asked, false);
+    assert.equal(run.detail.estimates, undefined);
+  });
 });
 
 describe('filings (F12)', () => {

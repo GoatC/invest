@@ -6,6 +6,7 @@ import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
+import { PE_CHECK_DEFAULTS, readPeCheckSettings } from '../../lib/models/forward-pe.ts';
 import { readLookThroughSettings } from '../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
 import { readMcSettings } from '../../lib/models/monte-carlo.ts';
@@ -27,13 +28,15 @@ const KEY_MISSING = '23503';
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
-// (Phase 3, step 1) adds simulation_runs, and N5's stock splits splits.
+// (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
+// analyst_estimates.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
+  'analyst_estimates',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -53,7 +56,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs and splits', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits and analyst_estimates', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -988,5 +991,30 @@ describe('stock splits (N5)', () => {
     await as(db, 'stranger', async (tx) => {
       assert.equal(await errorCode(tx.query(`insert into public.splits (ticker, ex_date, ratio) values ('AAPL', '2026-06-10', 4)`)), DENIED);
     });
+  });
+});
+
+describe('forward P/E check (F12, added 2026-11-04)', () => {
+  it("keeps one consensus a stock, the owner's typed or the job's, logged; a stranger sees none", async () => {
+    const row = `('2330', '2026-11-04', 'TWD', '{"years": [{"periodEnd": "2026-12-31", "mean": 62.5}]}', 'typed')`;
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ${row}`);
+      await tx.query(`update public.analyst_estimates set estimates = '{"years": [{"periodEnd": "2026-12-31", "mean": 63}]}' where ticker = '2330'`);
+      assert.equal(await scalar(tx, `select count(*) from public.audit_log where table_name = 'analyst_estimates' and row_key = '2330'`), 1);
+      assert.equal(await errorCode(tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ('AAPL', '2026-11-04', 'USD', '{"years": {}}', 'typed')`)), CHECK_FAILED);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.analyst_estimates'), 0);
+      assert.equal(await errorCode(tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ('2330', '2026-11-04', 'TWD', '{"years": []}', 'typed') on conflict (ticker) do nothing`)), DENIED);
+    });
+    await as(db, 'service_role', (tx) => tx.query(`update public.analyst_estimates set source = 'alphavantage' where ticker = 'AAPL'`));
+    await db.query(`delete from public.analyst_estimates where ticker = '2330'`);
+  });
+
+  it('seeds config pe_check and a demo consensus for AAPL', async () => {
+    const settings = readPeCheckSettings(await scalar(db, `select value from public.config where key = 'pe_check'`));
+    assert.deepEqual(settings, PE_CHECK_DEFAULTS);
+    const seeded = await scalar<{ years: unknown[] }>(db, `select estimates from public.analyst_estimates where ticker = 'AAPL'`);
+    assert.equal(seeded.years.length, 2);
   });
 });
