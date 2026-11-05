@@ -155,12 +155,19 @@ Sharpe = \frac{E[R_p] - R_f}{\sigma_p}
 ```
 
 - Output 輸出: frontier curve, capital market line, current and target portfolios plotted as points. Reference only: it never writes back to F6 targets. 效率前緣曲線、資本市場線，並標出目前與目標投資組合的位置。結果僅供參考，不會自動改寫 F6 的目標權重。
+- What-if: shorting and leverage 假設情境：做空與槓桿 (added 2026-11-05): below the long-only frontier, a what-if lets each class go short down to a cap (0–100% of the portfolio per class, 0.1 steps; its maximum unchanged and the weights still summing to 100%, so shorts fund longs; gross exposure Σ|w| is shown), and holds the whole mix at a leverage L from 0.1× to 3.0× in 0.1× steps along the capital allocation line: below 1× the rest earns R\_f, above 1× the extra is borrowed at R\_f plus a spread (0–5%, default 1%). Allowing shorts can only raise the best Sharpe ratio. The page notes what a straight line hides: a loss beyond own money ends in a margin call, shorts pay borrow fees and the dividends of what they borrowed. Analysis only: read from the page's address, never saved, never written to F6 targets or `frontier.bounds`, no rule reads it. 在只做多的效率前緣下方新增假設情境：每個類別可放空至上限（每類別占投資組合 0–100%，以 0.1 為級距；上限不變、權重仍合計 100%，即以放空的資金買進其他類別；並顯示總曝險 Σ|w|），整個配置可沿資本配置線以 0.1 倍到 3.0 倍（以 0.1 倍為級距）的槓桿 L 持有：低於 1 倍時其餘資金賺取無風險利率，高於 1 倍時多出的部分以無風險利率加利差（0–5%，預設 1%）借入。允許放空只會提高最佳夏普比率。頁面說明直線所隱藏的風險：虧損超過自有資金即被追繳保證金，放空須支付借券費與所借股票的股利。僅供分析：參數來自網址，不儲存、不寫回 F6 目標或 `frontier.bounds`，也沒有規則讀取。
+
+```latex
+E[R_L] = R_f + L\left(E[R_p] - R_f\right) - \max(0,\, L - 1) \cdot \text{spread}, \qquad \sigma_L = L\, \sigma_p
+```
 
 **F10 Stress test & scenario replay 壓力測試與情境回放**
 
 - Scenarios 情境: 2008 global financial crisis, 2020 COVID crash, 2022 rate shock, plus a custom shock. 2008 金融海嘯、2020 新冠崩盤、2022 升息衝擊，另可自訂情境。
 - Logic 邏輯: apply each scenario's asset-class returns (in TWD) to current weights. 將各情境的資產類別報酬（以台幣計）套用到目前權重。
 - Output 輸出: maximum drawdown in % and NT$, months to recover, and which F3 acceleration tiers would have fired. 最大回撤（百分比與台幣金額）、回本所需月數，以及會觸發哪些 F3 加速級距。
+- Direction & leverage 多空方向與槓桿 (added 2026-11-05): a short or leveraged holding (N5) moves its class by its exposure, not its own money: each month the value changes by exposure × r and the exposure by (1 + r), so a short gains when its class falls and a 2× long moves twice as far. 做空或槓桿持股（N5）以曝險而非自有資金帶動其類別：每月價值變動為曝險 × r，曝險本身變為 × (1 + r)；因此做空在類別下跌時獲利，2 倍做多的波動為兩倍。
+- What-if position 假設部位 (added 2026-11-05): add a position not held, long or short, leverage 1.0× to 10.0× in 0.1× steps, with an amount of own money (default 5% of the portfolio), following one asset class's series. Each scenario shows its own money month by month (it starts at ±L × margin of exposure; a 1 ÷ L move against it uses it up), the lowest share of the margin left (below 0 when a gap costs more than was put in), the first month it reached config `leverage.margin_call_share` (margin call) and the first month it was used up, when the broker would have closed it and its loss is frozen; and the whole portfolio's deepest fall with the position added. Monthly steps miss a crash inside a month; borrowing cost, borrow fees and a short's dividends are left out. Analysis only, nothing saved. 加入一個未持有的假設部位：做多或做空、槓桿 1.0 至 10.0 倍（以 0.1 倍為級距）、投入的自有資金（預設為投資組合的 5%），跟隨某個資產類別的資料。每個情境顯示自有資金的逐月變化（起始曝險為 ±L × 保證金；反向變動 1 ÷ L 即虧光）、剩餘保證金的最低比例（跳空損失超過投入時會低於 0）、首次降到 config `leverage.margin_call_share`（追繳保證金）的月份，以及虧光的月份（券商會在此時平倉，損失就此凍結）；並顯示加入該部位後整個投資組合的最大回撤。以月為單位會漏掉月中的崩跌；未計入融資利息、借券費與做空須支付的股利。僅供分析，不儲存。
 
 ### Module C — Security Analysis 證券分析
 
@@ -191,6 +198,11 @@ R_{i,t} - R_{f,t} = \alpha_i + \beta_i \left( R_{m,t} - R_{f,t} \right) + \varep
   - Adjusted β (Blume) = 0.67 × raw β + 0.33 調整後 β
   - Rolling β line chart, 52-week window 52 週滾動 β 時間序列
   - Compare mode: up to 5 tickers on one rolling-β chart 比較模式：最多 5 檔同圖比較. 5-factor mode: loadings on market, size, value, profitability and investment with t-statistics, per holding and for the whole portfolio, from the free Kenneth French data library. 五因子模式：各持股與整體組合的因子係數與 t 值
+- What-if: long or short, with leverage 假設情境：做多或做空，加上槓桿 (added 2026-11-05): β and α above are for one dollar held long. Pick a direction, a leverage from 1.0× to 10.0× in 0.1× steps, an amount of own money and an index move (−30% to +30%); for each benchmark the page shows the position's β and α on own money (both × s × L, s = +1 long, −1 short), what the move would do to own money (s × L × β × move, the market part only, α and noise left out), and the index amount whose β cancels it (β × exposure: short the index when positive, buy it when negative). The unexplained 1 − R² is leveraged too, and α is before borrowing cost, borrow fees and a short's dividends. Analysis only, nothing saved. 上方的 β 與 α 是做多一元的結果。選擇方向、槓桿（1.0 至 10.0 倍，以 0.1 倍為級距）、自有資金金額與指數變動（−30% 到 +30%）後，頁面對每個基準顯示：部位對自有資金的 β 與 α（皆乘以 s × L，做多 s = +1、做空 s = −1）、該指數變動對自有資金的影響（s × L × β × 變動，只計市場部分，不含 α 與雜訊），以及可抵銷其 β 的指數金額（β × 曝險：正值為放空指數、負值為買進指數）。未被解釋的 1 − R² 同樣被放大；α 未扣除融資利息、借券費與做空須支付的股利。僅供分析，不儲存。
+
+```latex
+\beta_{position} = s \cdot L \cdot \beta_i, \qquad \alpha_{position} = s \cdot L \cdot \alpha_i, \qquad s = \begin{cases} +1 & \text{long} \\ -1 & \text{short} \end{cases}
+```
 
 **F12 Valuation workbench + watchlist alerts 估值工作台與觀察清單警報**
 
@@ -307,11 +319,13 @@ VaR_{95\%} = 1.645 \cdot \sigma_p \cdot \sqrt{h} \cdot V, \qquad \sigma_p = \sqr
 **N5 Holdings entry page 持倉登錄頁**
 
 - Purpose 目的: the one page where Hugo records every buy and sell; it feeds F8, F18, N2, N4 and N6. 記錄每筆買賣的唯一頁面，資料提供給 F8、F18、N2、N4、N6。
-- Form fields 表單欄位: trade date, market (US / TW / UK), ticker with autocomplete, buy / sell, quantity, price, trade currency, fee, tax, FX rate (auto-filled, editable), sleeve (auto-filled from the security), pool (regular / windfall). 交易日、市場、代號（自動完成）、買賣、數量、價格、交易幣別、手續費、稅、匯率（自動帶入可修改）、部位（依證券自動帶入）、資金池。
+- Form fields 表單欄位: trade date, market (US / TW / UK), ticker with autocomplete, buy / sell, quantity, price, trade currency, fee, tax, FX rate (auto-filled, editable), sleeve (auto-filled from the security), pool (regular / windfall), direction (long / short) and leverage (added 2026-11-05). 交易日、市場、代號（自動完成）、買賣、數量、價格、交易幣別、手續費、稅、匯率（自動帶入可修改）、部位（依證券自動帶入）、資金池、多空方向與槓桿倍數（2026-11-05 加入）。
+- Direction & leverage 多空方向與槓桿 (added 2026-11-05): long (buy to open, sell to close) or short (sell short to open with borrowed shares, buy to cover); leverage = exposure ÷ own money, 1.0× up to config `leverage.max` (5.0× to start; the database accepts up to 10.0×) in steps of 0.1×. Only qty × price ÷ leverage of an opening trade is own money (a long's fee and tax come out of it, a short's out of the sale's proceeds); the rest is borrowed. A position's own money now is margin + s × (qty × price − entry value), s = +1 long, −1 short, which for a long at 1× is just its market value, so every trade saved before stays exactly as it was (long, 1×). A short is kept apart from a long of the same ticker and pool, never netted; a cover larger than the short is refused like an oversized sell. Before saving, the form shows the own money, the exposure, what is borrowed and the move that would use the own money up (1 ÷ leverage), and for a short that its loss has no ceiling and that 複委託 usually cannot short. CSV imports carry no direction or leverage: every imported trade is a long at 1×. Recording only: the app never places a trade (L2). 做多（買進開倉、賣出平倉）或做空（以借來的股票放空賣出開倉、買進回補）；槓桿 = 曝險 ÷ 自有資金，自 1.0 倍到 config `leverage.max`（起始 5.0 倍；資料庫最多接受 10.0 倍），以 0.1 倍為級距。開倉交易只有數量 × 價格 ÷ 槓桿是自有資金（做多的手續費與稅由自有資金支付，做空的由賣出所得扣除），其餘為借入。部位目前的自有資金 = 保證金 + s ×（數量 × 現價 − 開倉金額），做多 s = +1、做空 s = −1；1 倍做多即為市值，因此既有交易完全不變（做多、1 倍）。同一代號與資金池的做空與做多分開記錄，不互相抵銷；回補數量超過放空數量時，與超賣一樣會被拒絕。儲存前，表單顯示自有資金、曝險、借入金額，以及會虧光自有資金的價格變動（1 ÷ 槓桿）；做空時另提醒虧損沒有上限，且複委託通常不能放空。CSV 匯入不含方向與槓桿：所有匯入交易皆為 1 倍做多。只做紀錄：App 不會下單（L2）。
 - Non-listed assets 非上市資產: physical gold entered in grams and valued at the TWD gold price; high-yield savings and money-market funds entered as balances. 實體黃金以克數輸入、依台幣金價估值；高利活存與貨幣基金以餘額輸入。
-- Checks on save 儲存檢查: warns, without blocking, when a trade would break R1 (one stock above 5%) or R2 (satellite above 25%). 若交易會違反 R1 或 R2，顯示警示但不阻擋。
+- Checks on save 儲存檢查: warns, without blocking, when a trade would break R1 (one stock above 5%) or R2 (satellite above 25%). Since 2026-11-05 both read gross exposure over the regular pool's own money: a stock's long and short lines added as absolute values, so a 3× long of NT$10,000 counts as NT$30,000. 若交易會違反 R1 或 R2，顯示警示但不阻擋。2026-11-05 起兩者皆以總曝險除以一般資金池的自有資金計算：同一檔股票的做多與做空部位取絕對值相加，因此 NT$10,000 的 3 倍做多以 NT$30,000 計。
 - Bulk import 批次匯入: 複委託 statement CSV with a column-mapping step remembered per broker. 匯入複委託對帳單 CSV，欄位對應設定依券商記憶。
 - Holdings view 持倉總覽: quantity, average cost, market value in TWD, unrealised gain, actual vs target weight; every entry can be edited or deleted, with an audit log. 數量、平均成本、台幣市值、未實現損益、實際與目標權重；每筆紀錄可修改或刪除，並留存稽核紀錄。
+- Short and leveraged lines 做空與槓桿部位 (added 2026-11-05): such a line shows its direction and leverage as badges, its value as own money and its exposure (negative for a short) under its weight; a warning appears when its own money falls to config `leverage.margin_call_share` (30% to start) of what was put in or below, display only, no rule or push. A class's weight is its net exposure (a short subtracts) over the pool's own money, so leverage shows as weight. The value at risk measures each proxy by the TWD that moves with it (a short against the long it hedges), and performance (F18) counts only own money as put in and returns the gain on it, so a 2× long's daily return is twice the price's. 此類部位以標籤顯示方向與槓桿，價值為自有資金，權重下方顯示曝險（做空為負）；自有資金降到投入的 config `leverage.margin_call_share`（起始 30%）以下時顯示警示，僅顯示，不觸發規則或推播。類別權重為淨曝險（做空為減項）除以資金池的自有資金，因此槓桿會反映在權重上。風險值以隨各代理指標變動的台幣金額衡量（做空抵銷其避險的做多），績效（F18）只把自有資金算作投入，並以其計算報酬，因此 2 倍做多的日報酬為價格變動的兩倍。
 
 **N6 Allocation donuts 資產配置圓餅圖**
 
@@ -452,7 +466,7 @@ Nineteen Postgres tables cover holdings, market data, rules and model outputs; a
 | --- | --- | --- |
 | asset\_classes 資產類別 | id, name\_en, name\_zh, target\_weight, benchmark\_ticker, is\_satellite | F6, F8, N2 |
 | securities 證券 | ticker, market (US/TW/UK), product\_type, listing\_country, sleeve, currency, domicile, asset\_class\_id | All |
-| transactions 交易 | date, ticker, side, qty, price, fee, tax, fx\_rate, source (manual/CSV), pool (regular/windfall) | F18, N2 |
+| transactions 交易 | date, ticker, side, qty, price, fee, tax, fx\_rate, source (manual/CSV), pool (regular/windfall), direction (long/short), leverage (1.0–10.0) | F18, N2 |
 | cash\_flows 現金流 | date, amount\_twd, type (contribution/windfall/dividend), pool (regular/windfall) | F2, F18 |
 | prices 價格 | ticker, date, close, adj\_close | All |
 | fx\_rates 匯率 | date, pair, rate | F18, N2 |
@@ -486,6 +500,8 @@ Phase 2, step 6 adds fund\_holdings (fund, as\_of, source, constituents, loaded\
 Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly job's monthly Monte Carlo re-run, the inputs and the figures at the marks, written by the job only, read by the dashboard in the week it updates. 第三階段第 1 步新增 simulation\_runs（模型、執行日、摘要）：每夜排程每月一次的蒙地卡羅重跑結果，只有排程能寫入，儀表板在更新當週讀取。 Step 2 adds only config rows: timeline (the later goals) 第 2 步只新增 config：timeline（後續目標）。
 
 After Phase 3, N5 adds splits (ticker, ex\_date, ratio, note): one row per stock split, ratio new shares per old share; trades stay as traded and the models read them in today's units. 第三階段後，N5 加入 splits（代號、生效日、比例、備註）：每次股票分割一列，比例為每 1 股舊股換得的新股數；交易維持成交時的紀錄，模型以今天的股數讀取。
+
+On 2026-11-05, N5 adds two columns to transactions: direction (long / short, default long) and leverage (numeric(3,1), 1.0 to 10.0, default 1.0), so every trade saved before is a long at 1×; and config `leverage` (max, the highest leverage the form offers; margin\_call\_share, the share of own money left at which the holdings page warns). 2026-11-05 起，N5 在 transactions 加入兩個欄位：direction（long／short，預設 long）與 leverage（numeric(3,1)，1.0 至 10.0，預設 1.0），因此既有交易皆為 1 倍做多；另加入 config `leverage`（max：表單提供的最高槓桿；margin\_call\_share：自有資金剩下多少比例時持倉頁提醒）。
 
 ## 8. Roadmap 開發路線圖
 
@@ -615,6 +631,10 @@ After Phase 3 第三階段之後 (open questions closed in code 以程式解決�
 - Capital market assumptions (CMA) – long-run expected return and volatility set for each asset class; Chinese translation: 資本市場假設：為各資產類別設定的長期預期報酬與波動度，作為預測與最適化的輸入。
 - Core–satellite – a portfolio built from a passive core plus a smaller, actively chosen satellite; Chinese translation: 核心–衛星策略：以被動式核心資產為主，搭配較小比例的主動選股部位。
 - Tranche – one installment of a sum invested in stages; Chinese translation: 分批：將一筆資金分次投入時的其中一批。
+- Short (position) – selling borrowed shares to buy them back later, gaining when the price falls; Chinese translation: 做空（放空）：賣出借來的股票、日後買回，價格下跌時獲利。
+- Leverage – exposure divided by own money; Chinese translation: 槓桿倍數：曝險除以自有資金。
+- Exposure – the amount that moves with the price, negative for a short; Chinese translation: 曝險：隨價格變動的金額，做空為負值。
+- Margin call – the broker's demand for more money once own money in a position runs low; Chinese translation: 追繳保證金：部位的自有資金過低時，券商要求補足資金。
 
 ## 11. Claude Code Handoff 交付 Claude Code
 
@@ -726,6 +746,20 @@ Rules:
 | N2 Carino | Several months of any returns | Linked effects sum to the period's R_p − R_b |
 | N1 five factors (added in Phase 3, step 6) | 36 months of a return built from market 0.9, size 0.3, value −0.2, profitability 0.1, investment 0.05, α 0.1% a month, plus a little noise (computed with numpy) | Loadings 0.9019 / 0.3068 / −0.1929 / 0.0983 / −0.0401; standard errors 0.0333 / 0.0654 / 0.0867 / 0.1103 / 0.1318; t 27.07 / 4.69 / −2.23 / 0.89 / −0.30; α 0.1154% a month (t 1.25); R² 0.9617, adjusted 0.9553 |
 | N1 five factors, no noise | A return that is exactly Rf + 0.9 Mkt − 0.4 CMA | Loadings exactly 0.9, 0, 0, 0, −0.4; α 0; R² 1 |
+| N5 leverage (added 2026-11-05) | Buy 10 at 100, fee 2, 2.5× | Own money 10 × 100 ÷ 2.5 + 2 = 402; at 110 own money 500; at 60 (a 40% fall, 1 ÷ 2.5) 0; at 59 −10 |
+| N5 leveraged sell | Buy 10 at 100, 2×, FX 30; sell 5 at 120 | Half of the 500 own money released plus 5 × 20 gained: gain NT$3,000; 5 left on 250 own money |
+| N5 short | Sell short 4 at 50, fee 1; buy to cover 4 at 40, fee 1; FX 32 | Proceeds 199, covered for 161: gain 38 USD = NT$1,216; open at 4 × 50 with no fee, own money 160 at 60 and 240 at 40 |
+| N5 R1 on exposure | 0050 NT$200,000; 2330 NT$10,000 of own money at 3× | Pool NT$210,000; 2330 weighs 30,000 ÷ 210,000 = 14.3% for R1 (own money only 4.8%): breach of 5% |
+| N5 class weight | Short 100 of 0050 at 100, now 90 | Exposure −NT$9,000; own money 10,000 + 1,000 = NT$11,000; class weight −9,000 ÷ 11,000 |
+| N5 performance | Short 10 at 100, close 90; 2× long 10 at 100, close 105 | Short: NT$1,000 put in, worth 1,100, return +10%; 2× long: NT$500 put in, return +10% |
+| N5 VaR exposure | VT long 300, VT short own 100 exposure −100; AAPL own 50 at 3× | V = 450 of own money; VT proxy 200, VOO proxy 150 |
+| F10 leveraged replay | Own money 100, exposure −200 (a 2× short); its series −10% | End value 120 |
+| F10 what-if, 2× long | Margin 100; series −20%, −40%, +50%; margin call at 30% | 60, then −4: margin call and wiped out in month 2; frozen at −4 after (worst −4% of the margin) |
+| F10 what-if, short | 1× short, margin 100; series −50%, +100% | 150 (exposure −50), then 100; never called or wiped |
+| F10 what-if, portfolio | Portfolio 1,000 → 800; position 100 → 300, or 100 → 0 | Deepest fall 0; or 300 ÷ 1,100 = 27.27% (NT$300) |
+| F7 leverage | Mix 8% at 12% volatility, Rf 2%, spread 1% | 2×: 2% + 2 × 6% − 1% = 13% at 24%; 0.5×: 5% at 6% |
+| F7 shorts | Three classes, shorts allowed to 30% each | Lower bounds −30%; the best Sharpe never below long-only; weights sum to 1; gross exposure ≥ 1 |
+| N1 position β | β 1.2, α 2% a year; NT$100,000 own money; index −10% | Long 2×: β 2.4, α 4%, own money −24%, hedge: short NT$240,000 of the index; short 1.5×: β −1.8, own money +18%, hedge: buy NT$180,000 |
 
 **First prompt for Claude Code 第一個指令**
 
