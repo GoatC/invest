@@ -724,6 +724,13 @@ button:disabled {
   color: var(--warn-text);
 }
 
+.badge.danger {
+  border-color: var(--danger-text);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  white-space: normal;
+}
+
 .estimate {
   color: var(--muted);
 }

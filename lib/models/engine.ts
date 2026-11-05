@@ -53,6 +53,7 @@
  * changes; an open proposal closes when it times out (config proposal_expiry_days), when its rule
  * no longer fires, or when a new state supersedes it.
  */
+import { isPlain } from './positions';
 import { addDays } from '../dates';
 import { classDrifts, type DriftBands } from './allocation';
 import { daysBetween } from './fx';
@@ -1242,8 +1243,14 @@ function taipeiDate(at: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(at));
 }
 
-/** Evaluates every rule and decides which proposals to draft and which open ones to close. */
-export function evaluate(input: EngineInput): Outcome {
+/**
+ * Evaluates every rule and decides which proposals to draft and which open ones to close. Short and
+ * leveraged lines are left out: a proposal only ever buys or sells plain longs, so it can never open
+ * or add to a short by "selling", and their margin never counts as money a rule may move. The
+ * holdings page and the trade form still check R1 and R2 on their exposure.
+ */
+export function evaluate(raw: EngineInput): Outcome {
+  const input: EngineInput = { ...raw, holdings: raw.holdings.filter(isPlain) };
   const pool = regularPool(input.holdings);
   const classes = [...input.assetClasses].sort((a, b) => a.sortOrder - b.sortOrder);
   const monthly = input.rules.find((rule) => rule.condition === 'day_after_dca');

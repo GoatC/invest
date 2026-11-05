@@ -37,6 +37,7 @@ import {
   parseTargets,
   parseTaxForm,
   parseTrade,
+  leverageSteps,
   parseWindfallSettingsForm,
   vehicleField,
   withholdingField,
@@ -55,12 +56,37 @@ const TODAY = '2026-10-21';
 
 const usdBuy = { tradeDate: '2026-10-20', ticker: 'vt', side: 'buy', qty: '2', price: '157.80', currency: '', fee: '', tax: '', fxRate: '32.4', pool: 'regular' };
 
+describe('parseTrade: direction and leverage', () => {
+  it('reads a short at 1.5x when the maximum allows it', () => {
+    const parsed = parseTrade({ ...usdBuy, side: 'sell', direction: 'short', leverage: '1.5' }, securities, TODAY, 5);
+    assert.ok(parsed.ok);
+    assert.deepEqual([parsed.value.direction, parsed.value.leverage], ['short', 1.5]);
+  });
+
+  it('takes leverage on the 0.1x grid only, up to the maximum, and blank as 1x', () => {
+    assert.equal(parseTrade({ ...usdBuy, leverage: '' }, securities, TODAY, 5).ok, true);
+    assert.equal(parseTrade({ ...usdBuy, leverage: '2.0×' }, securities, TODAY, 5).ok, true);
+    for (const leverage of ['1.55', '0.9', '5.1', 'two']) {
+      const parsed = parseTrade({ ...usdBuy, leverage }, securities, TODAY, 5);
+      assert.equal(parsed.ok, false, leverage);
+      if (!parsed.ok) assert.equal(parsed.errors.leverage, MESSAGES.leverage);
+    }
+    // Before config leverage exists the maximum is 1x.
+    assert.equal(parseTrade({ ...usdBuy, leverage: '1.1' }, securities, TODAY).ok, false);
+  });
+
+  it('lists the form’s leverage steps', () => {
+    assert.deepEqual(leverageSteps(1.3), [1, 1.1, 1.2, 1.3]);
+    assert.deepEqual(leverageSteps(0.5), [1]);
+  });
+});
+
 describe('parseTrade', () => {
   it('reads a USD buy, taking the currency from the security and treating empty fee and tax as 0', () => {
     const parsed = parseTrade(usdBuy, securities, TODAY);
     assert.deepEqual(parsed, {
       ok: true,
-      value: { tradeDate: '2026-10-20', ticker: 'VT', side: 'buy', qty: 2, price: 157.8, currency: 'USD', fee: 0, tax: 0, fxRate: 32.4, pool: 'regular', note: null },
+      value: { tradeDate: '2026-10-20', ticker: 'VT', side: 'buy', qty: 2, price: 157.8, currency: 'USD', fee: 0, tax: 0, fxRate: 32.4, pool: 'regular', direction: 'long', leverage: 1, note: null },
     });
   });
 

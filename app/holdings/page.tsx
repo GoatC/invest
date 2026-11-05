@@ -10,7 +10,7 @@ import { requireSession } from '@/lib/auth';
 import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, orDataError, type CashFlowRecord, type HoldingsData, type Proposal } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, twd } from '@/lib/format';
-import { FLOW_TYPE, LABELS, POOL, SIDE, SOURCE, type Bilingual } from '@/lib/i18n';
+import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
 import { flowTotals } from '@/lib/models/cash-flows';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey, type Shortfall } from '@/lib/models/positions';
@@ -339,6 +339,29 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
   );
 }
 
+/**
+ * A short or leveraged line's direction and leverage, and a warning when its own money has fallen
+ * to config leverage's margin_call_share of what was put in (or below zero). Nothing for a plain long.
+ */
+function DirectionBadges({ holding, marginCallShare }: { holding: Holding; marginCallShare: number | null }) {
+  if (holding.direction === 'long' && Math.abs(holding.leverage - 1) < 1e-9) return null;
+  const left = holding.valueTwd !== null && holding.costTwd ? holding.valueTwd / holding.costTwd : null;
+  const call = left !== null && marginCallShare !== null && left <= marginCallShare;
+  return (
+    <div className="row small">
+      <span className={holding.direction === 'short' ? 'badge warn' : 'badge'}>
+        <Bi {...DIRECTION[holding.direction]} />
+      </span>
+      <span className="badge">{leverageText(holding.leverage)}</span>
+      {call && (
+        <span className="badge danger" role="alert">
+          <Bi en={`Own money down to ${percent(left)}: margin call risk`} zh={`自有資金剩 ${percent(left)}：可能被追繳保證金`} />
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Estimated({ holding }: { holding: Holding }) {
   return holding.estimated && holding.valueTwd !== null ? (
     <span className="estimate" title="Estimated 估計值">
@@ -349,7 +372,7 @@ function Estimated({ holding }: { holding: Holding }) {
 
 function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portfolio: Portfolio; priced: ReadonlySet<string> }) {
   const classes = new Map(data.assetClasses.map((assetClass) => [assetClass.id, assetClass]));
-  const positions = new Map(portfolio.positions.map((position) => [positionKey(position.pool, position.ticker), position]));
+  const positions = new Map(portfolio.positions.map((position) => [positionKey(position.pool, position.ticker, position.direction), position]));
   const listed = portfolio.holdings
     .filter((holding) => holding.ticker !== null)
     .sort(
@@ -424,6 +447,7 @@ function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portf
                       </details>
                     )}
                     <div className="muted small">{holding.label}</div>
+                    <DirectionBadges holding={holding} marginCallShare={data.leverage.marginCallShare} />
                     {holding.ticker && !priced.has(holding.ticker) && (
                       <div className="small">
                         <span className="status-icon idle" aria-hidden="true">
@@ -450,7 +474,14 @@ function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portf
                     {twd(gain)}
                     {gain !== null && holding.costTwd ? <div className="muted small">{percent(gain / holding.costTwd)}</div> : null}
                   </td>
-                  <td className="num">{holding.pool === 'regular' && holding.valueTwd !== null && total > 0 ? percent(holding.valueTwd / total) : '—'}</td>
+                  <td className="num">
+                    {holding.pool === 'regular' && holding.exposureTwd !== null && total > 0 ? percent(holding.exposureTwd / total) : '—'}
+                    {holding.exposureTwd !== null && holding.exposureTwd !== holding.valueTwd && (
+                      <div className="muted small">
+                        <Bi en={`exposure ${twd(holding.exposureTwd)}`} zh={`曝險 ${twd(holding.exposureTwd)}`} />
+                      </div>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -605,7 +636,8 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
                   <strong>{trade.ticker}</strong>
                 </td>
                 <td className="nowrap">
-                  <Bi {...SIDE[trade.side]} />
+                  <Bi {...ACTION[trade.direction ?? 'long'][trade.side]} />
+                  {(trade.leverage ?? 1) !== 1 && <span className="muted small">{` ${leverageText(trade.leverage ?? 1)}`}</span>}
                 </td>
                 <td className="num">{quantity(trade.qty)}</td>
                 <td className="num">{`${quantity(trade.price)} ${trade.currency}`}</td>

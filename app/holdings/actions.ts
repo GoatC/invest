@@ -26,7 +26,10 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
   const fields = formFields(formData);
   const data = await orDataError(loadHoldingsData(supabase));
   if (data instanceof DataError) return { errors: {}, message: saveFailed(data.detail) };
-  const parsed = parseTrade(fields, new Map(data.securities.map((security) => [security.ticker, security])), taipeiToday());
+  // Editing a trade saved at a leverage above today's maximum keeps that leverage valid.
+  const editing = data.trades.find((trade) => trade.id === parseId(fields['id']));
+  const maxLeverage = Math.max(data.leverage.max, editing?.leverage ?? 1);
+  const parsed = parseTrade(fields, new Map(data.securities.map((security) => [security.ticker, security])), taipeiToday(), maxLeverage);
   if (!parsed.ok) return { errors: parsed.errors, message: ACTION_MESSAGES.checkFields };
 
   const id = parseId(fields['id']);

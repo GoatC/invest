@@ -13,6 +13,8 @@ import { LABELS, type Bilingual } from '@/lib/i18n';
 import { customReplay, replay, type Replay, type Scenario, type StressSettings } from '@/lib/models/stress';
 import type { Tier } from '@/lib/models/windfall';
 
+import { WhatIfSection, whatIfFrom } from './what-if';
+
 type Params = Record<string, string | string[] | undefined>;
 
 const CUSTOM = 'custom';
@@ -118,6 +120,7 @@ export default async function StressPage({ searchParams }: { searchParams: Promi
       </section>
       <Detail name={shownName} shown={shown} isCustom={!selected} scenario={selected?.scenario} tiers={tiers} total={total} names={names} />
       {!selected && <CustomForm data={data} shocks={shocks} start={customStart} maxMonths={settings.customMaxMonths} />}
+      <WhatIfSection data={data} settings={settings} replays={replays} custom={custom} customShocks={shocks} whatIf={whatIfFrom(params, data, total)} total={total} scenario={chosen} />
       <Mapping settings={settings} names={names} />
       <Method settings={settings} />
     </>

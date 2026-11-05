@@ -45,12 +45,12 @@ import { proposalTitle } from './proposal-text';
 import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type Vapid } from './push';
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
-import { latestFx, latestPrices } from './models/valuation';
+import { exposureOf, latestFx, latestPrices } from './models/valuation';
 import { restateCloses, restateTrades, type Split } from './models/splits';
 import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
 import { capePercentile, MARKET_SERIES, readAcceleration, readPace, type Acceleration } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
-import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
+import type { AssetClass, CashFlow, Direction, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 import type { Figures, Quarter } from './models/fundamentals';
 import { assumed, readAssumptions as readStockAssumptions, readValuationSettings, valueStock, type Assumed, type StockAssumptions, type Valuation, type ValuationSettings } from './models/intrinsic';
 import { filedSince, readSaved, valuationInput, valuationRows, watchInputs, type InputProblem, type SavedValuation, type StockSeries, type Trigger } from './models/workbench';
@@ -143,11 +143,14 @@ interface TransactionRow {
   tax: number;
   fx_rate: number;
   pool: Pool;
+  /** Absent only in rows written before the direction / leverage migration. */
+  direction?: Direction;
+  leverage?: number;
   source: 'manual' | 'csv';
   note: string | null;
 }
 
-export const TRANSACTION_COLUMNS = 'id, trade_date, ticker, side, qty, price, currency, fee, tax, fx_rate, pool, source, note';
+export const TRANSACTION_COLUMNS = 'id, trade_date, ticker, side, qty, price, currency, fee, tax, fx_rate, pool, direction, leverage, source, note';
 
 export function toTransaction(row: TransactionRow): TransactionRecord {
   return {
@@ -162,6 +165,8 @@ export function toTransaction(row: TransactionRow): TransactionRecord {
     tax: Number(row.tax),
     fxRate: Number(row.fx_rate),
     pool: row.pool,
+    direction: row.direction === 'short' ? 'short' : 'long',
+    leverage: Number(row.leverage ?? 1),
     source: row.source,
     note: row.note,
   };
@@ -180,6 +185,8 @@ export function transactionColumns(trade: Omit<Trade, 'id'> & { note: string | n
     tax: trade.tax,
     fx_rate: trade.fxRate,
     pool: trade.pool,
+    direction: trade.direction ?? 'long',
+    leverage: trade.leverage ?? 1,
     note: trade.note,
   };
 }
@@ -366,6 +373,24 @@ async function loadSplitsUncached(supabase: SupabaseClient): Promise<SplitRecord
   return ((data ?? []) as SplitRow[]).map((row) => ({ id: row.id, ticker: row.ticker, exDate: row.ex_date, ratio: Number(row.ratio), note: row.note }));
 }
 
+/** The trade form's leverage choices and the margin-call warning (config leverage). */
+export interface LeverageSettings {
+  /** Highest leverage offered, a multiple of 0.1 from 1.0 to 10.0. */
+  max: number;
+  /** Share of a leveraged or short line's own money left at which the holdings page warns; null turns it off. */
+  marginCallShare: number | null;
+}
+
+/** config leverage read defensively; before its migration is applied, 1× only and no warning. */
+export function leverageSettings(value: unknown): LeverageSettings {
+  const max = setting(value, 'max');
+  const share = setting(value, 'margin_call_share');
+  return {
+    max: typeof max === 'number' && max >= 1 && max <= 10 ? Math.round(max * 10) / 10 : 1,
+    marginCallShare: typeof share === 'number' && share > 0 && share < 1 ? share : null,
+  };
+}
+
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */
 export interface HoldingsData extends PortfolioData {
   /** As saved, in the units they were traded in; the models restate them with `splits`. */
@@ -375,6 +400,7 @@ export interface HoldingsData extends PortfolioData {
   caps: Caps;
   fxMaxGap: number | null;
   fxMaxAgeDays: number | null;
+  leverage: LeverageSettings;
 }
 
 async function loadHoldingsDataUncached(supabase: SupabaseClient): Promise<HoldingsData> {
@@ -388,9 +414,10 @@ async function loadHoldingsDataUncached(supabase: SupabaseClient): Promise<Holdi
     rows<{ pair: string; rate_date: string; rate: number }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate')),
     rows<ManualAssetRow>('manual_assets', supabase.from('manual_assets').select(MANUAL_ASSET_COLUMNS).order('id')),
     rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])),
-    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'fx_rate_check')),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['fx_rate_check', 'leverage'])),
     loadSplits(supabase),
   ]);
+  const fxCheck = settings.find((row) => row.key === 'fx_rate_check')?.value;
   return {
     trades: transactions.map(toTransaction),
     splits,
@@ -400,8 +427,9 @@ async function loadHoldingsDataUncached(supabase: SupabaseClient): Promise<Holdi
     fx: fx.map((row): FxQuote => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
     manualAssets: manualAssets.map(toManualAsset),
     caps: capsFromRules(rules),
-    fxMaxGap: fxMaxGap(settings[0]?.value),
-    fxMaxAgeDays: fxMaxAgeDays(settings[0]?.value),
+    fxMaxGap: fxMaxGap(fxCheck),
+    fxMaxAgeDays: fxMaxAgeDays(fxCheck),
+    leverage: leverageSettings(settings.find((row) => row.key === 'leverage')?.value),
   };
 }
 
@@ -2475,24 +2503,35 @@ export interface StressData {
   expected: Record<string, number>;
   /** F3's tiers and window from the rule; null when missing or malformed. */
   acceleration: Acceleration | null;
+  /** config leverage: when the what-if position is close to a margin call. */
+  leverage: LeverageSettings;
 }
 
 export async function loadStressData(supabase: SupabaseClient): Promise<StressData> {
   const [config, holdings, assumptions, rules, classNames] = await Promise.all([
-    rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'stress')),
+    rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', ['stress', 'leverage'])),
     loadHoldingsData(supabase),
     loadAssumptions(supabase),
     loadRules(supabase),
     loadAssetClasses(supabase),
   ]);
-  const totals = new Map<string, number>();
+  // Own money and exposure by class: a short or leveraged line moves its class by its exposure.
+  const totals = new Map<string, { valueTwd: number; exposureTwd: number }>();
   for (const holding of buildPortfolio(holdings).holdings) {
-    if (holding.assetClassId) totals.set(holding.assetClassId, (totals.get(holding.assetClassId) ?? 0) + (holding.valueTwd ?? 0));
+    if (!holding.assetClassId) continue;
+    const total = totals.get(holding.assetClassId) ?? { valueTwd: 0, exposureTwd: 0 };
+    total.valueTwd += holding.valueTwd ?? 0;
+    total.exposureTwd += holding.valueTwd === null ? 0 : exposureOf(holding);
+    totals.set(holding.assetClassId, total);
   }
   const rule = rules.find((entry) => entry.id === 'WINDFALL_ACCELERATION');
   return {
-    settings: readStressSettings(config[0]?.value, config[0]?.last_verified ?? null),
-    classes: [...totals].map(([id, valueTwd]) => ({ id, valueTwd })),
+    settings: (() => {
+      const row = config.find((entry) => entry.key === 'stress');
+      return readStressSettings(row?.value, row?.last_verified ?? null);
+    })(),
+    leverage: leverageSettings(config.find((entry) => entry.key === 'leverage')?.value),
+    classes: [...totals].map(([id, total]) => ({ id, valueTwd: total.valueTwd, ...(Math.abs(total.exposureTwd - total.valueTwd) > 1e-6 ? { exposureTwd: total.exposureTwd } : {}) })),
     classNames,
     expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
     acceleration: rule ? readAcceleration(rule.threshold) : null,

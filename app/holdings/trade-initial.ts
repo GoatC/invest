@@ -48,6 +48,9 @@ export function tradeInitial(data: HoldingsData, rates: readonly FxQuote[], toda
       tax: estimate(tax),
       fxRate: rate === undefined ? '' : String(rate),
       pool: pool === 'windfall' ? 'windfall' : 'regular',
+      // Proposals only ever draft plain longs (the engine leaves short and leveraged lines alone).
+      direction: 'long',
+      leverage: '1.0',
       note: fromProposal !== undefined ? `Proposal #${fromProposal} 提案 #${fromProposal}` : '',
     },
   };
