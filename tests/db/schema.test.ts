@@ -238,6 +238,32 @@ describe('change logs', () => {
 });
 
 describe('constraints', () => {
+  it('read a trade saved without direction or leverage as a 1x long, and keep leverage in 1.0–10.0', async () => {
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query<{ direction: string; leverage: string }>(
+        `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate)
+         values ('2026-10-21', 'VT', 'buy', 1, 158, 'USD', 32.4) returning direction, leverage`,
+      );
+      assert.deepEqual([rows[0]?.direction, Number(rows[0]?.leverage)], ['long', 1]);
+      const short = await scalar<string>(
+        tx,
+        `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate, direction, leverage)
+         values ('2026-10-21', 'VT', 'sell', 1, 158, 'USD', 32.4, 'short', 2.5) returning leverage`,
+      );
+      assert.equal(Number(short), 2.5);
+    });
+    for (const [direction, leverage] of [['short', 10.5], ['long', 0.9], ['sideways', 1]] as const) {
+      const insert = `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate, direction, leverage)
+                      values ('2026-10-21', 'VT', 'buy', 1, 158, 'USD', 32.4, '${direction}', ${leverage})`;
+      assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert))), CHECK_FAILED);
+    }
+  });
+
+  it('seed config leverage with a 5x maximum and a 30% margin-call share', async () => {
+    const value = await scalar<{ max: number; margin_call_share: number }>(db, `select value from public.config where key = 'leverage'`);
+    assert.deepEqual(value, { max: 5.0, margin_call_share: 0.3 });
+  });
+
   it('require fx_rate 1 on a TWD trade', async () => {
     const insert = `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate)
                     values ('2026-10-21', '0050', 'buy', 10, 107, 'TWD', 32.4)`;

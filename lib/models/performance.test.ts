@@ -600,3 +600,40 @@ describe('snapshots', () => {
     );
   });
 });
+
+describe('buildSeries: shorts and leverage', () => {
+  it('values a short as margin ± the move, puts in only the margin, and returns the gain on it', () => {
+    const days = buildSeries(
+      input({
+        end: '2026-01-03',
+        trades: [trade({ tradeDate: '2026-01-01', ticker: '0050', side: 'sell', direction: 'short', qty: 10, price: 100, currency: 'TWD', fxRate: 1 })],
+        prices: [
+          { ticker: '0050', date: '2026-01-01', close: 100, adjClose: null },
+          { ticker: '0050', date: '2026-01-02', close: 90, adjClose: null },
+        ],
+      }),
+    );
+    // Own money in: the margin, 1,000.
+    near(day(days, '2026-01-01').flow.all, -1000);
+    near(day(days, '2026-01-01').value.all, 1000);
+    // The price falls 10%: the short gains 100 on 1,000.
+    near(day(days, '2026-01-02').value.all, 1100);
+    near(day(days, '2026-01-02').ret.all, 0.1);
+    near(day(days, '2026-01-02').exposure?.['regular:0050:short'], -900);
+  });
+
+  it('doubles a 2x long’s daily return on own money', () => {
+    const days = buildSeries(
+      input({
+        end: '2026-01-02',
+        trades: [trade({ tradeDate: '2026-01-01', ticker: '0050', qty: 10, price: 100, currency: 'TWD', fxRate: 1, leverage: 2 })],
+        prices: [
+          { ticker: '0050', date: '2026-01-01', close: 100, adjClose: null },
+          { ticker: '0050', date: '2026-01-02', close: 105, adjClose: null },
+        ],
+      }),
+    );
+    near(day(days, '2026-01-01').flow.all, -500);
+    near(day(days, '2026-01-02').ret.all, 0.1);
+  });
+});

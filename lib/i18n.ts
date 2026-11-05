@@ -36,6 +36,8 @@ export const LABELS = {
   ticker: { en: 'Ticker', zh: '代號' },
   name: { en: 'Name', zh: '名稱' },
   side: { en: 'Buy / sell', zh: '買賣' },
+  direction: { en: 'Direction', zh: '多空方向' },
+  leverage: { en: 'Leverage', zh: '槓桿倍數' },
   qty: { en: 'Quantity', zh: '數量' },
   price: { en: 'Price', zh: '價格' },
   currency: { en: 'Trade currency', zh: '交易幣別' },
@@ -98,6 +100,23 @@ export const SIDE = {
   buy: { en: 'Buy', zh: '買進' },
   sell: { en: 'Sell', zh: '賣出' },
 } as const satisfies Record<string, Bilingual>;
+
+/** Long profits when the price rises (buy low, sell high); short when it falls (sell high, buy back low). */
+export const DIRECTION = {
+  long: { en: 'Long (buy low, sell high)', zh: '做多（買低賣高）' },
+  short: { en: 'Short (sell high, buy back low)', zh: '做空（賣高買低）' },
+} as const satisfies Record<string, Bilingual>;
+
+/** What a buy or sell does in each direction. */
+export const ACTION = {
+  long: { buy: { en: 'Buy to open', zh: '買進開倉' }, sell: { en: 'Sell to close', zh: '賣出平倉' } },
+  short: { buy: { en: 'Buy to cover', zh: '買進回補' }, sell: { en: 'Sell short', zh: '放空賣出' } },
+} as const satisfies Record<string, Record<string, Bilingual>>;
+
+/** 1.5 → "1.5×". */
+export function leverageText(value: number): string {
+  return `${value.toFixed(1)}×`;
+}
 
 export const POOL = {
   regular: { en: 'Regular', zh: '一般' },

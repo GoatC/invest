@@ -57,6 +57,8 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
             tax: String(trade.tax),
             fxRate: String(trade.fxRate),
             pool: trade.pool,
+            direction: trade.direction ?? 'long',
+            leverage: (trade.leverage ?? 1).toFixed(1),
             note: trade.note ?? '',
           }}
         />

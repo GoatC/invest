@@ -164,7 +164,15 @@ export interface Replay {
 
 export interface ClassValue {
   id: string;
+  /** Own money at the start: what the portfolio's value adds up. */
   valueTwd: number;
+  /**
+   * What moves with the series, negative for a short; the value when absent. A month's return r
+   * changes the value by exposure × r, and the exposure itself by (1 + r).
+   */
+  exposureTwd?: number;
+  /** The asset class whose series it follows, when `id` is not one (a what-if position); `id` when absent. */
+  classId?: string;
 }
 
 /**
@@ -173,8 +181,10 @@ export interface ClassValue {
  */
 function run(start: string, classes: readonly ClassValue[], months: number, returnsOf: (classId: string, index: number) => number | undefined, gauge: ((index: number) => number) | null, tiers: readonly Tier[], windowWeeks: number): Replay {
   const values = new Map(classes.map((entry) => [entry.id, entry.valueTwd]));
+  const exposures = new Map(classes.map((entry) => [entry.id, entry.exposureTwd ?? entry.valueTwd]));
+  const seriesOf = new Map(classes.map((entry) => [entry.id, entry.classId ?? entry.id]));
   const startClass = new Map(values);
-  const unmapped = classes.filter((entry) => entry.valueTwd > 0 && returnsOf(entry.id, 0) === undefined).map((entry) => entry.id);
+  const unmapped = classes.filter((entry) => Math.abs(entry.exposureTwd ?? entry.valueTwd) > 0 && returnsOf(entry.classId ?? entry.id, 0) === undefined).map((entry) => entry.id);
   const startValue = classes.reduce((sum, entry) => sum + entry.valueTwd, 0);
 
   const out: ReplayMonth[] = [{ month: addMonths(start, -1), value: startValue, drawdown: 0, gaugeDrawdown: gauge ? 0 : null }];
@@ -190,8 +200,11 @@ function run(start: string, classes: readonly ClassValue[], months: number, retu
   for (let index = 0; index < months; index++) {
     let total = 0;
     for (const [id, value] of values) {
-      const next = value * (1 + (returnsOf(id, index) ?? 0));
+      const r = returnsOf(seriesOf.get(id) ?? id, index) ?? 0;
+      const exposure = exposures.get(id) ?? value;
+      const next = value + exposure * r;
       values.set(id, next);
+      exposures.set(id, exposure * (1 + r));
       total += next;
     }
     if (total > peak) {
@@ -267,4 +280,83 @@ export function customReplay(start: string, classes: readonly ClassValue[], shoc
   // Stop at the month the start value is regained.
   const troughAt = full.months.findIndex((month) => month.month === full.troughMonth);
   return run(start, classes, troughAt + full.recoveryMonths, returnsOf, null, [], 52);
+}
+
+// ---------------------------------------------------------------------------
+// What-if position: a long or short, leveraged, added to the replay (analysis only, nothing saved)
+// ---------------------------------------------------------------------------
+
+export interface WhatIf {
+  /** The asset class whose series the position follows. */
+  classId: string;
+  direction: 'long' | 'short';
+  /** 1 to 10 in steps of 0.1. */
+  leverage: number;
+  /** Own money put in, TWD. */
+  marginTwd: number;
+}
+
+export interface PositionPath {
+  /** Own money left at each month-end, TWD, the start first: margin ± exposure × the month's return, frozen once used up. */
+  values: number[];
+  /** The lowest own money as a share of the margin (it can be below 0: a gap that costs more than was put in). */
+  worstShare: number;
+  /** First month own money fell to `callShare` of the margin or below; null when it never did. */
+  callMonth: string | null;
+  /** First month own money was used up (0 or below), when the broker would have closed it; null when it never was. */
+  wipedMonth: string | null;
+  /** Own money at the end as a share of the margin. */
+  endShare: number;
+}
+
+/**
+ * The position month by month. Exposure starts at ±leverage × margin and moves with the series:
+ * each month the own money changes by exposure × r and the exposure by (1 + r), so a short's
+ * exposure shrinks as prices fall and a leveraged long's grows as they rise. Once the own money
+ * reaches 0 the position is treated as closed by the broker at that month-end, its loss frozen.
+ */
+export function positionPath(whatIf: WhatIf, start: string, months: number, returnAt: (index: number) => number | undefined, callShare: number | null): PositionPath {
+  const margin = whatIf.marginTwd;
+  let equity = margin;
+  let exposure = (whatIf.direction === 'short' ? -1 : 1) * whatIf.leverage * margin;
+  const values = [margin];
+  let worst = margin;
+  let callMonth: string | null = null;
+  let wipedMonth: string | null = null;
+  for (let index = 0; index < months; index++) {
+    if (wipedMonth === null) {
+      const r = returnAt(index) ?? 0;
+      equity += exposure * r;
+      exposure *= 1 + r;
+      const month = addMonths(start, index);
+      if (callMonth === null && callShare !== null && equity <= callShare * margin + 1e-9) callMonth = month;
+      if (equity <= 1e-9) wipedMonth = month;
+    }
+    worst = Math.min(worst, equity);
+    values.push(equity);
+  }
+  return { values, worstShare: margin > 0 ? worst / margin : 0, callMonth, wipedMonth, endShare: margin > 0 ? equity / margin : 0 };
+}
+
+/** The portfolio's deepest fall from its running peak with the position's own money added month by month. */
+export function combinedDrawdown(base: Pick<Replay, 'months'>, path: Pick<PositionPath, 'values'>): { maxDrawdown: number; maxDrawdownTwd: number; endValue: number } {
+  let peak = -Infinity;
+  let worst = 0;
+  let worstTwd = 0;
+  let total = 0;
+  base.months.forEach((month, at) => {
+    total = month.value + (path.values[at] ?? path.values[path.values.length - 1] ?? 0);
+    if (total > peak) peak = total;
+    if (peak > 0 && 1 - total / peak > worst) {
+      worst = 1 - total / peak;
+      worstTwd = peak - total;
+    }
+  });
+  return { maxDrawdown: worst, maxDrawdownTwd: worstTwd, endValue: total };
+}
+
+/** A scenario's monthly returns for one asset class, through the class → series map. */
+export function classReturns(scenario: Scenario, map: Readonly<Record<string, string>>, classId: string): number[] | undefined {
+  const series = map[classId];
+  return series ? scenario.returns[series] : undefined;
 }

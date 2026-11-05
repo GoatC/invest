@@ -13,7 +13,7 @@ import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
-import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
+import type { AssetClass, CashFlow, Direction, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
 export type RawForm = Record<string, string | undefined>;
 export type FieldErrors<K extends string> = Partial<Record<K, Bilingual>>;
@@ -50,6 +50,7 @@ export const MESSAGES = {
   expiryDays: { en: 'Enter whole days from 1 to 365.', zh: '請輸入 1 到 365 的整數天數。' },
   shareDecimals: { en: 'Enter 1 to 4 decimals.', zh: '請輸入 1 到 4 位小數。' },
   clock: { en: 'Enter a time as HH:MM, 24-hour, e.g. 23:00.', zh: '請以 24 小時制 HH:MM 輸入時間，例如 23:00。' },
+  leverage: { en: 'Pick a leverage from the list: 1.0× and up in steps of 0.1×.', zh: '請從清單選擇槓桿：1.0 倍起，以 0.1 倍為級距。' },
   quietSame: { en: 'The quiet hours cannot start and end at the same time.', zh: '安靜時段的開始與結束時間不能相同。' },
   weekday: { en: 'Pick a day of the week.', zh: '請選擇星期幾。' },
   rate: { en: 'Enter a percentage from 0 to 100, with at most four decimals, e.g. 0.1425.', zh: '請輸入 0 到 100 的百分比，最多四位小數，例如 0.1425。' },
@@ -140,12 +141,35 @@ export interface TradeInput {
   tax: number;
   fxRate: number;
   pool: Pool;
+  direction: Direction;
+  leverage: number;
   note: string | null;
 }
 
 export type TradeField = keyof TradeInput;
 
-export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Security>, today: string): Parsed<TradeInput, TradeField> {
+/** The leverage a form may pick, 1.0× to `max` in steps of 0.1×: [1, 1.1, …, max]. */
+export function leverageSteps(max: number): number[] {
+  const top = Math.max(10, Math.min(100, Math.round(max * 10)));
+  return Array.from({ length: top - 9 }, (_, index) => (10 + index) / 10);
+}
+
+/** A typed leverage on the 0.1× grid between 1 and `max`, else undefined. Blank is 1×. */
+export function parseLeverage(raw: string | undefined, max: number): number | undefined {
+  const typed = text(raw);
+  if (typed === '') return 1;
+  const value = parseNumber(typed.replace(/[x×倍]$/i, ''));
+  if (value === undefined) return undefined;
+  const tenths = Math.round(value * 10);
+  if (Math.abs(value * 10 - tenths) > 1e-6) return undefined;
+  return tenths >= 10 && tenths <= Math.round(max * 10) ? tenths / 10 : undefined;
+}
+
+/**
+ * A trade from the form. `maxLeverage` is config leverage's max; before that setting exists every
+ * trade is 1×. A short is a sell that opens and a buy that closes (positions.ts).
+ */
+export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Security>, today: string, maxLeverage = 1): Parsed<TradeInput, TradeField> {
   const errors: FieldErrors<TradeField> = {};
   const tradeDate = text(raw['tradeDate']);
   if (!isIsoDate(tradeDate)) errors.tradeDate = MESSAGES.date;
@@ -177,6 +201,10 @@ export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Securit
 
   const pool = oneOf(raw['pool'] || 'regular', ['regular', 'windfall'] as const);
   if (!pool) errors.pool = MESSAGES.choice;
+  const direction = oneOf(raw['direction'] || 'long', ['long', 'short'] as const);
+  if (!direction) errors.direction = MESSAGES.choice;
+  const leverage = parseLeverage(raw['leverage'], maxLeverage);
+  if (leverage === undefined) errors.leverage = MESSAGES.leverage;
   const note = text(raw['note']);
   if (note.length > 500) errors.note = MESSAGES.tooLong;
 
@@ -191,6 +219,8 @@ export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Securit
     tax: tax as number,
     fxRate: fxRate as number,
     pool: pool as Pool,
+    direction: direction as Direction,
+    leverage: leverage as number,
     note: note || null,
   }));
 }

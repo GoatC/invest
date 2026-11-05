@@ -359,3 +359,30 @@ export function weightsFor(ids: readonly string[], byClass: Readonly<Record<stri
   const total = raw.reduce((sum, value) => sum + value, 0);
   return total > 0 ? raw.map((value) => value / total) : null;
 }
+
+// ---------------------------------------------------------------------------
+// What-if: shorting and leverage (analysis only; the targets and the saved bounds never change)
+// ---------------------------------------------------------------------------
+
+/**
+ * The same problem with every class allowed down to −cap (a short of up to `cap` of the portfolio
+ * in each class), its maximum unchanged; the weights still sum to 100%, so shorts fund longs.
+ */
+export function withShorts(problem: Problem, cap: number): Problem {
+  return { ...problem, lo: problem.lo.map((low) => Math.min(low, -Math.max(0, cap))) };
+}
+
+/** Gross exposure Σ|w|: 1 for a long-only mix, more once shorts fund extra longs. */
+export function grossExposure(weights: readonly number[]): number {
+  return weights.reduce((sum, weight) => sum + Math.abs(weight), 0);
+}
+
+/**
+ * A mix held at `leverage` times its own money along the capital allocation line: below 1 the rest
+ * sits at the risk-free rate, above 1 the extra is borrowed at the risk-free rate plus `spread`.
+ * E[R] = Rf + L × (E[Rp] − Rf) − max(0, L − 1) × spread; σ = L × σp.
+ */
+export function levered(point: Pick<FrontierPoint, 'ret' | 'vol'>, riskFree: number, leverage: number, spread: number): { ret: number; vol: number; borrowed: number } {
+  const borrowed = Math.max(0, leverage - 1);
+  return { ret: riskFree + leverage * (point.ret - riskFree) - borrowed * spread, vol: leverage * point.vol, borrowed };
+}

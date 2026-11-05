@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, orderSettings, toTransaction } from './data';
+import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, leverageSettings, orderSettings, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -45,6 +45,42 @@ describe('toTransaction', () => {
       note: null,
     });
     assert.deepEqual([trade.qty, trade.price, trade.fee, trade.fxRate], [2, 150, 1, 31.8]);
+    // A row saved before direction and leverage existed reads as a plain long.
+    assert.deepEqual([trade.direction, trade.leverage], ['long', 1]);
+  });
+
+  it('reads a short and its leverage', () => {
+    const trade = toTransaction({
+      id: 2,
+      trade_date: '2026-10-08',
+      ticker: 'AAPL',
+      side: 'sell',
+      qty: 1,
+      price: 200,
+      currency: 'USD',
+      fee: 0,
+      tax: 0,
+      fx_rate: 32,
+      pool: 'regular',
+      direction: 'short',
+      leverage: '1.5' as unknown as number,
+      source: 'manual',
+      note: null,
+    });
+    assert.deepEqual([trade.direction, trade.leverage], ['short', 1.5]);
+  });
+});
+
+describe('leverageSettings', () => {
+  it('reads the highest leverage and the margin-call share', () => {
+    assert.deepEqual(leverageSettings({ max: 5, margin_call_share: 0.3 }), { max: 5, marginCallShare: 0.3 });
+    assert.deepEqual(leverageSettings({ max: 2.34 }), { max: 2.3, marginCallShare: null });
+  });
+
+  it('offers 1x only when the setting is missing or out of range', () => {
+    for (const value of [undefined, null, {}, { max: 0.5 }, { max: 11 }, { max: '3' }]) {
+      assert.equal(leverageSettings(value).max, 1);
+    }
   });
 });
 

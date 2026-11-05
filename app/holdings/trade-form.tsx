@@ -10,13 +10,13 @@ import { RuleMath } from '@/components/rule-math';
 import type { HoldingsData } from '@/lib/data';
 import { isIsoDate } from '@/lib/dates';
 import { shortfallMessage } from '@/lib/forms';
-import { bi, LABELS, MARKET, POOL, SIDE, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { ACTION, bi, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { previewTrade } from '@/lib/models/portfolio';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { breachText } from '@/lib/rule-text';
-import { parseTrade, type TradeField } from '@/lib/validation';
+import { leverageSteps, parseNumber, parseTrade, type TradeField } from '@/lib/validation';
 
 import { saveTrade, type TradeFormState } from './actions';
 
@@ -87,7 +87,10 @@ export function TradeForm({
     setOwnRate(field === 'fxRate' || (ownRate && !currencyChanged));
   }
 
-  const parsed = parseTrade(values, securities, today);
+  const maxLeverage = Math.max(data.leverage.max, parseNumber(initial.leverage) ?? 1);
+  const parsed = parseTrade(values, securities, today, maxLeverage);
+  const direction = values.direction === 'short' ? 'short' : 'long';
+  const steps = useMemo(() => leverageSteps(data.leverage.max), [data.leverage.max]);
   const preview = parsed.ok ? previewTrade(data, { ...parsed.value, id }, data.caps) : null;
 
   function error(field: TradeField): Bilingual | null {
@@ -140,11 +143,37 @@ export function TradeForm({
       <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
     </Field>
   );
+  const directionField = (
+    <Field label={LABELS.direction} error={error('direction')}>
+      <select name="direction" value={direction} onChange={(e) => change('direction', e.target.value)}>
+        <option value="long">{bi(DIRECTION.long)}</option>
+        <option value="short">{bi(DIRECTION.short)}</option>
+      </select>
+    </Field>
+  );
   const sideField = (
     <Field label={LABELS.side} error={error('side')}>
       <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
-        <option value="buy">{bi(SIDE.buy)}</option>
-        <option value="sell">{bi(SIDE.sell)}</option>
+        <option value="buy">{bi(ACTION[direction].buy)}</option>
+        <option value="sell">{bi(ACTION[direction].sell)}</option>
+      </select>
+    </Field>
+  );
+  // A saved trade above today's maximum still shows its own leverage, so editing it never changes it silently.
+  const saved = parseNumber(values.leverage);
+  const leverageOptions = saved !== undefined && !steps.some((step) => Math.abs(step - saved) < 1e-9) ? [...steps, saved].sort((a, b) => a - b) : steps;
+  const leverageField = (
+    <Field
+      label={LABELS.leverage}
+      error={error('leverage')}
+      hint={data.leverage.max <= 1 ? <Bi en="Raise config leverage max to offer more" zh="調高 config leverage 的 max 才會出現更多選項" /> : <Bi en="Steps of 0.1×" zh="以 0.1 倍為級距" />}
+    >
+      <select name="leverage" value={saved === undefined ? '1.0' : saved.toFixed(1)} onChange={(e) => change('leverage', e.target.value)}>
+        {leverageOptions.map((step) => (
+          <option key={step} value={step.toFixed(1)}>
+            {leverageText(step)}
+          </option>
+        ))}
       </select>
     </Field>
   );
@@ -215,7 +244,9 @@ export function TradeForm({
             {tradeDateField}
             {tickerField}
             {datalistField}
+            {directionField}
             {sideField}
+            {leverageField}
             {qtyField}
             {priceField}
           </div>
@@ -248,7 +279,9 @@ export function TradeForm({
           {tickerField}
           {datalistField}
           {marketField}
+          {directionField}
           {sideField}
+          {leverageField}
           {qtyField}
           {priceField}
           {currencyField}
@@ -262,6 +295,7 @@ export function TradeForm({
       )}
 
       <FxTypoWarning entered={Number(values.fxRate)} reference={dated ?? latestRate} maxGap={data.fxMaxGap} />
+      {parsed.ok && <ExposureNote trade={parsed.value} />}
       <TradeEffect preview={preview} caps={data.caps} pool={values.pool} />
       {state.message && (
         <p className="banner danger" role="alert">
@@ -330,6 +364,38 @@ function TradeEffect({ preview, caps, pool }: { preview: ReturnType<typeof previ
             <Bi en="R1 and R2 stay within their limits after this trade." zh="這筆交易後，R1 與 R2 都在限制內。" />
           )}
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a short or a leveraged trade puts at stake: the own money, the exposure, what is borrowed,
+ * and the move that would wipe out the own money. Nothing for a plain long.
+ */
+function ExposureNote({ trade }: { trade: { direction: 'long' | 'short'; leverage: number; side: string; qty: number; price: number; currency: string } }) {
+  if (trade.direction === 'long' && trade.leverage === 1) return null;
+  const exposure = trade.qty * trade.price;
+  const own = exposure / trade.leverage;
+  const amount = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const wipeout = 1 / trade.leverage;
+  const pct = `${(wipeout * 100).toFixed(1)}%`;
+  const opening = trade.direction === 'long' ? trade.side === 'buy' : trade.side === 'sell';
+  return (
+    <div className="banner warn" aria-live="polite">
+      {opening ? (
+        <Bi
+          en={`Own money ${amount(own)} ${trade.currency} controls ${amount(exposure)} ${trade.currency} (${leverageText(trade.leverage)}); ${amount(exposure - own)} is ${trade.direction === 'long' ? 'borrowed' : 'covered by the broker’s margin'}. A ${pct} ${trade.direction === 'long' ? 'fall' : 'rise'} in the price would use up the own money.`}
+          zh={`自有資金 ${amount(own)} ${trade.currency} 控制 ${amount(exposure)} ${trade.currency} 的部位（${leverageText(trade.leverage)}）；其中 ${amount(exposure - own)} ${trade.direction === 'long' ? '為借入資金' : '由券商保證金制度支撐'}。價格${trade.direction === 'long' ? '下跌' : '上漲'} ${pct} 就會虧光自有資金。`}
+        />
+      ) : (
+        <Bi en="This trade closes part or all of the position at the average cost and margin it was opened with." zh="這筆交易會依開倉時的平均成本與保證金，平掉部分或全部部位。" />
+      )}
+      {trade.direction === 'short' && opening && (
+        <>
+          {' '}
+          <Bi en="A short’s loss has no ceiling, and 複委託 usually cannot short: record here only what a broker actually allows." zh="做空的虧損沒有上限，且複委託通常不能放空：請只記錄券商實際允許的交易。" />
+        </>
       )}
     </div>
   );

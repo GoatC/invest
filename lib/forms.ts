@@ -46,6 +46,12 @@ export function afterSecurityAdded(next: string | undefined, ticker: string): st
 /** Why a sell is impossible: it would sell more than the pool holds on that date. */
 export function shortfallMessage(shortfall: Shortfall): Bilingual {
   const missing = quantity(shortfall.missingQty);
+  if (shortfall.direction === 'short') {
+    return {
+      en: `This leaves the ${shortfall.ticker} buy to cover on ${shortfall.tradeDate} ${missing} units larger than the short position.`,
+      zh: `這會讓 ${shortfall.tradeDate} 回補的 ${shortfall.ticker} 比放空數量多 ${missing} 單位。`,
+    };
+  }
   return {
     en: `This leaves the ${shortfall.ticker} sell on ${shortfall.tradeDate} ${missing} units larger than the holding.`,
     zh: `這會讓 ${shortfall.tradeDate} 賣出的 ${shortfall.ticker} 比持有數量多 ${missing} 單位。`,

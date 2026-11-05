@@ -14,6 +14,7 @@ import { bi, LABELS, type Bilingual } from '@/lib/i18n';
 import { build, expectedReturn, frontier, marketLine, sharpe, tangent, volatility, weightsFor, type Built, type FrontierPoint, type FrontierSettings } from '@/lib/models/frontier';
 
 import { FrontierForm } from './forms';
+import { FrontierWhatIfSection, frontierWhatIf, type FrontierWhatIf } from './what-if';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -64,7 +65,7 @@ export default async function FrontierPage({ searchParams }: { searchParams: Pro
         )}
         {built && !('model' in built) && <Problem problem={built} />}
       </section>
-      {settings && built && 'model' in built && <Report built={built} settings={settings} data={data} />}
+      {settings && built && 'model' in built && <Report built={built} settings={settings} data={data} whatIf={frontierWhatIf(params)} />}
       {settings && (
         <section id="settings" className="card form">
           <h2>
@@ -107,7 +108,7 @@ interface Named {
   sharpe: number | null;
 }
 
-function Report({ built, settings, data }: { built: Built; settings: FrontierSettings; data: FrontierData }) {
+function Report({ built, settings, data, whatIf }: { built: Built; settings: FrontierSettings; data: FrontierData; whatIf: FrontierWhatIf }) {
   const { model: problem, ids } = built;
   const curve = frontier(problem, settings.points);
   const best = tangent(problem, curve, settings.riskFree);
@@ -249,6 +250,7 @@ function Report({ built, settings, data }: { built: Built; settings: FrontierSet
         </h2>
         <CorrelationHeatmap names={classNames} matrix={built.correlation} label={{ en: 'The correlation of each pair of asset classes’ monthly returns in TWD.', zh: '各對資產類別以台幣計的月報酬相關係數。' }} />
       </section>
+      <FrontierWhatIfSection problem={problem} points={settings.points} riskFree={settings.riskFree} best={best} current={current} ids={ids} names={names} whatIf={whatIf} />
     </>
   );
 }

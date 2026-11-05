@@ -59,7 +59,7 @@ export interface TradePreview {
 }
 
 function shortfallKey(shortfall: Shortfall): string {
-  return `${shortfall.pool}:${shortfall.ticker}:${shortfall.tradeDate}`;
+  return `${shortfall.pool}:${shortfall.ticker}:${shortfall.direction ?? 'long'}:${shortfall.tradeDate}`;
 }
 
 /** Shortfalls in `after` that `before` did not have, or that grew. */

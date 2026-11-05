@@ -7,6 +7,8 @@ import {
   covarianceMatrix,
   expectedReturn,
   frontier,
+  grossExposure,
+  levered,
   highestReturn,
   marketLine,
   readFrontierSettings,
@@ -15,6 +17,7 @@ import {
   tangent,
   volatility,
   weightsFor,
+  withShorts,
   type Built,
   type Problem,
 } from './frontier';
@@ -210,5 +213,30 @@ describe('readFrontierSettings', () => {
     assert.equal(readFrontierSettings({ ...valid, risk_free: 0.5 }), undefined);
     assert.equal(readFrontierSettings({ ...valid, bounds: { a: [0.6, 0.5] } }), undefined);
     assert.equal(readFrontierSettings({ ...valid, bounds: {} }), undefined);
+  });
+});
+
+describe('frontier what-if', () => {
+  it('levers a mix along the capital allocation line, borrowing at a spread', () => {
+    const point = { ret: 0.08, vol: 0.12 };
+    const two = levered(point, 0.02, 2, 0.01);
+    assert.ok(Math.abs(two.ret - 0.13) < 1e-12);
+    assert.ok(Math.abs(two.vol - 0.24) < 1e-12);
+    assert.equal(two.borrowed, 1);
+    const half = levered(point, 0.02, 0.5, 0.01);
+    assert.ok(Math.abs(half.ret - 0.05) < 1e-12);
+    assert.ok(Math.abs(half.vol - 0.06) < 1e-12);
+  });
+
+  it('lets shorts fund longs, which can only raise the best Sharpe', () => {
+    const problem = { mu: [0.08, 0.02, 0.05], sigma: [[0.04, 0.012, 0.01], [0.012, 0.01, 0.004], [0.01, 0.004, 0.02]], lo: [0, 0, 0], hi: [1, 1, 1] };
+    const shorted = withShorts(problem, 0.3);
+    assert.deepEqual(shorted.lo, [-0.3, -0.3, -0.3]);
+    const longOnly = tangent(problem, frontier(problem, 21), 0.01);
+    const longShort = tangent(shorted, frontier(shorted, 21), 0.01);
+    assert.ok(longOnly && longShort);
+    assert.ok(longShort.sharpe >= longOnly.sharpe - 1e-9);
+    assert.ok(Math.abs(longShort.weights.reduce((sum, w) => sum + w, 0) - 1) < 1e-9);
+    assert.ok(grossExposure(longShort.weights) >= 1 - 1e-9);
   });
 });

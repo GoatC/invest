@@ -12,6 +12,8 @@ import { FREQUENCIES, loadFrom, regressTicker, type Benchmark, type Choice, type
 
 import { RegressionSettingsForm, type SettingsField } from './forms';
 
+import { BetaWhatIf } from './what-if';
+
 type Params = Record<string, string | string[] | undefined>;
 
 const FREQ: Record<Frequency, Bilingual> = {
@@ -134,6 +136,8 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
           <Panel key={benchmark.id} ticker={ticker} benchmark={benchmark} outcome={outcome} colorIndex={index} />
         ))}
       </div>
+
+      <BetaWhatIf params={params} ticker={ticker} choice={choice} compare={compare} against={against.id} results={results} />
 
       {results.some(({ outcome }) => outcome.ok && outcome.result.rolling.length > 1) && (
         <section className="card form" id="rolling">

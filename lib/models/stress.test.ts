@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { customReplay, readStressSettings, replay, type Scenario, type StressSettings } from './stress';
+import { combinedDrawdown, customReplay, positionPath, readStressSettings, replay, type Scenario, type StressSettings } from './stress';
 import type { Tier } from './windfall';
 
 function near(actual: number | null | undefined, expected: number, tolerance = 1e-9): void {
@@ -118,5 +118,43 @@ describe('readStressSettings', () => {
     assert.equal(readStressSettings({ ...valid, scenarios: [{ ...valid.scenarios[0], returns: { stocks: [-0.05, -1.5], bonds: [0.01, 0.02] } }] }), undefined);
     assert.equal(readStressSettings({ ...valid, gauge: 'nothing' }), undefined);
     assert.equal(readStressSettings({ ...valid, custom: { max_months: 3 } }), undefined);
+  });
+});
+
+describe('what-if position', () => {
+  it('a 2x long loses twice the series and is closed when its own money runs out', () => {
+    const path = positionPath({ classId: 'us', direction: 'long', leverage: 2, marginTwd: 100 }, '2020-01', 3, (i) => [-0.2, -0.4, 0.5][i], 0.3);
+    // −20% on 200 of exposure: −40 → 60, exposure 160; −40% on 160: −64 → −4, wiped out in month 2.
+    assert.ok(Math.abs((path.values[1] as number) - 60) < 1e-9);
+    assert.ok(Math.abs((path.values[2] as number) + 4) < 1e-9);
+    assert.equal(path.wipedMonth, '2020-02');
+    assert.equal(path.callMonth, '2020-02');
+    // Frozen after it is closed: the rebound does not count.
+    assert.ok(Math.abs((path.values[3] as number) + 4) < 1e-9);
+    assert.ok(Math.abs(path.worstShare + 0.04) < 1e-9);
+  });
+
+  it('a 1x short gains when the series falls and its exposure shrinks with the price', () => {
+    const path = positionPath({ classId: 'us', direction: 'short', leverage: 1, marginTwd: 100 }, '2020-01', 2, (i) => [-0.5, 1][i], null);
+    // Exposure −100: −50% → +50 (150), exposure −50; +100% → −50, back to 100.
+    assert.ok(Math.abs((path.values[1] as number) - 150) < 1e-9);
+    assert.ok(Math.abs((path.values[2] as number) - 100) < 1e-9);
+    assert.equal(path.wipedMonth, null);
+    assert.equal(path.callMonth, null);
+  });
+
+  it('adds the position to the portfolio before measuring the fall', () => {
+    const base = { months: [{ month: '2019-12', value: 1000, drawdown: 0, gaugeDrawdown: null }, { month: '2020-01', value: 800, drawdown: 0.2, gaugeDrawdown: null }] };
+    const hedged = combinedDrawdown(base, { values: [100, 300] });
+    assert.ok(Math.abs(hedged.maxDrawdown - 0) < 1e-9);
+    const levered = combinedDrawdown(base, { values: [100, 0] });
+    assert.ok(Math.abs(levered.maxDrawdown - 300 / 1100) < 1e-9);
+    assert.ok(Math.abs(levered.maxDrawdownTwd - 300) < 1e-9);
+  });
+
+  it('moves a short or leveraged holding by its exposure in the replay', () => {
+    const scenario: Scenario = { id: 's', nameEn: 's', nameZh: 's', from: '2020-01', returns: { us_equity: [-0.1] } };
+    const result = replay(scenario, [{ id: 'us_global_equity', valueTwd: 100, exposureTwd: -200 }], { map: { us_global_equity: 'us_equity' }, gauge: 'us_equity' }, [], 52);
+    assert.ok(Math.abs(result.endValue - 120) < 1e-9);
   });
 });

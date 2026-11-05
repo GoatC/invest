@@ -586,3 +586,28 @@ export function loadFrom(today: string, years: number, rollingWeeks: number): st
   const [year, month, day] = today.split('-').map(Number) as [number, number, number];
   return addDays(new Date(Date.UTC(year - years, month - 1, day)).toISOString().slice(0, 10), -7 * rollingWeeks - 31);
 }
+
+// ---------------------------------------------------------------------------
+// What-if: the same β held long or short, with leverage (analysis only)
+// ---------------------------------------------------------------------------
+
+export interface PositionBeta {
+  /** β of the position against own money: s × L × β. */
+  beta: number;
+  /** α a year on own money, before borrowing cost: s × L × α. */
+  alphaAnnual: number;
+  /** Own money's move, as a fraction, for the index's `move` (excess return), ignoring α and noise. */
+  ownMove: number;
+  /** TWD of the index to short (positive) or buy (negative) to cancel the position's β. */
+  hedgeTwd: number;
+}
+
+/**
+ * A long or short of the ticker, leveraged, with `marginTwd` of own money: exposure s × L × margin
+ * carries the regression's β and α, so on own money both scale by s × L. The hedge is the index
+ * amount whose β (1 by definition) cancels it: β × exposure.
+ */
+export function positionBeta(fit: { beta: number; alphaAnnual: number }, direction: 'long' | 'short', leverage: number, marginTwd: number, move: number): PositionBeta {
+  const scale = (direction === 'short' ? -1 : 1) * leverage;
+  return { beta: scale * fit.beta, alphaAnnual: scale * fit.alphaAnnual, ownMove: scale * fit.beta * move, hedgeTwd: scale * fit.beta * marginTwd };
+}

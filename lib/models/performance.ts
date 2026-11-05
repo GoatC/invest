@@ -21,8 +21,8 @@ import { addDays } from '../dates';
 import { daysBetween } from './fx';
 import { stateOn, type ManualHistory, type ManualState } from './manual-history';
 import { MarketHistory, type PriceRow } from './market';
-import { chronological, positionKey } from './positions';
-import type { AssetClass, CashFlow, FxQuote, Pool, Security, Trade } from './types';
+import { chronological, directionOf, leverageOf, opens, positionKey, sign } from './positions';
+import type { AssetClass, CashFlow, Direction, FxQuote, Pool, Security, Trade } from './types';
 
 export type Scope = 'all' | Pool;
 export const SCOPES: readonly Scope[] = ['all', 'regular', 'windfall'];
@@ -61,6 +61,11 @@ export interface DayPoint {
   classValue: Record<string, number>;
   /** Each holding's value at the close, TWD, both pools, keyed as on the holdings page ("regular:VT", "manual:3"); the N4 VaR reads it. */
   held: Record<string, number>;
+  /**
+   * What each short or leveraged line moved with at the close, TWD, negative for a short: absent
+   * for plain longs, whose exposure is their value. The daily VaR reads it (risk.dayLines).
+   */
+  exposure?: Record<string, number>;
   /** The day's return in TWD; null when the scope held nothing at the previous close. */
   ret: MaybePerScope;
   /** The same with foreign holdings in their own currency, before the currency's move. */
@@ -119,6 +124,17 @@ interface Held {
   /** The last trade's price and rate: the value until the feeds have a close and a rate. */
   lastPrice: number;
   lastFx: number;
+  direction: Direction;
+  /** False once a short or a leveraged trade opened it: then it is valued as margin ± the move (positions.ts). */
+  plain: boolean;
+  /** Entry value and own money, in the trade currency, as in positions.ts. */
+  costLocal: number;
+  marginLocal: number;
+}
+
+/** Own money in a short or leveraged line at a price, in the trade currency. */
+function heldEquity(held: Held, price: number): number {
+  return held.marginLocal + sign(held.direction) * (held.qty * price - held.costLocal);
 }
 
 /** Each day's value, money moved, returns and benchmark, from the first trade to `end`. */
@@ -151,6 +167,8 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
   /** Yesterday's manual-asset states, and every holding's value at yesterday's close. */
   let manual = new Map<number, ManualState>();
   let closing = new Map<string, number>();
+  /** Short and leveraged lines' own money at yesterday's close, in the trade currency. */
+  let closingLocal = new Map<string, number>();
   const days: DayPoint[] = [];
 
   let before: string | undefined;
@@ -192,6 +210,16 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
       for (const [key, held] of holdings) {
         const value = closing.get(key);
         if (value === undefined || value <= 0) continue;
+        if (!held.plain) {
+          // Margin ± the move: today's own money against yesterday's, at the closes and rates (raw closes, no dividend growth).
+          const was = closingLocal.get(key);
+          const price = market.close(held.ticker, date) ?? held.lastPrice;
+          const rate = market.fx(held.currency, date) ?? held.lastFx;
+          const nowLocal = heldEquity(held, price);
+          const twd = (nowLocal * rate) / value - 1;
+          add(held.pool, value, twd, was && was > 0 ? nowLocal / was - 1 : twd, held.assetClassId);
+          continue;
+        }
         // Valued at the trade price yesterday (no close yet): today's close against that price.
         const close = market.close(held.ticker, date);
         const price = market.growth(held.ticker, then, date) ?? (close === undefined ? 1 : close / held.lastPrice);
@@ -235,7 +263,8 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
       flow[pool] += amount;
     };
     for (const trade of tradesOn.get(date) ?? []) {
-      const key = positionKey(trade.pool, trade.ticker);
+      const direction = directionOf(trade);
+      const key = positionKey(trade.pool, trade.ticker, direction);
       const held = holdings.get(key) ?? {
         ticker: trade.ticker,
         pool: trade.pool,
@@ -244,13 +273,51 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
         qty: 0,
         lastPrice: trade.price,
         lastFx: trade.fxRate,
+        direction,
+        plain: true,
+        costLocal: 0,
+        marginLocal: 0,
       };
-      held.qty = trade.side === 'buy' ? held.qty + trade.qty : Math.max(0, held.qty - trade.qty);
+      const gross = trade.qty * trade.price;
+      if (opens(trade)) {
+        // Own money in: a long pays its fee and tax from it; a short's come out of the sale's proceeds.
+        const own = gross / leverageOf(trade);
+        const marginLocal = direction === 'long' ? own + trade.fee + trade.tax : own;
+        held.plain = held.plain && direction === 'long' && leverageOf(trade) === 1;
+        held.qty += trade.qty;
+        held.costLocal += direction === 'long' ? gross + trade.fee + trade.tax : gross - trade.fee - trade.tax;
+        held.marginLocal += marginLocal;
+        move(trade.pool, -marginLocal * trade.fxRate);
+      } else if (held.plain) {
+        const before = held.qty;
+        held.qty = Math.max(0, before - trade.qty);
+        const kept = before > 0 ? held.qty / before : 0;
+        held.costLocal *= kept;
+        held.marginLocal *= kept;
+        move(trade.pool, (gross - trade.fee - trade.tax) * trade.fxRate);
+      } else {
+        // What closing frees: the own money released, plus or minus the move (positions.ts).
+        const closed = Math.min(trade.qty, held.qty);
+        const share = held.qty > 0 ? closed / held.qty : 0;
+        const settle = closed * trade.price;
+        const costOut = held.costLocal * share;
+        const marginOut = held.marginLocal * share;
+        const freed = direction === 'long' ? marginOut + settle - trade.fee - trade.tax - costOut : marginOut + costOut - settle - trade.fee - trade.tax;
+        held.qty -= closed;
+        held.costLocal -= costOut;
+        held.marginLocal -= marginOut;
+        move(trade.pool, freed * trade.fxRate);
+      }
       held.lastPrice = trade.price;
       held.lastFx = trade.fxRate;
+      if (held.qty <= 1e-9) {
+        // A closed line starts plain again.
+        held.qty = 0;
+        held.plain = true;
+        held.costLocal = 0;
+        held.marginLocal = 0;
+      }
       holdings.set(key, held);
-      const gross = trade.qty * trade.price;
-      move(trade.pool, trade.side === 'buy' ? -(gross + trade.fee + trade.tax) * trade.fxRate : (gross - trade.fee - trade.tax) * trade.fxRate);
     }
     for (const dividend of dividendsOn.get(date) ?? []) move(dividend.pool, dividend.amount * dividend.fxRate);
 
@@ -263,14 +330,22 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
       if (pool === 'regular') classValue[assetClassId] = (classValue[assetClassId] ?? 0) + amount;
     };
     const nextClosing = new Map<string, number>();
+    const nextClosingLocal = new Map<string, number>();
+    const exposure: Record<string, number> = {};
     for (const [key, held] of holdings) {
       if (held.qty <= 0) continue;
       const close = market.close(held.ticker, date);
       const rate = market.fx(held.currency, date);
       if (close === undefined || rate === undefined) estimated = true;
-      const amount = held.qty * (close ?? held.lastPrice) * (rate ?? held.lastFx);
+      const price = close ?? held.lastPrice;
+      const fx = rate ?? held.lastFx;
+      const amount = held.plain ? held.qty * price * fx : heldEquity(held, price) * fx;
       count(held.pool, held.assetClassId, amount);
       nextClosing.set(key, amount);
+      if (!held.plain) {
+        nextClosingLocal.set(key, heldEquity(held, price));
+        exposure[key] = sign(held.direction) * held.qty * price * fx;
+      }
     }
     const nextManual = new Map<number, ManualState>();
     for (const { id, now, was, wasPrice, nowPrice } of assets) {
@@ -288,8 +363,21 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
       nextClosing.set(`manual:${id}`, amount);
     }
     closing = nextClosing;
+    closingLocal = nextClosingLocal;
     manual = nextManual;
-    days.push({ date, value, flow, classValue, held: Object.fromEntries(nextClosing), ret, local, classDay, benchmark: benchmarkReturn, estimated });
+    days.push({
+      date,
+      value,
+      flow,
+      classValue,
+      held: Object.fromEntries(nextClosing),
+      ...(Object.keys(exposure).length > 0 ? { exposure } : {}),
+      ret,
+      local,
+      classDay,
+      benchmark: benchmarkReturn,
+      estimated,
+    });
   }
   return days;
 }

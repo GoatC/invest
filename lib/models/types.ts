@@ -2,6 +2,8 @@
 
 export type Pool = 'regular' | 'windfall';
 export type Side = 'buy' | 'sell';
+/** Long: a buy opens and a sell closes. Short: a sell opens (borrowed shares) and a buy closes. */
+export type Direction = 'long' | 'short';
 export type Sleeve = 'core' | 'satellite';
 export type Market = 'US' | 'TW' | 'UK';
 export type ProductType = 'equity_etf' | 'bond_etf' | 'gold' | 'cash_mmf' | 'stock' | 'theme_etf';
@@ -19,6 +21,10 @@ export interface Trade {
   tax: number;
   fxRate: number;
   pool: Pool;
+  /** Long when absent: every trade saved before direction existed. */
+  direction?: Direction;
+  /** Exposure ÷ own money, 1 to 10 in steps of 0.1; 1 when absent. */
+  leverage?: number;
 }
 
 export interface Security {

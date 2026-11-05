@@ -100,3 +100,41 @@ describe('previewImport', () => {
     );
   });
 });
+
+describe('buildPortfolio: shorts and leverage', () => {
+  it('adds own money to the pool and checks R1 on exposure', () => {
+    const portfolio = buildPortfolio(
+      data({
+        trades: [
+          trade({ id: 1, ticker: '0050', qty: 2_000, price: 100, currency: 'TWD', fxRate: 1 }),
+          // NT$10,000 of own money in 2330 at 3x: NT$30,000 of exposure.
+          trade({ id: 2, ticker: '2330', qty: 30, price: 1000, currency: 'TWD', fxRate: 1, leverage: 3 }),
+        ],
+        prices: [
+          { ticker: '0050', date: '2026-10-20', close: 100 },
+          { ticker: '2330', date: '2026-10-20', close: 1000 },
+        ],
+      }),
+    );
+    const stock = portfolio.holdings.find((holding) => holding.ticker === '2330');
+    assert.equal(stock?.valueTwd, 10_000);
+    assert.equal(stock?.exposureTwd, 30_000);
+    assert.equal(portfolio.pool.totalTwd, 210_000);
+    const preview = previewTrade(data(), trade({ ticker: '2330', qty: 30, price: 1000, currency: 'TWD', fxRate: 1, leverage: 3 }), CAPS);
+    // 30,000 ÷ 210,000 = 14.3% of the pool, above the 5% cap, though only 4.8% is own money.
+    assert.equal(preview.breaches[0]?.rule, 'R1');
+    assert.ok(Math.abs((preview.breaches[0]?.weight ?? 0) - 30_000 / 210_000) < 1e-12);
+  });
+
+  it('keys a short apart from the long and gives it negative exposure', () => {
+    const portfolio = buildPortfolio(data({ trades: [trade({ id: 1, ticker: '0050', side: 'sell', direction: 'short', qty: 100, price: 100, currency: 'TWD', fxRate: 1 })], prices: [{ ticker: '0050', date: '2026-10-20', close: 90 }] }));
+    const [line] = portfolio.holdings;
+    assert.equal(line?.key, 'regular:0050:short');
+    assert.equal(line?.exposureTwd, -9_000);
+    // Margin 10,000 + (10,000 − 9,000).
+    assert.equal(line?.valueTwd, 11_000);
+    // The class's weight is its net exposure over own money: −9,000 ÷ 11,000.
+    const tw = portfolio.classes.find((entry) => entry.assetClass.id === 'tw_market_cap');
+    assert.ok(Math.abs((tw?.weight ?? 0) + 9_000 / 11_000) < 1e-12);
+  });
+});
