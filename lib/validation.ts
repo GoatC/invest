@@ -12,6 +12,7 @@ import type { FrontierSettings } from './models/frontier';
 import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
+import { EVENT_KINDS, KIND_NAMES, type MarketEvent } from './models/events';
 import { COMPONENT_UNIT, type ComponentSetting, type VolatilitySettings } from './models/volatility';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, Direction, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
@@ -1572,6 +1573,7 @@ const VOLATILITY_MESSAGES = {
   weight: { en: 'Enter a weight of 0 or more; at least one above 0.', zh: '請輸入 0 或以上的權重，至少一個大於 0。' },
   maxAge: { en: 'Enter whole days from 1 to 30.', zh: '請輸入 1 到 30 的整數天數。' },
   coverage: { en: 'Enter a share from 1% to 100%.', zh: '請輸入 1% 到 100% 的比例。' },
+  lead: { en: 'Enter whole days from 1 to 14.', zh: '請輸入 1 到 14 的整數天數。' },
 } as const satisfies Record<string, Bilingual>;
 
 /**
@@ -1598,11 +1600,46 @@ export function parseVolatilityForm(raw: RawForm, current: VolatilitySettings, t
   if (maxAge === undefined || !Number.isInteger(maxAge) || maxAge < 1 || maxAge > 30) errors['maxAgeDays'] = VOLATILITY_MESSAGES.maxAge;
   const coverage = parseNumber(raw['minCoverage']);
   if (coverage === undefined || coverage < 1 || coverage > 100) errors['minCoverage'] = VOLATILITY_MESSAGES.coverage;
+  const lead = parseNumber(raw['eventLeadDays']);
+  if (lead === undefined || !Number.isInteger(lead) || lead < 1 || lead > 14) errors['eventLeadDays'] = VOLATILITY_MESSAGES.lead;
   return finish(errors, () => ({
     ...current,
     components,
+    events: { leadDays: lead as number, remind: EVENT_KINDS.filter((kind) => raw[`remind_${kind}`] === 'on') },
     maxAgeDays: maxAge as number,
     minCoverage: Number(((coverage as number) / 100).toFixed(4)),
     lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+export type EventField = 'kind' | 'date' | 'time' | 'name' | 'note';
+
+const EVENT_MESSAGES = {
+  kind: { en: "Choose Taiwan's central bank or another event.", zh: '請選擇央行理監事會議或其他事件。' },
+  time: { en: 'Enter a Taipei time as HH:MM, or leave it blank.', zh: '請以 HH:MM 輸入台北時間，或留空。' },
+  name: { en: 'Enter a name of up to 120 characters.', zh: '請輸入 120 字以內的名稱。' },
+  note: { en: 'Up to 200 characters.', zh: '最多 200 字。' },
+} as const satisfies Record<string, Bilingual>;
+
+/** A typed event (N8 step 2): Taiwan's central bank meeting (its name given) or another event named by Hugo, at a Taipei date and optional time. */
+export function parseEventForm(raw: RawForm): Parsed<MarketEvent, EventField> {
+  const errors: FieldErrors<EventField> = {};
+  const kind = oneOf(raw['kind'], ['cbc', 'other'] as const);
+  if (!kind) errors.kind = EVENT_MESSAGES.kind;
+  const date = text(raw['date']);
+  if (!isIsoDate(date)) errors.date = MESSAGES.date;
+  const time = text(raw['time']);
+  if (time !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) errors.time = EVENT_MESSAGES.time;
+  const name = text(raw['name']);
+  if ((kind === 'other' && name === '') || name.length > 120) errors.name = EVENT_MESSAGES.name;
+  const note = text(raw['note']);
+  if (note.length > 200) errors.note = EVENT_MESSAGES.note;
+  return finish(errors, () => ({
+    kind: kind as 'cbc' | 'other',
+    date,
+    time: time || null,
+    name: name ? { en: name, zh: name } : KIND_NAMES[kind as 'cbc' | 'other'],
+    source: 'typed' as const,
+    note: note || null,
   }));
 }

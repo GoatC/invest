@@ -11,6 +11,7 @@ import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   SPLIT_MESSAGES,
   parseSplitForm,
+  parseEventForm,
   parseVolatilityForm,
   MESSAGES,
   parseAssumptionForm,
@@ -826,7 +827,7 @@ describe('parseVolatilityForm (N8)', () => {
   });
   assert.ok(current);
   const form = (changes: Record<string, string> = {}) => {
-    const raw: Record<string, string> = { maxAgeDays: '5', minCoverage: '50' };
+    const raw: Record<string, string> = { maxAgeDays: '5', minCoverage: '50', eventLeadDays: '2', remind_fomc: 'on', remind_cpi: 'on', remind_payrolls: 'on', remind_cbc: 'on', remind_other: 'on' };
     for (const row of current.components) {
       const scale = ['spx_drawdown', 'taiex_drawdown', 'taiex_fall'].includes(row.id) ? 100 : 1;
       raw[`${row.id}_calm`] = String(row.calm * scale);
@@ -844,6 +845,9 @@ describe('parseVolatilityForm (N8)', () => {
     assert.equal(parsed.value.minCoverage, 0.6);
     assert.equal(parsed.value.drawdownDays, 365);
     assert.equal(parsed.value.lastVerified, '2026-11-06');
+    const quiet = parseVolatilityForm(form({ eventLeadDays: '3', remind_cpi: '' }), current, '2026-11-06');
+    assert.ok(quiet.ok);
+    assert.deepEqual(quiet.value.events, { leadDays: 3, remind: ['fomc', 'payrolls', 'cbc', 'other'] });
     assert.deepEqual(parseVolatilityForm(form(), current, '2026-11-06'), { ok: true, value: current });
   });
 
@@ -858,5 +862,28 @@ describe('parseVolatilityForm (N8)', () => {
     assert.ok(errors({ maxAgeDays: '0' })['maxAgeDays']);
     assert.ok(errors({ minCoverage: '150' })['minCoverage']);
     assert.ok(errors({ vix_calm: 'abc' })['vix_calm']);
+    assert.ok(errors({ eventLeadDays: '15' })['eventLeadDays']);
+  });
+});
+
+describe('parseEventForm (N8 step 2)', () => {
+  it("names a central bank meeting by its kind, another event by Hugo's name, at a Taipei date and optional time", () => {
+    assert.deepEqual(parseEventForm({ kind: 'cbc', date: '2027-03-18', time: '14:00', name: '' }), {
+      ok: true,
+      value: { kind: 'cbc', date: '2027-03-18', time: '14:00', name: { en: "Taiwan's central bank meeting", zh: '央行理監事會議' }, source: 'typed', note: null },
+    });
+    const election = parseEventForm({ kind: 'other', date: '2028-01-15', time: '', name: '總統大選', note: ' Taiwan ' });
+    assert.ok(election.ok);
+    assert.deepEqual(election.value.name, { en: '總統大選', zh: '總統大選' });
+    assert.equal(election.value.time, null);
+    assert.equal(election.value.note, 'Taiwan');
+  });
+
+  it('refuses a feed kind, a bad date or time, another event without a name', () => {
+    const parsed = parseEventForm({ kind: 'fomc', date: '2027-3-18', time: '25:00', name: '' });
+    assert.ok(!parsed.ok);
+    assert.deepEqual(Object.keys(parsed.errors).sort(), ['date', 'kind', 'time']);
+    const unnamed = parseEventForm({ kind: 'other', date: '2027-03-18' });
+    assert.ok(!unnamed.ok && unnamed.errors.name);
   });
 });

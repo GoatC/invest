@@ -11,6 +11,8 @@ import { addDays } from '../../../lib/dates.ts';
 import { volatilityScore, VOLATILITY_SERIES, type Close, type ComponentReading, type VolatilitySettings } from '../../../lib/models/volatility.ts';
 import { FinMind } from '../feeds/finmind.ts';
 import { indexAttempts, type IndexAttempt, type IndexClose } from '../feeds/indices.ts';
+import type { MarketEvent } from '../../../lib/models/events.ts';
+import { FED_CALENDAR, fomcEvents, FRED_RELEASES, fredCalendarEvents, fredCalendarUrl } from '../feeds/events.ts';
 import type { Get } from '../feeds/types.ts';
 import { volatilityAttempts } from '../feeds/volatility.ts';
 
@@ -32,6 +34,8 @@ type Loaded = { source: string; rows: number; latest: string };
 export interface VolatilityRunDetail {
   series: Record<string, Loaded>;
   score?: { date: string; score: number | null; coverage: number };
+  /** The calendar's events from today on, by kind (N8 step 2). */
+  events?: Record<string, number>;
   warnings: string[];
   errors: string[];
 }
@@ -53,6 +57,8 @@ export interface VolatilityStore {
   series(ids: readonly string[], from: string): Promise<Map<string, Close[]>>;
   /** Upserts the day's score (volatility_scores). */
   saveScore(row: ScoreRow): Promise<void>;
+  /** Replaces a feed's events from `from` on with these (market_events): a rescheduled meeting moves. */
+  replaceEvents(source: 'fed' | 'fred', from: string, rows: readonly MarketEvent[]): Promise<void>;
   recordRun(run: VolatilityRun): Promise<void>;
 }
 
@@ -136,6 +142,37 @@ export async function runVolatility(deps: VolatilityDeps): Promise<VolatilityRun
     }
     // TAIEX and the S&P 500 have the nightly job's history to fall back on: a miss here is a warning.
     if (!saved) (id === 'SPX' || id === 'TAIEX' ? detail.warnings : detail.errors).push(...(failures.length > 0 ? failures : [`${id}: no feed covers it`]));
+  }
+
+  // The event calendar (step 2): a feed that fails keeps its saved events and is only a warning.
+  detail.events = {};
+  const loads: Array<{ source: 'fed' | 'fred'; label: string; load: () => Promise<MarketEvent[]> }> = [
+    { source: 'fed', label: 'FOMC', load: async () => fomcEvents(await get(FED_CALENDAR)) },
+    {
+      source: 'fred',
+      label: 'CPI and payrolls',
+      load: async () => {
+        const year = Number(today.slice(0, 4));
+        const rows: MarketEvent[] = [];
+        for (const [kind, release] of Object.entries(FRED_RELEASES) as Array<['cpi' | 'payrolls', number]>) {
+          for (const y of [year, year + 1]) rows.push(...fredCalendarEvents(await get(fredCalendarUrl(release, y)), kind));
+        }
+        return rows;
+      },
+    },
+  ];
+  for (const feed of loads) {
+    try {
+      const rows = (await feed.load()).filter((event) => event.date >= today);
+      if (rows.length === 0) {
+        detail.warnings.push(`events: ${feed.label}: no event from today on`);
+        continue;
+      }
+      await store.replaceEvents(feed.source, today, rows);
+      for (const event of rows) detail.events[event.kind] = (detail.events[event.kind] ?? 0) + 1;
+    } catch (err) {
+      detail.warnings.push(`events: ${feed.label}: ${message(err)}`);
+    }
   }
 
   try {

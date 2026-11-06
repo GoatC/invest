@@ -9,6 +9,7 @@ export function volatilitySummary(run: VolatilityRun): string[] {
   for (const [id, loaded] of Object.entries(run.detail.series)) lines.push(`  ${id}: ${loaded.rows} rows from ${loaded.source}, to ${loaded.latest}`);
   const score = run.detail.score;
   if (score) lines.push(`  Score 波動分數 ${score.date}: ${score.score === null ? '—' : score.score.toFixed(1)} / 10 (coverage 涵蓋 ${Math.round(score.coverage * 100)}%)`);
+  if (run.detail.events) lines.push(`  Events 事件: ${Object.entries(run.detail.events).map(([kind, count]) => `${kind} ${count}`).join(', ') || 'none'}`);
   for (const warning of run.detail.warnings) lines.push(`  warning 警告: ${warning}`);
   for (const error of run.detail.errors) lines.push(`  error 錯誤: ${error}`);
   return lines;

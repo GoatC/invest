@@ -1,6 +1,7 @@
 /** The volatility job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { MarketEvent } from '../../../lib/models/events.ts';
 import { readVolatilitySettings, type Close } from '../../../lib/models/volatility.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import type { ScoreRow, VolatilityRun, VolatilityStore } from './job.ts';
@@ -51,6 +52,14 @@ export function volatilityStore(client: SupabaseClient): VolatilityStore {
         .from('volatility_scores')
         .upsert({ score_date: row.date, score: row.score, mean: row.mean, coverage: row.coverage, components: row.components, computed_at: new Date().toISOString() }, { onConflict: 'score_date' });
       check('volatility_scores', error);
+    },
+    async replaceEvents(source: 'fed' | 'fred', from: string, rows: readonly MarketEvent[]) {
+      const removed = await client.from('market_events').delete().eq('source', source).gte('event_date', from);
+      check('market_events', removed.error);
+      const { error } = await client.from('market_events').insert(
+        rows.map((row) => ({ kind: row.kind, event_date: row.date, event_time: row.time, name_en: row.name.en, name_zh: row.name.zh, source: row.source, note: row.note })),
+      );
+      check('market_events', error);
     },
     async recordRun(run: VolatilityRun) {
       const { error } = await client.from('job_runs').insert({ job: run.job, started_at: run.startedAt, finished_at: run.finishedAt, status: run.status, detail: run.detail });
