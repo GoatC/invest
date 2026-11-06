@@ -18,6 +18,7 @@
     "test:e2e": "bash tests/e2e/run.sh",
     "nightly": "tsx scripts/nightly.ts",
     "notify": "tsx scripts/notify.ts",
+    "volatility": "tsx scripts/volatility.ts",
     "vapid-keys": "tsx scripts/vapid_keys.ts"
   },
   "devDependencies": {

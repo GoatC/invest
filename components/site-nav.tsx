@@ -46,6 +46,7 @@ const GROUPS: readonly Group[] = [
       { href: '/attribution', label: LABELS.attribution },
       { href: '/regression', label: LABELS.regression },
       { href: '/sectors', label: LABELS.sectors },
+      { href: '/volatility', label: LABELS.volatility },
     ],
   },
   {

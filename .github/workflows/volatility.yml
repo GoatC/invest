@@ -1,0 +1,41 @@
+# The volatility job (N8, added 2026-11-06): twice a day, load the VIX, the VIX3M, Taiwan's VIX,
+# the policy-uncertainty index, the high-yield spread and the last sessions of TAIEX and the
+# S&P 500, then save the day's volatility score. Setup: docs/volatility.md.
+# 波動排程：每天兩次載入 VIX、VIX3M、臺指 VIX、政策不確定性指數、高收益債利差與台股、標普最近的收盤，
+# 再存入當天的波動分數。設定方式見 docs/volatility.md。
+name: Volatility 波動警報
+
+on:
+  schedule:
+    # 07:17 UTC is 15:17 in Taipei: Taiwan's VIX (13:45) and TAIEX's close are out.
+    # 台北時間 15:17：臺指 VIX 與加權指數收盤已公布。
+    - cron: '17 7 * * 1-5'
+    # 22:17 UTC is 06:17 in Taipei the next morning: CBOE has posted the US session's VIX.
+    # 台北時間隔天早上 06:17：CBOE 已公布美股當天的 VIX。
+    - cron: '17 22 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: volatility
+  cancel-in-progress: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Load the series and score the day 載入資料並計算波動分數
+        run: npm run volatility
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}

@@ -11,6 +11,7 @@ import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
 import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
 import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
+import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
   evaluate,
   readDetail,
@@ -2389,6 +2390,50 @@ export async function loadSectorData(supabase: SupabaseClient, today: string, po
 }
 
 // ---------------------------------------------------------------------------
+// The volatility alert (N8, added 2026-11-06)
+// ---------------------------------------------------------------------------
+
+/** The volatility job's name in job_runs (scripts/lib/volatility/job.ts). */
+export const VOLATILITY_JOB = 'volatility';
+
+async function loadVolatilitySettingsUncached(supabase: SupabaseClient): Promise<VolatilitySettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'volatility'));
+  return readVolatilitySettings(found[0]?.value);
+}
+
+export interface VolatilityData {
+  settings: VolatilitySettings | undefined;
+  /** Today's score from the closes saved. */
+  today?: VolatilityScore;
+  /** The score on each day of the last year with a close, for the chart. */
+  history?: Array<{ date: string; score: number | null; coverage: number }>;
+  /** The volatility job's newest run. */
+  lastRun?: { finishedAt: string; status: RunStatus } | null;
+}
+
+/** The score today and over the last year, from the series in index_prices, and the job's newest run. */
+export async function loadVolatilityData(supabase: SupabaseClient, today: string): Promise<VolatilityData> {
+  const settings = await loadVolatilitySettings(supabase);
+  if (!settings) return { settings };
+  const from = addDays(today, -(366 + settings.drawdownDays + 14));
+  const [found, runs] = await Promise.all([
+    allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (start, end) =>
+      supabase.from('index_prices').select('index_id, price_date, close').in('index_id', [...VOLATILITY_SERIES]).gte('price_date', from).order('index_id').order('price_date').range(start, end),
+    ),
+    rows<{ finished_at: string; status: RunStatus }>('job_runs', supabase.from('job_runs').select('finished_at, status').eq('job', VOLATILITY_JOB).order('finished_at', { ascending: false }).limit(1)),
+  ]);
+  const series = new Map<string, VolatilityClose[]>();
+  for (const row of found) series.set(row.index_id, [...(series.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  const run = runs[0];
+  return {
+    settings,
+    today: volatilityScore(series, settings, today),
+    history: scoreHistory(series, settings, addDays(today, -365), today),
+    lastRun: run ? { finishedAt: run.finished_at, status: run.status } : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // F5 Monte Carlo (Phase 3, step 1)
 // ---------------------------------------------------------------------------
 
@@ -2850,6 +2895,7 @@ export const loadRedFlagData = cache(loadRedFlagDataUncached);
 export const loadLookThroughSettings = cache(loadLookThroughSettingsUncached);
 export const loadLookThroughData = cache(loadLookThroughDataUncached);
 export const loadSectorSettings = cache(loadSectorSettingsUncached);
+export const loadVolatilitySettings = cache(loadVolatilitySettingsUncached);
 export const loadAssetClassSettings = cache(loadAssetClassSettingsUncached);
 export const loadAssumptions = cache(loadAssumptionsUncached);
 export const loadCaps = cache(loadCapsUncached);

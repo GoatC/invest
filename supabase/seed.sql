@@ -322,3 +322,22 @@ insert into public.analyst_estimates (ticker, as_of, currency, estimates, source
      "targetPrice": 255,
      "ratings": {"strongBuy": 14, "buy": 18, "hold": 9, "sell": 1, "strongSell": 0}
    }', 'demo');
+
+-- The volatility alert (N8): invented daily closes of its series on the weekdays from 2026-05-04
+-- to 2026-10-23, calm with a two-week scare in late September (the VIX over the VIX3M, Taiwan's
+-- VIX near 40, spreads and the policy index up), so the page has a history to chart. Real closes
+-- come from the volatility job.
+insert into public.index_prices (index_id, price_date, close, source)
+select s.id, d.day, round(greatest(0.5, s.base + s.amplitude * sin(d.n * 0.21 + s.phase) + s.spike * exp(-power((d.day - date '2026-09-24') / 6.0, 2)))::numeric, 2), 'demo'
+from (
+  select day::date, row_number() over (order by day) as n
+  from generate_series(date '2026-05-04', date '2026-10-23', interval '1 day') as day
+  where extract(isodow from day) < 6
+) as d
+cross join (values
+  ('VIX', 15.0, 1.5, 0.0, 17.0),
+  ('VIX3M', 17.5, 1.0, 0.4, 9.0),
+  ('TWVIX', 20.0, 2.0, 1.1, 20.0),
+  ('HY_OAS', 3.2, 0.1, 0.7, 1.4),
+  ('EPU', 140.0, 30.0, 2.0, 260.0)
+) as s (id, base, amplitude, phase, spike);
