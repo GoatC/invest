@@ -338,9 +338,9 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, each enabled once its step is built (F3 since Phase 2, step 1, F12 since step 4, N3 since step 5)', async () => {
+  it('loads every Section 4 push rule, each enabled once its step is built (F3 since Phase 2, step 1, F12 since step 4, N3 since step 5, N8 since its step 3)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
-    assert.equal(rows.length, 14);
+    assert.equal(rows.length, 16);
     for (const row of rows) assert.equal(row.enabled, true, row.id);
   });
 
@@ -1107,5 +1107,16 @@ describe('event calendar (N8 step 2)', () => {
     assert.deepEqual(settings?.events, { leadDays: 2, remind: ['fomc', 'cpi', 'payrolls', 'cbc', 'other'] });
     await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('event', 'fomc:2099-12-10:FOMC', 't', 'b', '/volatility#events', now())`);
     await db.query(`delete from public.notifications where kind = 'event'`);
+  });
+});
+
+describe('volatility alert and hedge (N8 step 3)', () => {
+  it('loads VOLATILITY_ALERT and VOLATILITY_HEDGE with their thresholds, and the two VIX products in the tactical sleeve', async () => {
+    const { rows } = await db.query<{ id: string; condition: string; threshold: Record<string, unknown> }>(`select id, condition, threshold from public.rules where feature = 'N8' order by id`);
+    assert.deepEqual(rows.map((row) => [row.id, row.condition]), [['VOLATILITY_ALERT', 'volatility_score_crosses'], ['VOLATILITY_HEDGE', 'volatility_score_calm']]);
+    assert.equal(rows[0]?.threshold['push_in_quiet_hours'], true);
+    assert.equal(rows[1]?.threshold['vol_cap'], 0.05);
+    const products = await db.query<{ ticker: string; sleeve: string; asset_class_id: string }>(`select ticker, sleeve, asset_class_id from public.securities where ticker in ('00677U', 'VIXY') order by ticker`);
+    assert.deepEqual(products.rows, [{ ticker: '00677U', sleeve: 'satellite', asset_class_id: 'tactical_themes' }, { ticker: 'VIXY', sleeve: 'satellite', asset_class_id: 'tactical_themes' }]);
   });
 });

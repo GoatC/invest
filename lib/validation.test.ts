@@ -887,3 +887,16 @@ describe('parseEventForm (N8 step 2)', () => {
     assert.ok(!unnamed.ok && unnamed.errors.name);
   });
 });
+
+describe('parseRuleForm switches (N8 step 3)', () => {
+  it('reads a true/false threshold entry as a checkbox, words and lists kept', () => {
+    const threshold = { tense: 6, push_in_quiet_hours: true, panic_classes: ['us_global_equity'] };
+    const off = parseRuleForm({ cooldownDays: '7', threshold_tense: '6' }, threshold);
+    assert.ok(off.ok);
+    assert.deepEqual(off.value.threshold, { tense: 6, push_in_quiet_hours: false, panic_classes: ['us_global_equity'] });
+    const on = parseRuleForm({ cooldownDays: '7', threshold_tense: '7', threshold_push_in_quiet_hours: 'on' }, threshold);
+    assert.ok(on.ok);
+    assert.equal(on.value.threshold['push_in_quiet_hours'], true);
+    assert.equal(on.value.threshold['tense'], 7);
+  });
+});

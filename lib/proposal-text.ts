@@ -28,7 +28,33 @@ const TITLES: Record<string, Bilingual> = {
   value_change_exceeds: { en: 'Valuation updated', zh: '估值更新' },
   red_flag_worsens: { en: 'Red flag worsens', zh: '紅旗惡化' },
   satellite_red_flag: { en: 'Red flag turns red', zh: '紅旗轉紅' },
+  volatility_score_crosses: { en: 'Volatility alert', zh: '波動警報' },
+  volatility_score_calm: { en: 'Volatility hedge', zh: '波動避險' },
 };
+
+const BAND: Record<'calm' | 'tense' | 'panic', Bilingual> = {
+  calm: { en: 'calm', zh: '平靜' },
+  tense: { en: 'tense', zh: '緊張' },
+  panic: { en: 'panic', zh: '恐慌' },
+};
+
+/** The volatility rules' first line: the score, the line it crossed and since when. */
+function volatilityLine(detail: ProposalDetail): Bilingual[] {
+  const row = detail.volatility;
+  if (!row) return [];
+  const band = BAND[row.band];
+  const relation = row.band === 'calm' ? '<' : '≥';
+  return [
+    {
+      en: `Volatility score ${row.score.toFixed(1)} on ${row.scoreDate} ${relation} ${row.line} · ${band.en} since ${row.since}`,
+      zh: `波動分數 ${row.score.toFixed(1)}（${row.scoreDate}）${relation} ${row.line} · 自 ${row.since} 起${band.zh}`,
+    },
+    {
+      en: `Budget ${percent(row.share, 0)} of the regular pool, ${twd(row.budgetTwd)} · from strategic cash ${twd(row.fundedTwd)}`,
+      zh: `預算為一般投入資金池的 ${percent(row.share, 0)}，${twd(row.budgetTwd)} · 由戰略現金支應 ${twd(row.fundedTwd)}`,
+    },
+  ];
+}
 
 /** "R1 · Single-stock trim". */
 export function proposalTitle(rule: RuleLike): Bilingual {
@@ -211,6 +237,33 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         if (row.soldTwd !== undefined) lines.push({ en: `Exit option: sell ${twd(row.soldTwd)} of ${twd(row.heldTwd ?? 0)}`, zh: `出場選項：賣出 ${twd(row.heldTwd ?? 0)} 中的 ${twd(row.soldTwd)}` });
       }
       break;
+    case 'volatility_score_crosses': {
+      lines.push(...volatilityLine(detail));
+      const row = detail.volatility;
+      if (row?.band === 'panic') {
+        if (row.vixSoldTwd) lines.push({ en: `Sell the VIX hedge held: ${twd(row.vixSoldTwd)}`, zh: `賣出持有的 VIX 避險部位：${twd(row.vixSoldTwd)}` });
+        lines.push({ en: '→ the core equity classes, by their targets', zh: '→ 依目標權重買進核心股票類別' });
+      } else {
+        const picks = detail.picks ?? [];
+        if (picks.length === 0) lines.push({ en: 'No watchlist stock near its buy price · No orders drafted', zh: '觀察清單中沒有接近買入價的個股 · 不產生下單清單' });
+        for (const pick of picks) {
+          const where = pick.distance <= 0 ? { en: 'in its buy zone', zh: '已在買入區' } : { en: `${percent(pick.distance)} above its buy price`, zh: `高於買入價 ${percent(pick.distance)}` };
+          lines.push({
+            en: `${pick.ticker}: ${money(pick.price, pick.currency)}, buy price ${money(pick.buyPrice, pick.currency)} · ${where.en}${pick.boughtTwd === undefined ? ' · no room under R1 / R2' : ''}`,
+            zh: `${pick.ticker}：${money(pick.price, pick.currency)}，買入價 ${money(pick.buyPrice, pick.currency)} · ${where.zh}${pick.boughtTwd === undefined ? ' · R1／R2 無空間' : ''}`,
+          });
+        }
+      }
+      if (row && row.fundedTwd < 1 && !(row.vixSoldTwd && row.vixSoldTwd > 0)) lines.push({ en: 'No strategic cash to fund it: add new money, or dismiss', zh: '沒有戰略現金可支應：請投入新資金，或略過' });
+      break;
+    }
+    case 'volatility_score_calm': {
+      lines.push(...volatilityLine(detail));
+      const row = detail.volatility;
+      if (row?.vixHeldTwd) lines.push({ en: `VIX products held: ${twd(row.vixHeldTwd)}`, zh: `已持有 VIX 商品：${twd(row.vixHeldTwd)}` });
+      if (row && row.roomTwd !== undefined && row.roomTwd < row.budgetTwd - 1) lines.push({ en: `Room under the VIX cap and R2: ${twd(row.roomTwd)}`, zh: `VIX 上限與 R2 下的空間：${twd(row.roomTwd)}` });
+      break;
+    }
     default:
       break;
   }
@@ -257,6 +310,16 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
         { en: 'A satellite stock turned red: look at what fired again. The exit is drafted so it is ready; edit or dismiss it if the case still holds.', zh: '衛星持股轉為紅燈：請重新檢視觸發的指標。出場清單已先準備好；若投資理由仍成立，可修改或略過。' },
         { en: 'The proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '賣出所得留在一般投入資金池，買進最低於目標的核心類別。' },
       ];
+    case 'volatility_score_crosses':
+      return [
+        { en: 'The score crossed its line from below. Tense: the watchlist stocks nearest their buy price, within R1 and R2. Panic: the VIX hedge is sold (it pays in a spike) and the core equity classes bought, as after a crash buying broad markets in stages has paid better than buying volatility.', zh: '分數由下往上穿越門檻。緊張：買進觀察清單中最接近買入價的個股（受 R1／R2 限制）。恐慌：賣出 VIX 避險部位（恐慌時獲利），買進核心股票類別；崩盤後分批買進大盤，歷來比買進波動率商品有利。' },
+        { en: 'A score marks stress, not a bottom: this is one stage, and the next is your call. Funded from strategic cash, the share kept for such days. Once a run: the alert fires again only after the score falls a full reset gap below the line.', zh: '分數代表壓力而非底部：這是其中一批，下一批由你判斷。資金來自戰略現金，即為此保留的部分。每波只觸發一次：分數須先跌破門檻減重設差距，才會再次觸發。' },
+      ];
+    case 'volatility_score_calm':
+      return [
+        { en: 'Protection is cheap while markets are calm. A VIX product loses value while held (its futures roll), so keep it small and sell it into a spike: the panic alert drafts that sale.', zh: '市場平靜時保護成本低。VIX 商品持有期間會因期貨轉倉流失價值，因此部位要小，並在恐慌時賣出：恐慌警報會產生賣出清單。' },
+        { en: 'Never more than the cap of the regular pool in VIX products, and within R2. None while a hedge is held.', zh: 'VIX 商品合計不超過一般投入資金池的上限，並受 R2 限制；已持有避險部位時不再提出。' },
+      ];
     case 'value_change_exceeds':
       return [{ en: 'A new quarter changed the figures the value is worked out from. Check the growth rates and any typed figures still fit, then save the valuation again.', zh: '新一季財報改變了計算內在價值的數字。請確認成長率與自訂數字是否仍合適，再重新儲存估值。' }];
     default:
@@ -287,6 +350,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
     case 'quiet':
       return { en: 'Not firing', zh: '未觸發' };
     case 'covered':
+      if (check.why === 'hedge') return { en: 'A hedge is held already', zh: '已持有避險部位' };
       return check.why === 'R1' ? { en: "Covered by R1's trims", zh: '由 R1 的減碼處理' } : { en: 'Covered by the next contribution', zh: '下次每月投入可補足' };
     case 'waiting':
       if (check.why === 'dca_day') return { en: 'Waiting for the DCA debit day', zh: '尚未設定定期定額扣款日' };
@@ -296,6 +360,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
       if (check.why === 'gauge') return { en: "Waiting for ACWI's closes", zh: '等待 ACWI 的收盤價' };
       if (check.why === 'valuation') return { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' };
       if (check.why === 'red_flags') return { en: 'Waiting for a red-flag scan', zh: '尚無紅旗掃描' };
+      if (check.why === 'volatility') return { en: 'Waiting for a fresh volatility score', zh: '等待最新波動分數' };
       return { en: 'Nothing to measure yet', zh: '尚無可衡量的持股' };
     case 'unreadable':
       return { en: 'Threshold missing or malformed', zh: '門檻缺漏或格式錯誤' };

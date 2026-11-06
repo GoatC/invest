@@ -1642,6 +1642,40 @@ await step('volatility: the score of the demo series over the year, each compone
   check(/Market event[\s\S]*e2e election/.test(await body()), 'the deleted event in the edit history');
 });
 
+await step('volatility alert: a score crossing 8 drafts the panic proposal, explained, with its push through the quiet hours and its row in the alert record (N8 step 3)', async () => {
+  const rest = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) } });
+  const yesterday = new Date(Date.parse(`${taipeiToday}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const scores = [
+    { score_date: yesterday, score: 5.0, mean: 4.44, coverage: 1, components: [] },
+    { score_date: taipeiToday, score: 8.6, mean: 8.44, coverage: 1, components: [] },
+  ];
+  check((await rest('volatility_scores', { method: 'POST', body: JSON.stringify(scores), headers: { prefer: 'resolution=merge-duplicates' } })).ok, 'the two scores saved');
+  try {
+    await page.goto(`${BASE}/proposals`);
+    await page.getByRole('button', { name: /Check the rules now/ }).click();
+    await page.waitForURL(/\?saved=checked/);
+    const proposal = page.locator('article.proposal').filter({ hasText: 'Volatility alert' });
+    const text = (await proposal.innerText()).replace(/\s+/g, ' ');
+    check(text.includes(`VOLATILITY_ALERT · Volatility alert`) && text.includes(`Volatility score 8.6 on ${taipeiToday} ≥ 8 · panic since ${taipeiToday}`), `the panic proposal explained, got ${text}`);
+    check(/Budget 5% of the regular pool, NT\$[\d,]+ · from strategic cash NT\$[\d,]+/.test(text) && text.includes('the core equity classes, by their targets'), `its budget and buys, got ${text}`);
+    await snap('volatility-alert');
+    // Rules page: both rules on, the switch for the quiet hours shown.
+    await page.goto(`${BASE}/rules`);
+    const rules = await body();
+    // Each rule's form is folded under it: its switch is there, ticked, though not on screen.
+    const quietSwitch = page.locator('input[name=threshold_push_in_quiet_hours]');
+    check(rules.includes('VOLATILITY_ALERT') && rules.includes('VOLATILITY_HEDGE') && (await quietSwitch.count()) === 1 && (await quietSwitch.isChecked()), 'the two rules and the quiet-hours switch on the Rules page');
+    // The alert record follows it from today.
+    await page.goto(`${BASE}/volatility#shadow`);
+    const record = await page.locator('#shadow-list').innerText();
+    check(record.includes(taipeiToday) && /Panic[\s\S]*8\.6/.test(record), `the alert record lists it, got ${record}`);
+  } finally {
+    // Leave the steps after this one as they were: no alert, no scores.
+    check((await rest('proposals?rule_id=eq.VOLATILITY_ALERT', { method: 'DELETE' })).ok, 'the proposal removed');
+    check((await rest(`volatility_scores?score_date=in.(${yesterday},${taipeiToday})`, { method: 'DELETE' })).ok, 'the scores removed');
+  }
+});
+
 await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings, the windfall paced and accelerated as F3 runs it (F5)', async () => {
   await page.goto(`${BASE}/monte-carlo`);
   await page.getByRole('heading', { level: 1, name: '蒙地卡羅' }).waitFor();

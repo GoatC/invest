@@ -27,6 +27,17 @@ const KEYS: Record<string, Bilingual> = {
   multiple: { en: 'Multiple of the base value', zh: '基本情境內在價值的倍數' },
   sell_share: { en: 'Share of the holding sold', zh: '賣出持股的比例' },
   change: { en: 'Change in value that prompts a review', zh: '提醒檢視的價值變動幅度' },
+  tense: { en: 'Volatility score: tense from', zh: '波動分數：緊張門檻' },
+  panic: { en: 'Volatility score: panic from', zh: '波動分數：恐慌門檻' },
+  calm: { en: 'Volatility score: calm below', zh: '波動分數：平靜門檻' },
+  reset_gap: { en: 'Points back past the line that end a run', zh: '分數回落多少點才結束一波' },
+  tense_share: { en: 'Share of the pool a tense alert spends', zh: '緊張時投入資金池的比例' },
+  panic_share: { en: 'Share of the pool a panic alert spends', zh: '恐慌時投入資金池的比例' },
+  near_buy: { en: 'Watchlist stocks within this of their buy price', zh: '距買入價此幅度內的觀察清單個股' },
+  max_stocks: { en: 'Most stocks a tense alert buys', zh: '緊張時最多買進幾檔' },
+  hedge_share: { en: 'Share of the pool a hedge spends', zh: '避險投入資金池的比例' },
+  vol_cap: { en: 'Most of the pool in VIX products', zh: 'VIX 商品占資金池上限' },
+  push_in_quiet_hours: { en: 'Push in the quiet hours too', zh: '安靜時段照樣推播' },
 };
 
 function label(key: string): Bilingual {
@@ -37,10 +48,12 @@ function label(key: string): Bilingual {
 /** A rule's on/off, cooldown and the numbers in its threshold. */
 export function RuleForm({ id, enabled, cooldownDays, threshold }: { id: string; enabled: boolean; cooldownDays: number; threshold: Record<string, unknown> }) {
   const numbers = Object.entries(threshold).filter((entry): entry is [string, number] => typeof entry[1] === 'number');
+  const switches = Object.entries(threshold).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean');
   const [values, setValues] = useState<Record<string, string>>(() => ({
     cooldownDays: String(cooldownDays),
     ...(enabled ? { enabled: 'on' } : {}),
     ...Object.fromEntries(numbers.map(([key, value]) => [thresholdField(key), String(value)])),
+    ...Object.fromEntries(switches.filter(([, value]) => value).map(([key]) => [thresholdField(key), 'on'])),
   }));
   const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(saveRule, RULE_STATE);
@@ -83,6 +96,15 @@ export function RuleForm({ id, enabled, cooldownDays, threshold }: { id: string;
           );
         })}
       </div>
+      {switches.map(([key]) => {
+        const name = thresholdField(key);
+        return (
+          <label key={key} className="row">
+            <input type="checkbox" name={name} checked={values[name] === 'on'} onChange={(e) => change(name, e.target.checked ? 'on' : undefined)} />
+            <Bi {...label(key)} />
+          </label>
+        );
+      })}
       {state.message && (
         <p className="banner danger" role="alert">
           <Bi {...state.message} />

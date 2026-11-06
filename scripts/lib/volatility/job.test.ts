@@ -54,6 +54,7 @@ function memoryStore(missingSettings = false) {
       events = [...events.filter((event) => event.source !== source || event.date < from), ...rows];
     },
     recordRun: async (run) => void runs.push(run),
+    evaluateRules: async () => ({ created: 1, closed: 0 }),
   };
   return { store, prices, scores, runs, events: () => events };
 }
@@ -95,7 +96,9 @@ describe('volatility job (N8)', () => {
     assert.equal(saved.components.find((row) => row.id === 'taiex_fall')?.status, 'missing');
     assert.ok(saved.score > 5 && saved.score < 8, String(saved.score));
     assert.equal(runs.length, 1);
+    assert.deepEqual(run.detail.rules, { created: 1, closed: 0 });
     assert.ok(volatilitySummary(run).some((line) => line.includes('/ 10')));
+    assert.ok(volatilitySummary(run).some((line) => line.startsWith('  Rules 規則: 1 proposals drafted')));
   });
 
   it('replaces the feeds\' events from today on: a meeting moved, a past one left out', async () => {

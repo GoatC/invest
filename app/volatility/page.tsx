@@ -5,9 +5,12 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { VolatilityChart } from '@/components/volatility-chart';
 import { requireSession } from '@/lib/auth';
-import { DataError, EVENT_PAGE_DAYS, loadVolatilityData, type VolatilityData } from '@/lib/data';
+import { DataError, EVENT_PAGE_DAYS, loadShadowLog, loadVolatilityData, orDataError, type VolatilityData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { LABELS } from '@/lib/i18n';
+import { signedPercent, twd } from '@/lib/format';
+import { LABELS, type Bilingual } from '@/lib/i18n';
+import { HORIZONS, hitRates, type ShadowRow } from '@/lib/models/shadow';
+import { STATUS } from '@/lib/proposal-text';
 import { KIND_NAMES, whenText, type MarketEvent } from '@/lib/models/events';
 import { COMPONENT_TEXT, STATUS_TEXT, bandOf, figureText } from '@/lib/volatility-text';
 
@@ -24,6 +27,7 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const today = taipeiToday();
   let data: VolatilityData;
+  const shadow = orDataError(loadShadowLog(supabase));
   try {
     data = await loadVolatilityData(supabase, today);
   } catch (err) {
@@ -61,7 +65,10 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
           <Zh {...LABELS.volatility} />
         </h1>
         <p className="muted small">
-          <Bi en={`Scored ${today} · the score's alert and proposals come in a later step; events are reminded of ${data.settings.events.leadDays} days ahead`} zh={`${today} 計分 · 分數的警報與提案將於後續步驟加入；事件於 ${data.settings.events.leadDays} 天前提醒`} />
+          <Bi
+            en={`Scored ${today} · crossing 6 or 8 pushes a proposal (rule VOLATILITY_ALERT), even in the quiet hours; below 4, a small hedge (VOLATILITY_HEDGE) · events reminded of ${data.settings.events.leadDays} days ahead`}
+            zh={`${today} 計分 · 穿越 6 或 8 時推播提案（規則 VOLATILITY_ALERT），安靜時段照樣推播；低於 4 時小量避險（VOLATILITY_HEDGE）· 事件於 ${data.settings.events.leadDays} 天前提醒`}
+          />
         </p>
         <Facts facts={facts} />
         <VolatilityChart points={data.history ?? []} />
@@ -119,6 +126,7 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
           />
         </Info>
       </section>
+      <ShadowLog rows={await shadow} />
       <Events events={data.events ?? null} leadDays={data.settings.events.leadDays} saved={typeof params['saved'] === 'string' ? params['saved'] : undefined} />
       <section className="card form" id="settings">
         <h2>
@@ -220,6 +228,95 @@ function Events({ events, leadDays, saved }: { events: MarketEvent[] | null; lea
         <Bi
           en={`FOMC rate decisions come from the Fed's calendar (the second day of each meeting, 14:00 New York), US CPI and the jobs report from FRED's release calendar; the volatility job reloads them twice a day. Taiwan's central bank publishes its board meetings once a year in a press release: type next year's in here, and elections or anything else too. A reminder is pushed ${leadDays} days before each event, once, after the quiet hours. Implied volatility usually rises before an event and falls after it, so a reminder proposes no orders.`}
           zh={`聯準會利率決議取自聯準會日程（每次會議第二天，紐約時間 14:00），美國 CPI 與非農就業取自 FRED 公布時程；波動排程每天重新載入兩次。央行每年以新聞稿公布理監事會議日期：請在這裡輸入明年的日期，選舉或其他事件也可輸入。每個事件前 ${leadDays} 天推播一次提醒（安靜時段後送出）。事件前隱含波動率通常上升、事件後回落，因此提醒不附下單清單。`}
+        />
+      </Info>
+    </section>
+  );
+}
+
+const BAND_TEXT: Record<string, Bilingual> = {
+  calm: { en: 'Calm · hedge', zh: '平靜 · 避險' },
+  tense: { en: 'Tense', zh: '緊張' },
+  panic: { en: 'Panic', zh: '恐慌' },
+};
+
+/** The shadow log (step 3): how each alert's and hedge's proposed trades did afterwards, traded or not. */
+function ShadowLog({ rows }: { rows: ShadowRow[] | DataError }) {
+  if (rows instanceof DataError) return <DataProblem table={rows.table} detail={rows.detail} />;
+  const rates = hitRates(rows);
+  const facts: Fact[] = HORIZONS.map((sessions) => {
+    const rate = rates[sessions];
+    return {
+      label: { en: `Hit rate, ${sessions} sessions`, zh: `命中率，${sessions} 個交易日` },
+      value: rate.hitRate === null ? '—' : `${Math.round(rate.hitRate * 100)}%`,
+      note: rate.measured === 0 ? { en: 'None measured yet', zh: '尚無可衡量的提案' } : { en: `${rate.measured} measured · mean ${signedPercent(rate.mean)}`, zh: `已衡量 ${rate.measured} 份 · 平均 ${signedPercent(rate.mean)}` },
+      tone: rate.hitRate === null ? 'none' : rate.hitRate >= 0.5 ? 'ok' : 'watch',
+    };
+  });
+  return (
+    <section className="card form" id="shadow">
+      <h2>
+        <Bi en="Alert record" zh="影子紀錄" />
+      </h2>
+      <Facts facts={facts} />
+      {rows.length === 0 ? (
+        <p className="muted">
+          <Bi en="No alert or hedge has been proposed yet." zh="尚未提出任何警報或避險提案。" />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="compact" id="shadow-list">
+            <thead>
+              <tr>
+                <th>
+                  <Bi en="Drafted" zh="提出日" />
+                </th>
+                <th>
+                  <Bi en="Band · score" zh="區段 · 分數" />
+                </th>
+                <th>
+                  <Bi en="Trades" zh="交易" />
+                </th>
+                {HORIZONS.map((sessions) => (
+                  <th key={sessions} className="num">
+                    <Bi en={`${sessions} sessions`} zh={`${sessions} 日`} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const band = row.proposal.detail.volatility;
+                return (
+                  <tr key={row.proposal.id}>
+                    <td className="nowrap">
+                      <a href={`/proposals/${row.proposal.id}`}>{row.proposal.date}</a>
+                      <span className="muted small">
+                        {' '}
+                        <Bi {...(STATUS[row.proposal.status as keyof typeof STATUS] ?? { en: row.proposal.status, zh: row.proposal.status })} />
+                      </span>
+                    </td>
+                    <td>
+                      {band ? <Bi {...(BAND_TEXT[band.band] ?? { en: band.band, zh: band.band })} /> : '—'}
+                      {band && <span className="muted small"> {band.score.toFixed(1)}</span>}
+                    </td>
+                    <td className="small">{row.trades.length === 0 ? '—' : row.trades.map((one) => `${one.side === 'buy' ? '+' : '−'}${one.ticker} ${twd(one.amountTwd)}`).join(' · ')}</td>
+                    {HORIZONS.map((sessions) => (
+                      <td key={sessions} className="num">
+                        {row.returns[sessions] === null ? '…' : signedPercent(row.returns[sessions])}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Info>
+        <Bi
+          en="Every alert and hedge proposal is followed whether you traded it or not: its trades from the price they were drafted at to the close 5, 20 and 60 trading days later, weighted by amount; a buy gains when the price rises, the VIX hedge sold in a panic when it falls. The strategic cash that funds them is left out, as are the exchange rate and dividends. A hit is a return above 0; … is still pending. Judge the hit rate over several alerts before real money follows them."
+          zh="每份警報與避險提案不論是否實際下單都會追蹤：各筆交易自提出時的價格，到 5、20、60 個交易日後的收盤價，依金額加權；買進在價格上漲時獲利，恐慌時賣出的 VIX 避險在價格下跌時獲利。支應的戰略現金不計入，也不計匯率與股利。報酬大於 0 即為命中；… 表示尚未到期。請累積多次警報的命中率後，再決定是否以真錢跟隨。"
         />
       </Info>
     </section>

@@ -287,3 +287,39 @@ export function scoreHistory(series: ReadonlyMap<string, readonly Close[]>, sett
     return { date, score: result.score, coverage: result.coverage };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Runs of the saved score (step 3: the alert and the hedge)
+// ---------------------------------------------------------------------------
+
+export interface SavedScore {
+  date: string;
+  score: number;
+}
+
+/**
+ * The current run of a condition on the saved daily scores (oldest first): when the newest score,
+ * on or before `today` and no older than `maxAgeDays`, meets `inside`, walk back while each score
+ * meets `holds` (a looser test, so a score wobbling around the line does not start a new run) and
+ * return the first day of that stretch on which `inside` held. Undefined when the newest score
+ * does not meet `inside`; null when there is no fresh score.
+ */
+export function runStart(
+  scores: readonly SavedScore[],
+  today: string,
+  maxAgeDays: number,
+  inside: (score: number) => boolean,
+  holds: (score: number) => boolean,
+): { since: string; latest: SavedScore } | undefined | null {
+  const upTo = scores.filter((row) => row.date <= today);
+  const latest = upTo[upTo.length - 1];
+  if (!latest || latest.date < addDays(today, -maxAgeDays)) return null;
+  if (!inside(latest.score)) return undefined;
+  let since = latest.date;
+  for (let i = upTo.length - 1; i >= 0; i--) {
+    const row = upTo[i] as SavedScore;
+    if (!holds(row.score)) break;
+    if (inside(row.score)) since = row.date;
+  }
+  return { since, latest };
+}
