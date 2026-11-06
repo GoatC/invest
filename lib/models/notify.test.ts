@@ -222,3 +222,27 @@ describe('comingWeek', () => {
     assert.deepEqual(comingWeek('2026-10-22', null, null, null), []);
   });
 });
+
+describe('the volatility alert through the quiet hours (N8 step 3)', () => {
+  it('pushes an urgent proposal at once inside the quiet hours, the others after them', () => {
+    const at = new Date('2026-11-06T16:30:00Z'); // 00:30 in Taipei
+    const detail = { poolTwd: 200_000, cashTwd: 0, leftTwd: 0, volatility: { band: 'panic' as const, score: 8.4, scoreDate: '2026-11-06', line: 8, since: '2026-11-05', share: 0.05, budgetTwd: 10_000, fundedTwd: 10_000 } };
+    const planned = plan({
+      now: at,
+      proposals: [
+        { id: 1, ruleId: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses', title: { en: 'VOLATILITY_ALERT · Volatility alert', zh: 'VOLATILITY_ALERT · 波動警報' }, state: 'panic:2026-11-05', detail, urgent: true },
+        { id: 2, ruleId: 'R1', condition: 'single_stock_weight_above', title: { en: 'R1 · Single-stock trim', zh: 'R1 · 單一個股減碼' }, state: 'AAPL', detail: { poolTwd: 0, cashTwd: 0, leftTwd: 0, limit: 0.05 } },
+      ],
+      names: new Map(),
+      weekly: null,
+      weeklyKeys: new Set(),
+      summary: { openProposals: 0, approvedProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
+      health: { alert: false, misses: 0 } as unknown as Parameters<typeof plan>[0]['health'],
+      lastGoodRunId: null,
+      quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },
+    });
+    assert.equal(planned[0]?.sendAfter.toISOString(), at.toISOString());
+    assert.equal(planned[0]?.body, 'Volatility 8.4/10, panic: sell the VIX hedge, buy the core in a first stage.\n波動分數 8.4/10，恐慌：賣出 VIX 避險，分批買進核心。');
+    assert.equal(planned[1]?.sendAfter.toISOString(), '2026-11-07T00:00:00.000Z');
+  });
+});

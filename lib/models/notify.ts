@@ -182,6 +182,15 @@ function proposalAction(condition: string, state: string, detail: ProposalDetail
         en: `ACWI ${percent(detail.drawdown ?? 0)} below its high: deploy ${twd(detail.cashTwd)} more of the windfall now.`,
         zh: `ACWI 自高點下跌 ${percent(detail.drawdown ?? 0)}：現在多投入大額資金 ${twd(detail.cashTwd)}。`,
       };
+    case 'volatility_score_crosses': {
+      const row = detail.volatility;
+      const score = row ? row.score.toFixed(1) : '—';
+      return row?.band === 'panic'
+        ? { en: `Volatility ${score}/10, panic: sell the VIX hedge, buy the core in a first stage.`, zh: `波動分數 ${score}/10，恐慌：賣出 VIX 避險，分批買進核心。` }
+        : { en: `Volatility ${score}/10, tense: the watchlist stocks nearest their buy price.`, zh: `波動分數 ${score}/10，緊張：觀察清單中最接近買入價的個股。` };
+    }
+    case 'volatility_score_calm':
+      return { en: `Volatility ${detail.volatility?.score.toFixed(1) ?? '—'}/10, calm: a small hedge while protection is cheap.`, zh: `波動分數 ${detail.volatility?.score.toFixed(1) ?? '—'}/10，平靜：保護便宜時小量避險。` };
     case 'us_situs_value_above': {
       const total = money(detail.situsUsd ?? 0, 'USD', 0);
       const limit = money(detail.limitUsd ?? 0, 'USD', 0);
@@ -194,6 +203,8 @@ function proposalAction(condition: string, state: string, detail: ProposalDetail
 
 export interface ProposalForPush {
   id: number;
+  /** Pushed at once, through the quiet hours (VOLATILITY_ALERT's push_in_quiet_hours, N8). */
+  urgent?: boolean;
   ruleId: string;
   condition: string;
   /** "R1 · Single-stock trim". */
@@ -321,7 +332,7 @@ export interface PlanInput {
 /** The pushes due now, each with when it may go: now, or the end of the quiet hours. */
 export function plan(input: PlanInput): Array<Message & { sendAfter: Date }> {
   const sendAfter = quietUntil(input.now, input.quiet) ?? input.now;
-  const out: Array<Message & { sendAfter: Date }> = input.proposals.map((proposal) => ({ ...proposalMessage(proposal, input.names), sendAfter }));
+  const out: Array<Message & { sendAfter: Date }> = input.proposals.map((proposal) => ({ ...proposalMessage(proposal, input.names), sendAfter: proposal.urgent ? input.now : sendAfter }));
   if (input.weekly) {
     const last = lastWeeklyReview(input.now, input.weekly);
     const fresh = input.now.getTime() - last.at.getTime() < WEEKLY_GRACE_HOURS * 3_600_000;

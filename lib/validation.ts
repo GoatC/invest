@@ -537,7 +537,7 @@ export interface RuleInput {
 }
 
 /**
- * A rule's edit: on or off, its cooldown, and each number in its threshold. A whole number stays
+ * A rule's edit: on or off, its cooldown, each switch and each number in its threshold. A whole number stays
  * whole, a share (between 0 and 1) stays one, and any other number stays above 0 (a multiple such as 1.25).
  */
 export function parseRuleForm(raw: RawForm, threshold: Record<string, unknown>): Parsed<RuleInput, string> {
@@ -546,6 +546,11 @@ export function parseRuleForm(raw: RawForm, threshold: Record<string, unknown>):
   if (cooldownDays === undefined || !Number.isInteger(cooldownDays) || cooldownDays < 0 || cooldownDays > 365) errors['cooldownDays'] = MESSAGES.cooldown;
   const next: Record<string, unknown> = { ...threshold };
   for (const [key, was] of Object.entries(threshold)) {
+    // A switch (push_in_quiet_hours) is a checkbox: on, or off when left out.
+    if (typeof was === 'boolean') {
+      next[key] = raw[thresholdField(key)] === 'on';
+      continue;
+    }
     if (typeof was !== 'number') continue;
     const name = thresholdField(key);
     const value = parseNumber(raw[name]);

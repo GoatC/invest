@@ -11,6 +11,7 @@ import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
 import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
 import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
+import { shadowRows, type ShadowProposal, type ShadowRow } from './models/shadow';
 import { eventMessage, remindersDue, type EventKind, type EventSource, type MarketEvent } from './models/events';
 import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
@@ -1115,7 +1116,7 @@ export async function loadEngineInput(
     loadProposals(supabase, today),
     loadWindfallInput(supabase, today),
   ]);
-  const [watch, redFlags] = await Promise.all([loadWatchInputs(supabase, data.securities), loadFlagInputs(supabase, today, data)]);
+  const [watch, redFlags, volatility] = await Promise.all([loadWatchInputs(supabase, data.securities), loadFlagInputs(supabase, today, data), loadVolatilityInput(supabase, today)]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const day = configNumber(value('dca'), 'day_of_month');
   const expiry = configNumber(value('proposal_expiry_days'));
@@ -1135,8 +1136,23 @@ export async function loadEngineInput(
     windfall,
     ...(watch ? { watch } : {}),
     ...(redFlags ? { redFlags } : {}),
+    ...(volatility ? { volatility } : {}),
   };
   return { input, rules, proposals, orders: orderSettings(value('orders')) };
+}
+
+/** The days of saved volatility scores the N8 rules read: a run is followed back this far at most. */
+const VOLATILITY_RUN_DAYS = 120;
+
+/** The saved volatility scores (N8 step 3), oldest first; undefined before config volatility exists. */
+async function loadVolatilityInput(supabase: SupabaseClient, today: string): Promise<EngineInput['volatility']> {
+  const settings = await loadVolatilitySettings(supabase);
+  if (!settings) return undefined;
+  const found = await rows<{ score_date: string; score: number }>(
+    'volatility_scores',
+    supabase.from('volatility_scores').select('score_date, score').gte('score_date', addDays(today, -VOLATILITY_RUN_DAYS)).lte('score_date', today).order('score_date'),
+  );
+  return { scores: found.map((row) => ({ date: row.score_date, score: Number(row.score) })), maxAgeDays: settings.maxAgeDays };
 }
 
 /** Closes and drafts what the engine decided. Two runs at once cannot draft the same open proposal twice. */
@@ -1230,7 +1246,8 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     .filter((proposal) => proposal.status === 'open' && !pushed.has(String(proposal.id)))
     .map((proposal) => {
       const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
-      return { id: proposal.id, ruleId: proposal.ruleId, condition: rule.condition, title: proposalTitle(rule), state: proposal.state, detail: proposal.detail };
+      const urgent = rule.condition === 'volatility_score_crosses' && (('threshold' in rule ? rule.threshold : null) as Record<string, unknown> | null)?.['push_in_quiet_hours'] === true;
+      return { id: proposal.id, ruleId: proposal.ruleId, condition: rule.condition, title: proposalTitle(rule), state: proposal.state, detail: proposal.detail, ...(urgent ? { urgent } : {}) };
     });
   return {
     proposals: open,
@@ -2472,6 +2489,37 @@ export async function loadVolatilityData(supabase: SupabaseClient, today: string
     lastRun: run ? { finishedAt: run.finished_at, status: run.status } : null,
     events,
   };
+}
+
+/** The rules whose proposals the shadow log follows (N8 step 3). */
+export const SHADOW_RULES = ['VOLATILITY_ALERT', 'VOLATILITY_HEDGE'];
+/** The proposals the page lists, newest first. */
+const SHADOW_LIMIT = 40;
+
+/** The alert's and hedge's proposals, any status, and the quoted closes of their trades since (N8 step 3). */
+export async function loadShadowLog(supabase: SupabaseClient): Promise<ShadowRow[]> {
+  const found = await rows<{ id: number; rule_id: string; created_at: string; status: string; orders: unknown; detail: unknown }>(
+    'proposals',
+    supabase.from('proposals').select('id, rule_id, created_at, status, orders, detail').in('rule_id', SHADOW_RULES).order('created_at', { ascending: false }).limit(SHADOW_LIMIT),
+  );
+  const proposals: ShadowProposal[] = found.map((row) => ({
+    id: Number(row.id),
+    ruleId: row.rule_id,
+    date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(row.created_at)),
+    status: row.status,
+    orders: readOrders(row.orders),
+    detail: readDetail(row.detail),
+  }));
+  const tickers = [...new Set(proposals.flatMap((proposal) => proposal.orders.flatMap((order) => (order.kind === 'trade' ? [order.ticker] : []))))];
+  const from = proposals.reduce((min, proposal) => (proposal.date < min ? proposal.date : min), '9999-12-31');
+  const closes = new Map<string, Array<{ date: string; close: number }>>();
+  if (tickers.length > 0) {
+    const prices = await allRows<{ ticker: string; price_date: string; close: number }>('prices', (start, end) =>
+      supabase.from('prices').select('ticker, price_date, close').in('ticker', tickers).gt('price_date', from).order('ticker').order('price_date').range(start, end),
+    );
+    for (const row of prices) closes.set(row.ticker, [...(closes.get(row.ticker) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  }
+  return shadowRows(proposals, closes);
 }
 
 /** The days ahead the volatility page lists events for. */

@@ -42,6 +42,17 @@
  *   review again, with the exit drafted: selling sell_share of it (all, by default), the proceeds
  *   into the core. Both fire once per run of a light: dismissed or filled, not again until it changes.
  *
+ * - volatility_score_crosses (VOLATILITY_ALERT, N8 step 3): the saved volatility score crosses `tense`
+ *   (6) or `panic` (8) from below → tense: buy the watchlist stocks nearest their buy price
+ *   (within near_buy, at most max_stocks), tense_share of the pool; panic: sell the VIX products
+ *   held (a hedge pays in a spike) and buy the core equity classes (panic_classes) with that and
+ *   panic_share of the pool. Both are funded from strategic cash (from_class), satellite buys kept
+ *   within R1 and R2. A run ends only once the score falls reset_gap below the line, so a score
+ *   wobbling around it fires once; one proposal per run and band.
+ * - volatility_score_calm (VOLATILITY_HEDGE): the score below `calm` (4) → a small hedge in a VIX
+ *   product (vehicle), hedge_share of the pool from strategic cash, never past vol_cap of the pool
+ *   in VIX products nor R2's satellite target; none while the hedge is held. Once per calm run.
+ *
  * Every sale's proceeds stay in the regular pool: they buy the most underweight core classes (at
  * most MONTHLY_CONTRIBUTION's max_classes, F8's minimum-fee limit; F8 never buys the satellite).
  * Listed orders are in whole shares, or in fractions to config orders.share_decimals for the
@@ -63,6 +74,7 @@ import type { AssetClass, Pool, Side } from './types';
 import type { Holding } from './valuation';
 import { currentRun, worse, type Indicator, type Level, type Scan } from './red-flags';
 import { drawdownOf, readAcceleration, tierAmount, tierToFire, type Close } from './windfall';
+import { runStart, type SavedScore } from './volatility';
 
 /** Floating-point sums a hair over a limit are not over it. */
 const EPS = 1e-9;
@@ -135,6 +147,8 @@ export interface EngineInput {
   watch?: readonly WatchInput[];
   /** Each single stock's saved red-flag scans (N3), newest first; without them the two N3 rules wait. */
   redFlags?: ReadonlyArray<{ ticker: string; scans: readonly Scan[] }>;
+  /** The saved daily volatility scores, oldest first (N8 step 3); without them the two N8 rules wait. */
+  volatility?: { scores: readonly SavedScore[]; maxAgeDays: number };
 }
 
 /** A watched single stock's newest saved value a share (F12), for the zone rules. */
@@ -271,6 +285,39 @@ export interface ProposalDetail {
   changes?: Array<{ ticker: string; value: number; previous: number; valuedOn: string; previousOn: string; change: number }>;
   /** RED_FLAG_WORSENS and RED_FLAG_RED: each stock, its light before and now, since when, what fired, and (exit) what is sold. */
   flags?: FlagRow[];
+  /** VOLATILITY_ALERT and VOLATILITY_HEDGE: the band, the newest score, the line crossed and since when, the budget and what funds it. */
+  volatility?: VolatilityRow;
+  /** VOLATILITY_ALERT (tense): the watchlist stocks nearest their buy price. */
+  picks?: PickRow[];
+}
+
+export interface VolatilityRow {
+  band: 'calm' | 'tense' | 'panic';
+  score: number;
+  scoreDate: string;
+  line: number;
+  since: string;
+  /** The share of the pool the band spends, and that in TWD. */
+  share: number;
+  budgetTwd: number;
+  /** What strategic cash gave, TWD. */
+  fundedTwd: number;
+  /** The VIX products sold (panic) or held (calm), TWD. */
+  vixSoldTwd?: number;
+  vixHeldTwd?: number;
+  /** The hedge's room under vol_cap, R2 and its budget, TWD (calm). */
+  roomTwd?: number;
+}
+
+export interface PickRow {
+  ticker: string;
+  price: number;
+  currency: string;
+  buyPrice: number;
+  /** Price ÷ buy price − 1: 0 or below is in the buy zone. */
+  distance: number;
+  roomTwd: number;
+  boughtTwd?: number;
 }
 
 export interface FlagRow {
@@ -316,7 +363,7 @@ export interface Check {
   ruleId: string;
   outcome: CheckOutcome;
   draft?: Draft;
-  /** covered by: 'R1' or 'contribution'; waiting for: 'dca_day', 'pool', 'usd', 'plan', 'windfall_cash', 'gauge', 'valuation', 'red_flags'. */
+  /** covered by: 'R1', 'contribution' or 'hedge'; waiting for: 'dca_day', 'pool', 'usd', 'plan', 'windfall_cash', 'gauge', 'valuation', 'red_flags', 'volatility'. */
   why?: string;
   /** For a firing rule: held back by its cooldown until this date. */
   cooldownUntil?: string;
@@ -1211,6 +1258,185 @@ function evaluateFlagRed(rule: EngineRule, context: Context): Result {
   };
 }
 
+// ---------------------------------------------------------------------------
+// N8 step 3: the volatility alert and the hedge
+// ---------------------------------------------------------------------------
+
+const VIX_PRODUCTS = ['00677U', 'VIXY'];
+
+/** The VIX products, from VOLATILITY_HEDGE's threshold whether or not it is on. */
+function vixProducts(rules: readonly EngineRule[]): string[] {
+  const listed = record(rules.find((rule) => rule.condition === 'volatility_score_calm')?.threshold)['vix_products'];
+  return Array.isArray(listed) && listed.every((ticker) => typeof ticker === 'string') ? (listed as string[]) : VIX_PRODUCTS;
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function nonNegative(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/** Sells up to `amount` TWD of the funding class (strategic cash); the orders and what they give. */
+function fund(book: Book, fromClass: string, amount: number): { orders: DraftOrder[]; cashTwd: number } {
+  if (amount <= EPS) return { orders: [], cashTwd: 0 };
+  const { orders } = book.sellClass(fromClass, amount);
+  return { orders, cashTwd: orders.reduce((sum, order) => sum + order.amountTwd, 0) };
+}
+
+/** Room under R2's satellite target, TWD, after what R1's live proposal sells. */
+function satelliteRoom(context: Context, book: Book): number {
+  const target = capOf(context.input.rules, 'satellite_weight_above', 'target_weight');
+  if (target === undefined) return Number.POSITIVE_INFINITY;
+  const trimmed = [...context.r1Trims.values()].reduce((sum, value) => sum + value, 0);
+  const satellite = context.pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + book.valueOf(holding), 0) - trimmed;
+  return Math.max(0, target * book.total - satellite);
+}
+
+function evaluateVolatilityAlert(rule: EngineRule, context: Context): Result {
+  const t = record(rule.threshold);
+  const tense = positiveNumber(t['tense']);
+  const panic = positiveNumber(t['panic']);
+  const gap = nonNegative(t['reset_gap']);
+  const tenseShare = fraction(t['tense_share']);
+  const panicShare = fraction(t['panic_share']);
+  const near = nonNegative(t['near_buy']);
+  const maxStocks = typeof t['max_stocks'] === 'number' && Number.isInteger(t['max_stocks']) && t['max_stocks'] >= 0 ? t['max_stocks'] : undefined;
+  const fromClass = typeof t['from_class'] === 'string' ? t['from_class'] : 'strategic_cash';
+  const panicClasses = Array.isArray(t['panic_classes']) ? (t['panic_classes'] as unknown[]).filter((id): id is string => typeof id === 'string') : ['us_global_equity', 'tw_market_cap'];
+  if (!tense || !panic || panic <= tense || gap === undefined || tenseShare === undefined || panicShare === undefined || near === undefined || maxStocks === undefined) return { outcome: 'unreadable' };
+  const { volatility, quotes, watch, rules, today } = context.input;
+  if (!volatility) return { outcome: 'waiting', why: 'volatility' };
+  const runOf = (line: number) => runStart(volatility.scores, today, volatility.maxAgeDays, (score) => score >= line, (score) => score >= line - gap);
+  const tenseRun = runOf(tense);
+  if (tenseRun === null) return { outcome: 'waiting', why: 'volatility' };
+  if (!tenseRun) return { outcome: 'quiet' };
+  const panicRun = runOf(panic);
+  const band: 'tense' | 'panic' = panicRun ? 'panic' : 'tense';
+  const run = panicRun ?? tenseRun;
+  const share = band === 'panic' ? panicShare : tenseShare;
+  const book = newBook(context);
+  const budget = share * book.total;
+  const row: VolatilityRow = { band, score: run.latest.score, scoreDate: run.latest.date, line: band === 'panic' ? panic : tense, since: run.since, share, budgetTwd: budget, fundedTwd: 0 };
+  const state = `${band}:${run.since}`;
+
+  if (band === 'panic') {
+    // The hedge pays in a spike: sell every VIX product held, then add strategic cash.
+    const products = vixProducts(rules);
+    const sells: DraftOrder[] = [];
+    for (const holding of context.pool.holdings.filter((one) => one.ticker !== null && products.includes(one.ticker))) {
+      const order = book.sell(holding, book.valueOf(holding));
+      if (order) sells.push(order);
+    }
+    const sold = sells.reduce((sum, order) => sum + order.amountTwd, 0);
+    const funded = fund(book, fromClass, budget);
+    const cash = sold + funded.cashTwd;
+    const targets = panicClasses.map((id) => context.classById.get(id)).filter((one): one is EngineClass => one !== undefined && one.targetWeight > 0);
+    const totalTarget = targets.reduce((sum, one) => sum + one.targetWeight, 0);
+    const shares = new Map(targets.map((one) => [one.id, (cash * one.targetWeight) / totalTarget]));
+    const bought: BuyResult = cash > EPS && totalTarget > 0 ? buy(book, shares, context.classById, cash) : { orders: [], left: cash, noFund: [] };
+    row.fundedTwd = funded.cashTwd;
+    row.vixSoldTwd = sold;
+    return {
+      outcome: 'fires',
+      draft: {
+        ruleId: rule.id,
+        state,
+        orders: [...sells, ...funded.orders, ...bought.orders],
+        detail: { poolTwd: context.pool.totalTwd, volatility: row, cashTwd: cash, leftTwd: bought.left, ...(bought.noFund.length ? { noFund: bought.noFund } : {}) },
+      },
+    };
+  }
+
+  // Tense: the watchlist stocks nearest their buy price, within near_buy above it (or in the zone).
+  const zoneMultiple = fraction(record(rules.find((one) => one.condition === 'price_at_or_below_value_multiple')?.threshold)['multiple']) ?? 0.75;
+  const candidates = (watch ?? [])
+    .flatMap((entry) => {
+      const quote = quotes.get(entry.ticker);
+      const buyPrice = entry.value * (entry.buy ?? zoneMultiple);
+      if (!quote || buyPrice <= 0) return [];
+      const distance = quote.price / buyPrice - 1;
+      return distance <= near + EPS ? [{ entry, quote, buyPrice, distance }] : [];
+    })
+    .sort((a, b) => a.distance - b.distance || a.entry.ticker.localeCompare(b.entry.ticker))
+    .slice(0, maxStocks);
+  const maxWeight = capOf(rules, 'single_stock_weight_above', 'max_weight');
+  let satRoom = satelliteRoom(context, book);
+  // Each stock's room under R1, after what R1's live proposal sells of it.
+  const rooms = candidates.map(({ entry }) => {
+    const held = context.pool.holdings.filter((holding) => holding.ticker === entry.ticker).reduce((sum, holding) => sum + book.valueOf(holding) - (context.r1Trims.get(holding.key) ?? 0), 0);
+    return Math.max(0, maxWeight === undefined ? Number.POSITIVE_INFINITY : maxWeight * book.total - held);
+  });
+  const each = budget / Math.max(1, candidates.length);
+  const want = Math.min(budget, rooms.reduce((sum, room) => sum + Math.min(room, each), 0), satRoom);
+  const funded = fund(book, fromClass, want);
+  let cash = funded.cashTwd;
+  const orders: DraftOrder[] = [...funded.orders];
+  const picks: PickRow[] = candidates.map(({ entry, quote, buyPrice, distance }, index) => {
+    const room = Math.min(rooms[index] ?? 0, satRoom);
+    const amount = Math.min(cash / (candidates.length - index), room);
+    const qty = unitOf(quote) > 0 ? roundShares(amount / unitOf(quote), quote.decimals, 'down') : 0;
+    const pick: PickRow = { ticker: entry.ticker, price: quote.price, currency: quote.currency, buyPrice, distance, roomTwd: Number.isFinite(room) ? room : budget };
+    if (qty > 0) {
+      const order = tradeOrder(entry.ticker, 'buy', qty, quote, entry.assetClassId);
+      orders.push(order);
+      cash -= order.amountTwd;
+      satRoom -= order.amountTwd;
+      pick.boughtTwd = order.amountTwd;
+    }
+    return pick;
+  });
+  row.fundedTwd = funded.cashTwd;
+  return {
+    outcome: 'fires',
+    draft: { ruleId: rule.id, state, orders, detail: { poolTwd: context.pool.totalTwd, volatility: row, picks, cashTwd: funded.cashTwd, leftTwd: Math.max(0, cash) } },
+  };
+}
+
+function evaluateVolatilityHedge(rule: EngineRule, context: Context): Result {
+  const t = record(rule.threshold);
+  const calm = positiveNumber(t['calm']);
+  const gap = nonNegative(t['reset_gap']);
+  const share = fraction(t['hedge_share']);
+  const cap = fraction(t['vol_cap']);
+  const vehicle = typeof t['vehicle'] === 'string' ? t['vehicle'] : undefined;
+  const fromClass = typeof t['from_class'] === 'string' ? t['from_class'] : 'strategic_cash';
+  if (!calm || gap === undefined || share === undefined || cap === undefined || !vehicle) return { outcome: 'unreadable' };
+  const { volatility, quotes, today, rules } = context.input;
+  if (!volatility) return { outcome: 'waiting', why: 'volatility' };
+  const run = runStart(volatility.scores, today, volatility.maxAgeDays, (score) => score < calm, (score) => score < calm + gap);
+  if (run === null) return { outcome: 'waiting', why: 'volatility' };
+  if (!run) return { outcome: 'quiet' };
+  const book = newBook(context);
+  const products = vixProducts(rules);
+  const held = context.pool.holdings.filter((holding) => holding.ticker !== null && products.includes(holding.ticker)).reduce((sum, holding) => sum + book.valueOf(holding), 0);
+  const budget = share * book.total;
+  // A hedge already held is enough: none on top of it.
+  if (held + EPS >= budget) return { outcome: 'covered', why: 'hedge' };
+  const quote = quotes.get(vehicle);
+  const room = Math.max(0, Math.min(cap * book.total - held, satelliteRoom(context, book), budget - held));
+  const funded = quote ? fund(book, fromClass, room) : { orders: [], cashTwd: 0 };
+  const qty = quote && unitOf(quote) > 0 ? roundShares(funded.cashTwd / unitOf(quote), quote.decimals, 'down') : 0;
+  const orders: DraftOrder[] = [...funded.orders];
+  let bought = 0;
+  if (quote && qty > 0) {
+    const order = tradeOrder(vehicle, 'buy', qty, quote, 'tactical_themes');
+    orders.push(order);
+    bought = order.amountTwd;
+  }
+  const row: VolatilityRow = { band: 'calm', score: run.latest.score, scoreDate: run.latest.date, line: calm, since: run.since, share, budgetTwd: budget, fundedTwd: funded.cashTwd, vixHeldTwd: held, roomTwd: room };
+  return {
+    outcome: 'fires',
+    draft: {
+      ruleId: rule.id,
+      state: `calm:${run.since}`,
+      orders,
+      detail: { poolTwd: context.pool.totalTwd, volatility: row, cashTwd: funded.cashTwd, leftTwd: Math.max(0, funded.cashTwd - bought), ...(quote ? {} : { noFund: [vehicle] }) },
+    },
+  };
+}
+
 /** The conditions this engine evaluates, in the order it runs them (R2 counts what R1 sells). */
 export const CONDITIONS = [
   'single_stock_weight_above',
@@ -1227,13 +1453,15 @@ export const CONDITIONS = [
   'value_change_exceeds',
   'satellite_red_flag',
   'red_flag_worsens',
+  'volatility_score_crosses',
+  'volatility_score_calm',
 ] as const;
 
 /**
  * Conditions that fire once per state: a period (their state is or starts with the month or the
  * year), or a run of a red-flag light (its state names the day the run began).
  */
-const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month', 'price_at_or_below_value_multiple', 'satellite_red_flag', 'red_flag_worsens'];
+const PERIODIC: readonly string[] = ['day_after_dca', 'first_weekend_of_month', 'price_at_or_below_value_multiple', 'satellite_red_flag', 'red_flag_worsens', 'volatility_score_crosses', 'volatility_score_calm'];
 
 // ---------------------------------------------------------------------------
 // Deciding what to save
@@ -1293,6 +1521,8 @@ export function evaluate(raw: EngineInput): Outcome {
     else if (rule.condition === 'value_change_exceeds') result = evaluateValueChange(rule, context);
     else if (rule.condition === 'red_flag_worsens') result = evaluateFlagWorsens(rule, context);
     else if (rule.condition === 'satellite_red_flag') result = evaluateFlagRed(rule, context);
+    else if (rule.condition === 'volatility_score_crosses') result = evaluateVolatilityAlert(rule, context);
+    else if (rule.condition === 'volatility_score_calm') result = evaluateVolatilityHedge(rule, context);
     else result = evaluateAnnual(rule, context, drift);
     const check: Check = { ruleId: rule.id, ...result };
     checks.push(check);

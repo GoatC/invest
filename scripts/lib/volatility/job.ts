@@ -36,6 +36,8 @@ export interface VolatilityRunDetail {
   score?: { date: string; score: number | null; coverage: number };
   /** The calendar's events from today on, by kind (N8 step 2). */
   events?: Record<string, number>;
+  /** Proposals the rules drafted and closed on the new score (step 3). */
+  rules?: { created: number; closed: number };
   warnings: string[];
   errors: string[];
 }
@@ -60,6 +62,8 @@ export interface VolatilityStore {
   /** Replaces a feed's events from `from` on with these (market_events): a rescheduled meeting moves. */
   replaceEvents(source: 'fed' | 'fred', from: string, rows: readonly MarketEvent[]): Promise<void>;
   recordRun(run: VolatilityRun): Promise<void>;
+  /** Evaluates every rule as of `now` and saves the proposals (runRules in lib/data), so the alert reads the new score at once. */
+  evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
 }
 
 export interface VolatilityDeps {
@@ -187,6 +191,12 @@ export async function runVolatility(deps: VolatilityDeps): Promise<VolatilityRun
   } catch (err) {
     detail.errors.push(`saving: ${message(err)}`);
     return finish('failed');
+  }
+  // Step 3: the alert and the hedge read the score just saved; the workflow then sends the pushes.
+  try {
+    detail.rules = await store.evaluateRules(today, deps.now().toISOString());
+  } catch (err) {
+    detail.errors.push(`rules: ${message(err)}`);
   }
   return finish(detail.errors.length > 0 ? 'partial' : 'ok');
 }

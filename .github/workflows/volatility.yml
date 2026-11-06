@@ -1,6 +1,7 @@
 # The volatility job (N8, added 2026-11-06): twice a day, load the VIX, the VIX3M, Taiwan's VIX,
 # the policy-uncertainty index, the high-yield spread and the last sessions of TAIEX and the
-# S&P 500, then save the day's volatility score. Setup: docs/volatility.md.
+# S&P 500, then save the day's volatility score, check the rules on it (the alert and the hedge) and
+# send the pushes due. Setup: docs/volatility.md.
 # 波動排程：每天兩次載入 VIX、VIX3M、臺指 VIX、政策不確定性指數、高收益債利差與台股、標普最近的收盤，
 # 再存入當天的波動分數。設定方式見 docs/volatility.md。
 name: Volatility 波動警報
@@ -39,3 +40,13 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+      # The alert is pushed as soon as the rules draft it (step 3), even after a failed run's partial data.
+      - name: Send the pushes due 送出推播
+        if: ${{ !cancelled() }}
+        run: npm run notify
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

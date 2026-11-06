@@ -1,6 +1,7 @@
 /** The volatility job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { runRules } from '../../../lib/data.ts';
 import type { MarketEvent } from '../../../lib/models/events.ts';
 import { readVolatilitySettings, type Close } from '../../../lib/models/volatility.ts';
 import type { IndexClose } from '../feeds/indices.ts';
@@ -61,6 +62,7 @@ export function volatilityStore(client: SupabaseClient): VolatilityStore {
       );
       check('market_events', error);
     },
+    evaluateRules: (today: string, now: string) => runRules(client, today, now),
     async recordRun(run: VolatilityRun) {
       const { error } = await client.from('job_runs').insert({ job: run.job, started_at: run.startedAt, finished_at: run.finishedAt, status: run.status, detail: run.detail });
       check('job_runs', error);
