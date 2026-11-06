@@ -1,15 +1,18 @@
 import { Bi, Zh } from '@/components/bi';
+import { DeleteForm } from '@/components/delete-form';
 import { DataProblem } from '@/components/data-problem';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { VolatilityChart } from '@/components/volatility-chart';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadVolatilityData, type VolatilityData } from '@/lib/data';
+import { DataError, EVENT_PAGE_DAYS, loadVolatilityData, type VolatilityData } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
+import { KIND_NAMES, whenText, type MarketEvent } from '@/lib/models/events';
 import { COMPONENT_TEXT, STATUS_TEXT, bandOf, figureText } from '@/lib/volatility-text';
 
-import { VolatilitySettingsForm } from './forms';
+import { deleteMarketEvent } from './actions';
+import { EventForm, VolatilitySettingsForm } from './forms';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -58,7 +61,7 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
           <Zh {...LABELS.volatility} />
         </h1>
         <p className="muted small">
-          <Bi en={`Scored ${today} · the alert and its proposals come in a later step: no push yet`} zh={`${today} 計分 · 警報與提案將於後續步驟加入：目前不推播`} />
+          <Bi en={`Scored ${today} · the score's alert and proposals come in a later step; events are reminded of ${data.settings.events.leadDays} days ahead`} zh={`${today} 計分 · 分數的警報與提案將於後續步驟加入；事件於 ${data.settings.events.leadDays} 天前提醒`} />
         </p>
         <Facts facts={facts} />
         <VolatilityChart points={data.history ?? []} />
@@ -116,6 +119,7 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
           />
         </Info>
       </section>
+      <Events events={data.events ?? null} leadDays={data.settings.events.leadDays} saved={typeof params['saved'] === 'string' ? params['saved'] : undefined} />
       <section className="card form" id="settings">
         <h2>
           <Bi en="Settings" zh="設定" />
@@ -128,5 +132,96 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
         <VolatilitySettingsForm settings={data.settings} />
       </section>
     </>
+  );
+}
+
+const SOURCE_TEXT: Record<MarketEvent['source'], string> = { fed: 'Federal Reserve', fred: 'FRED', typed: 'typed 自行輸入' };
+
+/** The coming events (step 2): from the feeds and typed in, a reminder pushed before each. */
+function Events({ events, leadDays, saved }: { events: MarketEvent[] | null; leadDays: number; saved?: string }) {
+  return (
+    <section className="card form" id="events">
+      <h2>
+        <Bi en="Coming events" zh="近期事件" />
+      </h2>
+      {saved === 'event' && (
+        <p className="banner ok" role="status">
+          <Bi en="Event added." zh="已新增事件。" />
+        </p>
+      )}
+      {saved === 'event-deleted' && (
+        <p className="banner ok" role="status">
+          <Bi en="Event deleted; it stays in the edit history." zh="已刪除事件；保留在修改紀錄中。" />
+        </p>
+      )}
+      {events === null ? (
+        <p className="muted">
+          <Bi en="The event calendar is not set up yet: run npx supabase db push." zh="事件日曆尚未設定：請執行 npx supabase db push。" />
+        </p>
+      ) : events.length === 0 ? (
+        <p className="muted">
+          <Bi en={`No event in the next ${EVENT_PAGE_DAYS} days yet; the volatility job loads the Fed's and FRED's calendars.`} zh={`未來 ${EVENT_PAGE_DAYS} 天尚無事件；波動排程會載入聯準會與 FRED 的日程。`} />
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="compact" id="event-list">
+            <thead>
+              <tr>
+                <th>
+                  <Bi en="Taipei time" zh="台北時間" />
+                </th>
+                <th>
+                  <Bi en="Event" zh="事件" />
+                </th>
+                <th>
+                  <Bi en="Source" zh="來源" />
+                </th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => {
+                const when = whenText(event);
+                return (
+                  <tr key={event.id ?? `${event.kind}${event.date}${event.name.en}`}>
+                    <td className="nowrap">
+                      <Bi {...when} />
+                    </td>
+                    <td>
+                      <Bi {...event.name} />
+                      {event.kind === 'other' || event.name.en === KIND_NAMES[event.kind].en ? null : <span className="muted small"> {KIND_NAMES[event.kind].en}</span>}
+                      {event.note && <span className="muted small"> · {event.note}</span>}
+                    </td>
+                    <td className="small">{SOURCE_TEXT[event.source]}</td>
+                    <td>
+                      {event.source === 'typed' && event.id !== undefined && (
+                        <details>
+                          <summary>
+                            <Bi {...LABELS.delete} />
+                          </summary>
+                          <DeleteForm id={event.id} action={deleteMarketEvent} confirm={{ en: `Delete ${event.name.en} on ${event.date}?`, zh: `刪除 ${event.date} 的${event.name.zh}？` }} />
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <details>
+        <summary>
+          <Bi en="Add an event" zh="新增事件" />
+        </summary>
+        <EventForm />
+      </details>
+      <Info>
+        <Bi
+          en={`FOMC rate decisions come from the Fed's calendar (the second day of each meeting, 14:00 New York), US CPI and the jobs report from FRED's release calendar; the volatility job reloads them twice a day. Taiwan's central bank publishes its board meetings once a year in a press release: type next year's in here, and elections or anything else too. A reminder is pushed ${leadDays} days before each event, once, after the quiet hours. Implied volatility usually rises before an event and falls after it, so a reminder proposes no orders.`}
+          zh={`聯準會利率決議取自聯準會日程（每次會議第二天，紐約時間 14:00），美國 CPI 與非農就業取自 FRED 公布時程；波動排程每天重新載入兩次。央行每年以新聞稿公布理監事會議日期：請在這裡輸入明年的日期，選舉或其他事件也可輸入。每個事件前 ${leadDays} 天推播一次提醒（安靜時段後送出）。事件前隱含波動率通常上升、事件後回落，因此提醒不附下單清單。`}
+        />
+      </Info>
+    </section>
   );
 }

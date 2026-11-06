@@ -13,6 +13,7 @@ import {
   DataError,
   loadAllocationData,
   loadLastAttribution,
+  loadMarketEvents,
   loadLastRun,
   loadPlanData,
   loadProposals,
@@ -65,7 +66,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, settings, windfall, workbench, flags, simulation, attribution] = await Promise.all([
+  const [risk, proposals, value, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadValueWeek(supabase, today)),
@@ -82,6 +83,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     orDataError(loadRedFlagData(supabase, today, undefined, data)),
     orDataError(loadLastRun(supabase, 'monte_carlo')),
     orDataError(loadLastAttribution(supabase)),
+    orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
@@ -114,6 +116,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             today={today}
             settings={settings}
             rules={rules}
+            market={marketEvents instanceof DataError ? [] : (marketEvents ?? [])}
             tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
             filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
               const due = nextFiling(bench.security.market, bench.series.quarters);
@@ -458,10 +461,12 @@ function ComingWeek({
   rules,
   tranches,
   filings,
+  market,
 }: {
   today: string;
   settings: Array<{ key: string; value: unknown }> | DataError;
   rules: readonly RuleRecord[];
+  market: ReadonlyArray<{ date: string; time: string | null; name: Bilingual }>;
   tranches: ReadonlyArray<{ dueDate: string; status: string }>;
   filings: ReadonlyArray<{ ticker: string; date: string; kind: 'deadline' | 'estimate' }>;
 }) {
@@ -470,7 +475,7 @@ function ComingWeek({
   const day = typeof dca?.['day_of_month'] === 'number' ? dca['day_of_month'] : null;
   const annual = rules.find((rule) => rule.condition === 'first_weekend_of_month' && rule.enabled);
   const month = annual ? (annual.threshold as Record<string, unknown> | null)?.['month'] : undefined;
-  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches, filings);
+  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches, filings, market);
   return (
     <section className="card form">
       <h2>

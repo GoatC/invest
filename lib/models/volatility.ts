@@ -15,6 +15,7 @@
  * series from index_prices.
  */
 import { addDays } from '../dates';
+import { eventSettingsValue, readEventSettings, type EventSettings } from './events';
 
 export const COMPONENTS = ['vix', 'vix_term', 'tw_vix', 'spx_drawdown', 'taiex_drawdown', 'taiex_fall', 'hy_spread', 'epu'] as const;
 export type ComponentId = (typeof COMPONENTS)[number];
@@ -72,6 +73,8 @@ export interface VolatilitySettings {
   epuDays: number;
   /** Days of each series the job keeps loading and the page reads. */
   historyDays: number;
+  /** The event calendar's reminders (step 2); the defaults before its migration. */
+  events: EventSettings;
   lastVerified: string | null;
 }
 
@@ -108,8 +111,10 @@ export function readVolatilitySettings(value: unknown): VolatilitySettings | und
   const historyDays = wholeIn(row['history_days'], 30, 4000);
   if (maxAgeDays === undefined || minCoverage === undefined || minCoverage <= 0 || minCoverage > 1) return undefined;
   if (drawdownDays === undefined || fallSessions === undefined || epuDays === undefined || historyDays === undefined) return undefined;
+  const events = readEventSettings(row['events']);
+  if (!events) return undefined;
   const verified = row['last_verified'];
-  return { components, maxAgeDays, minCoverage, drawdownDays, fallSessions, epuDays, historyDays, lastVerified: typeof verified === 'string' ? verified : null };
+  return { components, maxAgeDays, minCoverage, drawdownDays, fallSessions, epuDays, historyDays, events, lastVerified: typeof verified === 'string' ? verified : null };
 }
 
 export function volatilitySettingsValue(settings: VolatilitySettings): Record<string, unknown> {
@@ -121,6 +126,7 @@ export function volatilitySettingsValue(settings: VolatilitySettings): Record<st
     fall_sessions: settings.fallSessions,
     epu_days: settings.epuDays,
     history_days: settings.historyDays,
+    events: eventSettingsValue(settings.events),
     last_verified: settings.lastVerified,
   };
 }

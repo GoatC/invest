@@ -39,6 +39,7 @@ const DEFAULT = {
   fall_sessions: 5,
   epu_days: 7,
   history_days: 400,
+  events: { lead_days: 2, remind: ['fomc', 'cpi', 'payrolls', 'cbc', 'other'] },
   last_verified: null,
 };
 

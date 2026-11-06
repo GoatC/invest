@@ -1620,6 +1620,26 @@ await step('volatility: the score of the demo series over the year, each compone
   await page.waitForURL('**/volatility?saved=settings**');
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*volatility/.test(await body()), 'the setting in the edit history');
+
+  // The event calendar (step 2): the seed's central bank meeting, an election typed in and deleted, logged.
+  await page.goto(`${BASE}/volatility#events`);
+  check((await page.locator('#event-list').innerText()).includes('2026-12-17'), 'the seeded central bank meeting');
+  await page.locator('#events summary', { hasText: 'Add an event' }).click();
+  await page.locator('#event-form input[name=date]').fill('2026-12-30');
+  await page.locator('#event-form input[name=time]').fill('20:00');
+  await page.locator('#event-form input[name=name]').fill('e2e election 選舉');
+  await page.locator('#event-form button[type=submit]').click();
+  await page.waitForURL('**/volatility?saved=event**');
+  const listed = await page.locator('#event-list').innerText();
+  check(/Wed 2026-12-30 20:00[\s\S]*e2e election 選舉/.test(listed), `the election listed at its Taipei time, got ${listed}`);
+  await snap('volatility-events');
+  const row = page.locator('#event-list tr', { hasText: 'e2e election' });
+  await row.locator('summary').click();
+  await row.getByRole('button', { name: /Delete/ }).click();
+  await page.waitForURL('**/volatility?saved=event-deleted**');
+  check(!(await page.locator('#event-list').innerText()).includes('e2e election'), 'the election deleted');
+  await page.goto(`${BASE}/history`);
+  check(/Market event[\s\S]*e2e election/.test(await body()), 'the deleted event in the edit history');
 });
 
 await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings, the windfall paced and accelerated as F3 runs it (F5)', async () => {
@@ -1967,6 +1987,10 @@ if (E2E_NIGHTLY !== '0') {
     await page.goto(`${BASE}/volatility`);
     await page.getByRole('heading', { level: 1, name: '波動警報' }).waitFor();
     check(new RegExp(`${Number(rows[0].score).toFixed(1)} / 10`).test(await body()), 'the page shows the score the job saved');
+    // Step 2: the Fed's and FRED's calendars, at Taipei times.
+    check(/Events 事件: [^\n]*fomc \d+[^\n]*cpi \d+/.test(stdout), `the calendars loaded, got ${stdout}`);
+    const events = await page.locator('#event-list').innerText();
+    check(/FOMC rate decision/.test(events) && /US CPI/.test(events) && /Federal Reserve/.test(events), `the live events listed, got ${events}`);
     await snap('volatility-live');
   });
 }

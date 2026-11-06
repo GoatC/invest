@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { MarketEvent } from '../../../lib/models/events.ts';
 import { readVolatilitySettings, type Close } from '../../../lib/models/volatility.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import { JOB, runVolatility, type ScoreRow, type VolatilityRun, type VolatilityStore } from './job.ts';
@@ -32,6 +33,7 @@ function memoryStore(missingSettings = false) {
   const prices = new Map<string, IndexClose>();
   const scores: ScoreRow[] = [];
   const runs: VolatilityRun[] = [];
+  let events: MarketEvent[] = [];
   const store: VolatilityStore = {
     settings: async () => settings,
     saveIndexPrices: async (rows, options) => {
@@ -48,9 +50,12 @@ function memoryStore(missingSettings = false) {
       return out;
     },
     saveScore: async (row) => void scores.push(row),
+    replaceEvents: async (source, from, rows) => {
+      events = [...events.filter((event) => event.source !== source || event.date < from), ...rows];
+    },
     recordRun: async (run) => void runs.push(run),
   };
-  return { store, prices, scores, runs };
+  return { store, prices, scores, runs, events: () => events };
 }
 
 const CBOE = (close: number) => `DATE,OPEN,HIGH,LOW,CLOSE\n11/05/2026,1,1,1,${close}\n`;
@@ -62,6 +67,9 @@ async function reply(url: string): Promise<string> {
   if (url.endsWith('202611new.txt')) return '20261106\t13450000\t\t\t46.52\t\t46.62\n';
   if (url.includes('taifex')) return '<title>404</title>';
   if (url.includes('policyuncertainty')) return 'day,month,year,daily_policy_index\n5,11,2026,168.20\n';
+  if (url.includes('fomccalendars')) return '<h4><a id="1">2026 FOMC Meetings</a></h4><div class="fomc-meeting__month"><strong>October</strong></div><div class="fomc-meeting__date">27-28</div><div class="fomc-meeting__month"><strong>December</strong></div><div class="fomc-meeting__date">8-9*</div>';
+  if (url.includes('releases/calendar') && url.includes('y=2026')) return '<span style="font-weight: bold;">Tuesday November 10, 2026</span></td></tr><tr><td nowrap style="x"> 7:30 am </td>';
+  if (url.includes('releases/calendar')) return '<p>none</p>';
   if (url.includes('openapi.twse')) return JSON.stringify([{ 日期: '1151106', 指數: '發行量加權股價報酬指數', 收盤指數: '60,000.00' }]);
   throw new Error('HTTP 503');
 }
@@ -88,6 +96,18 @@ describe('volatility job (N8)', () => {
     assert.ok(saved.score > 5 && saved.score < 8, String(saved.score));
     assert.equal(runs.length, 1);
     assert.ok(volatilitySummary(run).some((line) => line.includes('/ 10')));
+  });
+
+  it('replaces the feeds\' events from today on: a meeting moved, a past one left out', async () => {
+    const { store, events } = memoryStore();
+    await store.replaceEvents('fed', '2026-01-01', [{ kind: 'fomc', date: '2026-11-20', time: '03:00', name: { en: 'FOMC rate decision', zh: '聯準會利率決議' }, source: 'fed', note: null }]);
+    const run = await runVolatility(deps(store));
+    assert.deepEqual(run.detail.events, { fomc: 1, cpi: 1, payrolls: 1 });
+    assert.deepEqual(
+      events().filter((event) => event.kind === 'fomc').map((event) => event.date),
+      ['2026-12-10'],
+    );
+    assert.ok(volatilitySummary(run).some((line) => line.startsWith('  Events 事件: fomc 1')));
   });
 
   it('fails, saving no score, without the coverage needed', async () => {

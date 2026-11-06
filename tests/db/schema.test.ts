@@ -30,14 +30,14 @@ const KEY_MISSING = '23503';
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
-// analyst_estimates, and the volatility alert (N8) volatility_scores.
+// analyst_estimates, and the volatility alert (N8) volatility_scores and market_events.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
-  'analyst_estimates', 'volatility_scores',
+  'analyst_estimates', 'volatility_scores', 'market_events',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -57,7 +57,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates and volatility_scores', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores and market_events', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1072,5 +1072,40 @@ describe('volatility alert (N8, added 2026-11-06)', () => {
       assert.equal(await scalar(tx, 'select count(*) from public.volatility_scores'), 0);
     });
     await db.query(`delete from public.volatility_scores where score_date = '2099-11-06'`);
+  });
+});
+
+describe('event calendar (N8 step 2)', () => {
+  it("lets the owner read every event and type, edit and delete only typed ones, logged; the job's are the job's", async () => {
+    await db.query(`insert into public.market_events (kind, event_date, event_time, name_en, name_zh, source) values ('fomc', '2099-12-10', '03:00', 'FOMC rate decision', '聯準會利率決議', 'fed')`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.market_events where event_date = '2099-12-10'`), 1);
+      const { rows } = await tx.query<{ id: number }>(`insert into public.market_events (kind, event_date, name_en, name_zh, source) values ('other', '2099-01-15', 'Election', '選舉', 'typed') returning id`);
+      await tx.query(`update public.market_events set event_time = '20:00' where id = $1`, [rows[0]?.id]);
+      await tx.query(`delete from public.market_events where id = $1`, [rows[0]?.id]);
+      assert.equal(await scalar(tx, `select count(*) from public.audit_log where table_name = 'market_events' and row_key = $1`, [String(rows[0]?.id)]), 2);
+      // A feed's row cannot be touched: the delete finds nothing to delete.
+      assert.equal((await tx.query(`delete from public.market_events where source = 'fed' returning id`)).rows.length, 0);
+    });
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_events (kind, event_date, name_en, name_zh, source) values ('fomc', '2099-01-15', 'FOMC', 'FOMC', 'fed')`)), DENIED);
+    });
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_events (kind, event_date, event_time, name_en, name_zh, source) values ('other', '2099-01-15', '25:00', 'X', 'X', 'typed')`)), CHECK_FAILED);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.market_events'), 0);
+    });
+    // The job's own replacing is not logged.
+    await db.query(`delete from public.market_events where event_date = '2099-12-10'`);
+    assert.equal(await scalar(db, `select count(*) from public.audit_log where table_name = 'market_events' and old_row ->> 'source' = 'fed'`), 0);
+  });
+
+  it("seeds 2026's central bank meetings, the reminder settings, and takes event pushes", async () => {
+    assert.equal(await scalar(db, `select count(*) from public.market_events where kind = 'cbc' and event_date between '2026-01-01' and '2026-12-31'`), 4);
+    const settings = readVolatilitySettings(await scalar(db, `select value from public.config where key = 'volatility'`));
+    assert.deepEqual(settings?.events, { leadDays: 2, remind: ['fomc', 'cpi', 'payrolls', 'cbc', 'other'] });
+    await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('event', 'fomc:2099-12-10:FOMC', 't', 'b', '/volatility#events', now())`);
+    await db.query(`delete from public.notifications where kind = 'event'`);
   });
 });

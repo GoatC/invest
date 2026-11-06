@@ -133,7 +133,7 @@ export function lastWeeklyReview(at: Date, review: WeeklyReview): { key: string;
 // The messages
 // ---------------------------------------------------------------------------
 
-export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test';
+export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event';
 
 /** A push: title and body in both languages, and the page it opens. */
 export interface Message {
@@ -314,6 +314,8 @@ export interface PlanInput {
   health: DataHealth;
   lastGoodRunId: number | null;
   quiet: QuietHours | null;
+  /** Event reminders due and not planned before (N8 step 2, lib/models/events); they wait out the quiet hours too. */
+  reminders?: readonly Message[];
 }
 
 /** The pushes due now, each with when it may go: now, or the end of the quiet hours. */
@@ -327,6 +329,7 @@ export function plan(input: PlanInput): Array<Message & { sendAfter: Date }> {
   }
   const failure = dataFailureMessage(input.health, input.lastGoodRunId);
   if (failure) out.push({ ...failure, sendAfter });
+  for (const reminder of input.reminders ?? []) out.push({ ...reminder, sendAfter });
   return out;
 }
 
@@ -351,7 +354,8 @@ function nextMonth(month: string): string {
  * What falls in the next seven days, today included: the DCA debit (config dca.day_of_month) and
  * the monthly-contribution proposal the day after it, the weekly review, January's review, and
  * the windfall tranches still scheduled (F3, Phase 2 step 1), and the quarterly reports due of the
- * single stocks held or watched (F12, step 4): a Taiwan deadline, a US date estimated.
+ * single stocks held or watched (F12, step 4): a Taiwan deadline, a US date estimated; and the
+ * market events on N8's calendar (step 2), at their Taipei time.
  */
 export function comingWeek(
   today: string,
@@ -360,6 +364,7 @@ export function comingWeek(
   annualMonth: number | null,
   tranches: ReadonlyArray<{ dueDate: string; status: string }> = [],
   filings: ReadonlyArray<{ ticker: string; date: string; kind: 'deadline' | 'estimate' }> = [],
+  market: ReadonlyArray<{ date: string; time: string | null; name: Bilingual }> = [],
 ): WeekEvent[] {
   const last = addDays(today, 6);
   const inWeek = (date: string) => date >= today && date <= last;
@@ -393,6 +398,9 @@ export function comingWeek(
       date: filing.date,
       what: filing.kind === 'deadline' ? { en: `${filing.ticker} quarterly report deadline`, zh: `${filing.ticker} 季報公布期限` } : { en: `${filing.ticker} quarterly report, about (last year's date)`, zh: `${filing.ticker} 季報約略日期（依去年）` },
     });
+  }
+  for (const event of market) {
+    if (inWeek(event.date)) events.push({ date: event.date, ...(event.time ? { time: event.time } : {}), what: event.name });
   }
   return events.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
 }

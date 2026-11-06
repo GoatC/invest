@@ -19,6 +19,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   red_flag_entries: { en: 'Red flag entry', zh: '紅旗紀錄' },
   splits: { en: 'Stock split', zh: '股票分割' },
   analyst_estimates: { en: "Analysts' consensus", zh: '分析師共識預估' },
+  market_events: { en: 'Market event', zh: '市場事件' },
 };
 
 function text(value: unknown): string {
@@ -85,6 +86,8 @@ export function describeRow(table: string, row: Record<string, unknown> | null, 
         en: `${text(row['ticker'])} split ×${text(row['ratio'])} from ${text(row['ex_date'])}`,
         zh: `${text(row['ticker'])} 自 ${text(row['ex_date'])} 起分割 ×${text(row['ratio'])}`,
       };
+    case 'market_events':
+      return { en: `${text(row['event_date'])} ${text(row['name_en'])}`, zh: `${text(row['event_date'])} ${text(row['name_zh'])}` };
     default:
       return same(text(row['ticker']) || rowKey);
   }

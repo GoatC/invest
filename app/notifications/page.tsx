@@ -20,6 +20,7 @@ const KIND: Record<NotificationRecord['kind'], Bilingual> = {
   weekly: { en: 'Weekly review', zh: '每週檢視' },
   data_failure: { en: 'Data failure', zh: '資料異常' },
   test: { en: 'Test', zh: '測試' },
+  event: { en: 'Event reminder', zh: '事件提醒' },
 };
 
 function hhmm(minutes: number): string {

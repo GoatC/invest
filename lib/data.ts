@@ -11,6 +11,7 @@ import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
 import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
 import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
+import { eventMessage, remindersDue, type EventKind, type EventSource, type MarketEvent } from './models/events';
 import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
   evaluate,
@@ -1213,10 +1214,15 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     loadRules(supabase),
     loadAssetClasses(supabase),
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
-    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly']).gte('created_at', addDays(today, -400))),
+    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event']).gte('created_at', addDays(today, -400))),
     loadWeeklySummary(supabase, today),
     loadJobRuns(supabase),
   ]);
+  // The event reminders (N8 step 2): none before config volatility or market_events exist.
+  const volatility = await loadVolatilitySettings(supabase);
+  const events = volatility ? await loadMarketEvents(supabase, addDays(today, 1), addDays(today, volatility.events.leadDays)) : null;
+  const eventKeys = new Set(planned.filter((row) => row.kind === 'event').map((row) => row.key));
+  const reminders = volatility && events ? remindersDue(events, today, volatility.events, eventKeys).map((event) => eventMessage(event, today)) : [];
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const pushed = new Set(planned.filter((row) => row.kind === 'proposal').map((row) => row.key));
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -1235,6 +1241,7 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     health: dataHealth(jobs.runs, jobs.threshold, today),
     lastGoodRunId: jobs.runs.find((run) => run.status !== 'failed')?.id ?? null,
     quiet: readQuietHours(value('quiet_hours')),
+    reminders,
   };
 }
 
@@ -2409,6 +2416,38 @@ export interface VolatilityData {
   history?: Array<{ date: string; score: number | null; coverage: number }>;
   /** The volatility job's newest run. */
   lastRun?: { finishedAt: string; status: RunStatus } | null;
+  /** The calendar's events from today on (step 2); null before its migration. */
+  events?: MarketEvent[] | null;
+}
+
+interface EventRow {
+  id: number;
+  kind: EventKind;
+  event_date: string;
+  event_time: string | null;
+  name_en: string;
+  name_zh: string;
+  source: EventSource;
+  note: string | null;
+}
+
+/**
+ * The calendar's events from `from` to `to` (N8 step 2), in order; null when market_events is not
+ * there yet (its migration not applied), so the pushes and pages that read it keep working.
+ */
+export async function loadMarketEvents(supabase: SupabaseClient, from: string, to: string): Promise<MarketEvent[] | null> {
+  const { data, error } = await supabase
+    .from('market_events')
+    .select('id, kind, event_date, event_time, name_en, name_zh, source, note')
+    .gte('event_date', from)
+    .lte('event_date', to)
+    .order('event_date')
+    .order('event_time', { nullsFirst: true });
+  if (error) {
+    if (/market_events/.test(error.message) && /(does not exist|schema cache|not find)/i.test(error.message)) return null;
+    throw new DataError('market_events', error.message);
+  }
+  return ((data ?? []) as EventRow[]).map((row) => ({ id: Number(row.id), kind: row.kind, date: row.event_date, time: row.event_time, name: { en: row.name_en, zh: row.name_zh }, source: row.source, note: row.note }));
 }
 
 /** The score today and over the last year, from the series in index_prices, and the job's newest run. */
@@ -2416,11 +2455,12 @@ export async function loadVolatilityData(supabase: SupabaseClient, today: string
   const settings = await loadVolatilitySettings(supabase);
   if (!settings) return { settings };
   const from = addDays(today, -(366 + settings.drawdownDays + 14));
-  const [found, runs] = await Promise.all([
+  const [found, runs, events] = await Promise.all([
     allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (start, end) =>
       supabase.from('index_prices').select('index_id, price_date, close').in('index_id', [...VOLATILITY_SERIES]).gte('price_date', from).order('index_id').order('price_date').range(start, end),
     ),
     rows<{ finished_at: string; status: RunStatus }>('job_runs', supabase.from('job_runs').select('finished_at, status').eq('job', VOLATILITY_JOB).order('finished_at', { ascending: false }).limit(1)),
+    loadMarketEvents(supabase, today, addDays(today, EVENT_PAGE_DAYS)),
   ]);
   const series = new Map<string, VolatilityClose[]>();
   for (const row of found) series.set(row.index_id, [...(series.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
@@ -2430,8 +2470,12 @@ export async function loadVolatilityData(supabase: SupabaseClient, today: string
     today: volatilityScore(series, settings, today),
     history: scoreHistory(series, settings, addDays(today, -365), today),
     lastRun: run ? { finishedAt: run.finished_at, status: run.status } : null,
+    events,
   };
 }
+
+/** The days ahead the volatility page lists events for. */
+export const EVENT_PAGE_DAYS = 120;
 
 // ---------------------------------------------------------------------------
 // F5 Monte Carlo (Phase 3, step 1)
