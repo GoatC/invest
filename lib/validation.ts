@@ -12,6 +12,7 @@ import type { FrontierSettings } from './models/frontier';
 import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
+import { COMPONENT_UNIT, type ComponentSetting, type VolatilitySettings } from './models/volatility';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, Direction, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
@@ -1559,4 +1560,49 @@ export function parseEstimatesForm(raw: RawForm): Parsed<EstimatesInput, Estimat
   const years: EstimatesInput['years'] = [{ periodEnd: fy1End, mean: fy1Eps, ...(high !== undefined ? { high } : {}), ...(low !== undefined ? { low } : {}), ...(analysts !== undefined ? { analysts } : {}) }];
   if (fy2End && fy2Eps !== undefined) years.push({ periodEnd: fy2End, mean: fy2Eps, ...(analysts !== undefined ? { analysts } : {}) });
   return { ok: true, value: { years, ...(targetPrice !== undefined ? { targetPrice } : {}) } };
+}
+
+// ---------------------------------------------------------------------------
+// The volatility score (N8)
+// ---------------------------------------------------------------------------
+
+const VOLATILITY_MESSAGES = {
+  figure: { en: 'Enter a number.', zh: '請輸入數字。' },
+  order: { en: 'Panic must be above calm.', zh: '恐慌值必須高於平靜值。' },
+  weight: { en: 'Enter a weight of 0 or more; at least one above 0.', zh: '請輸入 0 或以上的權重，至少一個大於 0。' },
+  maxAge: { en: 'Enter whole days from 1 to 30.', zh: '請輸入 1 到 30 的整數天數。' },
+  coverage: { en: 'Enter a share from 1% to 100%.', zh: '請輸入 1% 到 100% 的比例。' },
+} as const satisfies Record<string, Bilingual>;
+
+/**
+ * config volatility: each component's calm and panic figures and weight (fields `<id>_calm`,
+ * `<id>_panic`, `<id>_weight`; a fall is typed in percent and kept as a share), the age past which
+ * a figure is left out and the share of the weight a score needs; the rest of the row stays.
+ */
+export function parseVolatilityForm(raw: RawForm, current: VolatilitySettings, today: string): Parsed<VolatilitySettings, string> {
+  const errors: FieldErrors<string> = {};
+  const components: ComponentSetting[] = current.components.map((component) => {
+    const scale = COMPONENT_UNIT[component.id] === 'share' ? 100 : 1;
+    const calm = parseNumber(raw[`${component.id}_calm`]);
+    const panic = parseNumber(raw[`${component.id}_panic`]);
+    const weight = parseNumber(raw[`${component.id}_weight`]);
+    if (calm === undefined) errors[`${component.id}_calm`] = VOLATILITY_MESSAGES.figure;
+    if (panic === undefined) errors[`${component.id}_panic`] = VOLATILITY_MESSAGES.figure;
+    else if (calm !== undefined && panic <= calm) errors[`${component.id}_panic`] = VOLATILITY_MESSAGES.order;
+    if (weight === undefined || weight < 0) errors[`${component.id}_weight`] = VOLATILITY_MESSAGES.weight;
+    const round = (value: number) => Number((value / scale).toFixed(6));
+    return { id: component.id, calm: round(calm ?? 0), panic: round(panic ?? 0), weight: weight ?? 0 };
+  });
+  if (!errors[`${components[0]?.id}_weight`] && components.every((component) => component.weight === 0)) errors[`${components[0]?.id}_weight`] = VOLATILITY_MESSAGES.weight;
+  const maxAge = parseNumber(raw['maxAgeDays']);
+  if (maxAge === undefined || !Number.isInteger(maxAge) || maxAge < 1 || maxAge > 30) errors['maxAgeDays'] = VOLATILITY_MESSAGES.maxAge;
+  const coverage = parseNumber(raw['minCoverage']);
+  if (coverage === undefined || coverage < 1 || coverage > 100) errors['minCoverage'] = VOLATILITY_MESSAGES.coverage;
+  return finish(errors, () => ({
+    ...current,
+    components,
+    maxAgeDays: maxAge as number,
+    minCoverage: Number(((coverage as number) / 100).toFixed(4)),
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
 }

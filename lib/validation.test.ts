@@ -6,10 +6,12 @@ import { readFrontierSettings } from './models/frontier';
 import { readMcSettings } from './models/monte-carlo';
 import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
+import { readVolatilitySettings } from './models/volatility';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   SPLIT_MESSAGES,
   parseSplitForm,
+  parseVolatilityForm,
   MESSAGES,
   parseAssumptionForm,
   parseAssumptionsForm,
@@ -799,5 +801,62 @@ describe('parseEstimatesForm (F12 forward P/E)', () => {
     assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy2_end: '2026-06-30', fy2_eps: '6' }), ['fy2_end']);
     assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy1_high: '4' }), ['fy1_high']);
     assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', analysts: '2.5', target: '0' }), ['analysts', 'target']);
+  });
+});
+
+describe('parseVolatilityForm (N8)', () => {
+  const current = readVolatilitySettings({
+    components: {
+      vix: { calm: 12, panic: 40, weight: 2 },
+      vix_term: { calm: 0.85, panic: 1.15, weight: 2 },
+      tw_vix: { calm: 15, panic: 45, weight: 2 },
+      spx_drawdown: { calm: 0.02, panic: 0.2, weight: 1 },
+      taiex_drawdown: { calm: 0.03, panic: 0.25, weight: 1 },
+      taiex_fall: { calm: 0, panic: 0.1, weight: 1 },
+      hy_spread: { calm: 3, panic: 7, weight: 1 },
+      epu: { calm: 100, panic: 500, weight: 0.5 },
+    },
+    max_age_days: 5,
+    min_coverage: 0.5,
+    drawdown_days: 365,
+    fall_sessions: 5,
+    epu_days: 7,
+    history_days: 400,
+    last_verified: null,
+  });
+  assert.ok(current);
+  const form = (changes: Record<string, string> = {}) => {
+    const raw: Record<string, string> = { maxAgeDays: '5', minCoverage: '50' };
+    for (const row of current.components) {
+      const scale = ['spx_drawdown', 'taiex_drawdown', 'taiex_fall'].includes(row.id) ? 100 : 1;
+      raw[`${row.id}_calm`] = String(row.calm * scale);
+      raw[`${row.id}_panic`] = String(row.panic * scale);
+      raw[`${row.id}_weight`] = String(row.weight);
+    }
+    return { ...raw, ...changes };
+  };
+
+  it('reads falls in percent as shares, keeps the rest of the row, and dates the check', () => {
+    const parsed = parseVolatilityForm(form({ taiex_drawdown_panic: '30', vix_weight: '3', minCoverage: '60', checked: 'on' }), current, '2026-11-06');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.components.find((row) => row.id === 'taiex_drawdown')?.panic, 0.3);
+    assert.equal(parsed.value.components.find((row) => row.id === 'vix')?.weight, 3);
+    assert.equal(parsed.value.minCoverage, 0.6);
+    assert.equal(parsed.value.drawdownDays, 365);
+    assert.equal(parsed.value.lastVerified, '2026-11-06');
+    assert.deepEqual(parseVolatilityForm(form(), current, '2026-11-06'), { ok: true, value: current });
+  });
+
+  it('refuses panic at or below calm, a negative weight, no weight at all, and days or coverage out of range', () => {
+    const errors = (changes: Record<string, string>) => {
+      const parsed = parseVolatilityForm(form(changes), current, '2026-11-06');
+      return parsed.ok ? {} : parsed.errors;
+    };
+    assert.ok(errors({ vix_panic: '12' })['vix_panic']);
+    assert.ok(errors({ epu_weight: '-1' })['epu_weight']);
+    assert.ok(errors(Object.fromEntries(current.components.map((row) => [`${row.id}_weight`, '0'])))['vix_weight']);
+    assert.ok(errors({ maxAgeDays: '0' })['maxAgeDays']);
+    assert.ok(errors({ minCoverage: '150' })['minCoverage']);
+    assert.ok(errors({ vix_calm: 'abc' })['vix_calm']);
   });
 });

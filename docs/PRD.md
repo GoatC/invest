@@ -34,13 +34,13 @@ A single-user PWA that runs a 30-year core–satellite portfolio on written rule
 **Design principles 設計原則**
 
 1. **SAA first 配置優先** — Core ETFs carry the portfolio; satellite stocks are capped and must pass valuation and red-flag checks. 核心 ETF 是投資組合的主體；衛星個股有比例上限，且必須通過估值與紅旗檢查。
-2. **Decisions, not prices 推播決策而非價格** — No real-time price alerts; every push names a rule that fired and the action it proposes. 不推播即時股價；每則推播都要指出觸發的規則與建議的動作。
+2. **Decisions, not prices 推播決策而非價格** — No real-time price alerts; every push names a rule that fired and the action it proposes. One exception, asked for by Hugo on 2026-11-06: N8's volatility alert pushes when a market-stress score crosses its threshold, still as a rule with a proposal. 不推播即時股價；每則推播都要指出觸發的規則與建議的動作。唯一例外（Hugo 於 2026-11-06 提出）：N8 波動警報在市場壓力分數穿越門檻時推播，仍以規則與提案的形式呈現。
 3. **Human in the loop (L2) 人在迴路中** — The app drafts order lists; Hugo confirms and places every trade manually at the broker. No broker API access. 由 App 產生建議下單清單，Hugo 確認後到券商手動下單；不串接券商 API。
 4. **Explain every number 每個數字都可解釋** — Each model shows its formula, inputs and assumptions, in English and Chinese, one tap away: the explanation sits folded behind ⓘ. 每個模型都以中英雙語顯示公式、輸入值與假設，點一下 ⓘ 即可展開。
 5. **Free data only 只用免費資料** — All phases run on free data sources; paid upgrades stay an open question. 所有階段都只使用免費資料；是否升級付費資料列為待決問題。
 6. **Figures, not paragraphs 數字優先，少用段落** — A page shows labelled figures as tiles with a status icon (✓ on track, ! watch, ✕ act, … waiting) and short lines; sentences that explain go behind ⓘ, edit histories fold under their heading. 頁面以「標籤＋數字＋狀態圖示」的小卡呈現（✓ 正常、! 注意、✕ 需處理、… 等待中），只留短句；說明文字收進 ⓘ，修改紀錄收合在標題下。
 
-**Non-goals 非目標:** day trading, automatic order execution, multi-user or commercial use, real-time quote streaming. 不做當沖、不自動下單、不支援多人或商業使用、不提供即時報價串流。
+**Non-goals 非目標:** day trading, automatic order execution, multi-user or commercial use, real-time quote streaming. N8's short-term trades are held days to weeks and scored twice a day on closes, not intraday. 不做當沖、不自動下單、不支援多人或商業使用、不提供即時報價串流。N8 的短線部位持有數天到數週，每天以收盤資料計分兩次，不做盤中交易。
 
 ## 2. User Context & Decisions 使用者情境與已定決策
 
@@ -67,7 +67,7 @@ The spec is written so Claude Code can implement each phase without further desi
 
 ## 3. Feature Specs 功能規格
 
-Twenty features ship across three phases; IDs keep the numbering from the original 20-feature list, and N1–N7 are new (N7 added during Phase 2). 共 20 個功能，分三個階段上線；編號沿用原本 20 項清單，N1–N7 為新增功能（N7 於第二階段加入）。
+Twenty features ship across three phases; IDs keep the numbering from the original 20-feature list, and N1–N7 are new (N7 added during Phase 2). N8 was added after Phase 3, on 2026-11-06. 共 20 個功能，分三個階段上線；編號沿用原本 20 項清單，N1–N7 為新增功能（N7 於第二階段加入）。N8 於第三階段後（2026-11-06）加入。
 
 | ID | Feature 功能 | Module 模組 | Phase 階段 | Automation 自動化 |
 | --- | --- | --- | --- | --- |
@@ -86,6 +86,7 @@ Twenty features ship across three phases; IDs keep the numbering from the origin
 | N3 | Red-flag indicator (ESG + financial) 紅旗指標 | C Analysis | 2 | Weekly scan 每週掃描 |
 | F14 | Combined look-through (core + satellite) 核心與衛星合併透視 | C Analysis | 2 | Monthly holdings refresh 每月更新成分股 |
 | N7 | Sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | C Analysis | 2 | Nightly sector closes 每夜更新類股價格 |
+| N8 | Volatility alert: stress score 1–10, event calendar, band proposals 波動警報：壓力分數 1–10、事件日曆、分區段提案 | F Short-term | After 3 第三階段後 | Scored twice a day; push on crossing 每天計分兩次，穿越門檻時推播 |
 | F1 | 30-year life timeline (tab) 30 年人生財務時間軸（分頁） | A Planning | 3 | Weekly overlay of actuals 每週疊加實際值 |
 | F5 | Monte Carlo simulation (shares F2 engine) 蒙地卡羅模擬（與 F2 共用引擎） | A Planning | 3 | Monthly re-run 每月重跑 |
 | F7 | Efficient frontier & CML (reference only) 效率前緣與資本市場線（僅供參考） | B Allocation | 3 | On demand 手動執行 |
@@ -259,6 +260,36 @@ A tab of its own (the menu's "Sectors 產業熱圖"), next to the Regression Lab
 - Each chart has its table underneath, and a sector lists the holdings behind it (directly and through each ETF), as N6's slices do. 每張圖下方都有表格；點選產業即列出背後的持股（直接持有與透過各 ETF），與 N6 相同。
 - Data 資料: the sector proxies' daily closes, loaded by the nightly job into index\_prices (step 2's table) with one fallback each; exposure from F14. 類股代理的每日收盤價由每夜排程載入 index\_prices（第 2 步的資料表），各有一個備援；曝險取自 F14。
 
+### Module F — Short-term volatility 短期波動 (added 2026-11-06)
+
+**N8 Volatility alert 波動警報**
+
+Hugo asked on 2026-11-06 for a fixed schedule that tracks market stress, scores it from 1 to 10, pushes once it passes a threshold (6 to start) and names what could be bought; and a reminder two days before each known market event. Critique accepted in the same talk: buying a VIX product after a crash buys it near its top, so the proposal follows the score's band; the news side is scored from free data, not a paid language model; a level such as "TAIEX below 40,000" goes stale, so falls are measured from the 52-week high. Hugo 於 2026-11-06 提出：以固定排程追蹤市場壓力，評為 1 到 10 分，超過門檻（起始為 6）即推播並建議可進場的標的；並在已知的重大事件前兩天提醒。同一次討論中接受的修正：崩盤後才買 VIX 商品等於買在高點，因此提案依分數區段而定；新聞面以免費資料計分，不使用付費語言模型；「台股跌破 40,000 點」這類點位會過時，因此跌幅以距 52 週高點衡量。
+
+- Score 波動分數 (step 1): eight components, each read from a free daily series as of the day. Its sub-score is 0 at or below a calm figure and 10 at or above a panic figure, linear between; the score is 1 + 0.9 × the weighted mean of the sub-scores, to 0.1, so all calm reads 1 and all at panic 10. A figure older than `max_age_days` (5) is left out and the others re-weighted; under `min_coverage` (50%) of the weight there is no score. Calm, panic and weight per component in config `volatility`, edited on the page and logged. 八個成分，各自讀取一個免費的每日資料。子分數在平靜值以下為 0、恐慌值以上為 10，中間為直線；總分 = 1 ＋ 0.9 × 子分數加權平均，取到 0.1，因此全部平靜為 1、全部恐慌為 10。超過 5 天的數值不計入、其餘重新加權；涵蓋權重低於 50% 時不計分。各成分的平靜值、恐慌值與權重存於 config `volatility`，可在頁面修改並留下紀錄。
+
+```latex
+s_i = 10 \cdot \operatorname{clamp}\!\left(\frac{x_i - \text{calm}_i}{\text{panic}_i - \text{calm}_i},\, 0,\, 1\right), \qquad \text{score} = 1 + 0.9 \cdot \frac{\sum_i w_i s_i}{\sum_i w_i}
+```
+
+| Component 成分 | Figure 數值 | Calm → panic 平靜 → 恐慌 | Weight 權重 |
+| --- | --- | --- | --- |
+| VIX | The close 收盤 | 12 → 40 | 2 |
+| VIX ÷ VIX3M | Above 1: the curve inverted, short-term fear above 3-month 大於 1 為倒掛 | 0.85 → 1.15 | 2 |
+| Taiwan VIX 臺指選擇權波動率指數 | The close 收盤 | 15 → 45 | 2 |
+| S&P 500 drawdown 標普 500 跌幅 | Below the 52-week high 距 52 週高點 | 2% → 20% | 1 |
+| TAIEX drawdown 加權指數跌幅 | Below the 52-week high (total return index) 距 52 週高點（報酬指數） | 3% → 25% | 1 |
+| TAIEX short fall 加權指數短期跌幅 | Over the last 5 sessions 近 5 個交易日 | 0% → 10% | 1 |
+| US high-yield spread 美國高收益債利差 | ICE BofA option-adjusted spread, % | 3% → 7% | 1 |
+| Policy uncertainty 政策不確定性 | US daily EPU (newspaper articles on uncertainty, economy and policy), 7-day mean 美國每日 EPU（報紙文章數），7 日平均 | 100 → 500 | 0.5 |
+
+  Checked against CBOE's history: 2017 reads 0 on both VIX components; 2020-03-16 and 2025-04-08 read 10; 2024-08-05 about 9.5; 2026-11-05 (VIX 28.18 over VIX3M 25.55) 5.8 and 8.4. The VIX closed above the VIX3M on 7.6% of days since 2010. 以 CBOE 歷史檢查：2017 年兩個 VIX 成分皆為 0；2020-03-16 與 2025-04-08 為 10；2024-08-05 約 9.5；2026-11-05（VIX 28.18、VIX3M 25.55）為 5.8 與 8.4。2010 年以來 VIX 高於 VIX3M 的交易日約 7.6%。
+- Schedule 排程 (step 1): its own GitHub Actions job, twice on weekdays: 15:17 Taipei after Taiwan's close (Taiwan's VIX, TAIEX) and 06:17 Taipei after the US close (the VIX). It loads the series into index\_prices, scores the day and saves it in volatility\_scores. The data-failure alert reads the nightly job only. 獨立的 GitHub Actions 排程，平日兩次：台北 15:17（台股收盤後）與 06:17（美股收盤後）；載入資料、計分並存入 volatility\_scores。資料異常警示只看每夜排程。
+- Page 頁面 (step 1): "波動警報" in the Analysis group: today's score with its band, the weight covered and the newest close; the last year's score as a line on a 1–10 axis with the bands as stripes; each component's figure, calm and panic, sub-score, weight and whether it counted; the settings. 分析區的「波動警報」：今日分數與區段、涵蓋權重、最新收盤；近一年分數走勢（1–10 軸，區段以色帶標示）；各成分數值、平靜與恐慌值、子分數、權重與是否計入；設定。
+- Event calendar 事件日曆 (step 2): FOMC decisions (the Fed's published calendar), US CPI and payrolls (BLS's release schedule), Taiwan's central bank quarterly meetings, and events Hugo types in (elections); a push two days before each, display of the coming events on the page and in the dashboard's coming week. Implied volatility usually rises before an event and falls after it, so the reminder proposes no VIX product. 聯準會利率決議（聯準會公布的日程）、美國 CPI 與非農就業（勞工統計局公布時程）、台灣央行每季理監事會，以及 Hugo 自行輸入的事件（選舉）；每個事件前兩天推播，並顯示於頁面與儀表板的下週事件。事件前隱含波動率通常上升、事件後回落，因此提醒不建議 VIX 商品。
+- Alert and proposals 警報與提案 (step 3): rule VOLATILITY_ALERT fires when the score crosses its threshold (6) from below, once per cooldown, and pushes even in the quiet hours (Hugo, 2026-11-06). Its proposal follows the band: 1–3 calm, a small hedge in a VIX product (VIXY, 00677U) while protection is cheap; 4–5 nothing; 6–7 tense, the watchlist stocks nearest their buy zone; 8–10 panic, staged buys of the core ETFs (VT, 0050) and the watchlist. Money comes from the satellite's 20% (R2 still applies); each VIX product at most 5% of the regular pool (Hugo, 2026-11-06), in config; short-term lines tagged so their performance is kept apart. A shadow log keeps each alert's proposal and its return after 5, 20 and 60 days, and the page shows the hit rate; headlines (GDELT) are shown with the push, not scored. L2 as everywhere: Hugo places every trade. 規則 VOLATILITY_ALERT 在分數由下往上穿越門檻（6）時觸發，冷卻期內只觸發一次，安靜時段照樣推播（Hugo，2026-11-06）。提案依區段：1–3 平靜，保護便宜時小量買進 VIX 商品（VIXY、00677U）避險；4–5 不動作；6–7 緊張，觀察清單中最接近買入區的個股；8–10 恐慌，分批買進核心 ETF（VT、0050）與觀察清單。資金來自衛星的 20%（R2 照常適用）；每檔 VIX 商品最多占一般資金池的 5%（Hugo，2026-11-06），存於 config；短線部位加上標記，績效分開計算。影子紀錄保存每次警報的提案及其 5、20、60 天後的報酬，頁面顯示命中率；新聞標題（GDELT）隨推播顯示、不計分。與其他功能相同為 L2：每筆交易由 Hugo 下單。
+- Limits 限制: closes only, so a crash inside a day shows the next run; VIX products lose value while held (futures roll), so a hedge is meant for days to weeks; Taiwan's VIX history starts with TAIFEX's last three months and builds up from the first run. 只用收盤資料，盤中崩跌要到下一次執行才反映；VIX 商品持有期間會因期貨轉倉而流失價值，避險只適合持有數天到數週；臺指 VIX 的歷史只從期交所最近三個月開始，自第一次執行起累積。
+
 ### Module D — Cost & Performance 成本與績效
 
 **F15 Fee & tax drag 費用與稅務拖累（含美國遺產稅檢查）**
@@ -396,8 +427,10 @@ Automation is conditional: the app evaluates written rules after every data refr
 | Trim zone 進入減碼區 | Price ≥ intrinsic value × 1.25 股價高於內在價值的 125% | Trim proposal 減碼提案 | F12 |
 | R1 Single-stock cap 單一個股上限 | One stock above 5% of the regular-contribution pool 單一個股超過一般投入資金池的 5% | Trim proposal 減碼提案 | Rules |
 | Red flag turns red 紅旗轉紅 | A satellite holding moves to red 衛星持股燈號轉紅 | Re-review prompt with exit option 重新檢視提示，附出場選項 | N3 |
+| Volatility alert 波動警報 (N8 step 3) | Score crosses 6 from below 分數由下往上穿越 6 | Band proposal; pushed in the quiet hours too 依區段提案；安靜時段照樣推播 | N8 |
+| Event ahead 事件前提醒 (N8 step 2) | Two days before a calendar event 日曆事件前兩天 | Reminder, no orders 提醒，不附下單清單 | N8 |
 
-**Noise controls 降噪設計:** quiet hours 23:00–08:00 Taipei; each rule fires at most once per 7 days unless its state changes; no price-movement alerts. 安靜時段為台北時間 23:00–08:00；同一規則 7 天內最多觸發一次（狀態改變時除外）；不推播價格波動。
+**Noise controls 降噪設計:** quiet hours 23:00–08:00 Taipei; each rule fires at most once per 7 days unless its state changes; no price-movement alerts. Exception (N8, 2026-11-06): the volatility alert pushes through the quiet hours, as US sessions fall in them. 安靜時段為台北時間 23:00–08:00；同一規則 7 天內最多觸發一次（狀態改變時除外）；不推播價格波動。例外（N8，2026-11-06）：波動警報在安靜時段照樣推播，因為美股交易時間落在其中。
 
 ## 5. Weekly Review 每週檢視
 
@@ -424,7 +457,7 @@ Once a week a three-line push summary opens a dashboard that leads with rule sta
 
 The SAA drift bars, colour-coded green / amber / red, sit on the Allocation page only, so the dashboard does not repeat them; the largest drift is the band's second line. 以綠／黃／紅標示的 SAA 偏離長條只放在資產配置頁，儀表板不重複；最大偏離列在本週摘要第二行。
 
-**Navigation 導覽:** four pages as buttons — Dashboard, Holdings, Performance, Allocation — and four groups that list their pages below the button: Analysis (look-through, stress test, efficient frontier, attribution, regression, sectors), Other risks (red flags, cost of equity, costs & tax), Life planning (calculator, life timeline, Monte Carlo, windfall), More (data status, CSV import, and the button that runs the nightly job now and reloads the data when it is done; added 2026-11-04). On a phone the four pages are a bottom tab bar and "More" opens the groups. Navigation buttons and page titles show Chinese only. New trades are entered at the top of Holdings, which also holds the valuation watchlist and, folded, the securities list. 四個頁面按鈕——儀表板、持倉、績效、資產配置——與四個在按鈕下方列出頁面的群組：分析區（合併透視、壓力測試、效率前緣、績效歸因、回歸分析、產業熱圖）、其他風險（紅旗指標、權益成本、費用與稅務）、人生規劃（複利計算機、人生時間軸、蒙地卡羅、大額資金）、其他（資料狀態、匯入 CSV，以及立即執行每夜排程、完成後重新載入資料的「更新最新資料」按鈕；2026-11-04 加入）。手機上四個頁面改為底部分頁列，「更多」打開各群組。導覽按鈕與頁面標題只顯示中文。新增交易在持倉頁最上方；持倉頁也包含估值觀察清單，以及收合的證券主檔。
+**Navigation 導覽:** four pages as buttons — Dashboard, Holdings, Performance, Allocation — and four groups that list their pages below the button: Analysis (look-through, stress test, efficient frontier, attribution, regression, sectors, volatility alert; added 2026-11-06), Other risks (red flags, cost of equity, costs & tax), Life planning (calculator, life timeline, Monte Carlo, windfall), More (data status, CSV import, and the button that runs the nightly job now and reloads the data when it is done; added 2026-11-04). On a phone the four pages are a bottom tab bar and "More" opens the groups. Navigation buttons and page titles show Chinese only. New trades are entered at the top of Holdings, which also holds the valuation watchlist and, folded, the securities list. 四個頁面按鈕——儀表板、持倉、績效、資產配置——與四個在按鈕下方列出頁面的群組：分析區（合併透視、壓力測試、效率前緣、績效歸因、回歸分析、產業熱圖、波動警報；2026-11-06 加入）、其他風險（紅旗指標、權益成本、費用與稅務）、人生規劃（複利計算機、人生時間軸、蒙地卡羅、大額資金）、其他（資料狀態、匯入 CSV，以及立即執行每夜排程、完成後重新載入資料的「更新最新資料」按鈕；2026-11-04 加入）。手機上四個頁面改為底部分頁列，「更多」打開各群組。導覽按鈕與頁面標題只顯示中文。新增交易在持倉頁最上方；持倉頁也包含估值觀察清單，以及收合的證券主檔。
 
 Monthly and quarterly outputs (N2 attribution, F5 re-run, N1 5-factor results) appear in the weekly view only in the week they update. 每月與每季產出（N2 歸因、F5 重跑、N1 五因子結果）只在更新當週出現在週檢視。
 
@@ -450,6 +483,7 @@ Nightly jobs pull free data into Postgres; the rules engine turns fired rules in
 | US CAPE 週期調整本益比 | Robert Shiller's online data (ie_data.xls, monthly since 1871, with the S&P 500 price and dividends); multpl.com's monthly tables as fallback (Phase 2, step 1) Shiller 教授的線上資料（ie_data.xls，1871 年起每月，含 S&P 500 價格與股利）；multpl.com 每月表格為備援（第二階段第 1 步） | F3 |
 | MSCI ACWI drawdown 全球股市跌幅 | The iShares MSCI ACWI ETF's daily closes, loaded like the other US ETFs (FinMind; Alpha Vantage fills gaps) ACWI ETF 每日收盤價，與其他美國 ETF 相同方式載入 | F3 |
 | Factor returns 因子報酬 | Kenneth French Data Library | N1 |
+| Volatility series 波動資料 (added 2026-11-06) | VIX and VIX3M: CBOE's daily history files, FRED VIXCLS / VXVCLS as fallback; Taiwan's VIX: TAIFEX's monthly files (log2data/YYYYMMnew.txt, the last three months); US daily policy uncertainty: policyuncertainty.com, FRED USEPUINDXD as fallback; high-yield spread: FRED BAMLH0A0HYM2 (no fallback: the score counts one fewer); S&P 500 and TAIEX as for N1 VIX 與 VIX3M：CBOE 每日歷史檔，FRED 備援；臺指 VIX：期交所每月檔（最近三個月）；美國每日政策不確定性：policyuncertainty.com，FRED 備援；高收益債利差：FRED（無備援，少計一個成分）；標普 500 與加權指數同 N1 | N8 |
 | Equity risk premium 股票風險溢酬 | Damodaran Online: the implied ERP by month (ERPbymonth.xlsx, trailing-12-month figure); Taiwan's country risk premium from his country table, kept as a setting; the typed ERP in config capm as fallback (Phase 2, step 3) Damodaran Online：每月隱含風險溢酬（ERPbymonth.xlsx，近 12 個月現金殖利率法）；台灣的國家風險溢酬取自其國家風險表，存為設定值；config capm 的自訂值為備援（第二階段第 3 步） | F11 |
 | Governance and penalties 公司治理與裁罰 | Phase 2, step 5: the Ministry of Environment's penalties (open data ems_p_46, free key `MOENV_API_KEY`) by the company's business ID from TWSE's company profiles (t187ap03_L); TWSE's governance evaluation and EPA ECHO typed in by the owner, as cgc.twse.com.tw refuses scripts and ECHO names facilities, not companies 第二階段第 5 步：環境部裁罰（開放資料 ems_p_46，需免費金鑰）依證交所公司基本資料的統一編號比對；公司治理評鑑（網站擋程式）與 EPA ECHO（以工廠命名）由使用者自行登錄 | N3 |
 | Auditor changes, restatements, going concern 更換會計師、財報重編、繼續經營 | Phase 2, step 5: SEC submissions (8-K Items 4.01 and 4.02, the SIC industry) and EDGAR full-text search of 10-Ks for the going-concern paragraph; TWSE's daily material announcements (t187ap04_L, the last day only, so read from the first night forward) and a change of audit firm in its company profiles; MOPS by hand before that 第二階段第 5 步：SEC 8-K 4.01／4.02 與 10-K 全文搜尋；證交所每日重大訊息（只有最近一天，自第一晚起讀取）與公司基本資料的簽證事務所變動；之前的資料由使用者查公開資訊觀測站登錄 | N3 |
@@ -501,6 +535,8 @@ Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly j
 
 After Phase 3, N5 adds splits (ticker, ex\_date, ratio, note): one row per stock split, ratio new shares per old share; trades stay as traded and the models read them in today's units. 第三階段後，N5 加入 splits（代號、生效日、比例、備註）：每次股票分割一列，比例為每 1 股舊股換得的新股數；交易維持成交時的紀錄，模型以今天的股數讀取。
 
+On 2026-11-06, N8 adds volatility\_scores (score\_date, score 1–10, mean, coverage, components): each day's volatility score, written by the volatility job only; and config `volatility`. Its series go to index\_prices as VIX, VIX3M, TWVIX, EPU and HY\_OAS. 2026-11-06 起，N8 新增 volatility\_scores（日期、分數 1–10、加權平均、涵蓋權重、各成分）：每日波動分數，只有波動排程能寫入；另加入 config `volatility`。其資料以 VIX、VIX3M、TWVIX、EPU、HY\_OAS 存入 index\_prices。
+
 On 2026-11-05, N5 adds two columns to transactions: direction (long / short, default long) and leverage (numeric(3,1), 1.0 to 10.0, default 1.0), so every trade saved before is a long at 1×; and config `leverage` (max, the highest leverage the form offers; margin\_call\_share, the share of own money left at which the holdings page warns). 2026-11-05 起，N5 在 transactions 加入兩個欄位：direction（long／short，預設 long）與 leverage（numeric(3,1)，1.0 至 10.0，預設 1.0），因此既有交易皆為 1 倍做多；另加入 config `leverage`（max：表單提供的最高槓桿；margin\_call\_share：自有資金剩下多少比例時持倉頁提醒）。
 
 ## 8. Roadmap 開發路線圖
@@ -527,6 +563,7 @@ The largest design risk is windfall acceleration, which may commit most of the c
 | Supabase auto-pause 免費專案暫停 | A Free project with little activity for 7 days is paused 免費專案 7 天低活動會被暫停 | The nightly GitHub Actions job reads and writes the database every night; data-failure alert if it stops 每夜由 GitHub Actions 排程讀寫資料庫；中斷即警示 |
 | Schedule switched off 排程被暫停 | GitHub turns off the schedule of a public repo after 60 days without activity GitHub 會暫停 60 天無活動的公開 repo 排程 | Missed nights count toward the data-failure alert; re-enable in the Actions tab 未執行的夜晚計入資料異常警示；於 Actions 分頁重新啟用 |
 | Minimum fees 最低手續費 | NT$10,000 split across 8 sleeves means very small 複委託 orders 每月 1 萬分到 8 個部位，單筆複委託金額過小 | F8 sends each month's cash to at most 2 classes; F15 compares minimum fees 每月最多投入 2 個類別；F15 比較低消 |
+| Short-term trading 短線交易 (N8) | A score marks stress, not a bottom; VIX products decay while held 分數代表壓力而非底部；VIX 商品持有會流失價值 | Band proposals, 5% cap per VIX product, the satellite's money only, a shadow log of hit rates before real money 依區段提案、每檔 VIX 商品 5% 上限、只用衛星資金、先以影子紀錄觀察命中率 |
 | Phase 1 scope 第一階段範圍 | 11 items is heavy for 2–4 weeks 2–4 週內完成 11 項偏重 | Strict build order in Section 11; the gate decides, not the calendar 依第 11 節順序建置，以關卡而非日期為準 |
 
 This app supports Hugo's own decisions; it is not financial advice. 本 App 用於輔助 Hugo 自己的決策，不構成投資建議。
@@ -555,6 +592,7 @@ This app supports Hugo's own decisions; it is not financial advice. 本 App 用�
 - [x] Decided: satellite 20% of the regular pool, trim above 25%, windfall excluded; 複委託 only; public repo with demo data only 已決定：衛星 20%／25%、僅複委託、公開 repo 只放示範資料
 - [ ] (Raised in Phase 3, step 1) F5 and F7 read the history the free feeds hold, about five years of monthly returns by default (F7 asks for ten and uses what there is, at least 36 months): short for a 30-year simulation. Calibration to the CMA keeps the level in your hands, but the shape of the tails is only as wide as those years; a longer free history (index series back to the 1990s) would help （第三階段第 1 步提出）F5 與 F7 讀取免費資料來源擁有的歷史，預設約五年月報酬（F7 要求十年，有多少用多少，至少 36 個月），對 30 年的模擬偏短。依資本市場假設校準使水準由你決定，但尾端的寬度只反映那幾年；更長的免費歷史（回溯到 1990 年代的指數資料）會有幫助
 - [ ] (Raised in Phase 3, step 3) F10 replays cash with BIL in TWD, which moves with the dollar as N4 treats BIL; a TWD savings balance or money-market fund would not. Gold and bonds are GLD and AGG (a US aggregate, not global bonds), and the equity series stands for ACWI as F3's gauge （第三階段第 3 步提出）F10 以台幣計的 BIL 回放現金，會隨美元波動（與 N4 對 BIL 的處理相同），但台幣活存或貨幣基金不會；黃金與債券分別為 GLD 與 AGG（美國綜合債券，不是全球債券），股票資料作為 F3 指標，代表 ACWI
+- [ ] (N8, 2026-11-06) The calm and panic figures are starting values set against CBOE's history; check them on the Volatility page, Taiwan's VIX and the policy index especially, once a few months of closes are in （N8）平靜與恐慌值是依 CBOE 歷史設定的起始值；累積幾個月資料後，請在「波動警報」頁確認，尤其是臺指 VIX 與政策不確定性指數
 - [ ] (Raised in Phase 3, step 5) N2's level 2 prices each sector with its Select Sector SPDR fund as a price return (no dividends) and reads about a year of closes; the benchmark's sector weights are the core equity fund's file of the day, not each month's. Longer, total-return sector series would sharpen it （第三階段第 5 步提出）N2 第二層以 Select Sector SPDR 基金的價格報酬（不含股息）衡量各產業，約讀取一年的收盤價；基準的產業權重取當天的核心股票基金檔，而非每個月的。更長、含息的產業資料會更精確
 - [x] Phase 3's gate: passed by Hugo on 2026-10-29, after merging the Phase 3 pull requests (#20, #21), applying the migrations and checking each Phase 3 page's numbers against his own money; the app is complete 第三階段的關卡：Hugo 於 2026-10-29 通過，已合併第三階段的 pull request（#20、#21）、套用 migration，並對照自己的資金檢查各頁數字；App 建置完成
 
@@ -597,6 +635,7 @@ After Phase 3 第三階段之後 (open questions closed in code 以程式解決�
 
 - Splits, N5: a split is entered on its security's page as N old shares becoming M new ones on the ex-date (table `splits`, ratio M ÷ N; a reverse split below 1); not in the future, as closes before the ex-date are still in old shares, and refused when it would leave a sell larger than the holding. Trades stay saved as traded; every model reads them restated in today's units (quantity × ratio, price ÷ ratio, amounts unchanged), so quantity, average cost a share, value and R1 / R2 are right; F18's day-by-day replay restates quoted closes the same way, so the ex-date moves no value, and returns still come from adjusted closes 股票分割：在證券頁以「N 股舊股變為 M 股新股」登錄（`splits` 表，比例 M ÷ N，反分割小於 1）；不可登錄未來日期，若會使某筆賣出超過持有數量則拒絕。交易維持原紀錄，所有模型以今天的股數讀取（數量 × 比例、價格 ÷ 比例，金額不變）；F18 逐日重算也以相同方式換算原始收盤價，生效日不會產生價值跳動，報酬仍取自還原收盤價
 - F5 and the windfall (asked 2026-10-30): the simulation runs the windfall as F3 does. An expected windfall's tranches follow F3's pace at today's CAPE percentile (`windfall_pace`, so NT$5.5M at percentile 75 is 24 tranches of ≈ NT$229,000) unless a count is typed (`monte_carlo.windfall.tranches`, blank for the pace). On every path, `monte_carlo.gauge_class` (us_global_equity, VT standing for ACWI as in F10) is that path's market, and its fall from the highest of the last 12 month ends fires rule WINDFALL_ACCELERATION's tiers on the cash still waiting, each once per drawdown, while the rule is on; the tranches left share the cash left, and the last tranche takes all of it, interest included. The page splits each mark into the regular pool's and the windfall's median, gives the goal's chance with and without the windfall and the share of paths on which each tier fired; the monthly re-run saves them. Month ends are smoother than days, so the tiers fire a little less often than live F5 與大額資金（2026-10-30 提出）：模擬依 F3 規則處理大額資金。預期大額資金的批數依今天 CAPE 百分位的 F3 節奏（`windfall_pace`；NT$550 萬在第 75 百分位為 24 批、每批約 NT$229,000），除非自行輸入批數（`monte_carlo.windfall.tranches`，留白為依節奏）。每條路徑以 `monte_carlo.gauge_class`（us_global_equity，以 VT 代表 ACWI，與 F10 相同）作為該路徑的市場，自近 12 個月底最高點的回落在規則啟用時觸發 WINDFALL_ACCELERATION 的級距，作用於仍在等待的現金，同一波下跌每級只觸發一次；剩餘各批平分剩下的現金，最後一批投入全部（含利息）。頁面在各年數拆分一般資金池與大額資金的中位數，列出含與不含大額資金的目標達成機率，以及各級距被觸發的路徑比例；每月重跑也一併保存。月底資料較每日平滑，觸發次數會比實際略少
+- N8 step 1 (2026-11-06), the volatility score: config `volatility` (each component's calm, panic and weight; `max_age_days` 5, `min_coverage` 0.5, `drawdown_days` 365, `fall_sessions` 5, `epu_days` 7, `history_days` 400); series in index\_prices (VIX, VIX3M from CBOE; TWVIX from TAIFEX; EPU from policyuncertainty.com; HY\_OAS from FRED), TAIEX and the S&P 500's last 14 days loaded by the volatility job as well so a score after Taiwan's close sees the session; volatility\_scores one row a Taipei day, upserted by each run; job\_runs job `volatility`, outside the data-failure alert; the page scores today live from index\_prices and charts the last year; no rule and no push until step 3 第一步：波動分數設定、資料存入 index\_prices、每日一列分數、排程紀錄不計入資料異常警示；頁面即時計分並顯示近一年；第三步之前不設規則、不推播
 - Prices, Irish swaps: CSPX (253743), IB01 (307243) and IGLN (258441, the USD line of SGLN) join AGGU on the iShares daily NAV, so a swap the US estate-tax check suggests is priced from the first night; VWRA stays on Alpha Vantage weekly. The product page's NAV is read from its own data at full precision, as the page since October 2026 runs the figure into the 52-week range in its text (which had left AGGU on its 25 MB download every night). A NAV that moves to about a whole multiple of the day before (within 3%) is a consolidation or split, and the adjusted NAVs before it are scaled: IB01 consolidated about 20 into 1 on 2021-07-26 愛爾蘭替代 ETF 價格：CSPX、IB01、IGLN 與 AGGU 一樣讀取 iShares 每日淨值，VWRA 維持 Alpha Vantage 週線；產品頁淨值改由頁面資料讀取完整精度（2026 年 10 月起頁面文字把淨值與 52 週區間連在一起，使 AGGU 每晚都要下載 25 MB 檔案）；單日淨值變為前一日約整數倍（3% 內）視為合併或分割，之前的還原淨值依比例調整（IB01 於 2021-07-26 約 20 合 1）
 
 ## 10. Glossary 雙語術語表
@@ -692,6 +731,12 @@ Rules:
 5. N2 Brinson attribution. Brinson 績效歸因。
 6. N1 Fama–French 5-factor mode. 回歸分析區五因子模式。
 
+**N8 build order N8 建置順序** (set by Hugo on 2026-11-06, after Phase 3 Hugo 於 2026-11-06 訂定，第三階段之後)
+
+1. The score: its feeds, the twice-daily job, volatility\_scores and the page. 波動分數：資料來源、每天兩次的排程、volatility\_scores 與頁面。
+2. The event calendar and its reminder two days before. 事件日曆與事件前兩天的提醒。
+3. Rule VOLATILITY\_ALERT, its band proposals with the 5% cap, the push through quiet hours, and the shadow log. 規則 VOLATILITY\_ALERT、依區段的提案與 5% 上限、安靜時段推播與影子紀錄。
+
 **Acceptance tests 驗收測試** (computed for this check; each becomes a unit test 每項皆轉為單元測試)
 
 | Test 測試 | Input 輸入 | Expected 預期結果 |
@@ -760,6 +805,13 @@ Rules:
 | F7 leverage | Mix 8% at 12% volatility, Rf 2%, spread 1% | 2×: 2% + 2 × 6% − 1% = 13% at 24%; 0.5×: 5% at 6% |
 | F7 shorts | Three classes, shorts allowed to 30% each | Lower bounds −30%; the best Sharpe never below long-only; weights sum to 1; gross exposure ≥ 1 |
 | N1 position β | β 1.2, α 2% a year; NT$100,000 own money; index −10% | Long 2×: β 2.4, α 4%, own money −24%, hedge: short NT$240,000 of the index; short 1.5×: β −1.8, own money +18%, hedge: buy NT$180,000 |
+| N8 sub-score (added 2026-11-06) | Calm 12, panic 40; VIX 26, 50, 10 | 5.0, 10 (capped), 0 |
+| N8 term structure | VIX 28.18, VIX3M 25.55 (2026-11-05); calm 0.85, panic 1.15 | Ratio 1.1029; sub-score 8.43 |
+| N8 score | Sub-scores 10 (weight 2), 0 (weight 2), 5 (weight 1) | Mean 5; score 1 + 0.9 × 5 = 5.5; all calm 1.0, all at panic 10.0 |
+| N8 drawdown | 200 more than a year ago, then 100, a high of 120, now 90 | 25% (the older 200 not counted); sub-score 10 on 3% / 25% |
+| N8 short fall | 100, 99, 98, 97, 95, 90 | 10% over 5 sessions: sub-score 10 on 0 / 10%; a rise reads 0 |
+| N8 coverage | Taiwan's VIX missing (weight 2 of 10.5); then the spread 6 days old | 8.5 ÷ 10.5 = 80.95%, the rest re-weighted; then 7.5 ÷ 10.5 (stale); the VIX alone (19%) gives no score under 50% |
+| N8 policy index | Two days of 100, then a week of 400; six days of 100, then 700 | 7-day mean 400; 185.7 |
 
 **First prompt for Claude Code 第一個指令**
 

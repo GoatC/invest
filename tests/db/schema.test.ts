@@ -15,6 +15,7 @@ import { readStressSettings } from '../../lib/models/stress.ts';
 import { readTimelineSettings } from '../../lib/models/timeline.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
+import { readVolatilitySettings } from '../../lib/models/volatility.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -29,14 +30,14 @@ const KEY_MISSING = '23503';
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
-// analyst_estimates.
+// analyst_estimates, and the volatility alert (N8) volatility_scores.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
-  'analyst_estimates',
+  'analyst_estimates', 'volatility_scores',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -56,7 +57,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits and analyst_estimates', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates and volatility_scores', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1042,5 +1043,34 @@ describe('forward P/E check (F12, added 2026-11-04)', () => {
     assert.deepEqual(settings, PE_CHECK_DEFAULTS);
     const seeded = await scalar<{ years: unknown[] }>(db, `select estimates from public.analyst_estimates where ticker = 'AAPL'`);
     assert.equal(seeded.years.length, 2);
+  });
+});
+
+describe('volatility alert (N8, added 2026-11-06)', () => {
+  it('seeds config volatility, readable, and demo closes of its series', async () => {
+    const settings = readVolatilitySettings(await scalar(db, `select value from public.config where key = 'volatility'`));
+    assert.ok(settings);
+    assert.equal(settings.components.find((row) => row.id === 'vix')?.panic, 40);
+    assert.equal(await scalar(db, `select count(distinct index_id) from public.index_prices where index_id in ('VIX', 'VIX3M', 'TWVIX', 'HY_OAS', 'EPU')`), 5);
+  });
+
+  it('keeps one score a day, 1 to 10, written by the job only; the owner reads it, a stranger sees none', async () => {
+    const row = `('2099-11-06', 6.9, 6.57, 0.7143, '[{"id": "vix", "value": 28.18}]')`;
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${row}`)), DENIED);
+    });
+    for (const bad of [`('2099-11-07', 10.5, 10, 1, '[]')`, `('2099-11-07', 5, 5, 1, '{}')`]) {
+      await as(db, 'service_role', async (tx) => {
+        assert.equal(await errorCode(tx.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${bad}`)), CHECK_FAILED);
+      });
+    }
+    await db.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${row}`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select score from public.volatility_scores where score_date = '2099-11-06'`), '6.9');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.volatility_scores'), 0);
+    });
+    await db.query(`delete from public.volatility_scores where score_date = '2099-11-06'`);
   });
 });

@@ -1594,6 +1594,34 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
 });
 
+await step('volatility: the score of the demo series over the year, each component with its calm and panic figures, no score from figures too old, the settings logged (N8)', async () => {
+  await page.goto(`${BASE}/volatility`);
+  await page.getByRole('heading', { level: 1, name: '波動警報' }).waitFor();
+  await page.locator('.chart-figure svg').waitFor();
+  const table = await page.locator('#volatility-components').innerText();
+  check(/VIX \(S&P 500 options\)[\s\S]*12\.00 → 40\.00/.test(table) && /TAIEX fall over 5 sessions[\s\S]*0\.0% → 10\.0%/.test(table), `every component with its calm and panic, got ${table}`);
+  // The demo closes end on 2026-10-23, more than 5 days ago: too old to score today.
+  check(table.includes('Too old') && (await body()).includes('Not enough fresh figures'), 'figures too old leave no score');
+  check(/Volatility score from 2026-0\d-\d\d to 2026-10-23/.test((await page.locator('.chart-figure [role=img]').getAttribute('aria-label')) ?? ''), 'the history of the demo series');
+  await snap('volatility');
+  await page.setViewportSize({ width: 1280, height: 1300 });
+  await docShot('volatility', page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // The figures are a logged setting; a fall is typed in percent.
+  await page.locator('#settings input[name=taiex_drawdown_panic]').fill('30');
+  await page.locator('#settings input[name=checked]').check();
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/volatility?saved=settings**');
+  check((await page.locator('#settings input[name=taiex_drawdown_panic]').inputValue()) === '30' && (await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'saved and checked today');
+  check((await page.locator('#volatility-components').innerText()).includes('3.0% → 30.0%'), 'the table reads the new figure');
+  await page.locator('#settings input[name=taiex_drawdown_panic]').fill('25');
+  await page.locator('#settings button[type=submit]').click();
+  await page.waitForURL('**/volatility?saved=settings**');
+  await page.goto(`${BASE}/history`);
+  check(/Setting[\s\S]*volatility/.test(await body()), 'the setting in the edit history');
+});
+
 await step('monte carlo: the fan around the saved plan, the median and the range, the chance of a goal, today\'s money or nominal, the goal and an expected windfall as logged settings, the windfall paced and accelerated as F3 runs it (F5)', async () => {
   await page.goto(`${BASE}/monte-carlo`);
   await page.getByRole('heading', { level: 1, name: '蒙地卡羅' }).waitFor();
@@ -1788,7 +1816,7 @@ await step('data status: demo prices listed with their dates, the job not run ye
 if (TEXT_REPORT) {
   await step('text report: the visible text on each page', async () => {
     const report = {};
-    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/rules', '/notifications', '/data', '/history', '/import', '/assets/new', '/cash-flows/new', '/securities/new']) {
+    for (const path of ['/', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/volatility', '/rules', '/notifications', '/data', '/history', '/import', '/assets/new', '/cash-flows/new', '/securities/new']) {
       await page.goto(`${BASE}${path}`);
       await page.waitForLoadState('networkidle');
       report[path] = await page.evaluate(() => {
@@ -1814,7 +1842,7 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/rules', '/assets/new', '/cash-flows/new', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/volatility', '/rules', '/assets/new', '/cash-flows/new', '/securities/new', '/history', '/import', '/data']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
@@ -1855,7 +1883,7 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
 await step('phone turned upright: charts drawn sideways shrink back to the screen', async () => {
   const wide = [];
   try {
-    for (const path of ['/', '/performance', '/allocation', '/risk', '/windfall', '/attribution', '/stress', '/sectors', '/look-through', '/valuation?t=AAPL', '/regression']) {
+    for (const path of ['/', '/performance', '/allocation', '/risk', '/windfall', '/attribution', '/stress', '/sectors', '/volatility', '/look-through', '/valuation?t=AAPL', '/regression']) {
       await page.setViewportSize({ width: 852, height: 393 });
       await page.goto(`${BASE}${path}`);
       // Some charts sit folded inside <details> (the dashboard's VaR histogram); wait for a shown one.
@@ -1880,7 +1908,7 @@ await step('navigation: four pages as pills, four groups that list their pages b
   check((await nav.getByRole('link', { name: /Holdings/ }).innerText()) === '持倉', 'a Chinese label');
   await nav.getByRole('button', { name: /Analysis/ }).click();
   const menu = nav.locator('#nav-analysis');
-  check((await menu.getByRole('link').allInnerTexts()).join(' ') === '合併透視 壓力測試 效率前緣 績效歸因 回歸分析 產業熱圖', `the Analysis list, got ${await menu.innerText()}`);
+  check((await menu.getByRole('link').allInnerTexts()).join(' ') === '合併透視 壓力測試 效率前緣 績效歸因 回歸分析 產業熱圖 波動警報', `the Analysis list, got ${await menu.innerText()}`);
   await page.keyboard.press('Escape');
   check((await menu.count()) === 0, 'Escape closes the list');
   await nav.getByRole('button', { name: /Life planning/ }).click();
@@ -1923,6 +1951,26 @@ const nightly = (extra = {}) =>
     // SEC asks for a contact in the User-Agent (F12's US filings); a test address stands in for Hugo's.
     env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, SEC_USER_AGENT: process.env.SEC_USER_AGENT ?? 'LongViewInvest-e2e e2e@example.com', NODE_USE_ENV_PROXY: '1', ...extra },
   });
+// The real volatility job, against the stand-in, with live feeds: what GitHub Actions runs twice a day.
+if (E2E_NIGHTLY !== '0') {
+  await step('volatility job: live VIX, VIX3M, Taiwan VIX and policy index into index_prices, today scored and shown (N8)', async () => {
+    const { stdout } = await promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/volatility.ts'], {
+      cwd: REPO,
+      timeout: 5 * 60_000,
+      env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, FINMIND_TOKEN: FINMIND_TOKEN || 'none', NODE_USE_ENV_PROXY: '1' },
+    }).catch((err) => ({ stdout: `${err.stdout ?? ''}${err.stderr ?? ''}` }));
+    check(/VIX: \d+ rows from (cboe|fred)/.test(stdout) && /TWVIX: \d+ rows from taifex/.test(stdout), `the series loaded, got ${stdout}`);
+    check(/Score 波動分數 \d{4}-\d\d-\d\d: \d+\.\d \/ 10/.test(stdout), `today scored, got ${stdout}`);
+    const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/volatility_scores?select=score_date,score,coverage`, { headers: { apikey: SECRET_KEY } });
+    const rows = await res.json();
+    check(Array.isArray(rows) && rows.length === 1 && rows[0].score >= 1 && rows[0].score <= 10, `one score saved, got ${JSON.stringify(rows)}`);
+    await page.goto(`${BASE}/volatility`);
+    await page.getByRole('heading', { level: 1, name: '波動警報' }).waitFor();
+    check(new RegExp(`${Number(rows[0].score).toFixed(1)} / 10`).test(await body()), 'the page shows the score the job saved');
+    await snap('volatility-live');
+  });
+}
+
 if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
   await step('before the job: the invented weekly history and filings go, as a real project has none', async () => {
     // Its Fridays include market holidays the live feeds have no close for, and its quarter ends
