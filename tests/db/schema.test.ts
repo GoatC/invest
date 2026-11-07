@@ -16,6 +16,7 @@ import { readTimelineSettings } from '../../lib/models/timeline.ts';
 import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { readVolatilitySettings } from '../../lib/models/volatility.ts';
+import { readNewsSettings } from '../../lib/models/news.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -30,14 +31,14 @@ const KEY_MISSING = '23503';
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
-// analyst_estimates, and the volatility alert (N8) volatility_scores and market_events.
+// analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
-  'analyst_estimates', 'volatility_scores', 'market_events',
+  'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -57,7 +58,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores and market_events', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts and news_alerts', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1118,5 +1119,28 @@ describe('volatility alert and hedge (N8 step 3)', () => {
     assert.equal(rows[1]?.threshold['vol_cap'], 0.05);
     const products = await db.query<{ ticker: string; sleeve: string; asset_class_id: string }>(`select ticker, sleeve, asset_class_id from public.securities where ticker in ('00677U', 'VIXY') order by ticker`);
     assert.deepEqual(products.rows, [{ ticker: '00677U', sleeve: 'satellite', asset_class_id: 'tactical_themes' }, { ticker: 'VIXY', sleeve: 'satellite', asset_class_id: 'tactical_themes' }]);
+  });
+});
+
+describe('breaking news (N8 step 4)', () => {
+  it('seeds config news with its seven topics, readable', async () => {
+    const settings = readNewsSettings(await scalar(db, `select value from public.config where key = 'news'`));
+    assert.deepEqual(settings?.topics.map((topic) => topic.id).sort(), ['central_bank', 'crash', 'disaster', 'financial', 'taiwan_strait', 'trade', 'war']);
+    assert.equal(settings?.pushInQuietHours, true);
+  });
+
+  it('keeps counts and alerts for the job to write and the owner to read; a stranger sees none; news pushes are taken', async () => {
+    for (const sql of [`insert into public.news_counts (topic, counted_at, sources) values ('war', now(), 3)`, `insert into public.news_alerts (topic, sources, window_hours, headlines) values ('war', 30, 3, '[]')`]) {
+      await as(db, 'owner', async (tx) => assert.equal(await errorCode(tx.query(sql)), DENIED));
+    }
+    await as(db, 'service_role', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.news_alerts (topic, sources, window_hours, headlines) values ('war', 0, 3, '[]')`)), CHECK_FAILED);
+    });
+    await db.query(`insert into public.news_alerts (topic, sources, baseline, window_hours, headlines) values ('war', 30, 8, 3, '[{"title": "Strikes on Iran", "source": "CNBC"}]')`);
+    await as(db, 'owner', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.news_alerts'), 1));
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.news_alerts'), 0));
+    await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('news', '1', 't', 'b', '/volatility#news', now())`);
+    await db.query(`delete from public.notifications where kind = 'news'`);
+    await db.query('delete from public.news_alerts');
   });
 });

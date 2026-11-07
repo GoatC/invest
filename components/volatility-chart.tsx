@@ -82,20 +82,20 @@ export function VolatilityChart({ points }: { points: readonly ScorePoint[] }) {
   if (!first || !last || scored.length < 2) {
     return (
       <p className="muted small">
-        <Bi en="The history fills in as the volatility job runs." zh="歷史走勢會隨波動排程每次執行而累積。" />
+        <Bi en="Builds up daily" zh="每日累積" />
       </p>
     );
   }
   const high = scored.reduce((top, point) => ((point.score as number) > (top.score as number) ? point : top), first);
   const summary: Bilingual = {
-    en: `Volatility score from ${first.date} to ${last.date}: from ${first.score?.toFixed(1)} to ${last.score?.toFixed(1)}, highest ${high.score?.toFixed(1)} on ${high.date}.`,
-    zh: `${first.date} 至 ${last.date} 的波動分數：從 ${first.score?.toFixed(1)} 到 ${last.score?.toFixed(1)}，最高 ${high.score?.toFixed(1)}（${high.date}）。`,
+    en: `Volatility score from ${first.date} to ${last.date}: from ${first.score?.toFixed(1)} to ${last.score?.toFixed(1)}, highest ${high.score?.toFixed(1)} on ${high.date}. Stripes: calm 1–4, tense 6–8, panic 8–10.`,
+    zh: `${first.date} 至 ${last.date} 的波動分數：從 ${first.score?.toFixed(1)} 到 ${last.score?.toFixed(1)}，最高 ${high.score?.toFixed(1)}（${high.date}）。色帶：平靜 1–4、緊張 6–8、恐慌 8–10。`,
   };
   return (
     <figure className="chart-figure">
       <div ref={ref} className="chart" role="img" aria-label={bi(summary)} />
       <figcaption className="muted small">
-        <Bi en={`The last year, since ${first.date}; stripes: calm 1–4, tense 6–8, panic 8–10`} zh={`近一年（${first.date} 起）；色帶：平靜 1–4、緊張 6–8、恐慌 8–10`} />
+        <Bi en="1 year" zh="近一年" />
       </figcaption>
     </figure>
   );

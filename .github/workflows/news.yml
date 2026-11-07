@@ -1,0 +1,46 @@
+# The news job (N8 step 4, added 2026-11-07): every 30 minutes, count how many outlets report each
+# market-moving topic (war, the Taiwan Strait, an emergency central-bank move, a crash, a financial
+# crisis, tariffs and sanctions, a major disaster), save a breaking-news alert when a topic runs far
+# above its usual count, and push it. Setup: docs/volatility.md.
+# 前沿新聞排程：每 30 分鐘統計各主題的報導媒體家數，遠高於平常時存下警報並推播。設定方式見 docs/volatility.md。
+name: Breaking news 前沿新聞
+
+on:
+  schedule:
+    # Minutes 11 and 41 of every hour (UTC); GitHub may start a run a little late.
+    # 每小時第 11 與 41 分鐘；GitHub 可能稍晚開始。
+    - cron: '11,41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: news
+  cancel-in-progress: false
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Count the news and save the alerts 統計新聞並存下警報
+        run: npm run news
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      - name: Send the pushes due 送出推播
+        if: ${{ !cancelled() }}
+        run: npm run notify
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

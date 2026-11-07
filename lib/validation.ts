@@ -13,6 +13,7 @@ import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
 import { EVENT_KINDS, KIND_NAMES, type MarketEvent } from './models/events';
+import type { NewsSettings } from './models/news';
 import { COMPONENT_UNIT, type ComponentSetting, type VolatilitySettings } from './models/volatility';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
 import type { AssetClass, CashFlow, Direction, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
@@ -1647,4 +1648,37 @@ export function parseEventForm(raw: RawForm): Parsed<MarketEvent, EventField> {
     source: 'typed' as const,
     note: note || null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Breaking news (N8 step 4)
+// ---------------------------------------------------------------------------
+
+const NEWS_MESSAGES = {
+  count: { en: 'Enter a whole number from 1 to 500.', zh: '請輸入 1 到 500 的整數。' },
+  spike: { en: 'Enter a number from 1 to 20.', zh: '請輸入 1 到 20 的數字。' },
+  hours: { en: 'Enter whole hours from 1 to 72.', zh: '請輸入 1 到 72 的整數小時。' },
+  terms: { en: 'One term per line, at least one, each under 60 characters.', zh: '每行一個詞，至少一個，每個少於 60 字。' },
+} as const satisfies Record<string, Bilingual>;
+
+/** config news: the outlets needed, the spike, the window, the cooldown, the quiet-hours switch, and each topic's terms (one a line, field `terms_<id>`). */
+export function parseNewsForm(raw: RawForm, current: NewsSettings): Parsed<NewsSettings, string> {
+  const errors: FieldErrors<string> = {};
+  const whole = (name: string, min: number, max: number, message: Bilingual) => {
+    const value = parseNumber(raw[name]);
+    if (value === undefined || !Number.isInteger(value) || value < min || value > max) errors[name] = message;
+    return value ?? 0;
+  };
+  const minSources = whole('minSources', 1, 500, NEWS_MESSAGES.count);
+  const windowHours = whole('windowHours', 1, 72, NEWS_MESSAGES.hours);
+  const cooldownHours = whole('cooldownHours', 1, 72, NEWS_MESSAGES.hours);
+  const spike = parseNumber(raw['spike']);
+  if (spike === undefined || spike < 1 || spike > 20) errors['spike'] = NEWS_MESSAGES.spike;
+  const topics = current.topics.map((topic) => {
+    const name = `terms_${topic.id}`;
+    const terms = (raw[name] ?? '').split('\n').map((term) => term.trim()).filter(Boolean);
+    if (terms.length === 0 || terms.some((term) => term.length >= 60)) errors[name] = NEWS_MESSAGES.terms;
+    return { ...topic, terms };
+  });
+  return finish(errors, () => ({ ...current, topics, minSources, windowHours, cooldownHours, spike: spike as number, pushInQuietHours: raw['pushInQuietHours'] === 'on' }));
 }

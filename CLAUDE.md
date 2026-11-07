@@ -12,6 +12,7 @@ Rules:
 - Store money in trade currency plus the day's FX rate; report in TWD.
 - Thresholds live in the rules / config tables, never hard-coded.
 - All UI text bilingual: English + 繁體中文. Exception: the navigation buttons and page titles (h1) show Chinese only; their accessible names keep the English.
+- Few words (PRD design principle 6, the 2026-10-28 cut of about 85%): a page shows labelled figures as tiles with a status icon and short lines, never paragraphs; explanations, methods, sources and footnotes go behind ⓘ (components/info.tsx); settings forms, edit histories and long lists fold under a <details>. Tables keep short column names and short row labels. A new or changed page shows about a fifth of the text a paragraph-style page would: check it with the e2e TEXT_REPORT before opening its pull request. Push texts: a title and one line per language.
 - Every model function ships with unit tests using the acceptance values in PRD Section 11.
 - Explain each setup step to Hugo in plain Traditional Chinese before running it; he is new to deployment.
 - When a build step is finished, tested and pushed, open a pull request to main without asking; Hugo merges it.

@@ -21,6 +21,7 @@ const KIND: Record<NotificationRecord['kind'], Bilingual> = {
   data_failure: { en: 'Data failure', zh: '資料異常' },
   test: { en: 'Test', zh: '測試' },
   event: { en: 'Event reminder', zh: '事件提醒' },
+  news: { en: 'Breaking news', zh: '前沿新聞' },
 };
 
 function hhmm(minutes: number): string {
