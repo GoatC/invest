@@ -106,7 +106,7 @@ Run it once from the Actions tab, then check the Data status page: every securit
 
 ### 6. （選用）讓 App 的「更新最新資料」按鈕能啟動排程 Let the refresh button run the job
 
-App 的「更多 → 其他」裡有一顆 **更新最新資料** 按鈕：按下後立刻執行一次每夜排程（約 5–10 分鐘），完成時各頁自動換成最新資料。按鈕要能叫 GitHub 執行，Vercel 需要一把**只能啟動這個 repo 的排程**的 GitHub token。沒有設定時，按鈕只會重新整理畫面。
+App 的「更多 → 其他」裡有一顆 **更新最新資料** 按鈕：按下後依序執行每夜排程、波動排程、新聞排程與推播（`.github/workflows/refresh.yml`，約 12 分鐘），完成時各頁（包括波動警報）自動換成最新資料。前一個排程失敗時，後面的照樣執行，按鈕最後顯示「排程未完成」。按鈕要能叫 GitHub 執行，Vercel 需要一把**只能啟動這個 repo 的排程**的 GitHub token。沒有設定時，按鈕只會重新整理畫面。
 
 為什麼安全：這把 token 只放在 Vercel 的環境變數（伺服器端），瀏覽器拿不到；權限只有「這一個 repo 的 Actions」，不能讀寫程式碼或其他 repo；只有登入後的你按得到按鈕。
 
@@ -119,7 +119,7 @@ App 的「更多 → 其他」裡有一顆 **更新最新資料** 按鈕：按�
 7. Vercel → **Deployments** → 最新一筆右邊 **⋯ → Redeploy**，讓新的變數生效。
 8. 在手機打開 App → **更多** → **更新最新資料**。按鈕會顯示「等待 GitHub 開始執行…」→「正在載入最新資料…」→「已更新」，GitHub 的 **Actions** 分頁也會看到一筆新的執行。
 
-The refresh button in the More menu dispatches this workflow through GitHub's API. Give Vercel a fine-grained token limited to this repository with Actions read and write, as `GITHUB_DISPATCH_TOKEN` (server side only); without it the button just reloads the page's data.
+The refresh button in the More menu dispatches `.github/workflows/refresh.yml` through GitHub's API: the nightly job, then the volatility job, the news job and the pushes, one after another (since 2026-11-07). Give Vercel a fine-grained token limited to this repository with Actions read and write, as `GITHUB_DISPATCH_TOKEN` (server side only); without it the button just reloads the page's data.
 
 ## 平常要注意的事 Things to know
 
