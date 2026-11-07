@@ -7,11 +7,13 @@ import { readMcSettings } from './models/monte-carlo';
 import { readRedFlagSettings } from './models/red-flags';
 import { readSectorSettings } from './models/sectors';
 import { readVolatilitySettings } from './models/volatility';
+import { readNewsSettings } from './models/news';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
   SPLIT_MESSAGES,
   parseSplitForm,
   parseEventForm,
+  parseNewsForm,
   parseVolatilityForm,
   MESSAGES,
   parseAssumptionForm,
@@ -898,5 +900,24 @@ describe('parseRuleForm switches (N8 step 3)', () => {
     assert.ok(on.ok);
     assert.equal(on.value.threshold['push_in_quiet_hours'], true);
     assert.equal(on.value.threshold['tense'], 7);
+  });
+});
+
+describe('parseNewsForm (N8 step 4)', () => {
+  const current = readNewsSettings({ window_hours: 3, min_sources: 10, spike: 3, baseline_days: 7, cooldown_hours: 12, push_in_quiet_hours: true, topics: { war: { en: 'War', zh: '戰爭', terms: ['airstrike', '空襲'] } } });
+  assert.ok(current);
+  it('reads the counts, the switch and each topic\'s terms, one a line', () => {
+    const parsed = parseNewsForm({ minSources: '12', spike: '2.5', windowHours: '3', cooldownHours: '24', terms_war: 'airstrike\n 空襲 \n\nmissile attack' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.minSources, 12);
+    assert.equal(parsed.value.spike, 2.5);
+    assert.equal(parsed.value.pushInQuietHours, false);
+    assert.deepEqual(parsed.value.topics[0]?.terms, ['airstrike', '空襲', 'missile attack']);
+    assert.equal(parsed.value.baselineDays, 7);
+  });
+  it('refuses a topic without terms and counts out of range', () => {
+    const parsed = parseNewsForm({ minSources: '0', spike: '30', windowHours: '3', cooldownHours: '12', terms_war: '  ' }, current);
+    assert.ok(!parsed.ok);
+    assert.deepEqual(Object.keys(parsed.errors).sort(), ['minSources', 'spike', 'terms_war']);
   });
 });

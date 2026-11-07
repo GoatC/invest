@@ -2,12 +2,13 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadVolatilitySettings } from '@/lib/data';
+import { loadNewsSettings, loadVolatilitySettings } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
+import { newsSettingsValue } from '@/lib/models/news';
 import { volatilitySettingsValue } from '@/lib/models/volatility';
-import { parseEventForm, parseVolatilityForm, type FieldErrors } from '@/lib/validation';
+import { parseEventForm, parseNewsForm, parseVolatilityForm, type FieldErrors } from '@/lib/validation';
 
 export interface VolatilityFormState {
   errors: FieldErrors<string>;
@@ -56,4 +57,16 @@ export async function deleteMarketEvent(_previous: DeleteState, formData: FormDa
   if (error) return { message: saveFailed(error.message) };
   if (!data || data.length === 0) return { message: ACTION_MESSAGES.notFound };
   redirect('/volatility?saved=event-deleted#events');
+}
+
+/** config news (N8 step 4), logged like every setting. */
+export async function saveNewsSettings(_previous: VolatilityFormState, formData: FormData): Promise<VolatilityFormState> {
+  const { supabase } = await requireSession();
+  const current = await loadNewsSettings(supabase);
+  if (!current) return { errors: {}, message: MISSING };
+  const parsed = parseNewsForm(formFields(formData), current);
+  if (!parsed.ok) return { errors: parsed.errors, message: ACTION_MESSAGES.checkFields };
+  const { error } = await supabase.from('config').update({ value: newsSettingsValue(parsed.value) }).eq('key', 'news');
+  if (error) return { errors: {}, message: saveFailed(error.message) };
+  redirect('/volatility?saved=news#news');
 }

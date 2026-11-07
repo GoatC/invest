@@ -6,10 +6,11 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { bi, LABELS } from '@/lib/i18n';
 import { EVENT_KINDS, KIND_NAMES } from '@/lib/models/events';
+import type { NewsSettings } from '@/lib/models/news';
 import type { VolatilitySettings } from '@/lib/models/volatility';
 import { COMPONENT_TEXT, formFigure, unitText } from '@/lib/volatility-text';
 
-import { addMarketEvent, saveVolatilitySettings, type VolatilityFormState } from './actions';
+import { addMarketEvent, saveNewsSettings, saveVolatilitySettings, type VolatilityFormState } from './actions';
 
 const INITIAL: VolatilityFormState = { errors: {}, message: null };
 
@@ -117,6 +118,49 @@ export function EventForm() {
       <div className="row">
         <button type="submit" className="button primary" disabled={pending}>
           <Bi {...(pending ? LABELS.saving : { en: 'Add event', zh: '新增事件' })} />
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** config news: the counts and the switch, and each topic's terms, one a line. */
+export function NewsSettingsForm({ settings }: { settings: NewsSettings }) {
+  const [state, action, pending] = useActionState(saveNewsSettings, INITIAL);
+  const error = (name: string) => state.errors[name] ?? null;
+  return (
+    <form action={action} className="form" id="news-settings">
+      {state.message && (
+        <p className="banner danger" role="alert">
+          <Bi {...state.message} />
+        </p>
+      )}
+      <div className="row">
+        <Field label={{ en: 'Outlets needed', zh: '最少媒體家數' }} error={error('minSources')}>
+          <input name="minSources" inputMode="numeric" defaultValue={String(settings.minSources)} />
+        </Field>
+        <Field label={{ en: '× usual count', zh: '平常家數倍數' }} error={error('spike')}>
+          <input name="spike" inputMode="decimal" defaultValue={String(settings.spike)} />
+        </Field>
+        <Field label={{ en: 'Window, hours', zh: '統計時窗（小時）' }} error={error('windowHours')}>
+          <input name="windowHours" inputMode="numeric" defaultValue={String(settings.windowHours)} />
+        </Field>
+        <Field label={{ en: 'Again after, hours', zh: '再次通知間隔（小時）' }} error={error('cooldownHours')}>
+          <input name="cooldownHours" inputMode="numeric" defaultValue={String(settings.cooldownHours)} />
+        </Field>
+      </div>
+      <label className="row">
+        <input type="checkbox" name="pushInQuietHours" defaultChecked={settings.pushInQuietHours} />
+        <Bi en="Push in the quiet hours too" zh="安靜時段照樣推播" />
+      </label>
+      {settings.topics.map((topic) => (
+        <Field key={topic.id} label={topic.name} error={error(`terms_${topic.id}`)}>
+          <textarea name={`terms_${topic.id}`} rows={3} defaultValue={topic.terms.join('\n')} />
+        </Field>
+      ))}
+      <div className="row">
+        <button type="submit" className="button primary" disabled={pending}>
+          <Bi {...(pending ? LABELS.saving : LABELS.save)} />
         </button>
       </div>
     </form>

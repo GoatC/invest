@@ -1594,27 +1594,28 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
 });
 
-await step('volatility: the score of the demo series over the year, each component with its calm and panic figures, no score from figures too old, the settings logged (N8)', async () => {
+await step('volatility: the score of the demo series over the year in few words, its components folded, no score from figures too old, the settings logged; the event calendar (N8)', async () => {
   await page.goto(`${BASE}/volatility`);
   await page.getByRole('heading', { level: 1, name: '波動警報' }).waitFor();
   await page.locator('.chart-figure svg').waitFor();
-  const table = await page.locator('#volatility-components').innerText();
-  check(/VIX \(S&P 500 options\)[\s\S]*12\.00 → 40\.00/.test(table) && /TAIEX fall over 5 sessions[\s\S]*0\.0% → 10\.0%/.test(table), `every component with its calm and panic, got ${table}`);
   // The demo closes end on 2026-10-23, more than 5 days ago: too old to score today.
-  check(table.includes('Too old') && (await body()).includes('Not enough fresh figures'), 'figures too old leave no score');
+  check((await body()).includes('Data too old'), 'figures too old leave no score');
   check(/Volatility score from 2026-0\d-\d\d to 2026-10-23/.test((await page.locator('.chart-figure [role=img]').getAttribute('aria-label')) ?? ''), 'the history of the demo series');
+  await page.locator('summary', { hasText: 'Components' }).click();
+  const table = await page.locator('#volatility-components').innerText();
+  check(/VIX\/VIX3M/.test(table) && /TW VIX 臺指VIX/.test(table) && /old 舊/.test(table), `the components, short, the old ones marked, got ${table}`);
   await snap('volatility');
   await page.setViewportSize({ width: 1280, height: 1300 });
   await docShot('volatility', page);
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  // The figures are a logged setting; a fall is typed in percent.
+  // The figures are a logged setting, folded; a fall is typed in percent.
+  await page.locator('#settings > summary').click();
   await page.locator('#settings input[name=taiex_drawdown_panic]').fill('30');
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/volatility?saved=settings**');
-  check((await page.locator('#settings input[name=taiex_drawdown_panic]').inputValue()) === '30' && (await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'saved and checked today');
-  check((await page.locator('#volatility-components').innerText()).includes('3.0% → 30.0%'), 'the table reads the new figure');
+  check((await page.locator('#settings input[name=taiex_drawdown_panic]').inputValue()) === '30' && (await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'saved, open, and checked today');
   await page.locator('#settings input[name=taiex_drawdown_panic]').fill('25');
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/volatility?saved=settings**');
@@ -1623,15 +1624,15 @@ await step('volatility: the score of the demo series over the year, each compone
 
   // The event calendar (step 2): the seed's central bank meeting, an election typed in and deleted, logged.
   await page.goto(`${BASE}/volatility#events`);
-  check((await page.locator('#event-list').innerText()).includes('2026-12-17'), 'the seeded central bank meeting');
-  await page.locator('#events summary', { hasText: 'Add an event' }).click();
+  check((await page.locator('#event-list').innerText()).includes('12-17 14:00'), 'the seeded central bank meeting');
+  await page.locator('#events summary', { hasText: 'Add' }).click();
   await page.locator('#event-form input[name=date]').fill('2026-12-30');
   await page.locator('#event-form input[name=time]').fill('20:00');
   await page.locator('#event-form input[name=name]').fill('e2e election 選舉');
   await page.locator('#event-form button[type=submit]').click();
   await page.waitForURL('**/volatility?saved=event**');
   const listed = await page.locator('#event-list').innerText();
-  check(/Wed 2026-12-30 20:00[\s\S]*e2e election 選舉/.test(listed), `the election listed at its Taipei time, got ${listed}`);
+  check(/12-30 20:00[\s\S]*e2e election 選舉/.test(listed), `the election listed at its Taipei time, got ${listed}`);
   await snap('volatility-events');
   const row = page.locator('#event-list tr', { hasText: 'e2e election' });
   await row.locator('summary').click();
@@ -1640,6 +1641,38 @@ await step('volatility: the score of the demo series over the year, each compone
   check(!(await page.locator('#event-list').innerText()).includes('e2e election'), 'the election deleted');
   await page.goto(`${BASE}/history`);
   check(/Market event[\s\S]*e2e election/.test(await body()), 'the deleted event in the edit history');
+});
+
+await step('breaking news: an alert saved by the job is listed with its outlets and headline and pushed once; its settings are logged (N8 step 4)', async () => {
+  const rest = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) } });
+  await page.goto(`${BASE}/volatility#news`);
+  check((await page.locator('#news').innerText()).includes('None yet'), 'no breaking news yet');
+  const alert = { topic: 'war', sources: 49, baseline: 8, window_hours: 3, headlines: [{ title: 'e2e: strikes on a capital', source: 'CNBC', url: 'https://example.com/a', at: new Date().toISOString() }] };
+  check((await rest('news_alerts', { method: 'POST', body: JSON.stringify(alert) })).ok, 'the alert saved as the job would');
+  try {
+    await page.reload();
+    const list = await page.locator('#news-list').innerText();
+    check(/War or strikes 戰爭／空襲 · 49 e2e: strikes on a capital/.test(list), `the alert listed, got ${list}`);
+    await snap('volatility-news');
+    // The push job plans it once, at once (push_in_quiet_hours), as kind news.
+    const notify = () => promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/notify.ts'], { cwd: REPO, timeout: 120_000, env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY } });
+    await notify();
+    await notify();
+    const planned = await (await rest('notifications?select=title,body,url&kind=eq.news')).json();
+    check(planned.length === 1 && planned[0].title === 'Breaking: War or strikes 前沿新聞：戰爭／空襲' && planned[0].body.startsWith('49 outlets in 3 h · e2e: strikes on a capital (CNBC)') && planned[0].url === '/volatility#news', `pushed once, got ${JSON.stringify(planned)}`);
+    // The thresholds and terms are a logged setting.
+    await page.locator('#news > details > summary', { hasText: 'Settings' }).click();
+    await page.locator('#news-settings input[name=minSources]').fill('12');
+    await page.locator('#news-settings button[type=submit]').click();
+    await page.waitForURL('**/volatility?saved=news**');
+    check((await page.locator('#news-settings input[name=minSources]').inputValue()) === '12', 'the outlets needed saved');
+    await page.locator('#news-settings input[name=minSources]').fill('10');
+    await page.locator('#news-settings button[type=submit]').click();
+    await page.waitForURL('**/volatility?saved=news**');
+  } finally {
+    // The push stays in the log: the job's key may not delete one.
+    check((await rest('news_alerts?topic=eq.war', { method: 'DELETE' })).ok, 'the alert removed');
+  }
 });
 
 await step('volatility alert: a score crossing 8 drafts the panic proposal, explained, with its push through the quiet hours and its row in the alert record (N8 step 3)', async () => {
@@ -1667,6 +1700,7 @@ await step('volatility alert: a score crossing 8 drafts the panic proposal, expl
     check(rules.includes('VOLATILITY_ALERT') && rules.includes('VOLATILITY_HEDGE') && (await quietSwitch.count()) === 1 && (await quietSwitch.isChecked()), 'the two rules and the quiet-hours switch on the Rules page');
     // The alert record follows it from today.
     await page.goto(`${BASE}/volatility#shadow`);
+    await page.locator('#shadow summary', { hasText: 'Proposals' }).click();
     const record = await page.locator('#shadow-list').innerText();
     check(record.includes(taipeiToday) && /Panic[\s\S]*8\.6/.test(record), `the alert record lists it, got ${record}`);
   } finally {
@@ -2020,11 +2054,21 @@ if (E2E_NIGHTLY !== '0') {
     check(Array.isArray(rows) && rows.length === 1 && rows[0].score >= 1 && rows[0].score <= 10, `one score saved, got ${JSON.stringify(rows)}`);
     await page.goto(`${BASE}/volatility`);
     await page.getByRole('heading', { level: 1, name: '波動警報' }).waitFor();
-    check(new RegExp(`${Number(rows[0].score).toFixed(1)} / 10`).test(await body()), 'the page shows the score the job saved');
+    check(new RegExp(`${Number(rows[0].score).toFixed(1)}/10`).test(await body()), 'the page shows the score the job saved');
     // Step 2: the Fed's and FRED's calendars, at Taipei times.
     check(/Events 事件: [^\n]*fomc \d+[^\n]*cpi \d+/.test(stdout), `the calendars loaded, got ${stdout}`);
-    const events = await page.locator('#event-list').innerText();
-    check(/FOMC rate decision/.test(events) && /US CPI/.test(events) && /Federal Reserve/.test(events), `the live events listed, got ${events}`);
+    const events = (await page.locator('#events').textContent()) ?? '';
+    check(/FOMC rate decision/.test(events) && /US CPI/.test(events), `the live events listed, got ${events}`);
+    // Step 4: the real news job against live Google News, its counts saved (no alert expected: no usual counts yet, 30 outlets needed).
+    const news = await promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/news.ts'], {
+      cwd: REPO,
+      timeout: 5 * 60_000,
+      env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY, NODE_USE_ENV_PROXY: '1' },
+    }).catch((err) => ({ stdout: `${err.stdout ?? ''}${err.stderr ?? ''}` }));
+    check(/News job 新聞排程: (ok|partial)/.test(news.stdout) && /war: \d+ outlets, \d+ needed/.test(news.stdout), `the news job counted, got ${news.stdout}`);
+    const counts = await (await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/news_counts?select=topic`, { headers: { apikey: SECRET_KEY } })).json();
+    check(Array.isArray(counts) && counts.length === 7, `seven counts saved, got ${JSON.stringify(counts)}`);
+    await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/news_alerts?id=gt.0`, { method: 'DELETE', headers: { apikey: SECRET_KEY } });
     await snap('volatility-live');
   });
 }

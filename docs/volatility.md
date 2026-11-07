@@ -1,12 +1,12 @@
 # 波動警報 Volatility alert (N8)
 
-每個平日自動計算一次「市場壓力分數」（1 = 平靜，10 = 恐慌），存進 Supabase，並在 App 的「波動警報」頁顯示今天的分數、近一年走勢與每個成分。第二步加入了事件日曆：重大事件前兩天推播提醒。第三步加入警報與提案：分數穿越門檻時推播，依區段建議標的，並以影子紀錄追蹤命中率。
+每個平日自動計算一次「市場壓力分數」（1 = 平靜，10 = 恐慌），存進 Supabase，並在 App 的「波動警報」頁顯示今天的分數、近一年走勢與每個成分。第二步加入了事件日曆：重大事件前兩天推播提醒。第三步加入警報與提案：分數穿越門檻時推播，依區段建議標的，並以影子紀錄追蹤命中率。第四步加入**前沿新聞**：可能造成波動的重大新聞一出現就推播。
 
 On weekdays, GitHub Actions scores market stress from 1 (calm) to 10 (panic), saves it in Supabase and shows it on the Volatility page with the last year's line and each component. Step 2 adds the event calendar, with a reminder two days before each event; step 3 the alert, its proposals by band and a shadow log of how they did.
 
 ## 它怎麼運作 How it works
 
-- **時間**：平日每天兩次，在 GitHub Actions 執行（`.github/workflows/volatility.yml`、`scripts/volatility.ts`），公開 repo 免費。
+- **時間**：分數與事件平日每天兩次；前沿新聞每 30 分鐘一次（`.github/workflows/news.yml`、`scripts/news.ts`）。都在 GitHub Actions 執行（`.github/workflows/volatility.yml`、`scripts/volatility.ts`），公開 repo 免費。分數排程的時間：
   - 台北時間 **15:17**：台股收盤、臺指 VIX（13:45）已公布。
   - 台北時間 **06:17**：CBOE 已公布前一個美股交易日的 VIX。
 - **資料**（全部免費，存入 `index_prices`）：
@@ -33,6 +33,11 @@ On weekdays, GitHub Actions scores market stress from 1 (calm) to 10 (panic), sa
   - **VOLATILITY_HEDGE 波動避險**：分數低於 **4（平靜）** 時，用資金池 **1%** 買進 **00677U 富邦VIX**（台股帳戶白天就能買）當保險；所有 VIX 商品合計不超過資金池 **5%**，已持有時不再提出。
   - 錢都從**戰略現金**（BIL、活存或貨幣基金）來，這正是戰略現金保留的用途；沒有戰略現金時仍會推播，只是不附下單清單。
   - 一樣是 L2：App 只產生建議清單，你確認後自己到券商下單。
+- **前沿新聞**（第四步）：每 30 分鐘用各主題的關鍵詞查詢 Google 新聞（英文與繁中），統計近 3 小時有幾家**不同媒體**在報導。
+  - 主題：戰爭／空襲、台海情勢、央行緊急行動、市場崩跌、金融危機、關稅／制裁、重大災害。關鍵詞可在頁面「前沿新聞 → 設定」修改。
+  - 至少 **10 家**、而且是這個主題**平常家數的 3 倍**才通知（平常家數取近 7 天的中位數；剛上線不到半天時要 30 家）。同一主題 12 小時內最多通知一次，安靜時段照樣推播，推播會附最新一則標題。
+  - 例：2026-11-07 美國空襲伊朗時，「戰爭／空襲」3 小時內有 49 家媒體報導，會通知；「關稅／制裁」天天都有 20 多家在報，不會通知。
+  - 免費來源，不使用 AI；Google 新聞連不上時改用 CNBC、MarketWatch、鉅亨網。
 - **影子紀錄**（第三步）：「波動警報」頁的「影子紀錄」追蹤每一份警報與避險提案（不論有沒有真的下單），計算它建議的交易在 5、20、60 個交易日後的報酬與命中率。**建議先觀察幾次警報的命中率，再決定要不要用真錢跟。**
 - **紀錄**：每次執行記在 `job_runs`（工作名稱 `volatility`），分數存在 `volatility_scores`（每天一列，第二次執行會更新）。這個排程失敗**不會**觸發「資料異常」推播，那只看每夜排程。
 - **公開紀錄**：GitHub Actions 的紀錄只有市場數據與分數，沒有任何持股或金額。
@@ -42,7 +47,7 @@ On weekdays, GitHub Actions scores market stress from 1 (calm) to 10 (panic), sa
 只要做一次。不需要新的金鑰：沿用每夜排程已設好的 `SUPABASE_URL`、`SUPABASE_SECRET_KEY` 與 `FINMIND_TOKEN` 三個 GitHub secrets。
 
 1. **合併 pull request**：在 GitHub 合併這次的 PR。合併後排程就會自動開始（下一個 15:17 或 06:17）。
-2. **更新資料庫**：在你電腦上的 repo 資料夾執行下面的指令，把新的資料表（`volatility_scores`、第二步的 `market_events`）與設定加進 Supabase。這和之前每次加新功能時的步驟一樣。
+2. **更新資料庫**：在你電腦上的 repo 資料夾執行下面的指令，把新的資料表（`volatility_scores`、`market_events`、第四步的 `news_counts` 與 `news_alerts`）與設定加進 Supabase。這和之前每次加新功能時的步驟一樣。
 
    ```bash
    git pull

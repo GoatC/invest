@@ -1,6 +1,6 @@
 /** The volatility page's words (N8): each component's name, what it reads and where from; the score's band. */
 import type { Bilingual } from './i18n';
-import { COMPONENT_UNIT, type ComponentId, type ReadingStatus } from './models/volatility';
+import { COMPONENT_UNIT, type ComponentId } from './models/volatility';
 
 export const COMPONENT_TEXT: Record<ComponentId, { name: Bilingual; source: string }> = {
   vix: { name: { en: 'VIX (S&P 500 options)', zh: 'VIX 恐慌指數（標普 500 選擇權）' }, source: 'CBOE · FRED VIXCLS' },
@@ -13,10 +13,16 @@ export const COMPONENT_TEXT: Record<ComponentId, { name: Bilingual; source: stri
   epu: { name: { en: 'Policy uncertainty (news), 7-day mean', zh: '政策不確定性（新聞），7 日平均' }, source: 'policyuncertainty.com · FRED USEPUINDXD' },
 };
 
-export const STATUS_TEXT: Record<ReadingStatus, Bilingual> = {
-  ok: { en: 'Counted', zh: '計入' },
-  stale: { en: 'Too old', zh: '資料過舊' },
-  missing: { en: 'No data', zh: '無資料' },
+/** The component's short name, for the page's table. */
+export const COMPONENT_SHORT: Record<ComponentId, Bilingual> = {
+  vix: { en: 'VIX', zh: 'VIX' },
+  vix_term: { en: 'VIX/VIX3M', zh: 'VIX/VIX3M' },
+  tw_vix: { en: 'TW VIX', zh: '臺指VIX' },
+  spx_drawdown: { en: 'S&P off high', zh: '標普距高' },
+  taiex_drawdown: { en: 'TAIEX off high', zh: '加權距高' },
+  taiex_fall: { en: 'TAIEX 5d', zh: '加權5日' },
+  hy_spread: { en: 'HY spread', zh: '高收益利差' },
+  epu: { en: 'Policy news', zh: '政策新聞' },
 };
 
 /** A component's figure as it is shown and typed: a fall in percent, a spread in percent a year, an index or ratio as it is. */

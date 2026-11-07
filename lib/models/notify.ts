@@ -133,7 +133,7 @@ export function lastWeeklyReview(at: Date, review: WeeklyReview): { key: string;
 // The messages
 // ---------------------------------------------------------------------------
 
-export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event';
+export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event' | 'news';
 
 /** A push: title and body in both languages, and the page it opens. */
 export interface Message {
@@ -327,6 +327,8 @@ export interface PlanInput {
   quiet: QuietHours | null;
   /** Event reminders due and not planned before (N8 step 2, lib/models/events); they wait out the quiet hours too. */
   reminders?: readonly Message[];
+  /** Breaking-news alerts not planned before (N8 step 4); urgent: through the quiet hours (config news.push_in_quiet_hours). */
+  news?: { messages: readonly Message[]; urgent: boolean };
 }
 
 /** The pushes due now, each with when it may go: now, or the end of the quiet hours. */
@@ -341,6 +343,7 @@ export function plan(input: PlanInput): Array<Message & { sendAfter: Date }> {
   const failure = dataFailureMessage(input.health, input.lastGoodRunId);
   if (failure) out.push({ ...failure, sendAfter });
   for (const reminder of input.reminders ?? []) out.push({ ...reminder, sendAfter });
+  for (const message of input.news?.messages ?? []) out.push({ ...message, sendAfter: input.news?.urgent ? input.now : sendAfter });
   return out;
 }
 

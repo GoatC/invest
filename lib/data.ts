@@ -12,6 +12,7 @@ import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Brok
 import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
 import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
 import { shadowRows, type ShadowProposal, type ShadowRow } from './models/shadow';
+import { newsMessage, readNewsSettings, type Headline, type NewsAlert, type NewsSettings } from './models/news';
 import { eventMessage, remindersDue, type EventKind, type EventSource, type MarketEvent } from './models/events';
 import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
@@ -1230,7 +1231,7 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     loadRules(supabase),
     loadAssetClasses(supabase),
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
-    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event']).gte('created_at', addDays(today, -400))),
+    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event', 'news']).gte('created_at', addDays(today, -400))),
     loadWeeklySummary(supabase, today),
     loadJobRuns(supabase),
   ]);
@@ -1239,6 +1240,11 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
   const events = volatility ? await loadMarketEvents(supabase, addDays(today, 1), addDays(today, volatility.events.leadDays)) : null;
   const eventKeys = new Set(planned.filter((row) => row.kind === 'event').map((row) => row.key));
   const reminders = volatility && events ? remindersDue(events, today, volatility.events, eventKeys).map((event) => eventMessage(event, today)) : [];
+  // Breaking news (N8 step 4): each alert of the last day not pushed yet; none before config news exists.
+  const newsSettings = await loadNewsSettings(supabase);
+  const newsKeys = new Set(planned.filter((row) => row.kind === 'news').map((row) => row.key));
+  const fresh = newsSettings ? await loadNewsAlerts(supabase, newsSettings, new Date(Date.now() - NEWS_PUSH_HOURS * 3_600_000).toISOString(), 50) : null;
+  const news = newsSettings && fresh ? { messages: fresh.filter((alert) => !newsKeys.has(String(alert.id))).map(newsMessage), urgent: newsSettings.pushInQuietHours } : undefined;
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const pushed = new Set(planned.filter((row) => row.kind === 'proposal').map((row) => row.key));
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -1259,6 +1265,7 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     lastGoodRunId: jobs.runs.find((run) => run.status !== 'failed')?.id ?? null,
     quiet: readQuietHours(value('quiet_hours')),
     reminders,
+    ...(news ? { news } : {}),
   };
 }
 
@@ -2521,6 +2528,43 @@ export async function loadShadowLog(supabase: SupabaseClient): Promise<ShadowRow
   }
   return shadowRows(proposals, closes);
 }
+
+// ---------------------------------------------------------------------------
+// Breaking news (N8 step 4, added 2026-11-07)
+// ---------------------------------------------------------------------------
+
+/** A missing table (its migration not applied yet) reads as nothing, so pages and pushes keep working. */
+function missingTable(table: string, message: string): boolean {
+  return message.includes(table) && /(does not exist|schema cache|not find)/i.test(message);
+}
+
+export async function loadNewsSettings(supabase: SupabaseClient): Promise<NewsSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'news'));
+  return readNewsSettings(found[0]?.value);
+}
+
+/** The newest breaking-news alerts, newest first, since `since` (ISO); null before the migration. */
+export async function loadNewsAlerts(supabase: SupabaseClient, settings: NewsSettings, since: string, limit = 20): Promise<NewsAlert[] | null> {
+  const { data, error } = await supabase.from('news_alerts').select('id, topic, detected_at, sources, baseline, window_hours, headlines').gte('detected_at', since).order('detected_at', { ascending: false }).limit(limit);
+  if (error) {
+    if (missingTable('news_alerts', error.message)) return null;
+    throw new DataError('news_alerts', error.message);
+  }
+  const topics = new Map(settings.topics.map((topic) => [topic.id, topic]));
+  return ((data ?? []) as Array<{ id: number; topic: string; detected_at: string; sources: number; baseline: number | null; window_hours: number; headlines: unknown }>).map((row) => ({
+    id: Number(row.id),
+    topic: topics.get(row.topic) ?? { id: row.topic, name: { en: row.topic, zh: row.topic }, terms: [] },
+    detectedAt: row.detected_at,
+    sources: Number(row.sources),
+    baseline: row.baseline === null ? null : Number(row.baseline),
+    windowHours: Number(row.window_hours),
+    headlines: Array.isArray(row.headlines) ? (row.headlines as Headline[]) : [],
+  }));
+}
+
+/** How far back the page lists breaking news, and the push job looks for alerts not pushed yet. */
+export const NEWS_PAGE_DAYS = 14;
+const NEWS_PUSH_HOURS = 24;
 
 /** The days ahead the volatility page lists events for. */
 export const EVENT_PAGE_DAYS = 120;

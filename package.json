@@ -19,6 +19,7 @@
     "nightly": "tsx scripts/nightly.ts",
     "notify": "tsx scripts/notify.ts",
     "volatility": "tsx scripts/volatility.ts",
+    "news": "tsx scripts/news.ts",
     "vapid-keys": "tsx scripts/vapid_keys.ts"
   },
   "devDependencies": {
