@@ -1,11 +1,12 @@
 /**
- * The refresh button (the More menu): it starts the nightly job on GitHub Actions now
- * (workflow_dispatch on .github/workflows/nightly.yml) and follows that run until it is done. The
+ * The refresh button (the More menu): it starts every data job on GitHub Actions now
+ * (workflow_dispatch on .github/workflows/refresh.yml: the nightly job, then the volatility job, the
+ * news job and the pushes, one after another) and follows that run until it is done. The
  * server action holds GITHUB_DISPATCH_TOKEN, a fine-grained token that may only run this
  * repository's workflows (docs/nightly-job.md); the browser never sees it.
  */
 
-export const WORKFLOW = 'nightly.yml';
+export const WORKFLOW = 'refresh.yml';
 
 export type RefreshPhase = 'unset' | 'queued' | 'running' | 'done' | 'failed';
 

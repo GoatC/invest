@@ -1,0 +1,60 @@
+# The refresh button (the More menu, lib/refresh.ts): the nightly job, then the volatility job (N8:
+# VIX, Taiwan's VIX, the score, the events, the alert), then the news job (N8 step 4), then the
+# pushes, one after another in one run, so the button's one tap updates every page. A job that fails
+# does not stop the next; the run then reads as failed. Setup: docs/nightly-job.md.
+# 更新最新資料按鈕：依序執行每夜排程、波動排程、新聞排程與推播；前一個失敗時後面照跑，整體顯示為失敗。
+name: Refresh all 更新最新資料
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Queued behind a scheduled nightly run, never beside it: both write the same prices.
+concurrency:
+  group: nightly-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 1. Nightly job 每夜排程
+        run: npm run nightly
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+      - name: 2. Volatility job 波動排程
+        if: ${{ !cancelled() }}
+        run: npm run volatility
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+      - name: 3. News job 新聞排程
+        if: ${{ !cancelled() }}
+        run: npm run news
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      - name: 4. Send the pushes due 送出推播
+        if: ${{ !cancelled() }}
+        run: npm run notify
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}

@@ -13,7 +13,7 @@ export async function signOut(): Promise<void> {
   redirect('/login');
 }
 
-/** The refresh button: starts the nightly job now, or follows the one already going. */
+/** The refresh button: starts every data job now (refresh.yml), or follows the run already going. */
 export async function startRefresh(): Promise<RefreshState> {
   await requireSession();
   const config = githubConfig();
