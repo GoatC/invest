@@ -41,8 +41,8 @@ describe('refresh button', () => {
     const config = { token: 'secret', repo: 'GoatC/invest' };
     assert.equal((await listRuns(config, fetcher)).length, 1);
     await dispatch(config, fetcher);
-    assert.equal(calls[0]?.url, 'https://api.github.com/repos/GoatC/invest/actions/workflows/nightly.yml/runs?per_page=5');
-    assert.equal(calls[1]?.url, 'https://api.github.com/repos/GoatC/invest/actions/workflows/nightly.yml/dispatches');
+    assert.equal(calls[0]?.url, 'https://api.github.com/repos/GoatC/invest/actions/workflows/refresh.yml/runs?per_page=5');
+    assert.equal(calls[1]?.url, 'https://api.github.com/repos/GoatC/invest/actions/workflows/refresh.yml/dispatches');
     assert.equal(calls[1]?.init.body, JSON.stringify({ ref: 'main' }));
     assert.ok(calls.every((call) => !call.url.includes('secret') && (call.init.headers as Record<string, string>)['Authorization'] === 'Bearer secret'));
     await assert.rejects(dispatch(config, async () => new Response('no', { status: 403 })), /HTTP 403/);

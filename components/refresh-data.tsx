@@ -9,14 +9,15 @@ import type { RefreshState } from '@/lib/refresh';
 import { Bi } from './bi';
 
 /**
- * The refresh button in the More menu: it runs the nightly job now (prices, FX, filings, analysts'
- * estimates, then the rules) and checks on it every 15 seconds until it is done, then reloads the
+ * The refresh button in the More menu: it runs every data job now, one after another (refresh.yml:
+ * the nightly job with the rules, the volatility job, the news job, the pushes) and checks on it
+ * every 15 seconds until it is done, then reloads the
  * page's data. The run's state lives outside the menu, so closing the menu or changing page does
  * not lose it; a reload picks it up again from this tab's session storage.
  */
 
 const POLL_MS = 15_000;
-/** The workflow's own timeout is 20 minutes; past this the button stops waiting. */
+/** The workflow's own timeout is 35 minutes; past this the button stops waiting. */
 const GIVE_UP_MS = 40 * 60_000;
 const KEY = 'refresh-since';
 
@@ -76,8 +77,8 @@ function subscribe(listener: () => void) {
 }
 
 const MESSAGES: Record<View['phase'], { en: string; zh: string }> = {
-  idle: { en: 'Runs the nightly job now: prices, FX rates, filings and estimates, about 10 minutes.', zh: '立即執行每夜排程：價格、匯率、財報與分析師預估，約需 10 分鐘。' },
-  starting: { en: 'Asking GitHub to start the job…', zh: '正在請 GitHub 啟動排程…' },
+  idle: { en: 'Updates everything now: prices, the volatility score and news, about 12 minutes.', zh: '立即更新全部：價格、波動分數與新聞，約需 12 分鐘。' },
+  starting: { en: 'Asking GitHub to start…', zh: '正在請 GitHub 啟動…' },
   queued: { en: 'Waiting for GitHub to start the job…', zh: '等待 GitHub 開始執行…' },
   running: { en: 'Loading the latest data; you can keep using the app.', zh: '正在載入最新資料，可以繼續使用 App。' },
   done: { en: 'Updated: every page shows the new data.', zh: '已更新：各頁都已顯示最新資料。' },
