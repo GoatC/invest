@@ -953,12 +953,80 @@ tr.selected td {
   gap: 0.35rem;
 }
 
+/* A slice's holdings: name and share on a line, a bar of the share and the value under it. */
 .slice-holdings li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.75rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.35rem;
+}
+
+.slice-holding-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slice-bar {
+  display: block;
+  align-self: center;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.slice-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* The donut and the card that floats over it when a slice is tapped (no room taken on the page). */
+.donut-box {
+  position: relative;
+}
+
+.slice-card {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  width: min(18rem, calc(100% - 0.5rem));
+  max-height: calc(100% - 0.5rem);
+  overflow-y: auto;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft), 0 8px 24px rgba(31, 42, 58, 0.12);
+  font-size: 0.9rem;
+  z-index: 2;
+}
+
+.slice-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  position: sticky;
+  top: -0.55rem;
+  background: var(--surface);
+  padding-top: 0.1rem;
+}
+
+.slice-card-close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  min-height: 0;
+  padding: 0.1rem 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
 }
 
 .slice-holdings li:last-child {
@@ -1643,4 +1711,214 @@ details.ticker-menu a:hover {
     animation: none;
     transform: scaleX(0.6);
   }
+}
+
+/* Warnings as small tiles (components/alert-tiles.tsx): icon, code, name, figure, a gauge against the
+   limit and short chips, in place of a sentence per warning. */
+.alert-group {
+  display: grid;
+  gap: 0.4rem;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+
+.alert-group.alert {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.alert-group.watch {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.alert-group.info {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.alert-group.ok {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.alert-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.alert-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  gap: 0.4rem;
+}
+
+.alert-tile {
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+  background: var(--surface, #fff);
+  color: var(--text, inherit);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--info-text);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  min-width: 0;
+}
+
+.alert-tile.alert {
+  border-left-color: var(--danger-text);
+}
+
+.alert-tile.watch {
+  border-left-color: var(--warn-text);
+}
+
+.alert-tile.ok {
+  border-left-color: var(--ok-text);
+}
+
+.alert-link {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A tile never pushes a phone screen sideways: its parts shrink and its chips wrap. */
+.alert-tile > *,
+.alert-link > * {
+  min-width: 0;
+}
+
+.alert-top {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.alert-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--info-text);
+  flex: none;
+}
+
+.alert-icon.alert {
+  background: var(--danger-text);
+}
+
+.alert-icon.watch {
+  background: var(--warn-text);
+}
+
+.alert-icon.ok {
+  background: var(--ok-text);
+}
+
+.alert-code {
+  font-size: 0.72rem;
+  font-weight: 750;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.alert-title {
+  color: var(--muted);
+  min-width: 0;
+}
+
+.alert-value {
+  margin-left: auto;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-tile.alert .alert-value {
+  color: var(--danger-text);
+}
+
+.alert-tile.watch .alert-value {
+  color: var(--warn-text);
+}
+
+.alert-gauge {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.alert-gauge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--ok-text);
+}
+
+.alert-gauge-fill.over {
+  background: var(--danger-text);
+}
+
+.alert-gauge-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text, #222);
+}
+
+.alert-gauge-tick.target {
+  background: var(--ok-text);
+}
+
+.alert-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.alert-chip {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  background: var(--bg, rgba(127, 127, 127, 0.1));
+  color: var(--muted);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.alert-chip b {
+  color: var(--text, inherit);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A listed holding's name opens its price chart (/holdings/chart/[ticker]). */
+.holding-chart-link {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.holding-chart-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }

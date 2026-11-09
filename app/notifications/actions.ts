@@ -52,7 +52,7 @@ export async function sendTest(_previous: TestState): Promise<TestState> {
   const at = new Date().toISOString();
   const { data, error } = await supabase
     .from('notifications')
-    .insert({ kind: 'test', key: at, title: 'Test 測試推播', body: 'Notifications work on this device.\n這台裝置可以收到推播。', url: '/notifications' })
+    .insert({ kind: 'test', key: at, title: '測試推播', body: '這台裝置可以收到推播。', url: '/notifications' })
     .select('id, kind, key, title, body, url, created_at, send_after, sent_at, delivered, error');
   if (error || !data?.[0]) return { ok: false, message: saveFailed(error?.message ?? 'notifications') };
   const row = data[0] as { id: number; kind: 'test'; key: string; title: string; body: string; url: string; created_at: string; send_after: string; sent_at: null; delivered: null; error: null };

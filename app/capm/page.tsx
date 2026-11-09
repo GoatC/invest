@@ -39,7 +39,7 @@ const marketName = (market: string): Bilingual => MARKET[market] ?? { en: market
 
 /** What a tile's figure is, and its month once (Bi shows both languages side by side). */
 function quoteNote(quote: Quote, series: Bilingual): Bilingual {
-  return quote.from === 'series' ? { en: `${series.en} · ${quote.month}`, zh: series.zh } : { en: 'setting: not loaded yet', zh: '設定值：資料尚未載入' };
+  return quote.from === 'series' ? { en: `${series.en} · ${quote.month}`, zh: `${series.zh} · ${quote.month}` } : { en: 'setting: not loaded yet', zh: '設定值：資料尚未載入' };
 }
 
 /** The markets in a steady order, the US first (jsonb keeps its keys in its own order). */
@@ -87,7 +87,7 @@ export default async function CapmPage({ searchParams }: { searchParams: Promise
     note:
       settings.erp.source === 'manual'
         ? { en: 'typed', zh: '自訂值' }
-        : quoteNote(erp, { en: 'Damodaran', zh: '隱含溢酬' }),
+        : quoteNote(erp, { en: 'Damodaran', zh: 'Damodaran 隱含溢酬' }),
     tone: erp.from === 'series' || settings.erp.source === 'manual' ? 'ok' : 'watch',
   });
   for (const [market, inputs] of markets(settings)) {

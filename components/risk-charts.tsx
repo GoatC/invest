@@ -109,7 +109,7 @@ export function VarFigure({ horizons, weekVar, valueTwd, line }: { horizons: rea
       </div>
       <div className="stat" aria-live="polite">
         <span className="muted small">
-          <Bi {...horizon.label} />
+          <Bi {...horizon.label} label />
         </span>
         <span className="var-value">{twd(value)}</span>
         <span>

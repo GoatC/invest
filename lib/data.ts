@@ -1576,6 +1576,14 @@ export async function loadGauge(supabase: SupabaseClient, today: string): Promis
   return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
 }
 
+/** Every daily close of one ticker, oldest first, as quoted (the holding's price chart, N5). */
+export async function loadPriceHistory(supabase: SupabaseClient, ticker: string): Promise<Array<{ date: string; close: number }>> {
+  const found = await allRows<{ price_date: string; close: number }>('prices', (start, end) =>
+    supabase.from('prices').select('price_date, close').eq('ticker', ticker).order('price_date').range(start, end),
+  );
+  return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
+}
+
 /** What the two windfall rules read; the plan is null until one is started (or before the migration). */
 export async function loadWindfallInput(supabase: SupabaseClient, today: string): Promise<WindfallInput | undefined> {
   const [plan, gauge, settings] = await Promise.all([

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DraftOrder } from './models/engine';
-import { checkText, howLines, orderLine, proposalTitle, whyLines } from './proposal-text';
+import { checkText, howLines, orderLine, proposalAlert, proposalTitle, stateLabel, whyLines } from './proposal-text';
 
 const NAMES = new Map([
   ['global_bonds', { en: 'Global bonds', zh: '全球債券' }],
@@ -165,5 +165,24 @@ describe('proposal text', () => {
     assert.equal(checkText({ ruleId: 'US_ESTATE_TAX', outcome: 'waiting', why: 'usd' }).en, 'Waiting for a USD/TWD rate');
     assert.equal(checkText({ ruleId: 'BUY_ZONE', outcome: 'later' }).en, 'Comes with a later step');
     assert.ok(checkText({ ruleId: 'DATA_FAILURE', outcome: 'later' }, 'job_failed_consecutively').en.startsWith('Watched by the data status check'));
+  });
+});
+
+describe('proposalAlert', () => {
+  it('names the rule in place of its code and reads the volatility band', () => {
+    const tile = proposalAlert({ id: 12, ruleId: 'VOLATILITY_ALERT', state: 'tense:2026-11-07', status: 'open' }, { id: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses' });
+    assert.equal(tile.code, undefined);
+    assert.deepEqual(tile.title, { en: 'Volatility alert', zh: '波動警報' });
+    assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['狀態 待決定', '觸發 緊張 · 2026-11-07']);
+    assert.equal(tile.href, '/#proposal-12');
+  });
+
+  it('keeps a short rule code, and sends an approved proposal to its tab', () => {
+    const tile = proposalAlert({ id: 3, ruleId: 'R1', state: '2330,NVDA', status: 'approved' }, { id: 'R1', condition: 'single_stock_weight_above' });
+    assert.equal(tile.code, 'R1');
+    assert.equal(tile.tone, 'info');
+    assert.deepEqual(tile.chips?.map((chip) => chip.value), ['待下單', '2330, NVDA']);
+    assert.equal(tile.href, '/?p=approved#proposal-3');
+    assert.equal(stateLabel('satellite'), undefined);
   });
 });

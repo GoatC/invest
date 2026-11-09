@@ -3,19 +3,21 @@
 import Link from 'next/link';
 import { useActionState, useMemo, useState } from 'react';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
 import { RuleMath } from '@/components/rule-math';
+import type { AlertItem } from '@/lib/alerts';
 import type { HoldingsData } from '@/lib/data';
 import { isIsoDate } from '@/lib/dates';
-import { shortfallMessage } from '@/lib/forms';
+import { shortfallAlert } from '@/lib/forms';
 import { ACTION, bi, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { previewTrade } from '@/lib/models/portfolio';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { breachText } from '@/lib/rule-text';
+import { breachAlert } from '@/lib/rule-text';
 import { leverageSteps, parseNumber, parseTrade, type TradeField } from '@/lib/validation';
 
 import { saveTrade, type TradeFormState } from './actions';
@@ -322,47 +324,22 @@ function TradeEffect({ preview, caps, pool }: { preview: ReturnType<typeof previ
   const [shortfall] = preview.shortfalls;
   if (shortfall) {
     return (
-      <p className="banner danger" role="alert">
-        <Bi {...shortfallMessage(shortfall)} />
-      </p>
+      <AlertTiles heading={{ en: 'Larger than the holding', zh: '超過持有數量' }} tone="alert" items={[shortfallAlert(shortfall)]} />
     );
   }
   const created = preview.breaches.filter((breach) => breach.isNew);
   const existing = preview.breaches.filter((breach) => !breach.isNew);
   return (
     <div className="form" aria-live="polite">
-      {created.length > 0 && (
-        <div className="banner warn">
-          <Bi en="You can save, but this trade breaks a rule:" zh="可以儲存，但這筆交易會違反規則：" />
-          <ul>
-            {created.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, caps, 'after')} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {existing.length > 0 && (
-        <div className="banner info">
-          <Bi en="Already above a limit before this trade:" zh="這筆交易之前就已超過限制：" />
-          <ul>
-            {existing.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, caps, 'after')} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AlertTiles heading={{ en: 'Breaks a rule (can still save)', zh: '會違反規則（仍可儲存）' }} tone="watch" items={created.map((breach) => breachAlert(breach, caps, 'watch'))} />
+      <AlertTiles heading={{ en: 'Already over before this trade', zh: '交易前已超標' }} tone="info" items={existing.map((breach) => breachAlert(breach, caps, 'info'))} />
       <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this trade', zh: '這筆交易後 R1 與 R2 的計算方式' }} />
       {preview.breaches.length === 0 && (caps.singleStock || caps.satellite) && (
         <p className="banner ok">
-          {pool === 'windfall' ? (
-            <Bi en="Windfall money is left out of R1 and R2." zh="大額資金不計入 R1 與 R2。" />
-          ) : (
-            <Bi en="R1 and R2 stay within their limits after this trade." zh="這筆交易後，R1 與 R2 都在限制內。" />
-          )}
+          <span className="status-icon ok" aria-hidden="true">
+            ✓
+          </span>{' '}
+          {pool === 'windfall' ? <Bi en="Windfall: outside R1 / R2." zh="大額資金：不計入 R1、R2" /> : <Bi en="R1 / R2 within limits." zh="R1、R2 皆在限制內" />}
         </p>
       )}
     </div>
@@ -381,22 +358,36 @@ function ExposureNote({ trade }: { trade: { direction: 'long' | 'short'; leverag
   const wipeout = 1 / trade.leverage;
   const pct = `${(wipeout * 100).toFixed(1)}%`;
   const opening = trade.direction === 'long' ? trade.side === 'buy' : trade.side === 'sell';
+  if (!opening) {
+    return (
+      <p className="banner info" aria-live="polite">
+        <Bi en="Closes at the opening cost and margin" zh="依開倉成本與保證金平倉" />
+      </p>
+    );
+  }
+  const cur = trade.currency;
+  const chips = [
+    { label: { en: 'Own money', zh: '自有資金' }, value: `${amount(own)} ${cur}` },
+    { label: { en: 'Borrowed', zh: '借入' }, value: `${amount(exposure - own)} ${cur}` },
+    { label: { en: trade.direction === 'long' ? 'Wiped out at a fall of' : 'Wiped out at a rise of', zh: trade.direction === 'long' ? '下跌即虧光' : '上漲即虧光' }, value: pct },
+  ];
+  const items: AlertItem[] = [
+    { key: 'exposure', tone: 'watch', code: leverageText(trade.leverage), title: { en: 'Exposure', zh: '曝險' }, value: `${amount(exposure)} ${cur}`, chips },
+  ];
+  if (trade.direction === 'short') {
+    items.push({
+      key: 'short',
+      tone: 'alert',
+      title: { en: 'Short', zh: '做空' },
+      chips: [
+        { label: { en: 'Loss ceiling', zh: '虧損上限' }, value: '∞' },
+        { label: { en: '複委託 usually cannot short', zh: '複委託多半不能放空' }, value: '!' },
+      ],
+    });
+  }
   return (
-    <div className="banner warn" aria-live="polite">
-      {opening ? (
-        <Bi
-          en={`Own money ${amount(own)} ${trade.currency} controls ${amount(exposure)} ${trade.currency} (${leverageText(trade.leverage)}); ${amount(exposure - own)} is ${trade.direction === 'long' ? 'borrowed' : 'covered by the broker’s margin'}. A ${pct} ${trade.direction === 'long' ? 'fall' : 'rise'} in the price would use up the own money.`}
-          zh={`自有資金 ${amount(own)} ${trade.currency} 控制 ${amount(exposure)} ${trade.currency} 的部位（${leverageText(trade.leverage)}）；其中 ${amount(exposure - own)} ${trade.direction === 'long' ? '為借入資金' : '由券商保證金制度支撐'}。價格${trade.direction === 'long' ? '下跌' : '上漲'} ${pct} 就會虧光自有資金。`}
-        />
-      ) : (
-        <Bi en="This trade closes part or all of the position at the average cost and margin it was opened with." zh="這筆交易會依開倉時的平均成本與保證金，平掉部分或全部部位。" />
-      )}
-      {trade.direction === 'short' && opening && (
-        <>
-          {' '}
-          <Bi en="A short’s loss has no ceiling, and 複委託 usually cannot short: record here only what a broker actually allows." zh="做空的虧損沒有上限，且複委託通常不能放空：請只記錄券商實際允許的交易。" />
-        </>
-      )}
+    <div aria-live="polite">
+      <AlertTiles items={items} tone="watch" />
     </div>
   );
 }

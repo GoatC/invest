@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
@@ -179,12 +180,16 @@ function Report({ run, basis, names, lastRun }: { run: Ok; basis: Basis; names: 
           ))}
         </div>
         {calibration.leftShare > 0 && (
-          <p className="banner warn">
-            <Bi
-              en={`${percent(calibration.leftShare, 0)} of the targets are left out (${calibration.left.map((entry) => `${label(entry.id)?.nameEn ?? entry.id}: no ${entry.reason}`).join('; ')}); the rest are re-weighted to 100%, as in the calculator.`}
-              zh={`有 ${percent(calibration.leftShare, 0)} 的目標未納入（${calibration.left.map((entry) => `${label(entry.id)?.nameZh ?? entry.id}：沒有${entry.reason === 'assumption' ? '資本市場假設' : '歷史價格'}`).join('；')}）；其餘重新加權為 100%，與計算機相同。`}
-            />
-          </p>
+          <AlertTiles
+            heading={{ en: `Left out: ${percent(calibration.leftShare, 0)} of the targets`, zh: `未納入目標 ${percent(calibration.leftShare, 0)}（其餘重新加權為 100%）` }}
+            tone="watch"
+            items={calibration.left.map((entry) => ({
+              key: entry.id,
+              tone: 'watch' as const,
+              title: { en: label(entry.id)?.nameEn ?? entry.id, zh: label(entry.id)?.nameZh ?? entry.id },
+              chips: [{ label: { en: 'Missing', zh: '缺少' }, value: entry.reason === 'assumption' ? '資本市場假設' : '歷史價格' }],
+            }))}
+          />
         )}
         <FanChart fan={result.fan} basis={basis} band={settings.band} inflation={plan.inflation} label={fanLabel} bandText={bandText} />
         <Marks run={run} basis={basis} />

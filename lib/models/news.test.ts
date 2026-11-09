@@ -69,7 +69,7 @@ describe('breaking news', () => {
     assert.equal(matching(parseRss(xml.replace(/<source[^>]*>[^<]*<\/source>/g, ''), 'MarketWatch'), ['strikes on'], now, 3).length, 2);
   });
 
-  it('takes the median, and words the push in both languages', () => {
+  it('takes the median, and words the push in Chinese', () => {
     assert.equal(median([3, 1, 2]), 2);
     assert.equal(median([1, 2, 3, 10]), 2.5);
     assert.equal(median([]), 0);
@@ -77,8 +77,8 @@ describe('breaking news', () => {
     assert.deepEqual(message, {
       kind: 'news',
       key: '7',
-      title: 'Breaking: War or strikes 前沿新聞：戰爭／空襲',
-      body: '40 outlets in 3 h · Strikes on Iran (CNBC)\n3 小時內 40 家媒體報導',
+      title: '前沿新聞：戰爭／空襲',
+      body: '3 小時內 40 家媒體報導 · Strikes on Iran (CNBC)',
       url: '/volatility#news',
     });
   });

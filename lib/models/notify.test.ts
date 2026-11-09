@@ -89,7 +89,7 @@ describe('messages', () => {
       ['Rules: all on track.', 'Allocation: nothing held yet.', 'Value: no NAV snapshot yet.'],
     );
     const message = weeklyMessage(SUMMARY, '2026-10-25');
-    assert.deepEqual([message.kind, message.key, message.title, message.url], ['weekly', '2026-10-25', 'Weekly review 每週檢視', '/']);
+    assert.deepEqual([message.kind, message.key, message.title, message.url], ['weekly', '2026-10-25', '每週檢視', '/']);
     assert.equal(message.body.split('\n').length, 3);
   });
 
@@ -105,30 +105,30 @@ describe('messages', () => {
     assert.deepEqual(proposalMessage(r1, new Map()), {
       kind: 'proposal',
       key: '7',
-      title: 'R1 · Single-stock trim 單一個股減碼',
-      body: 'Trim 2330, NVDA back to the 5% cap.\n2330, NVDA 減碼回 5% 上限。',
+      title: 'R1 · 單一個股減碼',
+      body: '2330, NVDA 減碼回 5% 上限。',
       url: '/#proposal-7',
     });
     const drift = proposalMessage(
       { ...r1, id: 8, ruleId: 'F8_DRIFT', condition: 'class_drift_exceeds', title: { en: 'F8_DRIFT · Drift rebalance', zh: 'F8_DRIFT · 偏離再平衡' }, detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, classes: [{ id: 'global_bonds', weight: 0.091, target: 0.22, band: 0.05 }] } },
       new Map([['global_bonds', { en: 'Global bonds', zh: '全球債券' }]]),
     );
-    assert.equal(drift.body, 'Rebalance: Global bonds −12.9 pp.\n再平衡：全球債券 −12.9 pp。');
+    assert.equal(drift.body, '再平衡：全球債券 −12.9 pp。');
     const estate = proposalMessage(
       { ...r1, id: 9, ruleId: 'US_ESTATE_TAX', condition: 'us_situs_value_above', title: { en: 'US_ESTATE_TAX · US estate tax', zh: 'US_ESTATE_TAX · 美國遺產稅' }, state: 'over', detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, situsUsd: 61_000, limitUsd: 60_000 } },
       new Map(),
     );
-    assert.equal(estate.title, 'US_ESTATE_TAX · US estate tax 美國遺產稅');
+    assert.equal(estate.title, '美國遺產稅');
     const tranche = proposalMessage({ ...r1, id: 10, ruleId: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due', title: { en: 'WINDFALL_TRANCHE_DUE · Windfall tranche', zh: 'WINDFALL_TRANCHE_DUE · 大額資金分批' }, state: 'tranche:1', detail: { poolTwd: 1, cashTwd: 229_167, leftTwd: 0, dueDate: '2026-11-02' } }, new Map());
-    assert.equal(tranche.body, 'Deploy NT$229,167 of the windfall: the tranche due 2026-11-02.\n投入大額資金 NT$229,167：2026-11-02 到期的分批。');
-    assert.equal(estate.body, 'US assets 61,000 USD, above the 60,000 USD exemption: consider Irish-domiciled ETFs.\n美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
+    assert.equal(tranche.body, '投入大額資金 NT$229,167：2026-11-02 到期的分批。');
+    assert.equal(estate.body, '美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
   });
 
   it('alerts once per streak of missed nights, keyed by the last good run', () => {
     assert.equal(dataFailureMessage({ latest: undefined, misses: 1, alert: false }, 4), undefined);
     const alert = dataFailureMessage({ latest: undefined, misses: 2, alert: true }, 41);
     assert.deepEqual([alert?.key, alert?.url], ['after-run-41', '/data']);
-    assert.ok(alert?.body.includes('missed 2 nights in a row'));
+    assert.ok(alert?.body.includes('連續 2 晚未成功'));
   });
 });
 
@@ -161,7 +161,7 @@ describe('plan', () => {
     const late = plan({ ...base, now: taipei('2026-10-25T23:40'), proposals: [proposal], weeklyKeys: new Set(['2026-10-25']) });
     assert.equal(late.length, 1);
     assert.equal(late[0]?.sendAfter.toISOString(), taipei('2026-10-26T08:00').toISOString());
-    assert.equal(late[0]?.body, 'Trim the satellite from 26.0% back to 20%.\n衛星部位由 26.0% 減碼回 20%。');
+    assert.equal(late[0]?.body, '衛星部位由 26.0% 減碼回 20%。');
   });
 });
 
@@ -242,7 +242,7 @@ describe('the volatility alert through the quiet hours (N8 step 3)', () => {
       quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },
     });
     assert.equal(planned[0]?.sendAfter.toISOString(), at.toISOString());
-    assert.equal(planned[0]?.body, 'Volatility 8.4/10, panic: sell the VIX hedge, buy the core in a first stage.\n波動分數 8.4/10，恐慌：賣出 VIX 避險，分批買進核心。');
+    assert.equal(planned[0]?.body, '波動分數 8.4/10，恐慌：賣出 VIX 避險，分批買進核心。');
     assert.equal(planned[1]?.sendAfter.toISOString(), '2026-11-07T00:00:00.000Z');
   });
 });

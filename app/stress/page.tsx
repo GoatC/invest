@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
@@ -213,9 +214,11 @@ function Detail({ name, shown, isCustom, scenario, tiers, total, names }: { name
       </div>
       <UnderwaterChart points={points} tiers={isCustom ? [] : tiers.map((tier) => tier.drawdown)} label={label} />
       {shown.unmapped.length > 0 && (
-        <p className="banner warn">
-          <Bi en={`Held flat, as no scenario series is mapped to them: ${shown.unmapped.map((id) => names(id).en).join(', ')}.`} zh={`以下類別沒有對應的情境資料，視為持平：${shown.unmapped.map((id) => names(id).zh).join('、')}。`} />
-        </p>
+        <AlertTiles
+          heading={{ en: 'No scenario series: held flat', zh: '無情境資料・視為持平' }}
+          tone="watch"
+          items={shown.unmapped.map((id) => ({ key: id, tone: 'watch' as const, title: names(id), chips: [{ label: { en: 'Move', zh: '變動' }, value: '0%' }] }))}
+        />
       )}
       {!isCustom && (
         <div className="table-wrap">

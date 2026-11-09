@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { CorrelationHeatmap, FrontierChart, WeightsChart, type Curve, type Spot } from '@/components/frontier-charts';
@@ -158,12 +159,16 @@ function Report({ built, settings, data, whatIf }: { built: Built; settings: Fro
           ))}
         </div>
         {built.left.length > 0 && (
-          <p className="banner warn">
-            <Bi
-              en={`Left out: ${built.left.map((entry) => `${names(entry.id).en} (no ${entry.reason})`).join('; ')}. The current and target mixes are re-weighted to the classes used.`}
-              zh={`未納入：${built.left.map((entry) => `${names(entry.id).zh}（沒有${entry.reason === 'assumption' ? '資本市場假設' : entry.reason === 'history' ? '歷史價格' : '上下限'}）`).join('；')}。目前與目標配置已重新加權為所用類別的 100%。`}
-            />
-          </p>
+          <AlertTiles
+            heading={{ en: 'Left out; the rest re-weighted to 100%', zh: '未納入（其餘重新加權為 100%）' }}
+            tone="watch"
+            items={built.left.map((entry) => ({
+              key: entry.id,
+              tone: 'watch' as const,
+              title: names(entry.id),
+              chips: [{ label: { en: 'Missing', zh: '缺少' }, value: entry.reason === 'assumption' ? '資本市場假設' : entry.reason === 'history' ? '歷史價格' : '上下限' }],
+            }))}
+          />
         )}
         <FrontierChart curve={curvePoints} line={cml} classes={classSpots} current={current ? spot(bi({ en: 'Current', zh: '目前' }), current) : null} target={target ? spot(bi({ en: 'Target', zh: '目標' }), target) : null} best={best ? spot(bi({ en: 'Tangent', zh: '切線' }), best) : null} riskFree={settings.riskFree} label={chartLabel} />
         <div className="table-wrap">

@@ -29,7 +29,7 @@ export function Facts({ facts }: { facts: readonly Fact[] }) {
                 {ICON[fact.tone]}
               </span>
             )}
-            <Bi {...fact.label} />
+            <Bi {...fact.label} label />
           </span>
           <strong className="fact-value">{fact.value}</strong>
           {fact.note && (

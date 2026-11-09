@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useMemo, useState } from 'react';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import type { AssetClassSettings } from '@/lib/data';
@@ -101,12 +102,22 @@ export function TargetsForm({ classes, securities, r2Target }: { classes: AssetC
         </p>
       )}
       {satelliteOffR2 && r2Target !== null && (
-        <p className="banner info">
-          <Bi
-            en={`The satellite classes add up to ${percent(sleeveTotal('satellite'))}, while R2 trims the satellite back to ${percent(r2Target)} (rules table). Change R2 too if the satellite target moves.`}
-            zh={`衛星類別合計 ${percent(sleeveTotal('satellite'))}，但 R2 會把衛星減碼回 ${percent(r2Target)}（rules 表）。衛星目標改變時，R2 也要一起修改。`}
-          />
-        </p>
+        <AlertTiles
+          items={[
+            {
+              key: 'r2',
+              tone: 'info',
+              code: 'R2',
+              title: { en: 'Satellite targets', zh: '衛星目標合計' },
+              value: percent(sleeveTotal('satellite')),
+              chips: [
+                { label: { en: 'R2 trims back to', zh: 'R2 減碼回' }, value: percent(r2Target) },
+                { label: { en: 'Change R2 too', zh: '一併修改' }, value: 'R2' },
+              ],
+              href: '/rules#rule-R2',
+            },
+          ]}
+        />
       )}
       {state.message && state.message !== state.errors['total'] && (
         <p className="banner danger" role="alert">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useMemo, useState, useTransition } from 'react';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { RuleMath } from '@/components/rule-math';
@@ -14,13 +15,13 @@ import { decodeCsv, detectDelimiter, guessHeaderRow, parseCsv, type Delimiter, t
 import { guessDateFormat, wordList, type DateFormat } from '@/lib/csv/values';
 import type { CashFlowRecord, HoldingsData } from '@/lib/data';
 import { quantity } from '@/lib/format';
-import { shortfallMessage } from '@/lib/forms';
+import { shortfallAlert } from '@/lib/forms';
 import { bi, FLOW_TYPE, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';
 import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import type { FxQuote, Pool } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { breachText } from '@/lib/rule-text';
+import { breachAlert } from '@/lib/rule-text';
 import { parseNumber } from '@/lib/validation';
 
 import { importTrades, type ImportState } from './actions';
@@ -511,26 +512,10 @@ function Preview({
         </div>
       )}
       {shortfall && (
-        <p className="banner danger" role="alert">
-          <Bi
-            en={`${shortfallMessage(shortfall).en} Add the missing buy first, or leave the sell out.`}
-            zh={`${shortfallMessage(shortfall).zh}請先補上缺少的買進，或不要匯入這筆賣出。`}
-          />
-        </p>
+        <AlertTiles heading={{ en: 'Larger than the holding: add the buy or leave the sell out', zh: '超過持有數量：先補買進或略過此賣出' }} tone="alert" items={[shortfallAlert(shortfall)]} />
       )}
       {preview && <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this import', zh: '匯入後 R1 與 R2 的計算方式' }} />}
-      {created.length > 0 && (
-        <div className="banner warn">
-          <Bi en="You can import, but afterwards a rule is broken:" zh="可以匯入，但匯入後會違反規則：" />
-          <ul>
-            {created.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, caps, 'after')} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AlertTiles heading={{ en: 'Breaks a rule (can still import)', zh: '匯入後會違反規則（仍可匯入）' }} tone="watch" items={created.map((breach) => breachAlert(breach, caps, 'watch'))} />
       <div className="table-wrap">
         <table>
           <thead>

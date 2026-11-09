@@ -3,6 +3,7 @@
  * figures (design principle 4: explain every number), each draft order as a line, and what the
  * engine found for each rule. Bilingual; the pages and the trade form share them.
  */
+import type { AlertItem } from './alerts';
 import { money, percent, points, quantity, twd } from './format';
 import type { Bilingual } from './i18n';
 import type { Check, ClosedReason, DraftOrder, ProposalDetail, ProposalStatus } from './models/engine';
@@ -65,6 +66,36 @@ export function proposalTitle(rule: RuleLike): Bilingual {
 /** What a proposal fired on, readable and able to wrap: "2330, NVDA". */
 export function stateText(state: string): string {
   return state.split(',').join(', ');
+}
+
+/**
+ * What a proposal fired on, in Chinese for a tile: a volatility band and its date ("緊張 · 2026-11-07"),
+ * else the state as written ("2330, NVDA"); nothing for a state that only repeats the rule.
+ */
+export function stateLabel(state: string): string | undefined {
+  const band = /^(calm|tense|panic):(\d{4}-\d{2}-\d{2})$/.exec(state);
+  if (band) return `${BAND[band[1] as keyof typeof BAND].zh} · ${band[2]}`;
+  if (!state || state === 'satellite' || state === 'over') return undefined;
+  return stateText(state);
+}
+
+/** A proposal waiting on a decision or a trade, as a tile that opens it: the rule's name and code, what it fired on, its status. */
+export function proposalAlert(proposal: { id: number; ruleId: string; state: string; status: ProposalStatus }, rule: RuleLike | undefined): AlertItem {
+  const title = rule ? (TITLES[rule.condition] ?? { en: proposal.ruleId, zh: proposal.ruleId }) : { en: proposal.ruleId, zh: proposal.ruleId };
+  const fired = stateLabel(proposal.state);
+  const approved = proposal.status === 'approved';
+  return {
+    key: String(proposal.id),
+    tone: approved ? 'info' : 'watch',
+    ...(/^R\d+$/.test(proposal.ruleId) ? { code: proposal.ruleId } : {}),
+    title,
+    value: `#${proposal.id}`,
+    chips: [
+      { label: approved ? { en: 'Approved', zh: '已核准' } : { en: 'Status', zh: '狀態' }, value: approved ? '待下單' : '待決定' },
+      ...(fired ? [{ label: { en: 'On', zh: '觸發' }, value: fired }] : []),
+    ],
+    href: `/${approved ? '?p=approved' : ''}#proposal-${proposal.id}`,
+  };
 }
 
 export const STATUS: Record<ProposalStatus, Bilingual> = {

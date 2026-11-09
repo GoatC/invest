@@ -1,9 +1,9 @@
-import Link from 'next/link';
-
 import { taipeiDateTime } from '@/lib/format';
-import { LABELS, RUN_STATUS } from '@/lib/i18n';
+import type { AlertItem } from '@/lib/alerts';
+import { RUN_STATUS } from '@/lib/i18n';
 import type { DataHealth } from '@/lib/models/data-health';
 
+import { AlertTiles } from './alert-tiles';
 import { Bi } from './bi';
 
 export function RunStatusBadge({ status }: { status: keyof typeof RUN_STATUS }) {
@@ -26,59 +26,23 @@ export function hasNotice(health: DataHealth): boolean {
  */
 export function DataHealthBanner({ health, threshold, quiet = false }: { health: DataHealth; threshold: number | null; quiet?: boolean }) {
   const { latest, misses, alert } = health;
-  const link = (
-    <>
-      {' '}
-      <Link href="/data">
-        <Bi {...LABELS.dataStatus} />
-      </Link>
-    </>
-  );
+  const title = { en: 'Nightly prices', zh: '每夜價格' };
+  const tile = (item: Omit<AlertItem, 'key' | 'title' | 'href'>) => <AlertTiles items={[{ key: 'nightly', title, href: '/data', ...item }]} />;
   if (!latest) {
-    return (
-      <p className="banner info" role="status">
-        <Bi
-          en="The nightly price job has not run yet: * = trade price."
-          zh="每夜價格排程尚未執行：＊＝交易價格。"
-        />
-        {quiet && link}
-      </p>
-    );
+    return tile({ tone: 'info', value: '…', chips: [{ label: { en: 'Not run yet', zh: '尚未執行' }, value: '＊＝交易價格' }] });
   }
   const when = taipeiDateTime(latest.finishedAt);
+  const lastRun = { label: { en: 'Last run (Taipei)', zh: '最後執行' }, value: when };
   if (alert) {
-    return (
-      <p className="banner warn" role="alert">
-        <Bi
-          en={`The nightly price job has missed ${misses} nights in a row (the DATA_FAILURE rule alerts at ${threshold}); prices may be out of date. Last run ${when}, Taipei time.`}
-          zh={`每夜價格排程已連續 ${misses} 晚未成功（DATA_FAILURE 規則在 ${threshold} 次時警示），價格可能不是最新。最後一次執行：台北時間 ${when}。`}
-        />
-        {link}
-      </p>
-    );
+    return tile({
+      tone: 'watch',
+      value: `${misses} 晚未成功`,
+      chips: [...(threshold === null ? [] : [{ label: { en: 'DATA_FAILURE alerts at', zh: '警示門檻' }, value: `${threshold} 晚` }]), lastRun],
+    });
   }
   if (latest.status !== 'ok') {
-    return (
-      <p className="banner info" role="status">
-        {latest.status === 'failed' ? (
-          <Bi
-            en={`The nightly price job failed on its last run, ${when} Taipei time; prices stay as last loaded.`}
-            zh={`每夜價格排程最後一次執行（台北時間 ${when}）失敗；價格維持上次載入的數值。`}
-          />
-        ) : (
-          <Bi
-            en={`The nightly price job last ran ${when}, Taipei time, and could not load everything; the rest keeps its previous price.`}
-            zh={`每夜價格排程最後一次於台北時間 ${when} 執行，部分資料未能載入；未載入的項目沿用先前的價格。`}
-          />
-        )}
-        {link}
-      </p>
-    );
+    return tile({ tone: 'info', value: RUN_STATUS[latest.status].zh, chips: [lastRun, { label: { en: 'The rest keeps its last price', zh: '未載入者' }, value: '沿用前值' }] });
   }
   if (quiet) return null;
-  return (
-    <p className="banner ok" role="status">
-      <Bi en={`The nightly price job last ran ${when}, Taipei time, and loaded everything.`} zh={`每夜價格排程最後一次於台北時間 ${when} 執行，資料全部載入。`} />
-    </p>
-  );
+  return tile({ tone: 'ok', value: RUN_STATUS.ok.zh, chips: [lastRun] });
 }
