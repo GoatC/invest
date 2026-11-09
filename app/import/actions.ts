@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/auth';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { mappingKey, missingColumns, parseMapping } from '@/lib/csv/mapping';
 import { flowsToImport, planImport, readStatement, tradesToImport } from '@/lib/csv/plan';
-import { cashFlowColumns, DataError, loadCashFlows, loadFxHistory, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
+import { cashFlowColumns, DataError, loadCashFlows, loadFxHistory, loadHoldingsData, orDataError, rescoreQuietly, transactionColumns } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { formFields, saveFailed, shortfallMessage } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
@@ -96,5 +96,8 @@ export async function importTrades(_previous: ImportState, formData: FormData): 
     // The trades are in; importing the file again adds the dividends and skips what is saved.
     if (error) return { message: trades.length > 0 ? MESSAGES.dividendsFailed(error.message) : saveFailed(error.message) };
   }
+  // Trades in a satellite class score its assumption again (F6 auto).
+  const satellite = new Set(data.securities.filter((security) => security.sleeve === 'satellite').map((security) => security.ticker));
+  if (trades.some((trade) => satellite.has(trade.ticker))) await rescoreQuietly(supabase, taipeiToday());
   redirect(`/holdings?saved=imported&added=${trades.length}&dividends=${dividends.length}&skipped=${rows.length - trades.length - dividends.length}`);
 }

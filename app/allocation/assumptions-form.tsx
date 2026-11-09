@@ -18,7 +18,19 @@ function typedPercent(value: number): string {
   return String(Number((value * 100).toFixed(2)));
 }
 
-export function AssumptionsForm({ classes, assumptions }: { classes: AssetClassSettings[]; assumptions: Assumptions }) {
+/**
+ * Your assumptions per class. A satellite class left blank is scored from its holdings: its score
+ * shows as the placeholder, and typing a figure replaces it.
+ */
+export function AssumptionsForm({
+  classes,
+  assumptions,
+  scored = {},
+}: {
+  classes: AssetClassSettings[];
+  assumptions: Assumptions;
+  scored?: Record<string, { expectedReturn: number; volatility: number }>;
+}) {
   const initial = useMemo(
     () =>
       Object.fromEntries(
@@ -61,7 +73,7 @@ export function AssumptionsForm({ classes, assumptions }: { classes: AssetClassS
           </legend>
           {sleeve === 'satellite' && (
             <p className="muted small">
-              <Bi en="Optional: the spec asks for the core classes." zh="選填：規格只要求核心類別。" />
+              <Bi en="Optional: left blank, it is scored from its holdings." zh="選填：留白即依持股自動評分。" />
             </p>
           )}
           {classes
@@ -69,6 +81,8 @@ export function AssumptionsForm({ classes, assumptions }: { classes: AssetClassS
             .map((assetClass) => {
               const names = assumptionFields(assetClass.id);
               const row = [names.expectedReturn, names.volatility, names.source];
+              const score = sleeve === 'satellite' ? scored[assetClass.id] : undefined;
+              const auto = (value: number) => (score ? bi({ en: `Auto ${typedPercent(value)}`, zh: `自動 ${typedPercent(value)}` }) : undefined);
               return (
                 <div key={assetClass.id} className="form-grid">
                   <Field label={{ en: `${assetClass.nameEn}: expected return % a year`, zh: `${assetClass.nameZh}：預期年報酬 %` }} error={error(names.expectedReturn, row)}>
@@ -76,12 +90,20 @@ export function AssumptionsForm({ classes, assumptions }: { classes: AssetClassS
                       name={names.expectedReturn}
                       inputMode="decimal"
                       autoComplete="off"
+                      placeholder={score ? auto(score.expectedReturn) : undefined}
                       value={values[names.expectedReturn] ?? ''}
                       onChange={(e) => change(names.expectedReturn, e.target.value)}
                     />
                   </Field>
                   <Field label={{ en: 'Volatility % a year', zh: '年化波動度 %' }} error={error(names.volatility, row)}>
-                    <input name={names.volatility} inputMode="decimal" autoComplete="off" value={values[names.volatility] ?? ''} onChange={(e) => change(names.volatility, e.target.value)} />
+                    <input
+                      name={names.volatility}
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder={score ? auto(score.volatility) : undefined}
+                      value={values[names.volatility] ?? ''}
+                      onChange={(e) => change(names.volatility, e.target.value)}
+                    />
                   </Field>
                   <Field label={{ en: 'Source', zh: '來源' }} error={error(names.source, row)}>
                     <input name={names.source} placeholder={bi({ en: 'e.g. an outlook, 2026', zh: '例如：展望報告 2026' })} maxLength={200} autoComplete="off" value={values[names.source] ?? ''} onChange={(e) => change(names.source, e.target.value)} />

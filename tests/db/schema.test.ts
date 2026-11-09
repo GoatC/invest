@@ -17,6 +17,7 @@ import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { readVolatilitySettings } from '../../lib/models/volatility.ts';
 import { readNewsSettings } from '../../lib/models/news.ts';
+import { readAutoCmaSettings } from '../../lib/models/auto-cma.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -31,14 +32,15 @@ const KEY_MISSING = '23503';
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
-// analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts.
+// analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
+// F6's auto-scored assumptions add cma_estimates.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
-  'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts',
+  'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts', 'cma_estimates',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -58,7 +60,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts and news_alerts', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts and cma_estimates', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1142,5 +1144,37 @@ describe('breaking news (N8 step 4)', () => {
     await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('news', '1', 't', 'b', '/volatility#news', now())`);
     await db.query(`delete from public.notifications where kind = 'news'`);
     await db.query('delete from public.news_alerts');
+  });
+});
+
+describe('auto-scored assumptions (F6)', () => {
+  it('seeds config cma_auto, readable, anchoring US and Taiwan stocks to the two core equity classes', async () => {
+    const settings = readAutoCmaSettings(await scalar(db, `select value from public.config where key = 'cma_auto'`));
+    assert.deepEqual(settings, { enabled: true, premium: 'cma', anchors: { US: 'us_global_equity', TW: 'tw_market_cap' }, lookbackYears: 5, minMonths: 36 });
+  });
+
+  it('keeps one estimate per class for the owner and the job to write; a stranger sees none; a figure out of range is refused', async () => {
+    const row = `('tactical_themes', '2026-11-09', 0.0686, 0.18, 36, '{"lines": []}')`;
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months, detail) values ${row}`);
+      assert.equal(await scalar(tx, `select months from public.cma_estimates where class_id = 'tactical_themes'`), 36);
+    });
+    const insert = (values: string) => `insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months) values ${values}`;
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, -0.1, 36)`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('no_class', '2026-11-09', 0.07, 0.2, 36)`)))), KEY_MISSING);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, 0.2, 36)`)))), DENIED);
+    // A class held with nothing scorable yet keeps a row with neither figure; one figure alone is refused.
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.cma_estimates (class_id, as_of, months, detail) values ('us_stocks', '2026-11-09', 0, '{"left": [{"ticker": "NVDA", "reason": "history"}]}')`);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, null, 36)`)))), CHECK_FAILED);
+    await db.query(`insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months, detail) values ${row}`);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.cma_estimates'), 0));
+    await as(db, 'owner', async (tx) => assert.equal((await tx.query(`update public.cma_estimates set volatility = 0.2 where class_id = 'tactical_themes'`)).affectedRows, 1));
+    await as(db, 'service_role', async (tx) => assert.equal((await tx.query(`delete from public.cma_estimates where class_id = 'tactical_themes'`)).affectedRows, 1));
+    // Worked out from the holdings, so its writes are not audited.
+    await db.query(`update public.cma_estimates set volatility = 0.2 where class_id = 'tactical_themes'`);
+    assert.equal(await scalar(db, `select count(*) from public.audit_log where table_name = 'cma_estimates'`), 0);
+    await db.query('delete from public.cma_estimates');
   });
 });

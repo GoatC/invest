@@ -35,7 +35,8 @@ export default async function FrontierPage({ searchParams }: { searchParams: Pro
   const { settings } = data;
   const built = settings
     ? build(
-        data.classes.map((entry) => ({ id: entry.id, expected: data.expected[entry.id] ?? null, returns: (entry.benchmarkTicker ? data.history.get(entry.benchmarkTicker) : undefined) ?? [] })),
+        // An auto-scored class reads its holdings' basket, so its μ and Σ describe the same holdings.
+        data.classes.map((entry) => ({ id: entry.id, expected: data.expected[entry.id] ?? null, returns: data.baskets.get(entry.id) ?? (entry.benchmarkTicker ? data.history.get(entry.benchmarkTicker) : undefined) ?? [] })),
         settings.bounds,
         settings,
         settings.lookbackYears * 12,
@@ -158,6 +159,24 @@ function Report({ built, settings, data, whatIf }: { built: Built; settings: Fro
             <Stat key={stat.label.en} {...stat} />
           ))}
         </div>
+        <AlertTiles
+          heading={{ en: 'Auto-scored from holdings', zh: '依持股自動評分' }}
+          tone="info"
+          items={ids.flatMap((id, i) =>
+            data.baskets.has(id)
+              ? [
+                  {
+                    key: id,
+                    tone: 'info' as const,
+                    title: names(id),
+                    value: percent(problem.mu[i], 1),
+                    chips: [{ label: { en: 'Volatility', zh: '波動' }, value: percent(Math.sqrt((problem.sigma[i] as readonly number[])[i] as number), 1) }],
+                    href: '/allocation/assumptions#auto',
+                  },
+                ]
+              : [],
+          )}
+        />
         {built.left.length > 0 && (
           <AlertTiles
             heading={{ en: 'Left out; the rest re-weighted to 100%', zh: '未納入（其餘重新加權為 100%）' }}
@@ -269,6 +288,10 @@ function Method() {
     {
       en: 'μ is the capital market assumptions’ expected return of each class. Σ is the sample covariance of each class’s monthly returns in TWD (the benchmark ETF’s, the same proxies as the VaR), × 12, over the years of history set below; only months every class has are used. Both are estimates: μ is yours, Σ is the past, and the frontier is very sensitive to them.',
       zh: 'μ 為各類別資本市場假設的預期報酬。Σ 為各類別以台幣計的月報酬（基準 ETF，與風險值相同的代理指標）的樣本共變異數 × 12，期間為下方設定的歷史年數；只使用所有類別都有資料的月份。兩者都是估計：μ 是你的假設，Σ 是過去，前緣對它們非常敏感。',
+    },
+    {
+      en: 'A satellite class you left without an assumption is scored from what it holds (CAPM on each stock or ETF, weighted by exposure; see the assumptions page). Such a class reads its holdings’ monthly returns, weighted the same way, in place of its benchmark’s, so its return and its risk describe the same holdings.',
+      zh: '未設定假設的衛星類別，依其持股自動評分（每檔個股或 ETF 以 CAPM 計算，依曝險加權；見資本市場假設頁）。此類別改用持股依相同權重組成的月報酬，取代基準 ETF，使報酬與風險描述同一批持股。',
     },
     {
       en: 'Sharpe = (E[Rp] − Rf) ÷ σp. The tangent portfolio has the highest Sharpe ratio on the frontier; the capital market line runs from the risk-free rate through it. Your current mix is the regular pool’s actual class weights, the target mix the F6 targets, both re-weighted to the classes used.',

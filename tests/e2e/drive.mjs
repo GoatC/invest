@@ -601,6 +601,80 @@ await step('capital market assumptions: a source is required, then they show wit
   check(folded.includes('預期報酬：每個類別都設定假設後顯示'), 'no target-mix return yet');
 });
 
+/** The auto-scored estimates (F6) the stand-in holds, by class id; a class held but not scorable yet has no figures. */
+async function savedEstimates() {
+  const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/cma_estimates?select=class_id,expected_return,volatility,months,detail`, { headers: { apikey: SECRET_KEY } });
+  const figure = (value) => (value === null ? null : Number(value));
+  return Object.fromEntries((await res.json()).map((row) => [row.class_id, { ...row, expected_return: figure(row.expected_return), volatility: figure(row.volatility) }]));
+}
+
+const pctText = (value, digits = 1) => `${(value * 100).toFixed(digits)}%`;
+/** The capital market assumptions card on the allocation page. */
+const assumptionsCard = () => page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
+const autoCount = (text) => (text.match(/自動評分/g) ?? []).length;
+
+await step('auto-scored assumptions: Taiwan stocks scored from 2330 by CAPM on your own core assumption, US stocks waiting on NVDA\'s history; yours wins once typed; the settings logged (F6)', async () => {
+  // Saving the core assumptions above scored the satellite classes. 2330 holds over three years of
+  // demo closes and a β against both indices; NVDA (US stocks, AAPL sold by the CSV import) has no
+  // closes before tonight's job; nothing is held in tactical themes.
+  const saved = await savedEstimates();
+  check(saved.tw_stocks?.expected_return !== null && !saved.tactical_themes, `Taiwan stocks scored, tactical themes not held, got ${Object.keys(saved).join(', ')}`);
+  check(saved.us_stocks?.expected_return === null && saved.us_stocks.detail.left.some((line) => line.ticker === 'NVDA' && line.reason === 'history'), `US stocks held, NVDA left out for its history, got ${JSON.stringify(saved.us_stocks)}`);
+  const { detail } = saved.tw_stocks;
+  const [line] = detail.lines;
+  check(detail.lines.length === 1 && line.ticker === '2330' && line.weight === 1, 'Taiwan stocks scored from 2330 alone');
+  // E = R_f + β × P on the market of the index that explains 2330 best, P from your own assumption
+  // for that market's class (US / global equity 6.5%, Taiwan market-cap 6%) less its 10-year yield.
+  const market = detail.markets.find((entry) => entry.market === line.market);
+  const own = { US: 0.065, TW: 0.06 }[line.market];
+  check(market?.source === 'cma' && Math.abs(market.premium - (own - market.risk_free)) < 1e-9, `the premium from your assumption, got ${JSON.stringify(market)}`);
+  check(Math.abs(line.expected_return - (market.risk_free + line.beta * market.premium)) < 1e-9 && Math.abs(saved.tw_stocks.expected_return - line.expected_return) < 1e-9, '2330: CAPM');
+  check(saved.tw_stocks.months >= 36 && line.volatility > 0 && Math.abs(saved.tw_stocks.volatility - line.volatility) < 1e-9, '2330: three years of monthly returns or more; alone, its volatility is the class’s');
+  await page.goto(`${BASE}/allocation/assumptions`);
+  const auto = page.locator('#auto');
+  await auto.waitFor();
+  const text = await auto.innerText();
+  check(text.includes('依持股自動評分') && text.includes(pctText(saved.tw_stocks.expected_return)) && text.includes('持股尚無法評分') && text.includes('無可評分的持股'), `a tile per satellite class, got ${text}`);
+  check(/NVDA[\s\S]*歷史不足/.test(text), 'NVDA left out, as a tile');
+  check((await page.getAttribute('input[name=return_tw_stocks]', 'placeholder')) === `自動 ${Number((saved.tw_stocks.expected_return * 100).toFixed(2))}`, 'the score as the blank field’s placeholder');
+  check((await page.getAttribute('input[name=return_us_stocks]', 'placeholder')) === null, 'no placeholder without a score');
+  await auto.getByText('評分明細').click();
+  check(/2330\s+(SPX|TAIEX)\s+[\d.−-]+\s+[\d.]+/.test(await auto.innerText()), 'the detail: 2330’s index, β and R²');
+  await snap('assumptions-auto', auto);
+  await page.goto(`${BASE}/allocation`);
+  check(autoCount(await assumptionsCard()) === 1, `the card marks the scored class, got ${await assumptionsCard()}`);
+  // Yours wins: typed, Taiwan stocks read 8%; cleared, the score is back.
+  await page.goto(`${BASE}/allocation/assumptions`);
+  await page.fill('input[name=return_tw_stocks]', '8');
+  await page.fill('input[name=volatility_tw_stocks]', '30');
+  await page.fill('input[name=source_tw_stocks]', 'Demo, typed 示範');
+  await page.click('main form.form button[type=submit] >> nth=0');
+  await page.waitForURL('**/allocation?saved=assumptions');
+  const typed = await assumptionsCard();
+  check(typed.includes('8.0%') && autoCount(typed) === 0, `your 8% replaces the score, got ${typed}`);
+  await page.goto(`${BASE}/allocation/assumptions`);
+  check((await page.locator('#auto').innerText()).includes('採用你的假設'), 'the tile says yours is used');
+  for (const field of ['return', 'volatility', 'source']) await page.fill(`input[name=${field}_tw_stocks]`, '');
+  await page.click('main form.form button[type=submit] >> nth=0');
+  await page.waitForURL('**/allocation?saved=assumptions');
+  check(autoCount(await assumptionsCard()) === 1, 'cleared, the score is back');
+  // The settings: F11's ERP as the premium, saved and logged, then back to your own assumptions.
+  await page.goto(`${BASE}/allocation/assumptions`);
+  await page.locator('#auto details', { hasText: '設定' }).last().locator('summary').click();
+  await page.check('input[name=premium][value=erp]');
+  await page.click('#auto button:has-text("Save")');
+  await page.waitForURL('**/allocation/assumptions?saved=auto**');
+  check((await savedEstimates()).tw_stocks?.detail.markets.every((entry) => entry.source === 'erp'), 'scored again on F11’s ERP');
+  check(/premium: cma → erp/.test((await page.locator('section', { hasText: 'Edit history' }).last().textContent()) ?? ''), 'the setting in the edit history');
+  await page.locator('#auto details', { hasText: '設定' }).last().locator('summary').click();
+  await page.check('input[name=premium][value=cma]');
+  await page.click('#auto button:has-text("Save")');
+  await page.waitForURL('**/allocation/assumptions?saved=auto**');
+  await page.click('#auto button:has-text("Score now")');
+  await page.waitForURL('**/allocation/assumptions?saved=scored**');
+  check((await savedEstimates()).tw_stocks?.detail.markets.every((entry) => entry.source === 'cma'), 'back on your own assumptions');
+});
+
 /** The VaR figure the card shows, in NT$, and its share of the portfolio in %. */
 async function varFigure(card) {
   const value = Number((await card.locator('.var-value').innerText()).replace(/[^\d]/g, ''));
@@ -683,9 +757,12 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   await page.goto(`${BASE}/plan`);
   await page.getByRole('heading', { level: 1, name: '複利計算機' }).waitFor();
   await page.locator('.chart svg').first().waitFor();
-  // The assumptions entered above cover the five core classes: (0.28·6.5 + 0.12·6 + 0.22·3.5 + 0.10·4 + 0.08·1.5) ÷ 0.80 = 4.7875%.
-  check((await page.inputValue('input[name=expectedReturn]')) === '4.79', 'the target mix return over the core');
-  check((await body()).includes('目標配置：4.79%（80% 的目標有假設）'), 'the mix says what it covers');
+  // The assumptions entered above cover the five core classes, and the score Taiwan stocks:
+  // (0.28·6.5 + 0.12·6 + 0.22·3.5 + 0.10·4 + 0.08·1.5 + 0.05·E_TW) ÷ 0.85.
+  const scores = await savedEstimates();
+  const mix = (0.0383 + 0.05 * scores.tw_stocks.expected_return) / 0.85;
+  check((await page.inputValue('input[name=expectedReturn]')) === String(Number((mix * 100).toFixed(2))), `the target mix return over the core and the scored satellite, ${pctText(mix, 2)}`);
+  check((await body()).includes(`目標配置：${pctText(mix, 2)}（85% 的目標有假設）`), 'the mix says what it covers');
   check((await page.inputValue('input[name=pmt]')) === '10000', 'dca.amount_twd as the monthly contribution');
   check(/^\d{4}-\d{2}$/.test(await page.inputValue('input[name=start]')) && Number(await page.inputValue('input[name=pv]')) > 0, 'next month, from today’s regular pool');
   check((await body()).includes('在上方儲存計畫後'), 'no plan saved yet');
@@ -1852,6 +1929,11 @@ await step('efficient frontier: the curve, the capital market line and the tange
   check(/US \/ global equity/.test(weights) && /\d+\.\d%/.test(weights), `the weights by class, got ${weights}`);
   await page.locator('#frontier-correlation svg').waitFor();
   check((await page.locator('#frontier-correlation').innerText()).includes('1.00'), 'the correlation of a class with itself');
+  // Taiwan stocks, scored from 2330 (F6), is in the frontier on 2330's returns; US stocks, NVDA without history, is left out.
+  const scores = await savedEstimates();
+  const scored = await page.locator('.alert-group', { hasText: '依持股自動評分' }).innerText();
+  check(scores.tw_stocks?.expected_return !== null && scored.includes('Taiwan stocks') && scored.includes(pctText(scores.tw_stocks.expected_return)), `the scored class as a tile, got ${scored}`);
+  check(/Taiwan stocks/.test(weights) && (await page.locator('.alert-group', { hasText: '未納入' }).innerText()).includes('US stocks'), 'Taiwan stocks in the weights, US stocks left out');
   await snap('frontier');
   await page.setViewportSize({ width: 1280, height: 1900 });
   await docShot('frontier', page);

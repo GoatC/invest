@@ -18,6 +18,8 @@ export const RULES_ERROR = 'Rules';
 /** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
 export const BETAS_ERROR = 'Betas';
 export const MONTE_CARLO_ERROR = 'Monte Carlo';
+/** The label of an error in the auto-scored assumptions (F6) refresh. */
+export const CMA_ERROR = 'Auto CMA';
 export const ATTRIBUTION_ERROR = 'Attribution';
 /** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
 export const VALUATIONS_ERROR = 'Valuations';
