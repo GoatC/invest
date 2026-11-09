@@ -415,7 +415,7 @@ await step('splits: a split restates the shares bought before it, so R1 sees twi
   await page.waitForURL('**/securities/AAPL?saved=split-deleted#splits');
   check((await r1()) === before, `R1 AAPL back where it was, got ${await alertTile('R1 AAPL')}`);
   await page.goto(`${BASE}/history`);
-  check((await body()).includes(`AAPL split ×2 from ${today}`), 'the deleted split stays in the edit history');
+  check((await body()).includes(`AAPL 自 ${today} 起分割 ×2`), 'the deleted split stays in the edit history');
 });
 
 await step('CSV import: Big5 statement, title lines, guessed columns, every row explained', async () => {
@@ -441,7 +441,7 @@ await step('CSV import: an unknown ticker is added in a new tab, then "Check aga
   await tab.waitForLoadState();
   await tab.fill('input[name=name]', 'NVIDIA Corp.');
   await tab.click('main button[type=submit]');
-  await tab.getByText('Added NVDA.').waitFor();
+  await tab.getByText('已新增 NVDA。').waitFor();
   await snap('security-added-tab', tab, false);
   await tab.close();
   await page.getByRole('button', { name: /Check again/ }).click();
@@ -651,7 +651,7 @@ await step('risk details on the dashboard: the histogram with its cutoff, the we
   check(/TWD balances[\s\S]*Money-market fund \(demo\)[\s\S]*High-yield savings/.test(inputs), 'both TWD balances, windfall included, without risk');
   const figure = await varFigure(page.locator('#value-at-risk'));
   const formula = (await page.locator('#formula').textContent()) ?? '';
-  check(formula.includes(`× √1 × NT$`) && formula.includes(`= NT$${figure.value.toLocaleString('en-US')}.`), 'the formula, behind ⓘ, ends at the figure shown');
+  check(formula.includes(`× √1 × NT$`) && formula.includes(`= NT$${figure.value.toLocaleString('en-US')}。`), 'the formula, behind ⓘ, ends at the figure shown');
   check(text.includes('風險值的組成') && text.includes('公式與今天的數值'), 'Chinese labels');
   await snap('risk');
   // The README image, from the seed's invented history; a run with the nightly job replaces it with one that has the 52-week line.
@@ -990,10 +990,10 @@ await step("windfall: CAPE's percentile sets the pace, ACWI's fall from its high
   await page.locator('.chart-backtest svg').waitFor();
   const text = await body();
   // Seed: CAPE 24.04 in 2026-09, the 74th percentile of its 1,749 months since 1881: above the 70th, so 24 tranches.
-  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
+  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 24 tranches → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
   // ACWI's demo closes peak at 137.95 on 2026-09-17 and end at 130.28 on 2026-10-20: 5.6% below, short of the 15% tier.
   check((await fact('ACWI below 52-week high')).includes('−5.6% 高點 137.95 · 2026-09-17 · 下一級距 15%'), `the drawdown gauge, got ${await fact('ACWI below 52-week high')}`);
-  check((await fact('Plan')).includes('— 請於下方建立') && (await fact('Waiting as cash')).includes('NT$50,000 共 NT$50,000'), 'no plan; the money-market fund added above waits');
+  check((await fact('Plan')).includes('— start one below') && (await fact('Waiting as cash')).includes('NT$50,000 共 NT$50,000'), 'no plan; the money-market fund added above waits');
   check(!text.includes('大額資金只投入核心類別'), 'the explanation folded away');
   const backtest = await page.locator('#backtest').textContent();
   check(backtest.includes('從 1900-01 到 2021-09 的每個起始月（共 1,461 個') && backtest.includes('（示範資料）'), `the start months, got ${backtest.slice(0, 400)}`);
@@ -1286,7 +1286,7 @@ await step("forward P/E check: AAPL's demo consensus against its trailing and ow
   check(/Analysts 分析師 35/.test(text) && text.includes('買進 32・持有 9・賣出 1'), `the analysts and ratings, got ${text}`);
   check(/Mean target price 平均目標價 255\.00 USD/.test(text), `the target price, got ${text}`);
   check(/共識預估 30 天內變動 [+−][\d.]+%（上修 10、下修 5 位）/.test(text), `the revisions, got ${text}`);
-  check(text.includes(`Consensus as of ${taipeiToday}, Demo data`), `the source and date, got ${text}`);
+  check(text.includes(`共識預估日期 ${taipeiToday}，來源：示範資料`), `the source and date, got ${text}`);
   await snap('pe-check');
 
   // Taiwan has no feed: the form opens, refuses a second year before the first, then saves.
@@ -1519,7 +1519,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.waitForURL('**/red-flags?t=2330&saved=deleted**');
   check((await fact('Light')).includes('Green'), `green again, got ${await fact('Light')}`);
   await page.goto(`${BASE}/history`);
-  check(/Red flag entry[\s\S]*2330 Environmental penalties/.test(await body()), 'the deleted entry in the edit history');
+  check(/Red flag entry[\s\S]*2330 環境裁罰/.test(await body()), 'the deleted entry in the edit history');
 
   // An excluded industry turns 2330 red at once; the setting is logged, then put back.
   await page.goto(`${BASE}/red-flags`);
@@ -1539,7 +1539,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.goto(`${BASE}/holdings#valuation`);
   check(/AAPL[\s\S]*Amber/.test(await page.locator('#valuation table').first().innerText()), 'the light on the watchlist');
   await page.goto(`${BASE}/`);
-  check(/AAPL [^\n]*Amber, 88% covered/.test(await page.locator('#dashboard-watchlist').innerText()), 'the light on the dashboard');
+  check(/AAPL [^\n]*黃燈，覆蓋 88%/.test(await page.locator('#dashboard-watchlist').innerText()), 'the light on the dashboard');
 });
 
 await step('look-through: every fund opened up, TSMC through VT, 00692 and held directly, countries, sectors, the funds and their overlap (F14)', async () => {
@@ -2214,7 +2214,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     // 2330 is held, so this month's refresh saved its β on live closes.
     const tsmc = await costRow('2330');
     console.log(`  2330 ${tsmc.join(' | ')}`);
-    check(tsmc[2]?.includes(`saved ${taipeiToday}`), `2330's β from this month's refresh, got ${tsmc[2]}`);
+    check(tsmc[2]?.includes(`${taipeiToday} 存入`), `2330's β from this month's refresh, got ${tsmc[2]}`);
     const rate = pct(tsmc[5]);
     check(rate > 2 && rate < 15, `a plausible cost of equity for 2330, got ${tsmc[5]}`);
     await snap('capm-after-job');
@@ -2259,9 +2259,9 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     await page.goto(`${BASE}/look-through`);
     const funds = (await page.locator('#funds').innerText()).replace(/\s+/g, ' ');
     console.log(`  ${files || '(holdings line from an earlier run)'}\n  ${funds}`);
-    const vt = /VT NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · Vanguard · (\d+) lines, (\d+)% named/.exec(funds);
+    const vt = /VT NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · Vanguard · (\d+) 檔，列名 (\d+)%/.exec(funds);
     check(vt !== null && Number(vt[2]) > 5000 && Number(vt[3]) > 90, `VT's live file, got ${funds}`);
-    const tw = /00692 NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · Fubon · (\d+) lines/.exec(funds);
+    const tw = /00692 NT\$[\d,]+ (\d{4}-\d{2}-\d{2}) · 富邦投信 · (\d+) 檔/.exec(funds);
     check(tw !== null && Number(tw[2]) > 50, `00692's live file, got ${funds}`);
     const sectors = await page.locator('#sectors').innerText();
     check(/Information Technology 資訊科技\s+\d+\.\d%/.test(sectors), `sectors from the live files, got ${sectors}`);

@@ -1787,8 +1787,15 @@ details.ticker-menu a:hover {
 .alert-link {
   display: grid;
   gap: 0.3rem;
+  min-width: 0;
   color: inherit;
   text-decoration: none;
+}
+
+/* A tile never pushes a phone screen sideways: its parts shrink and its chips wrap. */
+.alert-tile > *,
+.alert-link > * {
+  min-width: 0;
 }
 
 .alert-top {
@@ -1895,7 +1902,8 @@ details.ticker-menu a:hover {
   padding: 0.05rem 0.45rem;
   background: var(--bg, rgba(127, 127, 127, 0.1));
   color: var(--muted);
-  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .alert-chip b {

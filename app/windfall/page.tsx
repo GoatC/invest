@@ -303,7 +303,7 @@ function SpreadRow({ label, spread }: { label: Bilingual; spread: Spread }) {
   return (
     <tr>
       <td>
-        <Bi {...label} />
+        <Bi {...label} label />
       </td>
       <td className="num">{percent(spread.wins, 0)}</td>
       <td className="num">{signedPercent(spread.median)}</td>
