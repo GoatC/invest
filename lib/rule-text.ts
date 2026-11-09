@@ -1,27 +1,42 @@
+import type { AlertItem, AlertTone } from './alerts';
 import { percent, twd } from './format';
 import type { Bilingual } from './i18n';
 import type { PoolFigures } from './models/portfolio';
 import type { CapBreach, Caps } from './models/rules';
 
 /**
- * The bilingual sentence for an R1 or R2 breach. "now" describes the portfolio as it stands
- * (holdings page); "after" describes it once a trade being typed is saved (trade form).
+ * An R1 or R2 breach as a tile that reads at a glance: the weight against its limit on a gauge, the
+ * limit, and the trim that brings it back (to the cap for R1, to the target for R2).
  */
-export function breachText(breach: CapBreach, caps: Caps, mood: 'now' | 'after'): Bilingual {
-  const weight = percent(breach.weight);
-  const limit = percent(breach.limit, 0);
+export function breachAlert(breach: CapBreach, caps: Caps, tone: AlertTone = 'alert'): AlertItem {
   const trim = twd(breach.trimTwd);
-  const is = mood === 'now' ? { en: 'is', zh: '目前占' } : { en: 'would be', zh: '將占' };
+  const limit = percent(breach.limit, 0);
   if (breach.rule === 'R1') {
     return {
-      en: `R1: ${breach.subject} ${is.en} ${weight} of the regular pool, above the ${limit} single-stock cap. Selling about ${trim} brings it back to the cap.`,
-      zh: `R1：${breach.subject} ${is.zh}一般投入資金池的 ${weight}，超過單一個股 ${limit} 上限；賣出約 ${trim} 可回到上限內。`,
+      key: `R1:${breach.subject}`,
+      tone,
+      code: 'R1',
+      title: { en: breach.subject, zh: breach.subject },
+      value: percent(breach.weight),
+      gauge: { value: breach.weight, limit: breach.limit },
+      chips: [
+        { label: { en: 'Cap', zh: '上限' }, value: limit },
+        { label: { en: 'Sell', zh: '賣出' }, value: `≈${trim}` },
+      ],
     };
   }
-  const target = percent(caps.satellite?.targetWeight ?? 0, 0);
+  const target = caps.satellite?.targetWeight;
   return {
-    en: `R2: the satellite ${is.en} ${weight} of the regular pool, above the ${limit} trigger. Trimming about ${trim} brings it back to ${target}.`,
-    zh: `R2：衛星部位${is.zh}一般投入資金池的 ${weight}，超過 ${limit} 觸發點；減碼約 ${trim} 可回到 ${target}。`,
+    key: 'R2:satellite',
+    tone,
+    code: 'R2',
+    title: { en: 'Satellite', zh: '衛星部位' },
+    value: percent(breach.weight),
+    gauge: { value: breach.weight, limit: breach.limit, ...(target === undefined ? {} : { target }) },
+    chips: [
+      { label: { en: 'Trigger', zh: '觸發' }, value: limit },
+      { label: { en: 'Trim', zh: '減碼' }, value: `≈${trim}${target === undefined ? '' : ` → ${percent(target, 0)}`}` },
+    ],
   };
 }
 

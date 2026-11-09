@@ -1,5 +1,6 @@
 import { percent } from '@/lib/format';
 
+import { AlertTiles } from './alert-tiles';
 import { Bi } from './bi';
 
 /** A known TWD rate and its date; estimated when it came from a trade rather than the nightly job. */
@@ -35,11 +36,19 @@ export function FxRateHint({ currency, dated, latest }: { currency: string; date
 export function FxTypoWarning({ entered, reference, maxGap }: { entered: number; reference: KnownRate | undefined; maxGap: number | null }) {
   if (maxGap === null || !reference || !(entered > 0) || Math.abs(entered - reference.value) / reference.value <= maxGap) return null;
   return (
-    <p className="banner warn">
-      <Bi
-        en={`This FX rate is more than ${percent(maxGap, 0)} away from ${reference.value} (${reference.date}); check for a typo.`}
-        zh={`這個匯率與 ${reference.value}（${reference.date}）相差超過 ${percent(maxGap, 0)}，請確認是否輸入錯誤。`}
-      />
-    </p>
+    <AlertTiles
+      items={[
+        {
+          key: 'fx',
+          tone: 'watch',
+          title: { en: 'FX rate: typo?', zh: '匯率是否打錯' },
+          value: String(entered),
+          chips: [
+            { label: { en: `Rate of ${reference.date}`, zh: `${reference.date} 匯率` }, value: String(reference.value) },
+            { label: { en: 'Gap', zh: '差距' }, value: `${percent(Math.abs(entered - reference.value) / reference.value, 0)} > ${percent(maxGap, 0)}` },
+          ],
+        },
+      ]}
+    />
   );
 }

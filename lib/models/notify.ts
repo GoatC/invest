@@ -135,7 +135,7 @@ export function lastWeeklyReview(at: Date, review: WeeklyReview): { key: string;
 
 export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event' | 'news';
 
-/** A push: title and body in both languages, and the page it opens. */
+/** A push: a title and a line, in Chinese (CLAUDE.md, the Chinese-first rule), and the page it opens. */
 export interface Message {
   kind: NotificationKind;
   /** With the kind, what makes it once only: a proposal's id, a week's date, a failure streak. */
@@ -145,8 +145,9 @@ export interface Message {
   url: string;
 }
 
+/** A push line: Chinese alone, or the text once when it is the same in both. */
 function both(text: Bilingual): string {
-  return text.en === text.zh ? text.en : `${text.en}\n${text.zh}`;
+  return text.zh;
 }
 
 /** What a proposal asks for, in a line each language. */
@@ -213,12 +214,18 @@ export interface ProposalForPush {
   detail: ProposalDetail;
 }
 
+/** A rule's Chinese name; a short code (R1, R2) stays in front, a long one (US_ESTATE_TAX) is dropped. */
+export function ruleTitle(ruleId: string, title: string): string {
+  const name = title.replace(`${ruleId} · `, '');
+  return /^R\d+$/.test(ruleId) ? `${ruleId} · ${name}` : name;
+}
+
 /** A new proposal: the rule that fired and what it proposes; it opens the proposal. */
 export function proposalMessage(proposal: ProposalForPush, names: ReadonlyMap<string, Bilingual>): Message {
   return {
     kind: 'proposal',
     key: String(proposal.id),
-    title: `${proposal.title.en} ${proposal.title.zh.replace(`${proposal.ruleId} · `, '')}`,
+    title: ruleTitle(proposal.ruleId, proposal.title.zh),
     body: both(proposalAction(proposal.condition, proposal.state, proposal.detail, names)),
     url: `/#proposal-${proposal.id}`,
   };
@@ -283,14 +290,14 @@ export function summaryLines(summary: WeeklySummary): Bilingual[] {
   return [rules, drift, value];
 }
 
-/** The weekly review push: three lines, each in English then Chinese; it opens the dashboard. */
+/** The weekly review push: three lines in Chinese; it opens the dashboard. */
 export function weeklyMessage(summary: WeeklySummary, key: string): Message {
   const lines = summaryLines(summary);
   return {
     kind: 'weekly',
     key,
-    title: 'Weekly review 每週檢視',
-    body: lines.map((line) => `${line.en} ${line.zh}`).join('\n'),
+    title: '每週檢視',
+    body: lines.map((line) => line.zh).join('\n'),
     url: '/',
   };
 }
@@ -301,7 +308,7 @@ export function dataFailureMessage(health: DataHealth, lastGoodRunId: number | n
   return {
     kind: 'data_failure',
     key: `after-run-${lastGoodRunId ?? 0}`,
-    title: 'Data failure 資料異常',
+    title: '資料異常',
     body: both({
       en: `The nightly price job has missed ${health.misses} nights in a row; the app shows the last prices it has. Open Data status.`,
       zh: `每夜價格排程已連續 ${health.misses} 晚未成功；App 沿用最後取得的價格。請查看資料狀態。`,

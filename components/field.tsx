@@ -8,7 +8,7 @@ import { Bi } from './bi';
 export function Field({ label, hint, error, children }: { label: Bilingual; hint?: ReactNode; error?: Bilingual | null; children: ReactNode }) {
   return (
     <label className="field">
-      <Bi {...label} />
+      <Bi {...label} label />
       {children}
       {hint && <span className="hint">{hint}</span>}
       {error && (

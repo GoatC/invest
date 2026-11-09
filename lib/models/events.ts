@@ -126,8 +126,8 @@ export function eventMessage(event: MarketEvent, today: string): Message {
   return {
     kind: 'event',
     key: eventKey(event),
-    title: `In ${days} day${days === 1 ? '' : 's'}: ${name.en} ${days} 天後：${name.zh}`,
-    body: `${when.en} Taipei. Volatility often rises before and falls after; no orders.\n台北時間 ${when.zh}。事件前波動常升高、事件後回落；不附下單清單。`,
+    title: `${days} 天後：${name.zh}`,
+    body: `台北時間 ${when.zh}。事件前波動常升高、事件後回落；不附下單清單。`,
     url: '/volatility#events',
   };
 }

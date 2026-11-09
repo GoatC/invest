@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
@@ -7,20 +8,24 @@ import { DataProblem } from '@/components/data-problem';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, orDataError, type CashFlowRecord, type HoldingsData, type Proposal } from '@/lib/data';
+import type { AlertItem } from '@/lib/alerts';
+import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, loadRules, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
 import { flowTotals } from '@/lib/models/cash-flows';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
-import { positionKey, type Shortfall } from '@/lib/models/positions';
+import { positionKey } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
+import { shortfallAlert } from '@/lib/forms';
 import type { FxQuote } from '@/lib/models/types';
 import type { Holding } from '@/lib/models/valuation';
-import { stateText } from '@/lib/proposal-text';
+import { proposalAlert } from '@/lib/proposal-text';
+import { breachAlert } from '@/lib/rule-text';
 
 import { SecuritiesMaster } from '../securities/master';
 import { ValuationOverview } from '../valuation/overview';
+import { tickerLinks } from './ticker-links';
 import { TradeForm } from './trade-form';
 import { tradeInitial } from './trade-initial';
 
@@ -65,14 +70,6 @@ function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-function shortfallText(shortfall: Shortfall): Bilingual {
-  const missing = quantity(shortfall.missingQty);
-  return {
-    en: `The ${shortfall.ticker} sell on ${shortfall.tradeDate} is ${missing} units larger than the ${POOL[shortfall.pool].en.toLowerCase()} pool held: a buy is missing or a quantity is wrong.`,
-    zh: `${shortfall.tradeDate} 賣出的 ${shortfall.ticker} 比${POOL[shortfall.pool].zh}資金池當時持有的多 ${missing} 單位，可能漏記買進或數量有誤。`,
-  };
-}
-
 export default async function HoldingsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
   const params = await searchParams;
@@ -80,14 +77,14 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   let flows: CashFlowRecord[];
   let rates: FxQuote[];
   // The proposals only add to the page, so a failed read of them does not hide the holdings.
-  let proposals: Proposal[] | DataError;
+  let proposals: [Proposal[], RuleRecord[]] | DataError;
   const today = taipeiToday();
   try {
     [data, flows, rates, proposals] = await Promise.all([
       loadHoldingsData(supabase),
       loadCashFlows(supabase),
       loadFxHistory(supabase),
-      orDataError(loadProposals(supabase, today)),
+      orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     ]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
@@ -124,19 +121,8 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           {savedTicker && <NextSteps ticker={savedTicker.ticker} productType={savedTicker.productType} waiting={!priced.has(savedTicker.ticker)} />}
         </div>
       )}
-      {!(proposals instanceof DataError) && <OpenProposals proposals={proposals} />}
-      {portfolio.shortfalls.length > 0 && (
-        <div className="banner danger" role="alert">
-          <Bi en="Some sells are larger than the holding; fix these trades so the figures add up:" zh="部分賣出數量超過持有數量，請修正以下交易，數字才會正確：" />
-          <ul>
-            {portfolio.shortfalls.map((shortfall) => (
-              <li key={`${shortfall.pool}:${shortfall.ticker}:${shortfall.tradeDate}`}>
-                <Bi {...shortfallText(shortfall)} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {!(proposals instanceof DataError) && <OpenProposals proposals={proposals[0]} rules={proposals[1]} />}
+      <AlertTiles heading={{ en: 'Sells larger than the holding: fix these trades', zh: '賣出超過持有：請修正這些交易' }} tone="alert" items={portfolio.shortfalls.map(shortfallAlert)} />
       <section className="card form" id="add-trade">
         <div className="row spread">
           <h1>持倉</h1>
@@ -184,26 +170,6 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   );
 }
 
-/** Where to look at a ticker next: the analyses that read it, by what kind of security it is. */
-function tickerLinks(ticker: string, productType: Holding['productType']): Array<{ href: string; label: Bilingual }> {
-  const t = encodeURIComponent(ticker);
-  const regression = { href: `/regression?t=${t}`, label: LABELS.regression };
-  const security = { href: `/securities/${t}`, label: { en: 'Security and splits', zh: '證券資料與分割' } };
-  if (productType === 'stock') {
-    return [
-      { href: `/valuation?t=${t}`, label: { en: 'Valuation workbench', zh: '估值工作台' } },
-      { href: `/red-flags?t=${t}`, label: LABELS.redFlags },
-      regression,
-      { href: '/capm', label: LABELS.costOfEquity },
-      security,
-    ];
-  }
-  if (productType === 'equity_etf' || productType === 'theme_etf') {
-    return [{ href: '/look-through', label: LABELS.lookThrough }, regression, { href: '/costs', label: LABELS.costs }, security];
-  }
-  return [regression, { href: '/costs', label: LABELS.costs }, security];
-}
-
 /** After a trade is saved: this ticker's analyses, and whether they must wait for tonight's prices. */
 function NextSteps({ ticker, productType, waiting }: { ticker: string; productType: Holding['productType']; waiting: boolean }) {
   return (
@@ -235,27 +201,21 @@ function NextSteps({ ticker, productType, waiting }: { ticker: string; productTy
   );
 }
 
-/** Proposals waiting on a decision or a trade: first on the page, as on the weekly dashboard (PRD Section 5). */
-function OpenProposals({ proposals }: { proposals: readonly Proposal[] }) {
-  const open = proposals.filter((proposal) => proposal.status === 'open');
-  const approved = proposals.filter((proposal) => proposal.status === 'approved');
-  if (open.length === 0 && approved.length === 0) return null;
-  const names = (list: readonly Proposal[]) => list.map((proposal) => `${proposal.ruleId}${proposal.state ? ` (${stateText(proposal.state)})` : ''}`).join('; ');
+/** Proposals waiting on a decision or a trade, as tiles: first on the page, as on the weekly dashboard (PRD Section 5). */
+function OpenProposals({ proposals, rules }: { proposals: readonly Proposal[]; rules: readonly RuleRecord[] }) {
+  const waiting = proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved');
+  if (waiting.length === 0) return null;
+  const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  const open = waiting.filter((proposal) => proposal.status === 'open').length;
+  const items: AlertItem[] = waiting.map((proposal) => proposalAlert(proposal, byId.get(proposal.ruleId)));
   return (
-    <p id="open-proposals" className="banner info" role="status">
-      {open.length > 0 && (
-        <Bi
-          en={`${open.length} proposal${open.length === 1 ? '' : 's'} to decide: ${names(open)}.`}
-          zh={`${open.length} 份提案待決定：${names(open)}。`}
-        />
-      )}{' '}
-      {approved.length > 0 && (
-        <Bi en={`${approved.length} approved, to trade: ${names(approved)}.`} zh={`${approved.length} 份已核准、待下單：${names(approved)}。`} />
-      )}{' '}
-      <Link href={`/${open.length === 0 ? '?p=approved' : ''}#proposals`}>
-        <Bi en="Open the proposals" zh="查看提案" />
-      </Link>
-    </p>
+    <div id="open-proposals">
+      <AlertTiles
+        heading={{ en: `Proposals waiting: ${waiting.length}`, zh: `待處理提案 ${waiting.length}${open < waiting.length ? `（${waiting.length - open} 份待下單）` : ''}` }}
+        tone="info"
+        items={items}
+      />
+    </div>
   );
 }
 
@@ -285,16 +245,6 @@ function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio
   );
 }
 
-/** An R1 or R2 breach as a tile: the weight against its limit, and the trim that brings it back. */
-function breachFact(breach: CapBreach, caps: HoldingsData['caps']): Fact {
-  const trim = twd(breach.trimTwd);
-  if (breach.rule === 'R1') {
-    return { label: { en: `R1 ${breach.subject}`, zh: `R1 ${breach.subject}` }, value: `${percent(breach.weight)} > ${percent(breach.limit, 0)}`, note: { en: `sell ≈ ${trim}`, zh: `賣出約 ${trim}` }, tone: 'alert' };
-  }
-  const target = percent(caps.satellite?.targetWeight ?? 0, 0);
-  return { label: { en: 'R2 satellite', zh: 'R2 衛星部位' }, value: `${percent(breach.weight)} > ${percent(breach.limit, 0)}`, note: { en: `trim ≈ ${trim} → ${target}`, zh: `減碼約 ${trim} → ${target}` }, tone: 'alert' };
-}
-
 function rulesOk(data: HoldingsData, portfolio: Portfolio): Fact[] {
   const { singleStock, satellite } = data.caps;
   const share = portfolio.pool.totalTwd > 0 ? satelliteValue(portfolio.pool) / portfolio.pool.totalTwd : 0;
@@ -318,7 +268,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
       </h2>
       {breaches.length > 0 ? (
         <div className="form">
-          <Facts facts={breaches.map((breach) => breachFact(breach, data.caps))} />
+          <AlertTiles items={breaches.map((breach) => breachAlert(breach, data.caps))} tone="alert" />
           <Link href="/#proposals">
             <Bi en="The rules engine drafts the trim as a proposal" zh="規則引擎會把減碼擬成提案" />
           </Link>
@@ -328,12 +278,10 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
       )}
       <RuleMath caps={data.caps} pool={poolFigures(portfolio.pool)} />
       {unpriced.length > 0 && (
-        <p className="banner info">
-          <Bi
-            en={`Not valued yet, left out: ${unpriced.map((holding) => holding.ticker ?? holding.label).join(', ')}.`}
-            zh={`尚未估值，不計入：${unpriced.map((holding) => holding.ticker ?? holding.label).join('、')}。`}
-          />
-        </p>
+        <AlertTiles
+          tone="info"
+          items={unpriced.map((holding) => ({ key: holding.key, tone: 'info' as const, title: { en: holding.ticker ?? holding.label, zh: holding.ticker ?? holding.label }, chips: [{ label: { en: 'Not valued yet', zh: '尚未估值' }, value: '不計入' }] }))}
+        />
       )}
     </section>
   );
@@ -390,7 +338,7 @@ function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portf
           <Bi en="Listed holdings" zh="上市持股" />
         </h2>
         <span className="muted small">
-          <Bi en="Tap a ticker for its analyses" zh="點代號看這檔的分析" />
+          <Bi en="Tap a ticker for its analyses, the name for its price chart" zh="點代號看分析 · 點名稱看走勢" />
         </span>
       </div>
       <div className="table-wrap">
@@ -446,7 +394,13 @@ function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portf
                         </ul>
                       </details>
                     )}
-                    <div className="muted small">{holding.label}</div>
+                    {holding.ticker ? (
+                      <Link href={`/holdings/chart/${encodeURIComponent(holding.ticker)}`} className="small holding-chart-link">
+                        {holding.label} <span aria-hidden="true">📈</span>
+                      </Link>
+                    ) : (
+                      <div className="muted small">{holding.label}</div>
+                    )}
                     <DirectionBadges holding={holding} marginCallShare={data.leverage.marginCallShare} />
                     {holding.ticker && !priced.has(holding.ticker) && (
                       <div className="small">

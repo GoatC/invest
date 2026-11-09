@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const health = jobs && !(jobs instanceof DataError) ? dataHealth(jobs.runs, jobs.threshold, taipeiToday()) : undefined;
 
   return (
-    <html lang="en">
+    <html lang="zh-Hant">
       <body className={signedIn ? 'signed-in' : undefined}>
         <header className="site-header">
           <div className="site-header-inner">

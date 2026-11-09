@@ -1,14 +1,44 @@
 /**
- * UI text in English and Traditional Chinese (CLAUDE.md: all UI text bilingual). Pages show both
- * side by side, the way the PRD is written; every string must come with both languages.
+ * UI text in English and Traditional Chinese. Every string is still written in both languages, but
+ * since 2026-11-09 (CLAUDE.md, the Chinese-first rule) a page shows both only for a name: a field,
+ * a column, a figure's label, a button or a link, e.g. "Regular pool 一般投入資金池". A sentence, a
+ * note or a line that carries figures shows in Chinese alone; repeating it in English only doubled
+ * the text. `textMode` decides, so every page follows the same rule.
  */
 export interface Bilingual {
   en: string;
   zh: string;
 }
 
-export function bi(text: Bilingual): string {
-  return text.en === text.zh ? text.en : `${text.en} ${text.zh}`;
+/** How a text shows: both languages (a name), Chinese alone (a sentence or a figure line), or once (the same in both). */
+export type TextMode = 'both' | 'zh' | 'same';
+
+/** A figure: a percentage, an amount, a decimal, a date or a number of three or more digits. */
+const FIGURE = /\d\s?%|NT\$|[$€£¥]\s?\d|\d[\d,]{2,}|\d\.\d|\d{4}-\d{2}/;
+/** A sentence ends in a full stop, question or exclamation mark, a semicolon or a colon. */
+const SENTENCE_END = /[.!?;:。：；][\s"'”’)\]]*$/;
+/** A name has at most this many words, not counting what is in brackets. */
+const NAME_WORDS = 5;
+
+/**
+ * Whether a text is a name (shown in both languages) or a sentence, a note or a figure line (shown
+ * in Chinese alone). `label` marks a field, column or figure label, which stays bilingual however
+ * long it is.
+ */
+export function textMode(text: Bilingual, label = false): TextMode {
+  if (text.en === text.zh) return 'same';
+  if (label) return 'both';
+  const en = text.en.trim();
+  if (SENTENCE_END.test(en) || FIGURE.test(en)) return 'zh';
+  const words = en.replace(/\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
+  return words > NAME_WORDS ? 'zh' : 'both';
+}
+
+/** A text as one string, by the rule above: "Regular pool 一般投入資金池", or the Chinese alone. */
+export function bi(text: Bilingual, label = false): string {
+  const mode = textMode(text, label);
+  if (mode === 'same') return text.en;
+  return mode === 'zh' ? text.zh : `${text.en} ${text.zh}`;
 }
 
 export const LABELS = {

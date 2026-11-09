@@ -7,7 +7,7 @@ export function Stat({ label, value, note }: { label: Bilingual; value: string; 
   return (
     <div className="stat">
       <span className="muted small">
-        <Bi {...label} />
+        <Bi {...label} label />
       </span>
       <span className="value">{value}</span>
       {note && (

@@ -54,12 +54,12 @@ describe('event calendar', () => {
     );
   });
 
-  it('words the reminder in both languages, with no orders, and plans it after the quiet hours', () => {
+  it('words the reminder in Chinese, with no orders, and plans it after the quiet hours', () => {
     const message = eventMessage(event('2026-12-10'), '2026-12-08');
     assert.equal(message.kind, 'event');
     assert.equal(message.key, 'fomc:2026-12-10:FOMC rate decision');
-    assert.equal(message.title, 'In 2 days: FOMC rate decision 2 天後：聯準會利率決議');
-    assert.match(message.body, /Thu 2026-12-10 03:00 Taipei[\s\S]*no orders[\s\S]*2026-12-10（週四） 03:00/);
+    assert.equal(message.title, '2 天後：聯準會利率決議');
+    assert.match(message.body, /^台北時間 2026-12-10（週四） 03:00。[\s\S]*不附下單清單。$/);
     assert.equal(message.url, '/volatility#events');
     assert.deepEqual(whenText(event('2026-11-08', 'other', null)), { en: 'Sun 2026-11-08', zh: '2026-11-08（週日）' });
     const input = {

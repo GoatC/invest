@@ -184,8 +184,8 @@ export function newsMessage(alert: NewsAlert): Message {
   return {
     kind: 'news',
     key: String(alert.id),
-    title: `Breaking: ${alert.topic.name.en} 前沿新聞：${alert.topic.name.zh}`,
-    body: `${alert.sources} outlets in ${alert.windowHours} h${line}\n${alert.windowHours} 小時內 ${alert.sources} 家媒體報導`,
+    title: `前沿新聞：${alert.topic.name.zh}`,
+    body: `${alert.windowHours} 小時內 ${alert.sources} 家媒體報導${line}`,
     url: '/volatility#news',
   };
 }
