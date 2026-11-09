@@ -253,7 +253,15 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
                       </td>
                       <td className="num">{assumption ? percent(assumption.expectedReturn) : '—'}</td>
                       <td className="num">{assumption ? percent(assumption.volatility) : '—'}</td>
-                      <td className="muted small">{assumption?.source ?? <Bi en="Not set yet" zh="尚未設定" />}</td>
+                      <td className="muted small">
+                        {assumption?.auto ? (
+                          <Link href="/allocation/assumptions#auto">
+                            <Bi en="Auto-scored" zh="自動評分" /> {assumption.auto.asOf}
+                          </Link>
+                        ) : (
+                          (assumption?.source ?? <Bi en="Not set yet" zh="尚未設定" />)
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

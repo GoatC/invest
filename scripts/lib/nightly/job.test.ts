@@ -199,6 +199,8 @@ class MemoryStore implements Store {
   indexFills: IndexClose[] = [];
   betaRuns: string[] = [];
   monteCarloRuns: string[] = [];
+  /** When the satellite classes were scored, and whether the β and F5 had run by then. */
+  cmaRuns: Array<{ today: string; betasRun: boolean; monteCarloRun: boolean }> = [];
   attributionRuns: string[] = [];
   fundamentals: FundamentalRow[] = [];
   /** When the watched stocks were valued again, and how many quarters were saved by then. */
@@ -222,6 +224,7 @@ class MemoryStore implements Store {
       factorYears?: number;
       failBetas?: boolean;
       failMonteCarlo?: boolean;
+      failCma?: boolean;
       failAttribution?: boolean;
       /** Whether config capm exists (F11). */
       capm?: boolean;
@@ -340,6 +343,11 @@ class MemoryStore implements Store {
     if (this.options.failAttribution) throw new Error('attribution: permission denied');
     this.attributionRuns.push(today);
     return { months: 2 };
+  }
+  async refreshCmaEstimates(today: string) {
+    if (this.options.failCma) throw new Error('cma_estimates: permission denied');
+    this.cmaRuns.push({ today, betasRun: this.betaRuns.includes(today), monteCarloRun: this.monteCarloRuns.includes(today) });
+    return { saved: ['tactical_themes'], unscored: ['us_stocks'] };
   }
   async refreshMonteCarlo(today: string) {
     if (this.options.failMonteCarlo) throw new Error('simulation_runs: permission denied');
@@ -789,6 +797,16 @@ describe('runNightly', () => {
     const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failMonteCarlo: true })));
     assert.equal(failed.status, 'partial');
     assert.deepEqual(failed.detail.errors, ['Monte Carlo: simulation_runs: permission denied']);
+  });
+
+  it("scores the satellite classes after the month's β and before F5 reads them, and reports a partial run when it cannot save", async () => {
+    const store = new MemoryStore({ regressionYears: 6 });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.cmaRuns, [{ today: TODAY, betasRun: true, monteCarloRun: false }]);
+    assert.deepEqual(run.detail.cma, { saved: ['tactical_themes'], unscored: ['us_stocks'] });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failCma: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Auto CMA: cma_estimates: permission denied']);
   });
 
   it("loads every security back over the years the Monte Carlo and the frontier read (F5, F7)", async () => {

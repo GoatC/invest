@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadEstimatePlan, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadEstimatePlan, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshCmaEstimates, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readFactorSettings } from '../../../lib/models/five-factor.ts';
 import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
@@ -187,6 +187,7 @@ export function supabaseStore(client: SupabaseClient): Store {
     revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
     refreshAttribution: (today) => refreshAttribution(client, today),
+    refreshCmaEstimates: (today) => refreshCmaEstimates(client, today),
     refreshMonteCarlo: async (today) => {
       const saved = await refreshMonteCarlo(client, today);
       return saved ? { runDate: saved.runDate } : undefined;

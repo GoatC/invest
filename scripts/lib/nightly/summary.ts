@@ -3,7 +3,7 @@
  * shows counts and database errors only; which tickers were loaded stays in job_runs, behind
  * row-level security, and the app shows it. A run by hand prints everything.
  */
-import { ATTRIBUTION_ERROR, BETAS_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
 import { DATABASE_ERRORS, type JobRun } from './job.ts';
 
 export function fullSummary(run: JobRun): string[] {
@@ -22,6 +22,7 @@ export function fullSummary(run: JobRun): string[] {
   }
   if (detail.rules) lines.push(`Rules 規則: ${detail.rules.created} proposals drafted 新提案, ${detail.rules.closed} closed 關閉`);
   if (detail.betas) lines.push(`Betas β: ${detail.betas.saved} saved for the month 已存入本月 β`);
+  if (detail.cma) lines.push(`Auto CMA 自動評分: ${detail.cma.saved.join(', ') || 'none 無'} scored 已評分${detail.cma.unscored.length > 0 ? `, ${detail.cma.unscored.join(', ')} not scorable yet 尚無可評分持股` : ''}`);
   if (detail.monteCarlo) lines.push('Monte Carlo 蒙地卡羅: re-run for the month 本月重新模擬');
   if (detail.attribution) lines.push(`Attribution 績效歸因: ${detail.attribution.months} month(s) saved 已存入 ${detail.attribution.months} 個月`);
   if (detail.valued) lines.push(`Valuations 估值: ${detail.valued.join(', ')} valued after a new filing 依新財報重新估值`);
@@ -31,8 +32,8 @@ export function fullSummary(run: JobRun): string[] {
   return lines;
 }
 
-/** Errors about the database, the snapshots, their VaR, the rules, the β or the red-flag scan name no tickers or amounts, so the public log can show them. */
-const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR, RULES_ERROR, BETAS_ERROR, MONTE_CARLO_ERROR, ATTRIBUTION_ERROR, VALUATIONS_ERROR, RED_FLAGS_ERROR].some((label) => line.startsWith(`${label}:`));
+/** Errors about the database, the snapshots, their VaR, the rules, the β, the auto-scored assumptions or the red-flag scan name no tickers or amounts, so the public log can show them. */
+const isDatabaseError = (line: string) => [...DATABASE_ERRORS, SNAPSHOT_ERROR, RISK_ERROR, RULES_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, ATTRIBUTION_ERROR, VALUATIONS_ERROR, RED_FLAGS_ERROR].some((label) => line.startsWith(`${label}:`));
 
 /** Lines with GitHub annotations, so a failed or partial run is flagged on the run's page. */
 export function publicSummary(run: JobRun): string[] {

@@ -2,7 +2,7 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
+import { DataError, loadHoldingsData, orDataError, rescoreQuietly, transactionColumns } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, shortfallMessage, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
@@ -46,6 +46,9 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
       ? await supabase.from('transactions').insert({ ...columns, source: 'manual' })
       : await supabase.from('transactions').update(columns).eq('id', id);
   if (error) return { errors: {}, message: saveFailed(error.message) };
+  // A trade in a satellite class scores its assumption again (F6 auto), so the frontier counts it now.
+  const tickers = new Set([parsed.value.ticker, ...(editing ? [editing.ticker] : [])]);
+  if (inSatellite(data.securities, tickers)) await rescoreQuietly(supabase, taipeiToday());
   // A trade recorded from an approved proposal's checklist goes back to it.
   const proposal = id === undefined ? parseId(fields['proposal']) : undefined;
   if (proposal !== undefined) redirect(`/?saved=trade&p=approved#proposal-${proposal}`);
@@ -67,5 +70,13 @@ export async function deleteTrade(_previous: DeleteState, formData: FormData): P
 
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) return { message: saveFailed(error.message) };
+  const deleted = data.trades.find((trade) => trade.id === id);
+  if (deleted && inSatellite(data.securities, [deleted.ticker])) await rescoreQuietly(supabase, taipeiToday());
   redirect('/holdings?saved=deleted');
+}
+
+/** Whether any of the tickers sits in a satellite class, whose auto-scored assumption reads its holdings. */
+function inSatellite(securities: ReadonlyArray<{ ticker: string; sleeve: string }>, tickers: Iterable<string>): boolean {
+  const wanted = new Set(tickers);
+  return securities.some((security) => wanted.has(security.ticker) && security.sleeve === 'satellite');
 }

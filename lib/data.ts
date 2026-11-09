@@ -8,6 +8,7 @@ import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun,
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
+import { basketReturns, estimateClass, estimateRow, marketLines, mergeAssumptions, readAutoCmaSettings, readEstimateRow, readUnscoredRow, unscoredRow, type AutoCmaSettings, type IndexFit, type SavedEstimate, type Unscored } from './models/auto-cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
 import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
 import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
@@ -789,10 +790,55 @@ async function loadAssetClassSettingsUncached(supabase: SupabaseClient): Promise
   return found.map((row) => ({ ...toAssetClass(row), benchmarkTicker: row.benchmark_ticker }));
 }
 
-/** The capital market assumptions (config cma) and when they were last reviewed; missing is undefined. */
-async function loadAssumptionsUncached(supabase: SupabaseClient): Promise<{ assumptions: Assumptions; verifiedOn: string | null } | undefined> {
-  const [row] = await rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'cma'));
-  return row ? { assumptions: readAssumptions(row.value), verifiedOn: row.last_verified } : undefined;
+/** The capital market assumptions as the models read them, with yours and the auto-scored ones apart. */
+export interface SavedAssumptions {
+  /** Yours, plus the estimate of each satellite class you left blank (F6 auto): what F2, F5, F7 and F10 read. */
+  assumptions: Assumptions;
+  /** Yours alone, as config cma holds them. */
+  manual: Assumptions;
+  /** Every saved estimate, a class you set included (shown beside yours); empty while scoring is off. */
+  estimates: SavedEstimate[];
+  /** The classes held with nothing that can be scored yet, and why each line was left out. */
+  unscored: Unscored[];
+  /** config cma_auto; undefined before its migration. */
+  auto: AutoCmaSettings | undefined;
+  verifiedOn: string | null;
+}
+
+/** The saved estimates (cma_estimates), each read defensively, and the classes held but not scored yet. */
+async function loadCmaEstimates(supabase: SupabaseClient): Promise<{ estimates: SavedEstimate[]; unscored: Unscored[] }> {
+  const found = await rows<{ class_id: string; as_of: string; expected_return: unknown; volatility: unknown; months: unknown; detail: unknown }>(
+    'cma_estimates',
+    supabase.from('cma_estimates').select('class_id, as_of, expected_return, volatility, months, detail'),
+  );
+  return {
+    estimates: found.flatMap((row) => {
+      const read = readEstimateRow(row);
+      return read ? [read] : [];
+    }),
+    unscored: found.flatMap((row) => {
+      const read = readUnscoredRow(row);
+      return read ? [read] : [];
+    }),
+  };
+}
+
+/**
+ * The capital market assumptions (config cma) and when they were last reviewed, merged with the
+ * auto-scored estimate of each satellite class left blank while config cma_auto is on; missing is undefined.
+ */
+async function loadAssumptionsUncached(supabase: SupabaseClient): Promise<SavedAssumptions | undefined> {
+  const [config, classes] = await Promise.all([
+    rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', ['cma', 'cma_auto'])),
+    loadAssetClasses(supabase),
+  ]);
+  const row = config.find((entry) => entry.key === 'cma');
+  if (!row) return undefined;
+  const manual = readAssumptions(row.value);
+  const auto = readAutoCmaSettings(config.find((entry) => entry.key === 'cma_auto')?.value);
+  const { estimates, unscored } = auto?.enabled ? await loadCmaEstimates(supabase) : { estimates: [], unscored: [] };
+  const satellite = new Set(classes.filter((assetClass) => assetClass.sleeve === 'satellite').map((assetClass) => assetClass.id));
+  return { assumptions: mergeAssumptions(manual, estimates, satellite), manual, estimates, unscored, auto, verifiedOn: row.last_verified };
 }
 
 /** R1 and R2 as the rules table holds them. */
@@ -806,7 +852,7 @@ export interface AllocationData extends HoldingsData {
   /** Undefined while the F8_DRIFT rule is off. */
   bands: DriftBands | undefined;
   /** Undefined until the step 6 migration is applied. */
-  assumptions: { assumptions: Assumptions; verifiedOn: string | null } | undefined;
+  assumptions: SavedAssumptions | undefined;
 }
 
 async function loadAllocationDataUncached(supabase: SupabaseClient): Promise<AllocationData> {
@@ -1818,20 +1864,36 @@ export interface CapmData {
   stocks: StockCost[];
 }
 
-/** The newest β saved for each ticker and benchmark (N1's monthly refresh), raw and adjusted. */
-async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, BetaInput>> {
-  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; factor_loadings: Record<string, unknown> | null; run_date: string }>(
+/** The newest β saved for each ticker and benchmark (N1's monthly refresh), raw and adjusted, with its R². */
+async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, BetaInput & { r2: number | null }>> {
+  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; factor_loadings: Record<string, unknown> | null; r2: number | null; run_date: string }>(
     'beta_results',
-    supabase.from('beta_results').select('ticker, benchmark, beta, factor_loadings, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(500),
+    supabase.from('beta_results').select('ticker, benchmark, beta, factor_loadings, r2, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(500),
   );
-  const out = new Map<string, BetaInput>();
+  const out = new Map<string, BetaInput & { r2: number | null }>();
   for (const row of found) {
     const key = `${row.ticker}|${row.benchmark}`;
     const adjusted = row.factor_loadings?.['adjusted'];
     if (out.has(key) || row.beta === null || typeof adjusted !== 'number') continue;
-    out.set(key, { raw: Number(row.beta), adjusted, runDate: row.run_date });
+    out.set(key, { raw: Number(row.beta), adjusted, runDate: row.run_date, r2: row.r2 === null ? null : Number(row.r2) });
   }
   return out;
+}
+
+/** F11's monthly series (the 10-year yields and Damodaran's ERP) of the last CAPM_MONTHS, oldest first. */
+async function loadCapmSeries(supabase: SupabaseClient, today: string): Promise<Map<string, MonthValue[]>> {
+  const since = `${addMonths(today.slice(0, 7), -CAPM_MONTHS)}-01`;
+  const found = await rows<{ series: string; obs_month: string; value: number }>(
+    'market_series',
+    supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(CAPM_SERIES)).gte('obs_month', since).order('obs_month'),
+  );
+  const series = new Map<string, MonthValue[]>();
+  for (const row of found) {
+    const list = series.get(row.series) ?? [];
+    list.push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
+    series.set(row.series, list);
+  }
+  return series;
 }
 
 /**
@@ -1839,25 +1901,15 @@ async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, Be
  * the market's index, the newest saved by the monthly refresh, else worked out now at N1's defaults.
  */
 async function loadCapmDataUncached(supabase: SupabaseClient, today: string): Promise<CapmData> {
-  const since = `${addMonths(today.slice(0, 7), -CAPM_MONTHS)}-01`;
-  const [capmRow, setup, saved, seriesRows, holdings] = await Promise.all([
+  const [capmRow, setup, saved, series, holdings] = await Promise.all([
     rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'capm')),
     loadRegressionSetup(supabase),
     savedBetaInputs(supabase),
-    rows<{ series: string; obs_month: string; value: number }>(
-      'market_series',
-      supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(CAPM_SERIES)).gte('obs_month', since).order('obs_month'),
-    ),
+    loadCapmSeries(supabase, today),
     loadHoldingsData(supabase),
   ]);
   const settings = readCapmSettings(capmRow[0]?.value);
   const regression = setup.settings;
-  const series = new Map<string, MonthValue[]>();
-  for (const row of seriesRows) {
-    const list = series.get(row.series) ?? [];
-    list.push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
-    series.set(row.series, list);
-  }
   const held = new Set(buildPortfolio(holdings).holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])));
   const stocks = setup.securities.filter((security) => security.productType === 'stock').sort((a, b) => Number(held.has(b.ticker)) - Number(held.has(a.ticker)) || a.ticker.localeCompare(b.ticker));
   if (!settings) return { settings, regression, series, stocks: [] };
@@ -1887,6 +1939,135 @@ async function loadCapmDataUncached(supabase: SupabaseClient, today: string): Pr
       return { security, held: held.has(security.ticker), outcome: stockCostOfEquity(security, found ?? now?.beta, settings, series), ...(problem ? { betaProblem: problem } : {}) };
     }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// F6 auto-scored assumptions (asked 2026-11-09)
+// ---------------------------------------------------------------------------
+
+/**
+ * Each ticker's fit against every N1 index, its β as config capm.beta reads it: the newest the
+ * monthly refresh saved, else worked out now at N1's defaults, as F11 does for a stock with none.
+ */
+async function loadIndexFits(supabase: SupabaseClient, today: string, tickers: readonly string[], capm: CapmSettings): Promise<Map<string, IndexFit[]>> {
+  const [setup, saved] = await Promise.all([loadRegressionSetup(supabase), savedBetaInputs(supabase)]);
+  const regression = setup.settings;
+  const benchmarks = regression?.benchmarks ?? [];
+  const used = (beta: { raw: number; adjusted: number }) => (capm.beta === 'adjusted' ? beta.adjusted : beta.raw);
+  const out = new Map<string, IndexFit[]>();
+  const missing: string[] = [];
+  for (const ticker of tickers) {
+    const fits: IndexFit[] = [];
+    for (const benchmark of benchmarks) {
+      const found = saved.get(`${ticker}|${benchmark.id}`);
+      if (found) fits.push({ benchmark: benchmark.id, beta: used(found), r2: found.r2 });
+    }
+    out.set(ticker, fits);
+    if (fits.length < benchmarks.length && setup.priced.has(ticker)) missing.push(ticker);
+  }
+  if (missing.length > 0 && regression) {
+    const { defaults } = regression;
+    const data = await loadRegressionData(supabase, missing, loadFrom(today, defaults.years, regression.rollingWeeks), setup);
+    const securities = new Map(setup.securities.map((security) => [security.ticker, security]));
+    for (const ticker of missing) {
+      const security = securities.get(ticker);
+      const fits = out.get(ticker) ?? [];
+      if (!security) continue;
+      for (const benchmark of benchmarks) {
+        if (fits.some((fit) => fit.benchmark === benchmark.id)) continue;
+        const outcome = regressTicker(data, security, benchmark, { freq: defaults.freq, years: defaults.years, basis: defaults.currency }, regression);
+        if (outcome.ok) fits.push({ benchmark: benchmark.id, beta: used({ raw: outcome.result.beta, adjusted: outcome.result.adjusted }), r2: outcome.result.r2 });
+      }
+    }
+  }
+  return out;
+}
+
+export interface CmaRefresh {
+  /** The satellite classes scored and saved. */
+  saved: string[];
+  /** The classes held with nothing that can be scored yet: saved with no figures, naming the lines left out. */
+  unscored: string[];
+}
+
+/**
+ * Scores each satellite class from its long lines of both pools (lib/models/auto-cma.ts) and saves
+ * the estimates in cma_estimates, today's date as of; a class holding nothing that can be scored
+ * loses its row. Undefined before the migration, without config capm or while scoring is off. The
+ * nightly job runs it, and so does the owner's save of a trade in a satellite class or of the
+ * assumptions, so a new holding is scored at once when its closes are in.
+ */
+export async function refreshCmaEstimates(supabase: SupabaseClient, today: string): Promise<CmaRefresh | undefined> {
+  const config = await rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['cma', 'cma_auto', 'capm']));
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const settings = readAutoCmaSettings(value('cma_auto'));
+  const capm = readCapmSettings(value('capm'));
+  if (!settings?.enabled || !capm || value('cma') === undefined) return undefined;
+  // Uncached: a server action calls this right after saving a trade.
+  const [classes, holdings, series] = await Promise.all([loadAssetClassSettingsUncached(supabase), loadHoldingsDataUncached(supabase), loadCapmSeries(supabase, today)]);
+  const satellite = classes.filter((assetClass) => assetClass.sleeve === 'satellite');
+  const ids = new Set(satellite.map((assetClass) => assetClass.id));
+  // Each satellite class's long lines by ticker, both pools: what the class holds.
+  const byClass = new Map<string, Map<string, { market: string; exposure: number }>>();
+  for (const holding of buildPortfolio(holdings).holdings) {
+    if (!holding.ticker || !holding.market || holding.qty <= 0 || holding.direction !== 'long' || !ids.has(holding.assetClassId)) continue;
+    const exposure = exposureOf(holding);
+    if (!(exposure > 0)) continue;
+    const lines = byClass.get(holding.assetClassId) ?? new Map<string, { market: string; exposure: number }>();
+    const line = lines.get(holding.ticker) ?? { market: holding.market, exposure: 0 };
+    line.exposure += exposure;
+    lines.set(holding.ticker, line);
+    byClass.set(holding.assetClassId, lines);
+  }
+  const tickers = [...new Set([...byClass.values()].flatMap((lines) => [...lines.keys()]))].sort();
+  const [fits, returns] =
+    tickers.length > 0
+      ? await Promise.all([loadIndexFits(supabase, today, tickers, capm), loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today)])
+      : [new Map<string, IndexFit[]>(), new Map<string, ReturnPoint[]>()];
+  const lines = marketLines(settings, capm, series, readAssumptions(value('cma')));
+  const out: Array<Record<string, unknown>> = [];
+  const saved: string[] = [];
+  const unscored: string[] = [];
+  for (const assetClass of satellite) {
+    const held = byClass.get(assetClass.id);
+    if (!held) continue;
+    const outcome = estimateClass(
+      assetClass.id,
+      [...held].map(([ticker, line]) => ({ ticker, market: line.market, exposure: line.exposure, fits: fits.get(ticker) ?? [], returns: returns.get(ticker) ?? [] })),
+      lines,
+      settings,
+    );
+    if (outcome.ok) {
+      out.push(estimateRow(outcome.estimate, lines, today));
+      saved.push(assetClass.id);
+    } else {
+      out.push(unscoredRow(assetClass.id, outcome.left, today));
+      unscored.push(assetClass.id);
+    }
+  }
+  if (out.length > 0) {
+    const { error } = await supabase.from('cma_estimates').upsert(out, { onConflict: 'class_id' });
+    if (error) throw new DataError('cma_estimates', error.message);
+  }
+  // A class that holds nothing any more has nothing to say.
+  const empty = satellite.map((assetClass) => assetClass.id).filter((id) => !byClass.has(id));
+  if (empty.length > 0) {
+    const { error } = await supabase.from('cma_estimates').delete().in('class_id', empty);
+    if (error) throw new DataError('cma_estimates', error.message);
+  }
+  return { saved, unscored };
+}
+
+/**
+ * The same after an owner's save, as a courtesy: the save already succeeded, so a failure here is
+ * left for the nightly job to retry rather than shown as the save's.
+ */
+export async function rescoreQuietly(supabase: SupabaseClient, today: string): Promise<void> {
+  try {
+    await refreshCmaEstimates(supabase, today);
+  } catch {
+    // The nightly job scores again tonight.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2737,8 +2918,13 @@ export interface FrontierData {
   classes: AssetClassSettings[];
   /** Expected yearly return by class id (the CMA). */
   expected: Record<string, number>;
-  /** Each class benchmark's monthly returns in TWD. */
+  /** Each class benchmark's monthly returns in TWD, and those of the lines an auto-scored class holds. */
   history: Map<string, ReturnPoint[]>;
+  /**
+   * The monthly TWD returns of each auto-scored class's basket (F6 auto), read in place of its
+   * benchmark's, so its expected return and its covariance describe the same holdings.
+   */
+  baskets: Map<string, ReturnPoint[]>;
   /** The regular pool's actual share of each class, 0 to 1. */
   current: Record<string, number>;
 }
@@ -2751,14 +2937,24 @@ export async function loadFrontierData(supabase: SupabaseClient, today: string):
     loadHoldingsData(supabase),
   ]);
   const settings = readFrontierSettings(config[0]?.value, config[0]?.last_verified ?? null);
-  const tickers = [...new Set(classes.flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])))];
+  const estimates = new Map((assumptions?.estimates ?? []).map((estimate) => [estimate.classId, estimate]));
+  const scored = classes.flatMap((entry) => {
+    const estimate = assumptions?.assumptions[entry.id]?.auto ? estimates.get(entry.id) : undefined;
+    return estimate && estimate.lines.length > 0 ? [estimate] : [];
+  });
+  const tickers = [...new Set([...classes.flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])), ...scored.flatMap((estimate) => estimate.lines.map((line) => line.ticker))])];
   const history = settings ? await loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today) : new Map<string, ReturnPoint[]>();
+  const baskets = new Map(scored.flatMap((estimate) => {
+    const basket = basketReturns(estimate.lines, history);
+    return basket.length > 0 ? [[estimate.classId, basket] as const] : [];
+  }));
   const portfolio = buildPortfolio(holdings);
   return {
     settings,
     classes,
     expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
     history,
+    baskets,
     current: Object.fromEntries(portfolio.classes.map((entry) => [entry.assetClass.id, entry.weight])),
   };
 }

@@ -9,6 +9,7 @@ import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
 import type { FrontierSettings } from './models/frontier';
+import type { AutoCmaSettings } from './models/auto-cma';
 import type { McSettings } from './models/monte-carlo';
 import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
 import type { SectorProxy, SectorSettings } from './models/sectors';
@@ -101,6 +102,8 @@ export const MESSAGES = {
   goalCount: { en: `At most ${MAX_GOALS} goals.`, zh: `最多 ${MAX_GOALS} 個目標。` },
   frontierBounds: { en: 'One per line: an asset class id, "=", the minimum and maximum in percent, e.g. us_global_equity = 0 - 50; the minimums must not exceed 100% nor the maximums fall short of it.', zh: '每行一個：資產類別代號、「=」、最小與最大百分比，例如 us_global_equity = 0 - 50；最小值合計不得超過 100%，最大值合計不得低於 100%。' },
   frontierYears: { en: 'Enter whole years from 1 to 30.', zh: '請輸入 1 到 30 的整數年數。' },
+  autoYears: { en: 'Enter whole years from 1 to 20.', zh: '請輸入 1 到 20 的整數年數。' },
+  autoMonths: { en: 'Enter whole months from 12 up to the years × 12.', zh: '請輸入 12 到「年數 × 12」之間的整數月數。' },
   fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -1457,6 +1460,28 @@ export function parseFrontierForm(raw: RawForm, current: FrontierSettings, class
     lookbackYears: years ?? current.lookbackYears,
     bounds,
     lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Auto-scored assumptions (F6, config cma_auto)
+// ---------------------------------------------------------------------------
+
+export type AutoCmaField = 'lookbackYears' | 'minMonths';
+
+/** config cma_auto from its form: on or off, the premium's source, the years and the fewest months; the anchors stay. */
+export function parseAutoCmaForm(raw: RawForm, current: AutoCmaSettings): Parsed<AutoCmaSettings, AutoCmaField> {
+  const errors: FieldErrors<AutoCmaField> = {};
+  const years = parseNumber(raw['lookbackYears']);
+  if (years === undefined || !Number.isInteger(years) || years < 1 || years > 20) errors.lookbackYears = MESSAGES.autoYears;
+  const minMonths = parseNumber(raw['minMonths']);
+  if (minMonths === undefined || !Number.isInteger(minMonths) || minMonths < 12 || (years !== undefined && minMonths > years * 12)) errors.minMonths = MESSAGES.autoMonths;
+  return finish(errors, () => ({
+    ...current,
+    enabled: raw['enabled'] === 'on',
+    premium: raw['premium'] === 'erp' ? ('erp' as const) : ('cma' as const),
+    lookbackYears: years ?? current.lookbackYears,
+    minMonths: minMonths ?? current.minMonths,
   }));
 }
 

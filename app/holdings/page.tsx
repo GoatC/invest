@@ -9,7 +9,7 @@ import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
-import { DataError, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, loadRules, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, loadAssumptions, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, loadRules, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
@@ -18,7 +18,9 @@ import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfo
 import { positionKey } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
 import { shortfallAlert } from '@/lib/forms';
-import type { FxQuote } from '@/lib/models/types';
+import type { AssetClass, FxQuote } from '@/lib/models/types';
+import type { Assumption } from '@/lib/models/cma';
+import type { LeftReason } from '@/lib/models/auto-cma';
 import type { Holding } from '@/lib/models/valuation';
 import { proposalAlert } from '@/lib/proposal-text';
 import { breachAlert } from '@/lib/rule-text';
@@ -95,6 +97,22 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const empty = data.trades.length === 0 && data.manualAssets.length === 0;
   const priced = new Set(data.prices.map((price) => price.ticker));
   const savedTicker = param(params, 'saved') === 'added' || param(params, 'saved') === 'updated' ? data.securities.find((security) => security.ticker === param(params, 't')) : undefined;
+  // A trade in a satellite class was just scored into its class's assumption (F6 auto): show the figure.
+  const savedClass = savedTicker?.sleeve === 'satellite' ? data.assetClasses.find((assetClass) => assetClass.id === savedTicker.assetClassId) : undefined;
+  const assumptions = savedClass ? await orDataError(loadAssumptions(supabase)) : undefined;
+  const score =
+    savedClass && savedTicker && assumptions && !(assumptions instanceof DataError)
+      ? {
+          assetClass: savedClass,
+          assumption: assumptions.assumptions[savedClass.id],
+          on: assumptions.auto?.enabled === true,
+          included: assumptions.estimates.some((estimate) => estimate.classId === savedClass.id && estimate.lines.some((line) => line.ticker === savedTicker.ticker)),
+          left: [...assumptions.estimates, ...assumptions.unscored].flatMap((entry) => (entry.classId === savedClass.id ? entry.left : [])).find((line) => line.ticker === savedTicker.ticker)?.reason,
+          minMonths: assumptions.auto?.minMonths ?? 0,
+          // Only a long line is scored; a sold-out or short one has nothing to count.
+          held: portfolio.holdings.some((holding) => holding.ticker === savedTicker.ticker && holding.qty > 0 && holding.direction === 'long'),
+        }
+      : undefined;
   const { initial, proposal } = tradeInitial(data, rates, today, {
     ticker: param(params, 'ticker'),
     side: param(params, 'side'),
@@ -118,7 +136,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
               </Link>
             </>
           )}
-          {savedTicker && <NextSteps ticker={savedTicker.ticker} productType={savedTicker.productType} waiting={!priced.has(savedTicker.ticker)} />}
+          {savedTicker && <NextSteps ticker={savedTicker.ticker} productType={savedTicker.productType} waiting={!priced.has(savedTicker.ticker)} {...(score ? { score } : {})} />}
         </div>
       )}
       {!(proposals instanceof DataError) && <OpenProposals proposals={proposals[0]} rules={proposals[1]} />}
@@ -170,10 +188,52 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   );
 }
 
-/** After a trade is saved: this ticker's analyses, and whether they must wait for tonight's prices. */
-function NextSteps({ ticker, productType, waiting }: { ticker: string; productType: Holding['productType']; waiting: boolean }) {
+/** After a trade is saved: this ticker's analyses, whether they must wait for tonight's prices, and its class's auto-scored assumption. */
+function NextSteps({
+  ticker,
+  productType,
+  waiting,
+  score,
+}: {
+  ticker: string;
+  productType: Holding['productType'];
+  waiting: boolean;
+  score?: { assetClass: AssetClass; assumption: Assumption | undefined; on: boolean; included: boolean; left: LeftReason | undefined; minMonths: number; held: boolean };
+}) {
   return (
     <div className="next-steps">
+      {score?.on && (!score.assumption || score.assumption.auto) && (
+        <p>
+          <span className={`status-icon ${score.assumption ? 'ok' : 'idle'}`} aria-hidden="true">
+            {score.assumption ? '✓' : '…'}
+          </span>{' '}
+          <Link href="/allocation/assumptions#auto">
+            <Bi en={score.assetClass.nameEn} zh={score.assetClass.nameZh} />
+          </Link>{' '}
+          {score.assumption ? (
+            <Bi
+              en={`auto-scored: return ${percent(score.assumption.expectedReturn, 1)}, volatility ${percent(score.assumption.volatility, 1)}`}
+              zh={`自動評分：報酬 ${percent(score.assumption.expectedReturn, 1)}・波動 ${percent(score.assumption.volatility, 1)}`}
+            />
+          ) : (
+            <Bi en="not scored yet" zh="尚未評分" />
+          )}
+          {!score.included && score.held && (
+            <>
+              {' '}
+              <span className="chip">
+                {waiting ? (
+                  <Bi en={`${ticker}: after tonight’s prices`} zh={`${ticker}：今晚載入價格後`} />
+                ) : score.left === 'beta' ? (
+                  <Bi en={`${ticker}: no β`} zh={`${ticker}：無 β`} />
+                ) : (
+                  <Bi en={`${ticker}: under ${score.minMonths} months`} zh={`${ticker}：不足 ${score.minMonths} 個月`} />
+                )}
+              </span>
+            </>
+          )}
+        </p>
+      )}
       {waiting && (
         <p>
           <span className="status-icon idle" aria-hidden="true">

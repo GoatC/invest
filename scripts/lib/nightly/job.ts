@@ -20,7 +20,7 @@
  * is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
-import { ATTRIBUTION_ERROR, BETAS_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
 import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
@@ -127,6 +127,8 @@ export interface Store {
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
   /** Saves each complete month's Brinson effects (N2) not yet saved; undefined when there is nothing new (refreshAttribution in lib/data). */
   refreshAttribution(today: string): Promise<{ months: number } | undefined>;
+  /** Scores each satellite class from its holdings (F6 auto) and saves the estimates; undefined before its migration or while off (refreshCmaEstimates in lib/data). */
+  refreshCmaEstimates?(today: string): Promise<{ saved: string[]; unscored: string[] } | undefined>;
   /** Saves the month's Monte Carlo summary (F5) once: undefined when it is saved already or cannot run yet (refreshMonteCarlo in lib/data). */
   refreshMonteCarlo(today: string): Promise<{ runDate: string } | undefined>;
   /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
@@ -175,6 +177,8 @@ export interface RunDetail {
   rules?: { created: number; closed: number };
   /** The holdings' β saved for the month (N1), on the month's first run. */
   betas?: { saved: number; runDate: string };
+  /** The satellite classes scored from their holdings tonight (F6 auto), and those held with nothing that can be scored yet; the figures stay in cma_estimates. */
+  cma?: { saved: string[]; unscored: string[] };
   /** The Monte Carlo re-run (F5) saved for the month, on the month's first run; its figures stay in simulation_runs. */
   monteCarlo?: { runDate: string };
   /** The months of Brinson effects (N2) saved tonight. */
@@ -835,6 +839,15 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       if (betas) detail.betas = betas;
     } catch (err) {
       detail.errors.push(`${BETAS_ERROR}: ${message(err)}`);
+    }
+  }
+  // F6's auto-scored assumptions, from the closes and the β just saved, before F5 reads them.
+  if (store.refreshCmaEstimates) {
+    try {
+      const cma = await store.refreshCmaEstimates(today);
+      if (cma) detail.cma = cma;
+    } catch (err) {
+      detail.errors.push(`${CMA_ERROR}: ${message(err)}`);
     }
   }
   // F5's monthly re-run, on the month's first night: the plan, the assumptions and the closes just saved.
