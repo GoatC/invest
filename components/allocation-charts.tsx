@@ -208,6 +208,7 @@ export function AllocationDonut({ slices, withTarget, label }: { slices: Record<
   const [selected, setSelected] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const chart = useRef<Chart | null>(null);
+  const box = useRef<HTMLDivElement>(null);
   const current = slices[lens];
   const ringTarget = withTarget && current.some((slice) => slice.target !== null);
 
@@ -221,18 +222,23 @@ export function AllocationDonut({ slices, withTarget, label }: { slices: Record<
           instance.on('click', (params) => {
             if (params.seriesIndex !== 0) return;
             const slice = current[params.dataIndex];
-            if (slice) setSelected((was) => (was === slice.key ? null : slice.key));
+            if (!slice) return;
+            // The card over the chart takes the tooltip's place.
+            instance.dispatchAction({ type: 'hideTip' });
+            setSelected((was) => (was === slice.key ? null : slice.key));
           });
         },
       ),
     [current, ringTarget],
   );
 
-  function choose(key: string) {
-    const next = selected === key ? null : key;
+  function choose(key: string | null) {
+    const next = key === null || selected === key ? null : key;
     setSelected(next);
-    const index = current.findIndex((slice) => slice.key === key);
-    chart.current?.dispatchAction({ type: next === null ? 'unselect' : 'select', seriesIndex: 0, dataIndex: index });
+    const index = current.findIndex((slice) => slice.key === (next ?? selected));
+    if (index !== -1) chart.current?.dispatchAction({ type: next === null ? 'unselect' : 'select', seriesIndex: 0, dataIndex: index });
+    // A row tapped under the chart brings the card above it into view.
+    if (next !== null) box.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   const chosen = current.find((slice) => slice.key === selected);
@@ -260,7 +266,10 @@ export function AllocationDonut({ slices, withTarget, label }: { slices: Record<
           <Bi en="Outer ring: actual. Inner ring: the SAA target." zh="外圈為實際比例，內圈為 SAA 目標。" />
         </p>
       )}
-      <div ref={ref} className="chart chart-donut" role="img" aria-label={`${bi(label)} · ${bi(LENS[lens])}`} />
+      <div ref={box} className="donut-box">
+        <div ref={ref} className="chart chart-donut" role="img" aria-label={`${bi(label)} · ${bi(LENS[lens])}`} />
+        {chosen && <SliceCard slice={chosen} onClose={() => choose(null)} />}
+      </div>
       <div className="table-wrap">
         <table className="slices compact">
           <thead>
@@ -298,36 +307,62 @@ export function AllocationDonut({ slices, withTarget, label }: { slices: Record<
           </tbody>
         </table>
       </div>
-      {chosen ? (
-        <div className="form">
-          <h3>
-            <Bi en={`In ${sliceLabel(chosen.key).en}`} zh={`${sliceLabel(chosen.key).zh}包含`} />
-          </h3>
-          {chosen.holdings.length === 0 ? (
-            <p className="muted">
-              <Bi en="Nothing held here yet." zh="目前沒有持有。" />
-            </p>
-          ) : (
-            <ul className="slice-holdings">
-              {chosen.holdings.map((holding) => (
-                <li key={holding.key}>
-                  <span>
-                    {holding.ticker && <strong>{holding.ticker} </strong>}
-                    <span className={holding.ticker ? 'muted small' : undefined}>{holding.label}</span>
-                  </span>
-                  <span className="num">
-                    {twd(holding.valueTwd)} · {percent(holding.weight)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : (
+      {!chosen && (
         <p className="muted small">
           <Bi en="Tap a slice or row for its holdings." zh="點選區塊或列 → 持股。" />
         </p>
       )}
     </figure>
+  );
+}
+
+/**
+ * A tapped slice's holdings in a small card floating over the chart (it takes no room on the page):
+ * each holding's share of the slice with a bar, and its value. Closed with ✕, Escape or a second tap.
+ */
+function SliceCard({ slice, onClose }: { slice: Slice; onClose: () => void }) {
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [onClose]);
+  const name = sliceLabel(slice.key);
+  return (
+    <div className="slice-card" role="dialog" aria-label={`${bi(name)} 成分`}>
+      <div className="slice-card-head">
+        <span className="chart-key rect" style={{ background: sliceColor(slice.key) }} aria-hidden="true" />
+        <strong>
+          <Bi {...name} />
+        </strong>
+        <span className="muted small">{`${percent(slice.weight)} · ${twd(slice.valueTwd)}`}</span>
+        <button type="button" className="slice-card-close" aria-label="Close 關閉" onClick={onClose}>
+          ✕
+        </button>
+      </div>
+      {slice.holdings.length === 0 ? (
+        <p className="muted small">
+          <Bi en="Nothing held here yet." zh="目前沒有持有。" />
+        </p>
+      ) : (
+        <ul className="slice-holdings">
+          {slice.holdings.map((holding) => {
+            const share = slice.valueTwd > 0 ? holding.valueTwd / slice.valueTwd : 0;
+            return (
+              <li key={holding.key}>
+                <span className="slice-holding-name">
+                  {holding.ticker ? <strong>{holding.ticker}</strong> : <span>{holding.label}</span>}
+                  {holding.ticker && <span className="muted small"> {holding.label}</span>}
+                </span>
+                <strong className="num">{percent(share)}</strong>
+                <span className="slice-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.min(100, share * 100).toFixed(1)}%`, background: sliceColor(slice.key) }} />
+                </span>
+                <span className="muted small num">{twd(holding.valueTwd)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

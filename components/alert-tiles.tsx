@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Fragment } from 'react';
 import type { AlertItem, AlertGauge, AlertTone } from '@/lib/alerts';
 import type { Bilingual } from '@/lib/i18n';
 
@@ -49,19 +50,21 @@ export function AlertTiles({ items, heading, tone }: { items: readonly AlertItem
                     {ICON[item.tone]}
                   </span>
                 )}
-                {item.code && <span className="alert-code">{item.code}</span>}
+                {item.code && <span className="alert-code">{item.code}</span>}{' '}
                 <span className="alert-title">
                   <Bi {...item.title} label />
-                </span>
+                </span>{' '}
                 {item.value !== undefined && <strong className="alert-value">{item.value}</strong>}
               </span>
-              {item.gauge && <Gauge gauge={item.gauge} />}
+              {item.gauge && <Gauge gauge={item.gauge} />}{' '}
               {item.chips && item.chips.length > 0 && (
                 <span className="alert-chips">
                   {item.chips.map((chip) => (
-                    <span key={chip.label.en} className="alert-chip" title={chip.label.en}>
-                      <span lang="zh-Hant">{chip.label.zh}</span> <b>{chip.value}</b>
-                    </span>
+                    <Fragment key={chip.label.en}>
+                      <span className="alert-chip" title={chip.label.en}>
+                        <span lang="zh-Hant">{chip.label.zh}</span> <b>{chip.value}</b>
+                      </span>{' '}
+                    </Fragment>
                   ))}
                 </span>
               )}

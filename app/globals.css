@@ -953,12 +953,80 @@ tr.selected td {
   gap: 0.35rem;
 }
 
+/* A slice's holdings: name and share on a line, a bar of the share and the value under it. */
 .slice-holdings li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.75rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.35rem;
+}
+
+.slice-holding-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slice-bar {
+  display: block;
+  align-self: center;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.slice-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* The donut and the card that floats over it when a slice is tapped (no room taken on the page). */
+.donut-box {
+  position: relative;
+}
+
+.slice-card {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  width: min(18rem, calc(100% - 0.5rem));
+  max-height: calc(100% - 0.5rem);
+  overflow-y: auto;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft), 0 8px 24px rgba(31, 42, 58, 0.12);
+  font-size: 0.9rem;
+  z-index: 2;
+}
+
+.slice-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  position: sticky;
+  top: -0.55rem;
+  background: var(--surface);
+  padding-top: 0.1rem;
+}
+
+.slice-card-close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  min-height: 0;
+  padding: 0.1rem 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
 }
 
 .slice-holdings li:last-child {

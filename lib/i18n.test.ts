@@ -10,6 +10,7 @@ describe('textMode (the Chinese-first rule)', () => {
     assert.equal(textMode({ en: 'Long (buy low, sell high)', zh: '做多（買低賣高）' }), 'both');
     assert.equal(bi({ en: 'Open the proposals', zh: '查看提案' }), 'Open the proposals 查看提案');
     assert.equal(bi(LABELS.saving), 'Saving… 儲存中…');
+    assert.equal(textMode({ en: '2008 global financial crisis', zh: '2008 全球金融危機' }), 'both');
   });
 
   it('shows sentences, figure lines and long phrases in Chinese alone', () => {
@@ -18,6 +19,7 @@ describe('textMode (the Chinese-first rule)', () => {
     assert.equal(textMode({ en: 'trim ≈ NT$17,750 → 20%', zh: '減碼約 NT$17,750 → 20%' }), 'zh');
     assert.equal(textMode({ en: 'R2 trigger 25%', zh: 'R2 觸發點 25%' }), 'zh');
     assert.equal(textMode({ en: 'Show all 120 trades', zh: '顯示全部 120 筆交易' }), 'zh');
+    assert.equal(textMode({ en: 'Of 10,000 paths', zh: '10,000 條路徑' }), 'zh');
     assert.equal(textMode({ en: 'Tap a ticker for its analyses', zh: '點代號看這檔的分析' }), 'zh');
   });
 

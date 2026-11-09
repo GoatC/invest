@@ -155,8 +155,7 @@ await step('holdings: R1 and R2 are worked out on screen with the demo figures',
   await page.getByText('R1 與 R2 的計算方式', { exact: true }).click();
   const text = await body();
   // 5% of NT$79,203.12; the satellite is 2330 (NT$7,215) plus AAPL (NT$7,646.40).
-  check(text.includes('One stock may hold up to NT$3,960'), 'R1 limit in NT$');
-  check(text.includes('NT$14,861 ÷ NT$79,203 = 18.8%'), 'R2 inputs');
+    check(text.includes('NT$14,861 ÷ NT$79,203 = 18.8%'), 'R2 inputs');
   check(text.includes('單一個股最多可持有 NT$3,960'), 'Chinese R1 line');
 });
 
@@ -186,7 +185,7 @@ await step("trade form: picking VT fills USD and the trade date's rate; an exist
   await page.fill('input[name=ticker]', 'VT');
   check((await page.inputValue('input[name=currency]')) === 'USD', 'currency USD');
   check((await page.inputValue('input[name=fxRate]')) === '32.4', `fx 32.4, got ${await page.inputValue('input[name=fxRate]')}`);
-  check((await body()).includes('Rate of 2026-10-20: 32.4'), "the hint names the rate's date");
+  check((await body()).includes('2026-10-20 的匯率為 32.4'), "the hint names the rate's date");
   await page.fill('input[name=qty]', '1');
   await page.fill('input[name=price]', '158');
   await page.fill('input[name=fee]', '1');
@@ -268,7 +267,7 @@ await step('deleting a trade asks first, then removes it', async () => {
 await step('the edit history keeps the change and the deleted trade', async () => {
   await page.goto(`${BASE}/history`);
   const text = await body();
-  check(/Deleted\s*刪除[\s\S]*buy 2 VT at 158 USD/.test(text), 'deleted trade listed with what it held');
+  check(/Deleted\s*刪除[\s\S]*買進 VT 2 單位，價格 158 USD/.test(text), 'deleted trade listed with what it held');
   check(text.includes('買進 VT 2 單位，價格 158 USD'), 'Chinese description');
   check(/Quantity\s*數量: 1 → 2/.test(text), 'the earlier quantity change');
   await snap('history');
@@ -318,7 +317,7 @@ await step("cash flows: a USD dividend takes its security's currency and the dat
   check((await page.inputValue('input[name=fxRate]')) === '32.4', `rate of 2026-10-20, got ${await page.inputValue('input[name=fxRate]')}`);
   check((await page.inputValue('select[name=pool]')) === 'regular', 'the pool that holds VT');
   await page.fill('input[name=amount]', '0.55');
-  await page.getByText('In USD = NT$18').waitFor();
+  await page.getByText('以 USD 計，約 NT$18').waitFor();
   await snap('cash-flow-form');
   await page.click('main button[type=submit]');
   await page.waitForURL('**/holdings?saved=flow-added**');
@@ -427,7 +426,7 @@ await step('CSV import: Big5 statement, title lines, guessed columns, every row 
   check((await page.locator('input[type=number]').inputValue()) === '3', 'header row 3');
   // No rate column and none typed: each row takes the rate of its trade date, here the newest within 10 days.
   // The 股利 row becomes a dividend cash flow; the totals row is skipped.
-  await page.getByText('2 new trades · 1 new dividend · 0 already saved · 1 with an unknown ticker · 1 skipped').waitFor();
+  await page.getByText('新交易 2 筆 · 新股利 1 筆 · 已存在 0 筆 · 未知代號 1 筆 · 略過 1 列').waitFor();
   const text = await body();
   check(text.includes('不是交易列'), 'totals row explained');
   const dividend = await page.locator('tr', { hasText: 'Dividend' }).first().innerText();
@@ -446,10 +445,10 @@ await step('CSV import: an unknown ticker is added in a new tab, then "Check aga
   await snap('security-added-tab', tab, false);
   await tab.close();
   await page.getByRole('button', { name: /Check again/ }).click();
-  await page.getByText('3 new trades · 1 new dividend · 0 already saved · 0 with an unknown ticker · 1 skipped').waitFor();
-  await page.getByRole('button', { name: /Import 3 trades and 1 dividend/ }).click();
+  await page.getByText('新交易 3 筆 · 新股利 1 筆 · 已存在 0 筆 · 未知代號 0 筆 · 略過 1 列').waitFor();
+  await page.getByRole('button', { name: /匯入 3 筆交易與 1 筆股利/ }).click();
   await page.waitForURL('**/holdings?saved=imported**');
-  await page.getByText('Imported 3 trades and 1 dividend; 1 row of the file skipped.').waitFor();
+  await page.getByText('已匯入 3 筆交易與 1 筆股利，略過檔案中的 1 列。').waitFor();
   check((await body()).includes('CSV import'), 'imported trades marked as CSV');
   check((await page.locator('#cash-flows tr', { hasText: '2026-10-18' }).innerText()).includes('1.24 USD'), 'the dividend is a cash flow');
   await snap('after-import');
@@ -459,7 +458,7 @@ await step('CSV import again: the broker mapping is remembered and nothing is im
   await page.goto(`${BASE}/import`);
   check((await page.locator('select').first().inputValue()) === '國泰複委託（示範）', 'saved broker selected');
   await page.setInputFiles('input[type=file]', CSV);
-  await page.getByText('0 new trades · 0 new dividends · 4 already saved').waitFor();
+  await page.getByText('新交易 0 筆 · 新股利 0 筆 · 已存在 4 筆').waitFor();
   check(await page.getByRole('button', { name: /Import 0 trades/ }).isDisabled(), 'import disabled');
   // A saved row can still be imported again on purpose, at its trade date's rate.
   await page.getByLabel('Import anyway').first().check();
@@ -473,7 +472,7 @@ await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split a
   await page.locator('.chart svg').nth(1).waitFor();
   const text = await body();
   // The seed's first trade is the VT buy of 2026-05-07; its demo closes run from that day.
-  check(text.includes('2026-05-07 (first purchase) →'), 'measured from the first demo purchase');
+  check(text.includes('2026-05-07（第一筆買進） →'), 'measured from the first demo purchase');
   // A tile reads: the label in English and Chinese on one line, then the figure.
   const tile = (label) => new RegExp(`${label}[^\\n]*\\n\\s*[+−]?\\d+\\.\\d%`).test(text);
   check(tile('Time-weighted return \\(TWR\\)'), 'TWR tile');
@@ -564,7 +563,7 @@ await step('allocation donuts: three lenses, the 80/20 target ring, a slice list
 await step('targets: must add up to 100%, are saved together and logged', async () => {
   await page.goto(`${BASE}/allocation/targets`);
   await page.fill('input[name=target_us_global_equity]', '27');
-  check((await body()).includes('The targets add up to 99%'), 'live total check');
+  check((await body()).includes('目標合計為 99%'), 'live total check');
   await page.fill('input[name=target_tw_market_cap]', '13');
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=targets');
@@ -605,7 +604,7 @@ await step('capital market assumptions: a source is required, then they show wit
 /** The VaR figure the card shows, in NT$, and its share of the portfolio in %. */
 async function varFigure(card) {
   const value = Number((await card.locator('.var-value').innerText()).replace(/[^\d]/g, ''));
-  const share = Number(/\(([\d.]+)% of portfolio\)/.exec(await card.innerText())?.[1]);
+  const share = Number(/（投資組合的 ([\d.]+)%）/.exec(await card.innerText())?.[1]);
   return { value, share };
 }
 
@@ -615,7 +614,7 @@ await step('risk card on the dashboard: the 95% 1-week VaR in NT$ and % of the p
   await card.waitFor();
   const text = await card.innerText();
   check(text.includes('95% 1-week VaR') && text.includes('95% 一週風險值'), 'bilingual label');
-  check(text.includes('In about 1 week in 20, losses could exceed this.') && text.includes('每 20 週約有 1 週，損失可能超過此金額。'), 'the 1-in-20 line');
+  check(text.includes('每 20 週約有 1 週，損失可能超過此金額。'), 'the 1-in-20 line');
   // The seed's three years of weekly demo closes give the proxies their covariance.
   const week = await varFigure(card);
   check(week.value > 0 && week.share > 0.2 && week.share < 6, `a plausible weekly VaR, got NT$${week.value} (${week.share}%)`);
@@ -628,7 +627,7 @@ await step('risk card on the dashboard: the 95% 1-week VaR in NT$ and % of the p
   await card.getByText('95% 1-month VaR').first().waitFor();
   const month = await varFigure(card);
   check(Math.abs(month.value - week.value * Math.sqrt(4.33)) <= 2, `1 month = 1 week × √4.33: ${month.value} vs ${week.value}`);
-  check((await card.innerText()).includes('In about 1 month in 20'), 'the month line');
+  check((await card.innerText()).includes('每 20 個月約有 1 個月'), 'the month line');
   await snap('dashboard-risk', card, false);
 });
 
@@ -643,8 +642,8 @@ async function openRiskDetails() {
 await step('risk details on the dashboard: the histogram with its cutoff, the weeks beyond it, what the VaR is made of, the formula', async () => {
   await openRiskDetails();
   const text = await body();
-  check(text.includes('Where the VaR sits among the last 156 weeks'), 'three years of weekly returns');
-  check(/Weeks beyond the VaR[\s\S]*?\d+ \/ 156[\s\S]*?≈ [\d.]+ expected/.test(text), `the weeks beyond the VaR are counted, got ${text.slice(0, 800)}`);
+  check(text.includes('風險值在過去 156 週報酬中的位置'), 'three years of weekly returns');
+  check(/Weeks beyond the VaR[\s\S]*?\d+ \/ 156[\s\S]*?預期約 [\d.]+/.test(text), `the weeks beyond the VaR are counted, got ${text.slice(0, 800)}`);
   const inputs = await page.locator('.risk-part', { hasText: '風險值的組成' }).innerText();
   // Each holding by its class proxy: 00692 and 2330 by 0050, NVDA by VOO; gold by GLDM; TWD balances add no risk.
   check(/0050\s+(00692, 2330|2330, 00692)/.test(inputs), `0050 measures 00692 and 2330, got ${inputs}`);
@@ -686,7 +685,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   await page.locator('.chart svg').first().waitFor();
   // The assumptions entered above cover the five core classes: (0.28·6.5 + 0.12·6 + 0.22·3.5 + 0.10·4 + 0.08·1.5) ÷ 0.80 = 4.7875%.
   check((await page.inputValue('input[name=expectedReturn]')) === '4.79', 'the target mix return over the core');
-  check((await body()).includes('Target mix: 4.79% (80% of targets assumed)'), 'the mix says what it covers');
+  check((await body()).includes('目標配置：4.79%（80% 的目標有假設）'), 'the mix says what it covers');
   check((await page.inputValue('input[name=pmt]')) === '10000', 'dca.amount_twd as the monthly contribution');
   check(/^\d{4}-\d{2}$/.test(await page.inputValue('input[name=start]')) && Number(await page.inputValue('input[name=pv]')) > 0, 'next month, from today’s regular pool');
   check((await body()).includes('在上方儲存計畫後'), 'no plan saved yet');
@@ -695,7 +694,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   check((await page.inputValue('input[name=pv]')) === '0', 'PV at the end of April is 0');
   await page.fill('input[name=start]', '2026-07');
   const june = Number(await page.inputValue('input[name=pv]'));
-  check(june > 15_000 && june < 25_000 && (await body()).includes('Regular pool 2026-06-30'), `PV at the end of June, got ${june}`);
+  check(june > 15_000 && june < 25_000 && (await body()).includes('一般資金池 2026-06-30'), `PV at the end of June, got ${june}`);
   // PRD Section 11: PV 0, PMT NT$10,000, 6% a year compounded monthly, 30 years, no step-up ≈ NT$10,045,000.
   await page.fill('input[name=start]', '2026-05');
   await page.fill('input[name=pv]', '0');
@@ -709,7 +708,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   check(Math.abs((await statValue("Value in today's money")) - 10_045_150.42 / 1.02 ** 30) <= 1, 'the real value');
   check((await body()).includes('3.92%') && (await body()).includes('實質年報酬'), 'real return (1.06 ÷ 1.02 − 1), bilingual');
   await page.fill('input[name=stepUp]', '3');
-  check((await statValue('Value after 30 years')) > 10_045_150 && (await body()).includes('Stepped up 3.00% a year'), 'a step-up raises the value');
+  check((await statValue('Value after 30 years')) > 10_045_150 && (await body()).includes('每年調升 3.00%'), 'a step-up raises the value');
   check(Math.abs((await statValue('Last monthly contribution')) - 10_000 * 1.03 ** (359 / 12)) <= 1, 'the last contribution after 29 years and 11 months of step-ups');
   await page.fill('input[name=years]', '0');
   await page.getByText('請輸入 1 到 60 之間的整數年數。').waitFor();
@@ -732,11 +731,11 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
 await step('calculator: saving the plan compares the regular pool with it at each month end, the gap split', async () => {
   await page.click('main button[type=submit]');
   await page.waitForURL('**/plan?saved=plan');
-  await page.getByText('Plan saved').waitFor();
+  await page.getByText('已儲存計畫；').waitFor();
   const section = page.locator('#actual-vs-plan');
   await section.locator('.chart svg').waitFor();
   const text = await section.innerText();
-  check(text.includes('The plan from 2026-05: NT$0 to start, NT$10,000 a month stepped up 0.00% a year, at 6.00% a year for 30 years.'), `the plan, got ${text}`);
+  check(text.includes('2026-05 起的計畫：起始金額 NT$0，每月投入 NT$10,000、每年調升 0.00%，以年報酬 6.00% 計算 30 年。'), `the plan, got ${text}`);
   // NT$10,000 at each month end, growing 0.5% a month: 10,000, then 20,050.
   await section.getByText('Show as a table').click();
   const table = await section.locator('table').innerText();
@@ -780,7 +779,7 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   const monthly = await page.locator('#rule-MONTHLY_CONTRIBUTION').innerText();
   check(monthly.includes('尚未設定定期定額扣款日'), `monthly waits, got ${monthly}`);
   // The engine's finding sits in the rule's status line.
-  const fires = async (id) => /^\S*\s*Fires/.test(await page.locator(`#rule-${id} .rule-check`).innerText());
+  const fires = async (id) => /^\S*\s*(Fires|觸發中)/.test(await page.locator(`#rule-${id} .rule-check`).innerText());
   check(await fires('R1'), 'R1 fires on the demo holdings');
   check((await page.locator('#rule-R2').innerText()).includes('Not firing'), 'R2 quiet at the demo satellite share');
   check((await page.locator('#rule-RED_FLAG_RED').innerText()).includes('Not firing'), "N3's rules read the seed's green scans");
@@ -796,7 +795,7 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await page.locator('#rule-R1 summary', { hasText: 'Thresholds' }).click();
   await page.fill('#rule-R1 input[name=threshold_max_weight]', '0.5');
   await page.locator('#rule-R1 input[name=threshold_max_weight]').blur();
-  check((await page.locator('#rule-R1').innerText()).includes('= 50.00%'), 'the share shown as a percentage');
+  check((await page.locator('#rule-R1').innerText()).includes('＝ 50.00%'), 'the share shown as a percentage');
   await page.locator('#rule-R1 button[type=submit]').click();
   await page.waitForURL('**/rules?saved=R1*');
   check((await page.locator('#rule-R1').innerText()).includes('Not firing'), 'with a 50% cap R1 stops firing');
@@ -818,7 +817,7 @@ await step('proposals: checking the rules drafts R1, F8 and the monthly contribu
   check((await page.locator('#proposals').innerText()).includes('沒有需要決定的事'), 'none before a check');
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check(/Rules checked: [3-9] new proposals, 0 closed\./.test(await body()), `three or more drafted, got ${await body()}`);
+  check(/已檢查規則：新增 [3-9] 份提案，關閉 0 份。/.test(await body()), `three or more drafted, got ${await body()}`);
   const open = page.locator('article.proposal');
   const titles = await open.locator('h3').allInnerTexts();
   check(titles.some((title) => title.startsWith('R1 · Single-stock trim')), `R1 drafted, got ${titles}`);
@@ -826,20 +825,20 @@ await step('proposals: checking the rules drafts R1, F8 and the monthly contribu
   check(titles.some((title) => title.startsWith('MONTHLY_CONTRIBUTION · Monthly contribution')), 'monthly drafted');
   const r1 = open.filter({ hasText: 'Single-stock trim' });
   const r1Text = await r1.innerText();
-  check(/: [\d.]+% of the regular pool \(NT\$[\d,]+ of NT\$[\d,]+\) > 5% cap · sell ≈ NT\$[\d,]+/.test(r1Text) && !r1Text.includes('Trim = '), `R1 explained, the method folded, got ${r1Text}`);
+  check(/：占一般投入資金池 [\d.]+%（NT\$[\d,]+ 中的 NT\$[\d,]+）> 5% 上限 · 賣出約 NT\$[\d,]+/.test(r1Text) && !r1Text.includes('減碼金額 ='), `R1 explained, the method folded, got ${r1Text}`);
   check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order with its shares, bilingual');
   // The demo savings (NT$20,000) put strategic cash far over its 8%: money out of the balance funds the buys.
   const f8Text = await open.filter({ hasText: 'Drift rebalance' }).innerText();
-  check(/Strategic cash: [\d.]+% \/ 8% target/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
+  check(/戰略現金：[\d.]+% \/ 目標 8%/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
   const monthlyText = await open.filter({ hasText: 'Monthly contribution' }).innerText();
-  check(monthlyText.includes(`NT$10,000 debited on ${taipeiYesterday} → the core classes furthest below target`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
+  check(monthlyText.includes(`${taipeiYesterday} 扣款 NT$10,000 → 最低於目標的核心類別`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
   await snap('proposals');
   await docShot('proposals', page.locator('#proposals'));
   // Checking again drafts nothing twice (from a fresh page, so the redirect is a new address).
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check((await body()).includes('Rules checked: 0 new proposals, 0 closed.'), 'no duplicates');
+  check((await body()).includes('已檢查規則：新增 0 份提案，關閉 0 份。'), 'no duplicates');
 });
 
 await step('proposals: edit the orders, approve, record the trade from the checklist, mark filled; dismiss with a reason', async () => {
@@ -849,7 +848,7 @@ await step('proposals: edit the orders, approve, record the trade from the check
   await page.waitForURL(/\/proposals\/\d+$/);
   // US funds are ordered in fractions, to four decimals (config orders).
   await page.fill('input[name=size_0]', '1.23456');
-  await page.getByText('with at most 4 decimals').waitFor();
+  await page.getByText('最多 4 位小數').waitFor();
   await page.fill('input[name=size_0]', '1.2345');
   await page.click('main button[type=submit]');
   await page.waitForURL(/\?saved=edited/);
@@ -884,7 +883,7 @@ await step('proposals: edit the orders, approve, record the trade from the check
   check(/Filled/.test(decided) && /Dismissed[\s\S]*Demo: keep the savings/.test(decided), `decided listed, got ${decided}`);
   // A dismissed state is held back for its cooldown.
   await page.goto(`${BASE}/rules`);
-  check(/held back until \d{4}-\d{2}-\d{2}/.test(await page.locator('#rule-F8_DRIFT').innerText()), 'F8 in its cooldown');
+  check(/冷卻至 \d{4}-\d{2}-\d{2}/.test(await page.locator('#rule-F8_DRIFT').innerText()), 'F8 in its cooldown');
   await page.goto(`${BASE}/history`);
   const history = await body();
   check(history.includes('Proposal') && history.includes('Demo: keep the savings'), 'proposal changes in the edit history');
@@ -939,11 +938,11 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   await page.waitForURL('**/costs?saved=fund*');
   check((await row('VT').innerText()).includes('0.66%'), 'VT: 0.06% + 2% × 30%');
   // The reloaded page has the settings folded again, so read the text rather than what is drawn.
-  check(((await page.locator('#fund-VT > summary').textContent()) ?? '').includes(`checked ${taipeiToday}`), 'checked today');
+  check(((await page.locator('#fund-VT > summary').textContent()) ?? '').includes(`${taipeiToday} 已確認`), 'checked today');
 
   await page.goto(`${BASE}/proposals`);
   const monthly = await page.locator('article.proposal').filter({ hasText: 'Monthly contribution' }).innerText();
-  check(monthly.includes('3.00 USD') && /Est\. fees and tax ≈ NT\$[\d,]+ \(Cathay Securities\)/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
+  check(monthly.includes('3.00 USD') && /預估費用與稅 ≈ NT\$[\d,]+（國泰[^）]*）/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
 });
 
 await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; the rule suggests Irish ETFs, with no orders', async () => {
@@ -959,7 +958,7 @@ await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; 
   await page.waitForURL(/\?saved=checked/);
   const estate = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
   const text = await estate.innerText();
-  check(/US-situs assets: 6\d,\d{3} USD > 60,000 USD exempt/.test(text) && text.includes('Irish-domiciled equivalents') && text.includes('No orders'), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  check(/美國資產：6\d,\d{3} USD > 免稅額 60,000 USD/.test(text) && text.includes('愛爾蘭註冊的同類 ETF') && text.includes('沒有下單清單'), `explained, got ${text.replace(/\s+/g, ' ')}`);
   await page.goto(`${BASE}/costs#estate-tax`);
   const section = await page.locator('#estate-tax').innerText();
   check(section.includes('VWRA') && section.includes('AGGU') && (await page.locator('#estate-tax .meter.over').count()) === 1, `over the exemption, alternatives named, got ${section}`);
@@ -991,13 +990,13 @@ await step("windfall: CAPE's percentile sets the pace, ACWI's fall from its high
   await page.locator('.chart-backtest svg').waitFor();
   const text = await body();
   // Seed: CAPE 24.04 in 2026-09, the 74th percentile of its 1,749 months since 1881: above the 70th, so 24 tranches.
-  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 24 tranches → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
+  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
   // ACWI's demo closes peak at 137.95 on 2026-09-17 and end at 130.28 on 2026-10-20: 5.6% below, short of the 15% tier.
-  check((await fact('ACWI below 52-week high')).includes('−5.6% high 137.95 · 2026-09-17 · next tier 15%'), `the drawdown gauge, got ${await fact('ACWI below 52-week high')}`);
-  check((await fact('Plan')).includes('— start one below') && (await fact('Waiting as cash')).includes('NT$50,000 of NT$50,000'), 'no plan; the money-market fund added above waits');
+  check((await fact('ACWI below 52-week high')).includes('−5.6% 高點 137.95 · 2026-09-17 · 下一級距 15%'), `the drawdown gauge, got ${await fact('ACWI below 52-week high')}`);
+  check((await fact('Plan')).includes('— 請於下方建立') && (await fact('Waiting as cash')).includes('NT$50,000 共 NT$50,000'), 'no plan; the money-market fund added above waits');
   check(!text.includes('大額資金只投入核心類別'), 'the explanation folded away');
   const backtest = await page.locator('#backtest').textContent();
-  check(backtest.includes('Every start month from 1900-01 to 2021-09 (1,461 of them)') && backtest.includes('(Demo data)'), `the start months, got ${backtest.slice(0, 400)}`);
+  check(backtest.includes('從 1900-01 到 2021-09 的每個起始月（共 1,461 個') && backtest.includes('（示範資料）'), `the start months, got ${backtest.slice(0, 400)}`);
   // Of the 1,461 starts the rule beat a lump sum in 38%, by −2.2% at the median: it costs in rising markets and saves after falls.
   const cells = async (label) => (await page.locator('#backtest tbody tr', { hasText: label }).locator('td').allInnerTexts()).slice(1).join(' | ');
   check((await cells('This rule vs lump sum')) === '38% | −2.2% | −11.7% … +9.5% | −25.3% | +34.4%', `the rule against a lump sum, got ${await cells('This rule vs lump sum')}`);
@@ -1034,19 +1033,19 @@ await step('windfall: the money arrives as a cash flow and a TWD balance; the pl
   check((await form.locator('input[name=totalTwd]').inputValue()) === '1200000', 'the amount from the windfall recorded');
   check((await form.locator('input[name=startDate]').inputValue()) === taipeiToday, 'the first tranche on the day it arrived');
   const preview = await form.locator('[role=status]').innerText();
-  check(preview.includes(`24 × ≈ NT$50,000 · ${taipeiToday} → ${monthsLater(taipeiToday, 23)} (CAPE 24.0, 74th percentile)`), `the pace as typed, got ${preview}`);
+  check(preview.includes(`24 批 × 約 NT$50,000 · ${taipeiToday} → ${monthsLater(taipeiToday, 23)}（CAPE 24.0，第 74 百分位）`), `the pace as typed, got ${preview}`);
   await form.getByRole('button', { name: /Start the plan/ }).click();
   await page.waitForURL('**/windfall?saved=plan**');
   const text = await body();
   check(text.includes('已儲存計畫：每一批到期時會產生提案。'), 'saved');
-  check((await fact('Plan')).includes(`0 / 24 NT$1,200,000 · next ${taipeiToday}`), `the plan in a tile, got ${await fact('Plan')}`);
+  check((await fact('Plan')).includes(`0 / 24 NT$1,200,000 · 下一批 ${taipeiToday}`), `the plan in a tile, got ${await fact('Plan')}`);
   const rows = await page.locator('#plan tbody tr').allInnerTexts();
   check(rows.length === 24 && /^1\s+\S+\s+NT\$50,000\s+Scheduled/.test(rows[0]) && rows[23].includes(monthsLater(taipeiToday, 23)), `24 tranches of NT$50,000, got ${rows[0]} … ${rows[23]}`);
 
   // The dashboard has the tranche in its coming week, and the plan under the windfall's progress.
   await page.goto(`${BASE}/`);
   const home = await body();
-  check(home.includes(`Plan 0/24 · on schedule · 1 due now · next ${monthsLater(taipeiToday, 1)}`), `the plan on the dashboard, got ${home}`);
+  check(home.includes(`計畫 0/24 · 依排程進行 · 1 批到期 · 下一批 ${monthsLater(taipeiToday, 1)}`), `the plan on the dashboard, got ${home}`);
   check(/Coming week[\s\S]*Windfall tranche due/.test(home), 'the tranche in the coming week');
 });
 
@@ -1054,14 +1053,14 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check(/Rules checked: 1 new proposals?, 0 closed\./.test(await body()), 'only the tranche: ACWI is 5.6% down, no tier');
+  check(/已檢查規則：新增 1 份提案，關閉 0 份。/.test(await body()), 'only the tranche: ACWI is 5.6% down, no tier');
   const proposal = page.locator('article.proposal').filter({ hasText: 'Windfall tranche' });
   trancheProposal = (await proposal.getAttribute('id'))?.replace('proposal-', '');
   const text = await proposal.innerText();
   check(text.includes('WINDFALL_TRANCHE_DUE · Windfall tranche'), 'its rule and title');
-  check(text.includes(`Tranche due ${taipeiToday}: NT$1,200,000 ÷ 24 tranches = NT$50,000, by the core targets`), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  check(text.includes(`${taipeiToday} 到期分批：NT$1,200,000 ÷ 24 批 = NT$50,000，依核心目標權重`), `explained, got ${text.replace(/\s+/g, ' ')}`);
   // Strategic cash's 8 of the core's 80 stays in the deposit, which is strategic cash already.
-  check(text.includes("Strategic cash's share, NT$5,000, stays in the balance"), 'strategic cash stays');
+  check(text.includes('戰略現金的部分 NT$5,000 留在原帳戶'), 'strategic cash stays');
   const orders = await proposal.locator('tbody tr').allInnerTexts();
   const tickers = orders.map((row) => row.split('\t')[1]?.trim());
   check(/^Take out/.test(orders[0] ?? '') && (orders[0] ?? '').includes('Time deposit (demo)'), `paid from the largest windfall balance, got ${orders[0]}`);
@@ -1080,13 +1079,13 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
   await page.locator('.chart-backtest svg').waitFor();
   const first = await page.locator('#plan tbody tr').first().innerText();
   check(first.includes('Done') && first.includes(`#${trancheProposal}`), `the first tranche done, with its proposal, got ${first}`);
-  check((await fact('Plan')).includes(`1 / 24 NT$1,200,000 · next ${monthsLater(taipeiToday, 1)}`), `the plan moves on, got ${await fact('Plan')}`);
+  check((await fact('Plan')).includes(`1 / 24 NT$1,200,000 · 下一批 ${monthsLater(taipeiToday, 1)}`), `the plan moves on, got ${await fact('Plan')}`);
   await snap('windfall-plan');
   await page.setViewportSize({ width: 1280, height: 1400 });
   await docShot('windfall', page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/`);
-  check((await body()).includes(`Plan 1/24 · on schedule · next ${monthsLater(taipeiToday, 1)}`), 'the dashboard follows');
+  check((await body()).includes(`計畫 1/24 · 依排程進行 · 下一批 ${monthsLater(taipeiToday, 1)}`), 'the dashboard follows');
 });
 
 await step('windfall: the demo put back for the steps that follow; the edit history keeps the plan', async () => {
@@ -1095,7 +1094,7 @@ await step('windfall: the demo put back for the steps that follow; the edit hist
   await page.locator('#plan details > summary', { hasText: 'Replace or delete the plan' }).click();
   await page.locator('#plan').getByRole('button', { name: /^Delete/ }).click();
   await page.waitForURL('**/windfall?saved=deleted**');
-  check((await fact('Plan')).includes('start one below'), 'the plan is gone');
+  check((await fact('Plan')).includes('請於下方建立'), 'the plan is gone');
   await page.goto(`${BASE}/assets/${depositId}`);
   await page.getByRole('button', { name: /^Delete/ }).click();
   await page.waitForURL('**/holdings?saved=asset-deleted');
@@ -1104,9 +1103,9 @@ await step('windfall: the demo put back for the steps that follow; the edit hist
   await page.waitForURL('**/holdings?saved=flow-deleted**');
   await page.goto(`${BASE}/history`);
   const history = await body();
-  check(history.includes('Windfall plan') && history.includes(`NT$1,200,000 from ${taipeiToday}`) && history.includes('Windfall tranche'), 'the plan and its tranches in the edit history');
+  check(history.includes('Windfall plan') && history.includes(`NT$1,200,000，自 ${taipeiToday} 起`) && history.includes('Windfall tranche'), 'the plan and its tranches in the edit history');
   await page.goto(`${BASE}/windfall`);
-  check((await fact('Waiting as cash')).includes('NT$50,000 of NT$50,000'), 'the pool as it was');
+  check((await fact('Waiting as cash')).includes('NT$50,000 共 NT$50,000'), 'the pool as it was');
 });
 
 /** A Regression panel's figures, in order: β ± SE, the 95% interval, Blume's β, α a year, R², the periods and their dates. */
@@ -1157,7 +1156,7 @@ await step('regression: compare up to five against one index, each β with its 9
   await page.waitForURL('**/regression?saved=settings**');
   await page.locator('#settings summary').click();
   const method = await page.locator('#settings').innerText();
-  check(method.includes('已儲存設定。') && method.includes(`TWD 1.80% (setting, checked ${taipeiToday})`), `the rate saved and checked, got ${method.slice(0, 600)}`);
+  check(method.includes('已儲存設定。') && method.includes(`台幣 1.80%（設定值，${taipeiToday} 確認）`), `the rate saved and checked, got ${method.slice(0, 600)}`);
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*regression/.test(await body()), 'the settings change in the edit history');
 });
@@ -1206,7 +1205,7 @@ await step("cost of equity: each market's 10-year yield and Damodaran's ERP, eve
   // AAPL at 5.00% + β × 5.00%, with β as worked out above.
   const typed = await costRow('AAPL');
   check(Math.abs(5 + Number(b1) * 5 - pct(typed[5])) < 0.0075, `AAPL at the typed ERP, got ${typed[5]}`);
-  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'checked today');
+  check((await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`), 'checked today');
   // From the plain page, so the save's redirect is a navigation to wait for.
   await page.goto(`${BASE}/capm`);
   await page.locator('#settings summary').click();
@@ -1229,7 +1228,7 @@ await step('valuation: the watchlist, a workbench valued by DCF, the dividend mo
   await page.waitForURL('**/valuation?t=AAPL');
   await page.locator('.chart-ranges svg').waitFor();
   // Demo filings to 2026-06-30, filed 33 days later; F11's live β gives the cost of equity.
-  check((await fact('Newest quarter')).includes('2026-06-30') && (await fact('Newest quarter')).includes('filed 2026-08-02'), `the newest quarter, got ${await fact('Newest quarter')}`);
+  check((await fact('Newest quarter')).includes('2026-06-30') && (await fact('Newest quarter')).includes('2026-08-02 申報'), `the newest quarter, got ${await fact('Newest quarter')}`);
   check((await fact('Cost of equity')).includes('9.43%'), `R_e from F11, got ${await fact('Cost of equity')}`);
   const models = await page.locator('main table').first().innerText();
   check(/DCF \(FCFF\)[^\n]*alerts[\s\S]*USD[\s\S]*Gordon DDM[\s\S]*USD[\s\S]*Multiples[\s\S]*USD/.test(models), `all three models valued, got ${models}`);
@@ -1266,7 +1265,7 @@ await step('valuation: the watchlist, a workbench valued by DCF, the dividend mo
   check(!(await page.locator('#rule-BUY_ZONE').innerText()).includes('Waiting for a saved valuation'), 'BUY_ZONE reads the saved value');
   await page.goto(`${BASE}/`);
   const watch = await page.locator('#dashboard-watchlist').innerText();
-  check(/AAPL [\d,.]+ USD vs [\d,.]+ USD \([+−][\d.]+%\): /.test(watch), `the dashboard watchlist line, got ${watch}`);
+  check(/AAPL\s*[\d,.]+ USD 對 [\d,.]+ USD（[+−][\d.]+%）：/.test(watch), `the dashboard watchlist line, got ${watch}`);
 
   // The defaults are a logged setting too.
   await page.goto(`${BASE}/holdings#valuation`);
@@ -1274,7 +1273,7 @@ await step('valuation: the watchlist, a workbench valued by DCF, the dividend mo
   await page.locator('#valuation-settings input[name=checked]').check();
   await page.locator('#valuation-settings button[type=submit]').click();
   await page.waitForURL(/\/holdings\?valuation=settings/);
-  check((await page.locator('#valuation-settings').innerText()).includes(`last ${taipeiToday}`), 'the defaults checked today');
+  check((await page.locator('#valuation-settings').innerText()).includes(`上次 ${taipeiToday}`), 'the defaults checked today');
 });
 
 await step("forward P/E check: AAPL's demo consensus against its trailing and own-median P/E; 2330's typed in, refused out of order, saved, logged and removed (F12)", async () => {
@@ -1284,9 +1283,9 @@ await step("forward P/E check: AAPL's demo consensus against its trailing and ow
   const text = (await card.innerText()).replace(/\s+/g, ' ');
   check(/Forward P\/E 預估本益比 [\d.]+×/.test(text) && /Trailing P\/E 目前本益比 [\d.]+×/.test(text), `both P/Es, got ${text}`);
   check(/Leans cheap|Neutral|Leans expensive/.test(text) && /偏便宜|中性|偏貴/.test(text), `a verdict, got ${text}`);
-  check(/Analysts 分析師 35/.test(text) && text.includes('32 buy · 9 hold · 1 sell'), `the analysts and ratings, got ${text}`);
+  check(/Analysts 分析師 35/.test(text) && text.includes('買進 32・持有 9・賣出 1'), `the analysts and ratings, got ${text}`);
   check(/Mean target price 平均目標價 255\.00 USD/.test(text), `the target price, got ${text}`);
-  check(/The consensus moved [+−][\d.]+% in 30 days \(10 up, 5 down\)/.test(text), `the revisions, got ${text}`);
+  check(/共識預估 30 天內變動 [+−][\d.]+%（上修 10、下修 5 位）/.test(text), `the revisions, got ${text}`);
   check(text.includes(`Consensus as of ${taipeiToday}, Demo data`), `the source and date, got ${text}`);
   await snap('pe-check');
 
@@ -1305,7 +1304,7 @@ await step("forward P/E check: AAPL's demo consensus against its trailing and ow
   await card.locator('form.form button[type=submit]').click();
   await page.waitForURL('**/valuation?t=2330&saved=estimates**');
   const typed = (await card.innerText()).replace(/\s+/g, ' ');
-  check(typed.includes('已儲存共識預估') && /Forward P\/E 預估本益比 [\d.]+×/.test(typed) && typed.includes('typed in'), `the typed consensus read, got ${typed}`);
+  check(typed.includes('已儲存共識預估') && /Forward P\/E 預估本益比 [\d.]+×/.test(typed) && typed.includes('自行輸入'), `the typed consensus read, got ${typed}`);
   await card.locator('details.more-fields summary').click();
   await card.getByRole('button', { name: /Remove the consensus/ }).click();
   await page.waitForURL('**/valuation?t=2330&saved=estimates-cleared**');
@@ -1387,17 +1386,17 @@ await step('notifications: a test push reaches a device encrypted to its keys an
   await save('phone', phone);
   await save('gone', pushDevice());
   await page.reload();
-  await page.getByRole('button', { name: /Send a test to every device/ }).click();
-  await page.getByText('Sent to 1 device').waitFor();
+  await page.getByRole('button', { name: /Send a test push/ }).click();
+  await page.getByText('已送到 1 台裝置').waitFor();
   check(pushes.length === 2, `the push service got ${pushes.length} pushes`);
   const [test] = phonePushes();
-  check(test?.title === 'Test 測試推播' && test.url === '/notifications', `the device reads the test, got ${JSON.stringify(test)}`);
+  check(test?.title === '測試推播' && test.url === '/notifications', `the device reads the test, got ${JSON.stringify(test)}`);
   const headers = pushes.find((push) => push.path === '/push/phone')?.headers ?? {};
   check(headers['content-encoding'] === 'aes128gcm' && String(headers.authorization).endsWith(`k=${VAPID_PUBLIC_KEY}`) && headers.ttl === '86400', 'encrypted, signed with the VAPID key, kept a day');
   // The page refreshes after a test: the device that left is gone, and the test is in the log.
   await page.getByText('1 device(s) gone, removed').waitFor();
   check((await page.getByRole('button', { name: /^Remove/ }).count()) === 1 && (await body()).includes('phone since'), 'only this device left');
-  check((await page.locator('section', { hasText: 'Recent pushes' }).innerText()).includes('Test 測試推播'), 'the test in the log');
+  check((await page.locator('section', { hasText: 'Recent pushes' }).innerText()).includes('測試推播'), 'the test in the log');
   await snap('notifications');
 });
 
@@ -1420,13 +1419,13 @@ await step('push job: plans the weekly review and the open proposal, sends each 
   const received = phonePushes().slice(before);
   const weekly = received.find((push) => push.title === '每週檢視');
   const monthly = received.find((push) => push.title === '每月投入');
-  check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('Rules: 1 proposal waiting.') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
-  check(monthly && /^Invest the NT\$10,000 debited on \d{4}-\d{2}-\d{2}/.test(monthly.body) && /^\/#proposal-\d+$/.test(monthly.url), `the proposal names its action, got ${JSON.stringify(monthly)}`);
+  check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('規則：1 份提案待處理。') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
+  check(monthly && /^把 \d{4}-\d{2}-\d{2} 扣款的 NT\$10,000 投入/.test(monthly.body) && /^\/#proposal-\d+$/.test(monthly.url), `the proposal names its action, got ${JSON.stringify(monthly)}`);
   const again = await notify();
   check(/Web Push: 0 planned, 0 sent/.test(again.stdout) && phonePushes().length === before + 2, 'nothing twice');
   await page.reload();
   const log = await page.locator('section', { hasText: 'Recent pushes' }).innerText();
-  check(log.includes('Weekly review') && log.includes('Monthly contribution') && log.includes('to 1 device'), `the log, got ${log}`);
+  check(log.includes('每週檢視') && log.includes('每月投入') && log.includes('to 1 device'), `the log, got ${log}`);
   await page.setViewportSize({ width: 1280, height: 1300 });
   await docShot('notifications', page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -1436,8 +1435,8 @@ await step('dashboard: the band with the value and the three lines, then VaR, wa
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();
   const text = await body();
-  check(text.includes('Rules: 1 proposal waiting.') && text.includes('規則：1 份提案待處理。'), 'the rules line, bilingual');
-  check(/Allocation: largest drift [^\n]+ [+−][\d.]+ pp\./.test(text), 'the largest drift');
+  check(text.includes('規則：1 份提案待處理。'), 'the rules line, in Chinese');
+  check(/配置：最大偏離為[^\n]+ [+−][\d.]+ pp。/.test(text), 'the largest drift');
   check(text.includes('市值：尚無淨值快照。'), 'no snapshot before the nightly job');
   const band = await page.locator('#this-week').innerText();
   check(band.includes('本週') && /NT\$[\d,]+/.test(band) && band.includes('both pools'), `the band with the value of both pools, got ${band}`);
@@ -1461,7 +1460,7 @@ await step('dashboard: the band with the value and the three lines, then VaR, wa
   await page.waitForURL(/\?saved=approved/);
   check((await body()).includes('執行清單'), 'approved from the dashboard');
   await page.goto(`${BASE}/`);
-  check((await body()).includes('Rules: 1 proposal waiting (1 approved, to trade).'), 'the approved one still waits on trades');
+  check((await body()).includes('規則：1 份提案待處理（其中 1 份已核准、待下單）。'), 'the approved one still waits on trades');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
   await page.locator('.chart-donut svg').waitFor();
@@ -1477,7 +1476,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   const aapl = (await table.locator('tr', { hasText: 'AAPL' }).innerText()).replace(/\s+/g, ' ');
   const tsmc = (await table.locator('tr', { hasText: '2330' }).innerText()).replace(/\s+/g, ' ');
   // AAPL: its invented auditor change makes it amber now; governance does not apply, no feed covers its penalties.
-  check(/Amber[\s\S]*88%[\s\S]*7 \/ 8[\s\S]*Auditor change[\s\S]*Green since 2026-10-11/.test(aapl), `AAPL amber, 7 of 8 covered, got ${aapl}`);
+  check(/Amber[\s\S]*88%[\s\S]*7 \/ 8[\s\S]*Auditor change[\s\S]*自 2026-10-11 起綠燈/.test(aapl), `AAPL amber, 7 of 8 covered, got ${aapl}`);
   // 2330: every indicator covered, its governance tier from the seed's entry.
   check(/Green[\s\S]*100%[\s\S]*9 \/ 9/.test(tsmc), `2330 green and fully covered, got ${tsmc}`);
   check((await body()).includes('紅旗指標') && (await body()).includes('覆蓋率'), 'Chinese labels');
@@ -1489,7 +1488,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.waitForURL('**/red-flags?t=AAPL');
   check((await fact('Industry')).includes('Electronic Computers') && (await fact('Industry')).includes('Altman Z'), `a manufacturer, got ${await fact('Industry')}`);
   const rows = await page.locator('main table').first().innerText();
-  check(/Beneish M-Score[\s\S]*Green[\s\S]*−?\d\.\d\d[\s\S]*Twelve months to 2026-06-30 against 2025-06-30/.test(rows), `Beneish from the demo filings, got ${rows}`);
+  check(/Beneish M-Score[\s\S]*Green[\s\S]*−?\d\.\d\d[\s\S]*截至 2026-06-30 的近四季，對照 2025-06-30/.test(rows), `Beneish from the demo filings, got ${rows}`);
   check(/Auditor change[\s\S]*Amber[\s\S]*2026-10-20 · 8-K Item 4\.01/.test(rows), 'the invented 8-K listed');
   check(/Governance rating[\s\S]*Does not apply/.test(rows) && /Environmental penalties[\s\S]*No data/.test(rows), 'governance n/a, penalties uncovered');
   await page.getByText('Beneish M, worked out').click();
@@ -1510,7 +1509,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
   const review = (await page.locator('article.proposal', { hasText: 'Red flag worsens' }).innerText()).replace(/\s+/g, ' ');
-  check(review.includes(`2330: green → amber since ${taipeiToday} · Environmental penalties`) && review.includes('No orders drafted'), `the review prompt, got ${review}`);
+  check(review.includes(`2330：綠燈 → 黃燈，自 ${taipeiToday}`) && review.includes('不產生下單清單'), `the review prompt, got ${review}`);
   await page.locator('article.proposal', { hasText: 'Red flag worsens' }).getByRole('button', { name: /^Dismiss/ }).click();
   await page.waitForURL(/\?saved=dismissed/);
 
@@ -1534,7 +1533,7 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/red-flags?saved=settings**');
-  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'checked today');
+  check((await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`), 'checked today');
 
   // Beside F12's watchlist: the light on the Valuation page and the dashboard.
   await page.goto(`${BASE}/holdings#valuation`);
@@ -1549,14 +1548,14 @@ await step('look-through: every fund opened up, TSMC through VT, 00692 and held 
   await page.locator('.chart-treemap svg').waitFor();
   const tsmc = (await page.locator('#companies tr', { hasText: 'Taiwan Semiconductor' }).innerText()).replace(/\s+/g, ' ');
   // The seed's invented files: 52.5% of 00692 and 1.6% of VT are TSMC; 2330 is also held directly.
-  check(/Taiwan · Information Technology/.test(tsmc) && ['00692 NT$', 'direct NT$', 'VT NT$'].every((route) => tsmc.includes(route)), `TSMC by route, got ${tsmc}`);
+  check(/台灣 · 資訊科技/.test(tsmc) && ['00692 NT$', '直接持有 NT$', 'VT NT$'].every((route) => tsmc.includes(route)), `TSMC by route, got ${tsmc}`);
   check((await fact('Looked through')).match(/\d+\.\d%/) !== null, `the share looked through, got ${await fact('Looked through')}`);
   check(/00692 × VT\s+1\.6%/.test(await page.locator('#overlaps').innerText()), 'the overlap of 00692 and VT');
   const countries = await page.locator('#countries').innerText();
   check(countries.includes('Taiwan') && countries.includes('台灣') && countries.includes('Funds not looked through'), `countries, got ${countries}`);
   check((await page.locator('#sectors').innerText()).includes('Information Technology'), 'sectors');
   const funds = await page.locator('#funds').innerText();
-  check(/VT[\s\S]*2026-09-30 · Demo data · 8 lines[\s\S]*30% withholding/.test(funds) && /BNDW[\s\S]*None: counted whole/.test(funds), `the funds, got ${funds}`);
+  check(/VT[\s\S]*2026-09-30 · 示範資料 · 8 檔[\s\S]*股利預扣 30%/.test(funds) && /BNDW[\s\S]*None: counted whole/.test(funds), `the funds, got ${funds}`);
   check((await body()).includes('合併透視') && (await body()).includes('公司曝險'), 'Chinese labels');
   await snap('look-through');
   await page.setViewportSize({ width: 1280, height: 1300 });
@@ -1566,14 +1565,14 @@ await step('look-through: every fund opened up, TSMC through VT, 00692 and held 
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/look-through?saved=settings**');
-  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'the map checked today');
+  check((await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`), 'the map checked today');
 });
 
 await step('sectors: the heatmap of returns by period, one market at a time, the treemap of exposure with a sector\'s companies, the bubbles, the settings logged (N7)', async () => {
   await page.goto(`${BASE}/sectors`);
   await page.getByRole('heading', { level: 1, name: '產業熱圖' }).waitFor();
   await page.locator('.chart-heatmap svg').waitFor();
-  check((await body()).includes('Closes to 2026-10-23'), 'the seed\'s newest weekly close');
+  check((await body()).includes('收盤價至 2026-10-23'), 'the seed\'s newest weekly close');
   const returns = await page.locator('#sector-returns').innerText();
   check(/Information Technology 資訊科技 US · XLK(\s+[+−]\d+\.\d%){5}/.test(returns) && /Information Technology 資訊科技 TW · ELECTRONIC/.test(returns), `both markets' tech rows, every period, got ${returns}`);
   const materials = /Materials 原物料 TW · ([A-Z, ]+)/.exec(returns)?.[1].split(', ') ?? [];
@@ -1611,7 +1610,7 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/sectors?saved=settings**');
-  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`) && (await page.locator('#settings select[name=colour]').inputValue()) === 'green_up', 'saved and checked today');
+  check((await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`) && (await page.locator('#settings select[name=colour]').inputValue()) === 'green_up', 'saved and checked today');
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*sectors/.test(await body()), 'the setting in the edit history');
 });
@@ -1622,7 +1621,7 @@ await step('volatility: the score of the demo series over the year in few words,
   await page.locator('.chart-figure svg').waitFor();
   // The demo closes end on 2026-10-23, more than 5 days ago: too old to score today.
   check((await body()).includes('Data too old'), 'figures too old leave no score');
-  check(/Volatility score from 2026-0\d-\d\d to 2026-10-23/.test((await page.locator('.chart-figure [role=img]').getAttribute('aria-label')) ?? ''), 'the history of the demo series');
+  check(/2026-0\d-\d\d 至 2026-10-23 的波動分數/.test((await page.locator('.chart-figure [role=img]').getAttribute('aria-label')) ?? ''), 'the history of the demo series');
   await page.locator('summary', { hasText: '成分' }).click();
   const table = await page.locator('#volatility-components').innerText();
   check(/VIX\/VIX3M/.test(table) && /TW VIX 臺指VIX/.test(table) && /old 舊/.test(table), `the components, short, the old ones marked, got ${table}`);
@@ -1637,7 +1636,7 @@ await step('volatility: the score of the demo series over the year in few words,
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/volatility?saved=settings**');
-  check((await page.locator('#settings input[name=taiex_drawdown_panic]').inputValue()) === '30' && (await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`), 'saved, open, and checked today');
+  check((await page.locator('#settings input[name=taiex_drawdown_panic]').inputValue()) === '30' && (await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`), 'saved, open, and checked today');
   await page.locator('#settings input[name=taiex_drawdown_panic]').fill('25');
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/volatility?saved=settings**');
@@ -1681,7 +1680,7 @@ await step('breaking news: an alert saved by the job is listed with its outlets 
     await notify();
     await notify();
     const planned = await (await rest('notifications?select=title,body,url&kind=eq.news')).json();
-    check(planned.length === 1 && planned[0].title === 'Breaking: War or strikes 前沿新聞：戰爭／空襲' && planned[0].body.startsWith('49 outlets in 3 h · e2e: strikes on a capital (CNBC)') && planned[0].url === '/volatility#news', `pushed once, got ${JSON.stringify(planned)}`);
+    check(planned.length === 1 && planned[0].title === '前沿新聞：戰爭／空襲' && planned[0].body.startsWith('3 小時內 49 家媒體報導 · e2e: strikes on a capital (CNBC)') && planned[0].url === '/volatility#news', `pushed once, got ${JSON.stringify(planned)}`);
     // The thresholds and terms are a logged setting.
     await page.locator('#news > details > summary', { hasText: 'Settings' }).click();
     await page.locator('#news-settings input[name=minSources]').fill('12');
@@ -1711,8 +1710,8 @@ await step('volatility alert: a score crossing 8 drafts the panic proposal, expl
     await page.waitForURL(/\?saved=checked/);
     const proposal = page.locator('article.proposal').filter({ hasText: 'Volatility alert' });
     const text = (await proposal.innerText()).replace(/\s+/g, ' ');
-    check(text.includes(`VOLATILITY_ALERT · Volatility alert`) && text.includes(`Volatility score 8.6 on ${taipeiToday} ≥ 8 · panic since ${taipeiToday}`), `the panic proposal explained, got ${text}`);
-    check(/Budget 5% of the regular pool, NT\$[\d,]+ · from strategic cash NT\$[\d,]+/.test(text) && text.includes('the core equity classes, by their targets'), `its budget and buys, got ${text}`);
+    check(text.includes(`VOLATILITY_ALERT · Volatility alert`) && text.includes(`波動分數 8.6（${taipeiToday}）≥ 8 · 自 ${taipeiToday} 起恐慌`), `the panic proposal explained, got ${text}`);
+    check(/預算為一般投入資金池的 5%，NT\$[\d,]+ · 由戰略現金支應 NT\$[\d,]+/.test(text) && text.includes('依目標權重買進核心股票類別'), `its budget and buys, got ${text}`);
     await snap('volatility-alert');
     // Rules page: both rules on, the switch for the quiet hours shown.
     await page.goto(`${BASE}/rules`);
@@ -1737,8 +1736,8 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.getByRole('heading', { level: 1, name: '蒙地卡羅' }).waitFor();
   await page.locator('.chart-figure svg').first().waitFor();
   const text = await body();
-  check(/Median in year \d+/.test(text) && /Of 10,000 paths/.test(text), `the median and the paths, got ${text.slice(0, 400)}`);
-  check(/months drawn from 20\d\d-\d\d to 20\d\d-\d\d \(\d+ months\), 3 at a time/.test(text), 'the history the months are drawn from');
+  check(/Median in year \d+/.test(text) && /10,000 條路徑/.test(text), `the median and the paths, got ${text.slice(0, 400)}`);
+  check(/抽樣自 20\d\d-\d\d 至 20\d\d-\d\d（\d+ 個月），每次連續抽 3 個月/.test(text), 'the history the months are drawn from');
   await page.getByText('The marks, as a table').click();
   check(await page.locator('details table').first().isVisible(), 'the marks table');
   await snap('monte-carlo');
@@ -1771,11 +1770,11 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.locator('#settings input[name=windfallMonth]').fill('2027-06');
   await page.locator('#settings input[name=windfallTranches]').fill('');
   await page.locator('#settings button[type=submit]').click();
-  await page.locator('#windfall').getByText(/The expected windfall: NT\$/).waitFor();
+  await page.locator('#windfall').getByText(/預期大額資金：NT\$/).waitFor();
   const windfall = await page.locator('#windfall').innerText();
-  check(/The expected windfall: NT\$1,200,000/.test(windfall), `the expected windfall named, got ${windfall.slice(0, 300)}`);
-  check(/\d+ monthly tranches: F3’s (pace at today’s CAPE percentile|middle pace)/.test(windfall), `paced by F3, got ${windfall.slice(0, 400)}`);
-  check(/Paths where the 15% tier fired/.test(windfall) || /Acceleration is off/.test(windfall), 'acceleration shown, or why it is off');
+  check(/預期大額資金：NT\$1,200,000/.test(windfall), `the expected windfall named, got ${windfall.slice(0, 300)}`);
+  check(/分 \d+ 個月：(F3 依今天 CAPE 百分位|尚未載入 CAPE)/.test(windfall), `paced by F3, got ${windfall.slice(0, 400)}`);
+  check(/Paths where the 15% tier fired/.test(windfall) || /未加速/.test(windfall), 'acceleration shown, or why it is off');
   check(windfall.includes('Without the windfall') && windfall.includes('不含大額資金'), 'the goal without the windfall');
   await snap('monte-carlo-windfall');
   // Put the demo back for the steps that follow: no expected windfall.
@@ -1809,7 +1808,7 @@ await step('timeline: the plan, the Monte Carlo band and the actuals on one char
   await page.locator('#goals textarea[name=goals]').fill('soon | x');
   await page.locator('#goals button[type=submit]').click();
   await page.locator('#goals [role=alert]').first().waitFor();
-  check((await page.locator('#goals').innerText()).includes('YYYY') || (await page.locator('#goals').innerText()).includes('month'), 'the format asked for');
+  check(/YYYY|month|月份/.test(await page.locator('#goals').innerText()), 'the format asked for');
   check((await body()).includes('人生時間軸') && (await body()).includes('目標與計畫對照'), 'Chinese labels');
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*timeline/.test(await body()), 'the setting in the edit history');
@@ -1866,7 +1865,7 @@ await step('efficient frontier: the curve, the capital market line and the tange
   await page.locator('#settings input[name=checked]').check();
   await page.locator('#settings button[type=submit]').click();
   await page.waitForURL('**/frontier?saved=settings**');
-  check((await page.locator('#settings').innerText()).includes(`last ${taipeiToday}`) && (await page.locator('#settings input[name=riskFree]').inputValue()) === '2', 'saved and checked today');
+  check((await page.locator('#settings').innerText()).includes(`上次 ${taipeiToday}`) && (await page.locator('#settings input[name=riskFree]').inputValue()) === '2', 'saved and checked today');
   check((await body()).includes('效率前緣') && (await body()).includes('切線組合'), 'Chinese labels');
   await page.goto(`${BASE}/history`);
   check(/Setting[\s\S]*frontier/.test(await body()), 'the setting in the edit history');
@@ -1902,7 +1901,7 @@ await step('five factors: the factors seeded by the job, none yet in the demo, t
   await page.waitForURL('**/regression/factors');
   await page.getByRole('heading', { level: 1, name: /五因子/ }).waitFor();
   const text = await body();
-  check(/No factor data yet/.test(text), `no factors in the demo, got ${text.slice(0, 400)}`);
+  check(/尚無因子資料/.test(text), `no factors in the demo, got ${text.slice(0, 400)}`);
   check((await body()).includes('五因子') && (await body()).includes('尚無因子資料'), 'Chinese labels');
 });
 
@@ -1934,9 +1933,9 @@ if (TEXT_REPORT) {
         const count = (text) => text.replace(/\s+/g, '').length;
         // Prose: visible paragraphs, list items, hints and banners outside tables, legends and summary tiles, each counted once.
         const prose = [...(main?.querySelectorAll('p, li, .hint, .banner') ?? [])].filter(
-          (el) => el.checkVisibility() && !el.closest('table, .chart-legend, .facts') && !el.parentElement?.closest('p, li, .hint, .banner'),
+          (el) => el.checkVisibility() && !el.closest('table, .chart-legend, .facts, .alert-group') && !el.parentElement?.closest('p, li, .hint, .banner'),
         );
-        const tiles = [...(main?.querySelectorAll('.fact') ?? [])].filter((el) => el.checkVisibility());
+        const tiles = [...(main?.querySelectorAll('.fact, .alert-tile') ?? [])].filter((el) => el.checkVisibility());
         return {
           total: count(main?.innerText ?? ''),
           prose: prose.reduce((sum, el) => sum + count(el.innerText), 0),
@@ -1952,11 +1951,11 @@ if (TEXT_REPORT) {
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   const wide = [];
-  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/volatility', '/rules', '/assets/new', '/cash-flows/new', '/securities/new', '/history', '/import', '/data']) {
+  for (const path of ['/', '/notifications', '/holdings', '/performance', '/allocation', '/allocation/targets', '/allocation/assumptions', '/plan', '/costs', '/windfall', '/monte-carlo', '/timeline', '/stress', '/frontier', '/attribution', '/regression', '/regression/factors', '/capm', '/valuation?t=AAPL', '/red-flags', '/red-flags?t=AAPL', '/look-through', '/sectors', '/sectors?view=treemap', '/sectors?view=bubble', '/volatility', '/rules', '/assets/new', '/cash-flows/new', '/securities/new', '/history', '/import', '/data', '/holdings/chart/AAPL']) {
     await page.goto(`${BASE}${path}`);
     if (path === '/import') {
       await page.setInputFiles('input[type=file]', CSV);
-      await page.getByText('already saved').first().waitFor();
+      await page.getByText('已存在').first().waitFor();
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     if (overflow > 0) {
@@ -2127,7 +2126,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     await page.goto(`${BASE}/data`);
     const text = await body();
     check(text.includes('Last run') && text.includes('Recent runs'), 'runs listed');
-    check(/Saved the daily NAV snapshot for each day from 2026-05-07 to \d{4}-\d{2}-\d{2}/.test(text), 'NAV snapshots saved from the first trade');
+    check(/已存入 2026-05-07 至 \d{4}-\d{2}-\d{2} 每一天的淨值快照/.test(text), 'NAV snapshots saved from the first trade');
     check(!text.includes('has not run yet'), 'the job has run');
     const vt = await page.locator('tr', { hasText: 'Vanguard Total World Stock ETF' }).innerText();
     check(vt.includes('FinMind') && !vt.includes('Demo data'), `VT from FinMind, got ${vt}`);
@@ -2139,7 +2138,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
     check(/\d{4}-\d{2}\s+[\d.]+\s+(Shiller's data|multpl\.com)/.test(cape) && !cape.includes('Demo data'), `CAPE loaded live, got ${cape.replace(/\s+/g, ' ')}`);
     // After the refresh the job checks the rules, with the secret key, as the owner's Check now does.
-    check(/Checked the rules: \d+ new proposals?, \d+ closed\./.test(text), 'the rules checked after the refresh');
+    check(/已檢查規則：新增 \d+ 份提案，關閉 \d+ 份。/.test(text), 'the rules checked after the refresh');
     await snap('data-status-after');
     await docShot('data-status', page);
   });
@@ -2164,11 +2163,11 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
 
   await step('risk after the job: each day saved with its VaR, the 52-week line drawn from them', async () => {
     await page.goto(`${BASE}/data`);
-    check(/(Each carries its 1-week VaR|of them carry a 1-week VaR)/.test(await body()), 'the snapshots carry their VaR');
+    check(/(每一天都附有一週風險值|天附有一週風險值)/.test(await body()), 'the snapshots carry their VaR');
     await openRiskDetails();
     await page.locator('.sparkline svg').waitFor();
     const text = await body();
-    check(text.includes('The last 52 weeks, since 2026-05-'), 'the line starts with the first demo trade');
+    check(text.includes('近 52 週（2026-05-'), 'the line starts with the first demo trade');
     const figure = await varFigure(page.locator('#value-at-risk'));
     check(figure.value > 0 && figure.share > 0.2 && figure.share < 6, `a plausible weekly VaR on live closes, got NT$${figure.value} (${figure.share}%)`);
     // The README image: the card with its line and, opened under it, the histogram.
@@ -2194,7 +2193,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     await page.goto(`${BASE}/regression/factors`);
     await page.locator('#factor-detail').waitFor();
     const text = await body();
-    check(/Factors loaded through: US factors 20\d\d-\d\d/.test(text), `the factors' newest months, got ${text.slice(0, 500)}`);
+    check(/因子資料至：美國因子 20\d\d-\d\d/.test(text), `the factors' newest months, got ${text.slice(0, 500)}`);
     const vt = (await page.locator('table').first().innerText()).split('\n').find((line) => line.startsWith('VT')) ?? '';
     const loadings = [...vt.matchAll(/(-?\d\.\d\d)\s*\(/g)].map((m) => Number(m[1]));
     check(loadings.length === 5 && loadings[0] > 0.7 && loadings[0] < 1.3, `VT's market loading is near 1 on live closes, got ${vt}`);
@@ -2229,9 +2228,9 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     check(/2330 \d{4}-\d{2}-\d{2} — FinMind \d+/.test(filings), `2330's quarters from FinMind, got ${filings}`);
     await page.goto(`${BASE}/valuation?t=AAPL`);
     const quarter = await fact('Newest quarter');
-    check(/SEC EDGAR · filed \d{4}-\d{2}-\d{2}/.test(quarter) && !quarter.includes('2026-06-30 demo'), `AAPL's live newest quarter, got ${quarter}`);
+    check(/SEC EDGAR · \d{4}-\d{2}-\d{2} 申報/.test(quarter) && !quarter.includes('2026-06-30 demo'), `AAPL's live newest quarter, got ${quarter}`);
     await page.getByText(/^Saved values \(\d+\)/).click();
-    check(/filing \d{4}-\d{2}-\d{2}/.test(await body()), 'valued again after the live filing');
+    check(/財報 \d{4}-\d{2}-\d{2}/.test(await body()), 'valued again after the live filing');
     await snap('valuation-after-job');
   });
 
@@ -2241,15 +2240,15 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const runs = (await res.json()).map((row) => row.detail?.redFlags?.scanned ?? null);
     check(runs.length >= 2 && runs[0]?.includes('AAPL') && runs[0]?.includes('2330') && runs[1]?.length === 0, `scanned by the first run, none due on the second, got ${JSON.stringify(runs)}`);
     await page.goto(`${BASE}/data`);
-    check((await body()).includes('Red flags: scanned none due'), 'the latest run says none was due');
+    check((await body()).includes('紅旗指標：已掃描 （無到期）'), 'the latest run says none was due');
     await page.goto(`${BASE}/red-flags?t=2330`);
     check((await fact('Industry')).includes('半導體業') && (await fact('Last scan')).includes(taipeiToday), `2330's live profile and today's scan, got ${await fact('Industry')}`);
     const tsmc = await page.locator('main table').first().innerText();
-    check(new RegExp(`Restatement[\\s\\S]*Checked ${taipeiToday}, reading since 2026-10-11`).test(tsmc), "TWSE's announcements read, since the seed's first night");
-    if (process.env.MOENV_API_KEY) check(new RegExp(`Environmental penalties[\\s\\S]*Checked ${taipeiToday}`).test(tsmc), 'the penalties checked by business ID');
+    check(new RegExp(`Restatement[\\s\\S]*檢查於 ${taipeiToday}，自 2026-10-11 起讀取`).test(tsmc), "TWSE's announcements read, since the seed's first night");
+    if (process.env.MOENV_API_KEY) check(new RegExp(`Environmental penalties[\\s\\S]*檢查於 ${taipeiToday}`).test(tsmc), 'the penalties checked by business ID');
     await page.goto(`${BASE}/red-flags?t=AAPL`);
     const apple = await page.locator('main table').first().innerText();
-    check(new RegExp(`Going-concern opinion[\\s\\S]*Checked ${taipeiToday}`).test(apple), 'the going-concern search ran');
+    check(new RegExp(`Going-concern opinion[\\s\\S]*檢查於 ${taipeiToday}`).test(apple), 'the going-concern search ran');
     await snap('red-flags-after-job');
   });
 
@@ -2272,7 +2271,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
   await step('sectors after the job: every SPDR fund\'s and TWSE industry index\'s live closes, a year of returns (N7)', async () => {
     await page.goto(`${BASE}/sectors`);
     await page.locator('.chart-heatmap svg').waitFor();
-    check(new RegExp(`Closes to (${taipeiToday}|\\d{4}-\\d{2}-\\d{2})`).test(await body()) && !(await body()).includes('Closes to 2026-10-23 '), 'newer than the seed');
+    check(new RegExp(`收盤價至 (${taipeiToday}|\\d{4}-\\d{2}-\\d{2})`).test(await body()) && !(await body()).includes('收盤價至 2026-10-23 '), 'newer than the seed');
     const returns = await page.locator('#sector-returns').innerText();
     console.log(`  ${returns.split('\n').slice(0, 4).join(' | ')}`);
     check(/Information Technology 資訊科技 US · XLK(\s+[+−]\d+\.\d%){5}/.test(returns), `XLK's live returns for every period, got ${returns}`);

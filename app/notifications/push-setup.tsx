@@ -155,7 +155,7 @@ export function PushSetup({ publicKey, devices }: { publicKey: string | null; de
         )}
         <form action={testAction}>
           <button type="submit" className="button" disabled={testing || devices.length === 0}>
-            <Bi {...(testing ? { en: 'Sending…', zh: '傳送中…' } : { en: 'Send a test to every device', zh: '傳送測試推播到所有裝置' })} />
+            <Bi {...(testing ? { en: 'Sending…', zh: '傳送中…' } : { en: 'Send a test push', zh: '傳送測試推播' })} />
           </button>
         </form>
       </div>

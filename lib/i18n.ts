@@ -13,8 +13,11 @@ export interface Bilingual {
 /** How a text shows: both languages (a name), Chinese alone (a sentence or a figure line), or once (the same in both). */
 export type TextMode = 'both' | 'zh' | 'same';
 
-/** A figure: a percentage, an amount, a decimal, a date or a number of three or more digits. */
-const FIGURE = /\d\s?%|NT\$|[$€£¥]\s?\d|\d[\d,]{2,}|\d\.\d|\d{4}-\d{2}/;
+/**
+ * A figure: a percentage, an amount, a decimal, a date, or a number of three or more digits; a
+ * year alone ("2008 global financial crisis") is part of a name, not a figure.
+ */
+const FIGURE = /\d\s?%|NT\$|[$€£¥]\s?\d|\d{1,3}(?:,\d{3})+|\b(?!(?:19|20)\d\d\b)\d{3,}\b|\d\.\d|\d{4}-\d{2}/;
 /** A sentence ends in a full stop, question or exclamation mark, a semicolon or a colon. */
 const SENTENCE_END = /[.!?;:。：；][\s"'”’)\]]*$/;
 /** A name has at most this many words, not counting what is in brackets. */
