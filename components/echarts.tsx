@@ -1,37 +1,22 @@
 /**
- * What every chart shares (ECharts in the browser): the modules it draws with, the colours from
- * the --chart-* and --status-* tokens in globals.css, mounting with redraws on a light/dark switch
- * and on resizing, a tooltip built from text nodes, and the plain-HTML legend. Imported only by
+ * What every chart shares (ECharts in the browser): the colours from the --chart-* and --status-*
+ * tokens in globals.css, mounting with redraws on a light/dark switch and on resizing, a tooltip
+ * built from text nodes, and the plain-HTML legend. The ECharts modules themselves live in
+ * components/echarts-core.ts and are fetched apart from the page (see `mount`). Imported only by
  * client components.
  */
-import {
-  BarChart,
-  CustomChart,
-  LineChart,
-  PieChart,
-  ScatterChart,
-  TreemapChart,
-  type BarSeriesOption,
-  type CustomSeriesOption,
-  type LineSeriesOption,
-  type PieSeriesOption,
-  type ScatterSeriesOption,
-  type TreemapSeriesOption,
-} from 'echarts/charts';
-import { GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, type GridComponentOption, type MarkAreaComponentOption, type MarkLineComponentOption, type TooltipComponentOption } from 'echarts/components';
-import * as echarts from 'echarts/core';
-import { SVGRenderer } from 'echarts/renderers';
+import type { BarSeriesOption, CustomSeriesOption, LineSeriesOption, PieSeriesOption, ScatterSeriesOption, TreemapSeriesOption } from 'echarts/charts';
+import type { GridComponentOption, MarkAreaComponentOption, MarkLineComponentOption, TooltipComponentOption } from 'echarts/components';
+import type { ComposeOption, ECharts } from 'echarts/core';
 
 import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-echarts.use([BarChart, CustomChart, LineChart, PieChart, ScatterChart, TreemapChart, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
-
-export type Option = echarts.ComposeOption<
+export type Option = ComposeOption<
   BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | TreemapSeriesOption | GridComponentOption | MarkAreaComponentOption | MarkLineComponentOption | TooltipComponentOption
 >;
-export type Chart = echarts.ECharts;
+export type Chart = ECharts;
 
 /** One stripe of a mark area: its two edges. */
 export type MarkArea = NonNullable<MarkAreaComponentOption['data']>[number];
@@ -67,32 +52,85 @@ function readColors(element: HTMLElement): Colors {
 /** Below this width a chart lays out for a phone. */
 export const NARROW = 520;
 
+type Core = typeof import('./echarts-core');
+
+/** The ECharts modules once they have arrived; until then `loading` is the fetch under way. */
+let core: Core | undefined;
+let loading: Promise<Core> | undefined;
+
+function loadCore(): Promise<Core> {
+  loading ??= import('./echarts-core').then((loaded) => {
+    core = loaded;
+    return loaded;
+  });
+  return loading;
+}
+
+// The fetch starts as soon as a page with a chart loads its script, alongside the page's own work.
+if (typeof window !== 'undefined') void loadCore();
+
+/** First draws waiting their turn: one chart per task, so a page of several never holds the screen in one long block. */
+const queue: Array<() => void> = [];
+let draining = false;
+
+function enqueue(job: () => void): void {
+  queue.push(job);
+  if (draining) return;
+  draining = true;
+  const next = () => {
+    const run = queue.shift();
+    if (!run) {
+      draining = false;
+      return;
+    }
+    try {
+      run();
+    } finally {
+      setTimeout(next, 0);
+    }
+  };
+  setTimeout(next, 0);
+}
+
 /**
  * Draws a chart into the element and redraws it on a light/dark switch, or when its width crosses
- * NARROW; `ready` may add event handlers. Returns the clean-up for useEffect.
+ * NARROW; `ready` may add event handlers. Returns the clean-up for useEffect. The first chart on a
+ * page waits for the ECharts modules to arrive and each first draw takes its own turn; once they
+ * are here a redraw (a new range, new data) happens at once, so a chart never blinks empty.
  */
 export function mount(element: HTMLDivElement | null, build: (colors: Colors, width: number) => Option, ready?: (chart: Chart) => void): (() => void) | undefined {
   if (!element) return undefined;
-  const chart = echarts.init(element, null, { renderer: 'svg' });
-  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const dark = window.matchMedia('(prefers-color-scheme: dark)');
-  let narrow = element.clientWidth < NARROW;
-  const draw = () => chart.setOption({ animation: !motion.matches, ...build(readColors(element), element.clientWidth) }, true);
-  draw();
-  ready?.(chart);
-  dark.addEventListener('change', draw);
-  const resize = new ResizeObserver(() => {
-    chart.resize();
-    if (element.clientWidth < NARROW !== narrow) {
-      narrow = !narrow;
-      draw();
-    }
-  });
-  resize.observe(element);
+  let stop: (() => void) | undefined;
+  let gone = false;
+  const start = ({ init }: Core) => {
+    if (gone) return;
+    const chart = init(element);
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const dark = window.matchMedia('(prefers-color-scheme: dark)');
+    let narrow = element.clientWidth < NARROW;
+    const draw = () => chart.setOption({ animation: !motion.matches, ...build(readColors(element), element.clientWidth) }, true);
+    draw();
+    ready?.(chart);
+    dark.addEventListener('change', draw);
+    const resize = new ResizeObserver(() => {
+      chart.resize();
+      if (element.clientWidth < NARROW !== narrow) {
+        narrow = !narrow;
+        draw();
+      }
+    });
+    resize.observe(element);
+    stop = () => {
+      dark.removeEventListener('change', draw);
+      resize.disconnect();
+      chart.dispose();
+    };
+  };
+  if (core) start(core);
+  else void loadCore().then((loaded) => enqueue(() => start(loaded)));
   return () => {
-    dark.removeEventListener('change', draw);
-    resize.disconnect();
-    chart.dispose();
+    gone = true;
+    stop?.();
   };
 }
 

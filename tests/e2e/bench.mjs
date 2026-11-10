@@ -1,7 +1,8 @@
 // Times the phone's tab switches (run.sh with E2E_DRIVER=bench.mjs): signs in on an iPhone-sized
 // screen with the CPU slowed four times, as a phone is, then taps the tab bar and the More sheet
-// round after round, timing each tap until the new page's h1 shows with nothing left loading, and
-// until the first sign the tap was taken (the link's pending bar, or the page changing).
+// round after round, timing each tap until the new page's h1 shows with nothing left loading, until
+// its h1 first shows (the tapped link's pending bar may still be fading), and until the first sign
+// the tap was taken (the link's pending bar, or the page changing).
 // GATEWAY_DELAY_MS adds a round trip's latency to every Supabase request, as from Vercel to a
 // hosted project. Prints the times and writes them as JSON to BENCH_REPORT when it is set.
 import { existsSync, writeFileSync } from 'node:fs';
@@ -50,6 +51,7 @@ async function settled(path) {
 
 const times = Object.fromEntries(STOPS.map((stop) => [stop.name, []]));
 const feedback = Object.fromEntries(STOPS.map((stop) => [stop.name, []]));
+const shown = Object.fromEntries(STOPS.map((stop) => [stop.name, []]));
 for (let round = 0; round < ROUNDS; round++) {
   for (const stop of STOPS) {
     if (COLD) {
@@ -69,6 +71,9 @@ for (let round = 0; round < ROUNDS; round++) {
     // First feedback: the tapped link's pending bar, a loading placeholder, or the new page.
     await page.waitForFunction((n) => (document.querySelector('main')?.innerHTML.length ?? 0) !== n || document.querySelector('[data-loading], [data-pending]') !== null, before, { timeout: 60_000, polling: 'raf' });
     feedback[stop.name].push(Date.now() - start);
+    // The new page's title: its figures are on screen, though the pending bar may not have gone yet.
+    await page.waitForFunction((want) => location.pathname === want && document.querySelector('main h1') !== null, stop.path, { timeout: 60_000, polling: 'raf' });
+    shown[stop.name].push(Date.now() - start);
     await settled(stop.path);
     times[stop.name].push(Date.now() - start);
   }
@@ -78,8 +83,9 @@ const mean = (list) => Math.round(list.reduce((sum, x) => sum + x, 0) / list.len
 const median = (list) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
 const all = Object.values(times).flat();
 const allFeedback = Object.values(feedback).flat();
+const allShown = Object.values(shown).flat();
 console.log(`latency per Supabase request: ${GATEWAY_DELAY_MS ?? 0} ms; CPU ×4; ${ROUNDS} rounds${COLD ? '; cold (page reloaded before each tap)' : ''}`);
-for (const stop of STOPS) console.log(`${stop.name.padEnd(28)} settled ${times[stop.name].join(' / ')} ms · first change ${feedback[stop.name].join(' / ')} ms`);
-console.log(`all taps: settled mean ${mean(all)} ms, median ${median(all)} ms; first change mean ${mean(allFeedback)} ms`);
-if (BENCH_REPORT) writeFileSync(BENCH_REPORT, JSON.stringify({ cold: COLD, delayMs: Number(GATEWAY_DELAY_MS ?? 0), rounds: ROUNDS, times, feedback, mean: mean(all), median: median(all), feedbackMean: mean(allFeedback) }, null, 2));
+for (const stop of STOPS) console.log(`${stop.name.padEnd(28)} settled ${times[stop.name].join(' / ')} ms · title ${shown[stop.name].join(' / ')} ms · first change ${feedback[stop.name].join(' / ')} ms`);
+console.log(`all taps: settled mean ${mean(all)} ms, median ${median(all)} ms; title mean ${mean(allShown)} ms, median ${median(allShown)} ms; first change mean ${mean(allFeedback)} ms`);
+if (BENCH_REPORT) writeFileSync(BENCH_REPORT, JSON.stringify({ cold: COLD, delayMs: Number(GATEWAY_DELAY_MS ?? 0), rounds: ROUNDS, times, shown, feedback, mean: mean(all), median: median(all), shownMean: mean(allShown), shownMedian: median(allShown), feedbackMean: mean(allFeedback) }, null, 2));
 await browser.close();
