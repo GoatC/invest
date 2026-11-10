@@ -6,6 +6,7 @@ import { Bi } from '@/components/bi';
 import { DataHealthBanner, hasNotice } from '@/components/data-status';
 import { DataToast } from '@/components/data-toast';
 import { SiteNav } from '@/components/site-nav';
+import { TableCards } from '@/components/table-cards';
 import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           </DataToast>
         )}
         <main className="page">{children}</main>
+        {signedIn && <TableCards />}
         <footer className="site-footer">
           <Bi en="This app supports Hugo's own decisions; it is not financial advice." zh="本 App 用於輔助 Hugo 自己的決策，不構成投資建議。" />
         </footer>
