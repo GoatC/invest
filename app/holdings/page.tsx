@@ -664,7 +664,7 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
                   <Bi {...SOURCE[trade.source]} />
                 </td>
                 <td className="nowrap">
-                  <Link href={`/holdings/${trade.id}`}>
+                  <Link href={`/holdings/${trade.id}`} prefetch={false}>
                     <Bi {...LABELS.edit} />
                   </Link>
                 </td>
@@ -759,7 +759,7 @@ function CashFlows({ flows, showAll }: { flows: CashFlowRecord[]; showAll: boole
                     </td>
                     <td className="small">{flow.note ?? ''}</td>
                     <td className="nowrap">
-                      <Link href={`/cash-flows/${flow.id}`}>
+                      <Link href={`/cash-flows/${flow.id}`} prefetch={false}>
                         <Bi {...LABELS.edit} />
                       </Link>
                     </td>

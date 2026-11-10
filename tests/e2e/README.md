@@ -64,7 +64,8 @@ line, the live monthly market series, the index closes, the holdings' monthly β
 `E2E_DRIVER=bench.mjs npm run test:e2e` runs the same stand-in but, in place of the walk-through,
 times the phone's tab switches: an iPhone-sized screen with the CPU slowed four times, tapping
 持倉, 績效, 配置, 回歸 (from the More sheet) and 儀表板 round after round, each until its h1 shows
-with no loading placeholder left. `GATEWAY_DELAY_MS` adds that many milliseconds to every
+with no loading placeholder left (settled), until its h1 first shows (title) and until the first
+sign the tap was taken (first change). `GATEWAY_DELAY_MS` adds that many milliseconds to every
 Supabase request (150 ≈ Vercel in Washington to a Tokyo project; 5 ≈ both in Tokyo),
 `BENCH_COLD=1` reloads before each tap so none is answered from the router cache, `BENCH_ROUNDS`
 sets the rounds (4) and `BENCH_REPORT=file` writes the times as JSON. `GATEWAY_LOG=1` prints each
