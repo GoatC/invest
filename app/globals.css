@@ -2511,3 +2511,122 @@ details.ticker-menu a:hover {
     padding: 0.45rem 0.8rem;
   }
 }
+
+/* F6's drift as bars on one scale (app/allocation/page.tsx): the weight filled, the target a tick,
+   F8's band a paler stripe behind them. */
+.bands,
+.band-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.band-group h3 {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.6rem;
+}
+
+.band-group h3 small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.band-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+  max-width: 40rem;
+}
+
+.band-row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.band-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.band-figures {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.band-figures b {
+  color: var(--text);
+}
+
+.band-track {
+  position: relative;
+  height: 0.95rem;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.band-track .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
+.band-track .fill {
+  position: absolute;
+  left: 0;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-context);
+}
+
+.band-track .fill.ok {
+  background: var(--status-good);
+}
+
+.band-track .fill.watch {
+  background: var(--status-warning);
+}
+
+.band-track .fill.rebalance {
+  background: var(--status-critical);
+}
+
+.band-track .tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.band-gap {
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each holding's part of the return (app/performance/page.tsx): the ranking's rows with a total. */
+.contrib .rank-row {
+  grid-template-columns: 5.2rem minmax(0, 1fr) 3.6rem 5.4rem;
+}
+
+.contrib .tk {
+  overflow-wrap: anywhere;
+}
+
+.rank-total {
+  border-top: 1px solid var(--border);
+  padding-top: 0.4rem;
+}

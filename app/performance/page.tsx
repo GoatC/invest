@@ -6,13 +6,14 @@ import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadPerformanceInput } from '@/lib/data';
+import { DataError, loadPerformanceInput, loadSectorSettings, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { points, signedPercent, twd } from '@/lib/format';
+import { points, signedPercent, signedTwd, twd } from '@/lib/format';
 import { LABELS, POOL, RETURN_SERIES as SERIES, type Bilingual } from '@/lib/i18n';
 import {
   asReported,
   buildSeries,
+  contributions,
   cumulativeReturns,
   holdingSplits,
   monthEnds,
@@ -21,6 +22,7 @@ import {
   periodStart,
   periodTable,
   SCOPES,
+  type Contribution,
   type CumulativePoint,
   type DayPoint,
   type HoldingSplit,
@@ -38,6 +40,11 @@ const SCOPE: Record<Scope, Bilingual> = {
   regular: POOL.regular,
   windfall: POOL.windfall,
 };
+
+/** The page's two views: the portfolio as a whole, or holding by holding. */
+const VIEWS = ['whole', 'each'] as const;
+type View = (typeof VIEWS)[number];
+const VIEW: Record<View, Bilingual> = { whole: { en: 'Whole', zh: '整體' }, each: { en: 'By holding', zh: '逐檔' } };
 
 /** The periods the charts can show; the table lists them all. */
 const RANGES: readonly Period[] = ['all', 'ytd', '1y', '3y'];
@@ -80,6 +87,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const params = await searchParams;
   const scope = pick(one(params, 'scope'), SCOPES, 'all');
   const range = pick(one(params, 'range'), RANGES, 'all');
+  const view = pick(one(params, 'view'), VIEWS, 'whole');
   const end = taipeiToday();
   let input: PerformanceInput;
   try {
@@ -89,20 +97,24 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
     throw err;
   }
   const days = buildSeries(input);
+  // Price moves follow the colour convention set on the sector page (Taiwan's red up by default).
+  const sectors = await orDataError(loadSectorSettings(supabase));
+  const redUp = sectors instanceof DataError || !sectors || sectors.colour === 'red_up';
 
   return (
     <>
-      <Header scope={scope} range={range} />
-      {days.length === 0 ? <Empty /> : <Report input={input} days={days} scope={scope} range={range} end={end} />}
+      <Header scope={scope} range={range} view={view} />
+      {days.length === 0 ? <Empty /> : <Report input={input} days={days} scope={scope} range={range} view={view} end={end} redUp={redUp} />}
       <Method input={input} />
     </>
   );
 }
 
-function Header({ scope, range }: { scope: Scope; range: Period }) {
-  const href = (next: { scope?: Scope; range?: Period }) => {
+function Header({ scope, range, view }: { scope: Scope; range: Period; view: View }) {
+  const href = (next: { scope?: Scope; range?: Period; view?: View }) => {
     const query = new URLSearchParams();
-    const [nextScope, nextRange] = [next.scope ?? scope, next.range ?? range];
+    const [nextScope, nextRange, nextView] = [next.scope ?? scope, next.range ?? range, next.view ?? view];
+    if (nextView !== 'whole') query.set('view', nextView);
     if (nextScope !== 'all') query.set('scope', nextScope);
     if (nextRange !== 'all') query.set('range', nextRange);
     const text = query.toString();
@@ -120,6 +132,13 @@ function Header({ scope, range }: { scope: Scope; range: Period }) {
         />
       </Info>
       <div className="filters">
+        <div className="segmented" role="group" aria-label="View 檢視">
+          {VIEWS.map((option) => (
+            <Link key={option} href={href({ view: option })} aria-current={option === view ? 'true' : undefined}>
+              <Bi {...VIEW[option]} />
+            </Link>
+          ))}
+        </div>
         <div className="segmented" role="group" aria-label="Pool 資金池">
           <span className="label">
             <Bi {...LABELS.pool} />
@@ -158,7 +177,7 @@ function Empty() {
   );
 }
 
-function Report({ input, days, scope, range, end }: { input: PerformanceInput; days: DayPoint[]; scope: Scope; range: Period; end: string }) {
+function Report({ input, days, scope, range, view, end, redUp }: { input: PerformanceInput; days: DayPoint[]; scope: Scope; range: Period; view: View; end: string; redUp: boolean }) {
   const first = days[0]?.date ?? end;
   const from = periodStart(range, end, first);
   const result = periodReturn(days, scope, from, end);
@@ -171,12 +190,21 @@ function Report({ input, days, scope, range, end }: { input: PerformanceInput; d
       </section>
     );
   }
+  const trades = scope === 'all' ? input.trades : input.trades.filter((trade) => trade.pool === scope);
+  if (view === 'each') {
+    return (
+      <>
+        <Headline result={result} from={from} />
+        <Contributions parts={contributions(days, scope, from, end)} twr={result.twr} input={input} redUp={redUp} />
+        <Splits splits={holdingSplits({ ...input, trades }, from, end)} />
+      </>
+    );
+  }
   const cumulative = cumulativeReturns(days, scope, from);
   const months = monthlyReturns(
     days.filter((day) => day.date > from),
     scope,
   );
-  const trades = scope === 'all' ? input.trades : input.trades.filter((trade) => trade.pool === scope);
   return (
     <>
       <Headline result={result} from={from} />
@@ -225,7 +253,6 @@ function Report({ input, days, scope, range, end }: { input: PerformanceInput; d
         </section>
       )}
       <Periods days={days} scope={scope} end={end} />
-      <Splits splits={holdingSplits({ ...input, trades }, from, end)} />
     </>
   );
 }
@@ -275,6 +302,102 @@ function Headline({ result, from }: { result: PeriodReturn; from: string }) {
             zh="＊部分以交易價格或手動估值計算。"
           />
         </p>
+      )}
+    </section>
+  );
+}
+
+/** "0.62" for 0.0062: percentage points, signed. */
+function pp(value: number): string {
+  const text = Math.abs(value * 100).toFixed(2);
+  return `${value < 0 && Number(text) > 0 ? '−' : '+'}${text}`;
+}
+
+/**
+ * Each holding's part of the period's return as a bar, the losses to the left of the zero line on
+ * the same scale (PRD Section 5, "Phone redesign", step 4): the parts add up to the TWR.
+ */
+function Contributions({ parts, twr, input, redUp }: { parts: readonly Contribution[]; twr: number; input: PerformanceInput; redUp: boolean }) {
+  const names = new Map(input.manualAssets.map((asset) => [`manual:${asset.id}`, asset.states[asset.states.length - 1]?.name ?? `#${asset.id}`]));
+  const label = (key: string) => {
+    const [pool, ticker, short] = key.split(':');
+    if (pool === 'manual') return { name: names.get(key) ?? key, tags: [] as Bilingual[] };
+    return { name: ticker ?? key, tags: [...(pool === 'windfall' ? [POOL.windfall] : []), ...(short ? [{ en: 'Short', zh: '做空' }] : [])] };
+  };
+  const [best, worst] = [Math.max(0, ...parts.map((part) => part.contribution)), Math.max(0, ...parts.map((part) => -part.contribution))];
+  // The zero line leaves the losses the room their size needs; one scale serves both sides.
+  const zero = worst > 0 ? Math.min(50, Math.max(10, (worst / (best + worst)) * 100)) : 0;
+  const unit = Math.max(best / (100 - zero), zero > 0 ? worst / zero : 0) || 1;
+  const tone = (value: number) => (Math.abs(value) < 0.00005 ? 'flat' : value > 0 ? 'up' : 'down');
+  return (
+    <section className={`card form glance ${redUp ? 'red-up' : 'green-up'}`} id="contributions">
+      <h2>
+        <Bi en="Each holding's part" zh="各持股的貢獻" />
+      </h2>
+      <Info>
+        <Bi
+          en="Each day, what a holding gained over what the pool was worth at the previous close, carried at the pool's growth up to that day: the parts add up to the time-weighted return of the period, before it is put per year. In percentage points; the amount beside it is what the holding gained or lost in TWD."
+          zh="每天以該持股的損益除以資金池前一日收盤市值，再乘上資金池到當天為止的累積成長；各持股加總等於期間的時間加權報酬（未年化）。單位為百分點，旁邊的金額是該持股在期間內的台幣損益。"
+        />
+      </Info>
+      {parts.length === 0 ? (
+        <p className="muted">
+          <Bi en="Nothing was held in this period." zh="這段期間沒有任何持有。" />
+        </p>
+      ) : (
+        <div className="rank contrib" role="table" aria-label="Contribution 報酬貢獻">
+          <div className="rank-row rank-head" role="row">
+            <span role="columnheader" />
+            <span role="columnheader" />
+            <span role="columnheader">
+              <Bi en="Points" zh="百分點" label />
+            </span>
+            <span role="columnheader">
+              <Bi en="Gain" zh="損益" label />
+            </span>
+          </div>
+          {parts.map((part) => {
+            const { name, tags } = label(part.key);
+            const style = { '--zero': `${zero}%` } as React.CSSProperties;
+            const width = Math.abs(part.contribution) / unit;
+            return (
+              <div key={part.key} className="rank-row" role="row">
+                <span className="tk" role="cell">
+                  {name}
+                  {tags.map((tag) => (
+                    <small key={tag.en} className="muted">
+                      {' '}
+                      <Bi {...tag} />
+                    </small>
+                  ))}
+                </span>
+                <span role="cell">
+                  <div className="zero-bar" style={style}>
+                    <i className={part.contribution >= 0 ? 'pos' : 'neg'} style={{ left: `${(part.contribution >= 0 ? zero : zero - width).toFixed(1)}%`, width: `${width.toFixed(1)}%` }} />
+                  </div>
+                </span>
+                <b className={tone(part.contribution)} role="cell">
+                  {pp(part.contribution)}
+                </b>
+                <span className={tone(part.contribution)} role="cell">
+                  {signedTwd(part.gainTwd)}
+                </span>
+              </div>
+            );
+          })}
+          <div className="rank-row rank-total" role="row">
+            <b role="cell">
+              <Bi en="Total" zh="合計" label />
+            </b>
+            <span role="cell" />
+            <b className={tone(twr)} role="cell">
+              {pp(twr)}
+            </b>
+            <span className={tone(twr)} role="cell">
+              {signedTwd(parts.reduce((sum, part) => sum + part.gainTwd, 0))}
+            </span>
+          </div>
+        </div>
       )}
     </section>
   );

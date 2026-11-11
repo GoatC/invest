@@ -1,123 +1,23 @@
 'use client';
 
 /**
- * F6's drift bars and N6's allocation donut. Drift bars wear the status colours, always with the
- * icon and label in the table beside them. Donut slices keep one colour per slice whatever else
+ * N6's allocation donut (F6's drift is drawn as bars on the page itself, app/allocation/page.tsx).
+ * Donut slices keep one colour per slice whatever else
  * is held, so switching pools never repaints a slice. Country and sleeve slices use slots that
  * keep every possible pair of neighbours apart (the dataviz validator, every ring of slices that
  * can occur, light and dark); the six product types are more than colour alone can keep apart
  * once some are missing, so their slots are the ones with the fewest failing rings among likely
  * holdings, and each slice also carries its name and share, in the chart and in the table.
  */
-import type { BarSeriesOption, PieSeriesOption, ScatterSeriesOption } from 'echarts/charts';
+import type { PieSeriesOption } from 'echarts/charts';
 import { useEffect, useRef, useState } from 'react';
 
-import { percent, points, twd } from '@/lib/format';
-import { bi, DRIFT_ICON, DRIFT_STATUS, LENS, SLICE, type Bilingual } from '@/lib/i18n';
-import { LENSES, type DriftStatus, type Lens, type Slice } from '@/lib/models/allocation';
+import { percent, twd } from '@/lib/format';
+import { bi, LENS, SLICE, type Bilingual } from '@/lib/i18n';
+import { LENSES, type Lens, type Slice } from '@/lib/models/allocation';
 
 import { Bi } from './bi';
 import { dataIndex, Legend, mount, NARROW, tooltip, tooltipStyle, type Chart, type Colors, type Option } from './echarts';
-
-// ---------------------------------------------------------------------------
-// F6: drift from the targets
-// ---------------------------------------------------------------------------
-
-export interface DriftRow {
-  id: string;
-  label: Bilingual;
-  target: number;
-  weight: number;
-  drift: number;
-  band: number | null;
-  status: DriftStatus;
-}
-
-function statusColor(status: DriftStatus, colors: Colors): string {
-  if (status === 'ok') return colors.status.good;
-  if (status === 'watch') return colors.status.warning;
-  return status === 'rebalance' ? colors.status.critical : colors.context;
-}
-
-function driftOption(rows: readonly DriftRow[], colors: Colors, width: number): Option {
-  const narrow = width < NARROW;
-  // Room past the longest bar for its label, more on a phone where the plot is narrow.
-  const reach = Math.max(0.01, ...rows.flatMap((row) => [Math.abs(row.drift), row.band ?? 0])) * (narrow ? 1.8 : 1.3);
-  const bars: BarSeriesOption = {
-    type: 'bar',
-    barMaxWidth: 16,
-    data: rows.map((row) => ({
-      value: row.drift,
-      itemStyle: { color: statusColor(row.status, colors), borderRadius: row.drift >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4] },
-      label: { position: row.drift >= 0 ? 'right' : 'left' },
-    })),
-    label: { show: true, color: colors.ink, fontFamily: colors.font, fontSize: 12, formatter: (params) => points(Number(params.value)) },
-    emphasis: { disabled: true },
-  };
-  // F8's band edges: a bar past its ticks is where F8 drafts a rebalance.
-  const edges: ScatterSeriesOption = {
-    type: 'scatter',
-    silent: true,
-    symbol: 'rect',
-    symbolSize: [2, 18],
-    itemStyle: { color: colors.muted },
-    data: rows.flatMap((row, index) => (row.band === null ? [] : [[-row.band, index], [row.band, index]])),
-  };
-  return {
-    textStyle: { fontFamily: colors.font },
-    grid: { left: 4, right: 12, top: 12, bottom: 4 },
-    tooltip: {
-      ...tooltipStyle(colors, 'item'),
-      formatter: (params) => {
-        const row = rows[dataIndex(params) ?? -1];
-        if (!row) return '';
-        return tooltip(bi(row.label), [
-          { value: points(row.drift), label: { en: 'Drift', zh: '偏離' }, key: { color: statusColor(row.status, colors), shape: 'rect' } },
-          { value: percent(row.weight), label: { en: 'Actual', zh: '實際' } },
-          { value: percent(row.target), label: { en: 'Target', zh: '目標' } },
-          ...(row.band === null ? [] : [{ value: `±${points(row.band).replace(/^[+−]/, '')}`, label: { en: 'F8 band', zh: 'F8 門檻' } }]),
-          { value: DRIFT_ICON[row.status], label: DRIFT_STATUS[row.status] },
-        ]);
-      },
-    },
-    xAxis: {
-      type: 'value',
-      min: -reach,
-      max: reach,
-      axisLabel: { color: colors.muted, formatter: (value: number) => points(value, 0), hideOverlap: true },
-      splitLine: { lineStyle: { color: colors.grid, width: 1, type: 'solid' } },
-    },
-    yAxis: {
-      type: 'category',
-      inverse: true,
-      data: rows.map((row) => `${row.label.en}\n${row.label.zh}`),
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: colors.grid } },
-      // Every class named, wrapping on a phone; rows are tall enough for three lines.
-      axisLabel: { color: colors.muted, interval: 0, width: narrow ? 120 : 170, overflow: 'break', lineHeight: 14 },
-    },
-    series: [bars, edges],
-  };
-}
-
-export function DriftChart({ rows, label }: { rows: readonly DriftRow[]; label: Bilingual }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => mount(ref.current, (colors, width) => driftOption(rows, colors, width)), [rows]);
-  return (
-    <figure className="chart-figure">
-      <Legend
-        items={[
-          { label: { en: `${DRIFT_ICON.ok} ${DRIFT_STATUS.ok.en}`, zh: DRIFT_STATUS.ok.zh }, color: 'var(--status-good)', shape: 'rect' },
-          { label: { en: `${DRIFT_ICON.watch} ${DRIFT_STATUS.watch.en}`, zh: DRIFT_STATUS.watch.zh }, color: 'var(--status-warning)', shape: 'rect' },
-          { label: { en: `${DRIFT_ICON.rebalance} ${DRIFT_STATUS.rebalance.en}`, zh: DRIFT_STATUS.rebalance.zh }, color: 'var(--status-critical)', shape: 'rect' },
-          { label: { en: 'Satellite, left to R2', zh: '衛星，由 R2 管理' }, color: 'var(--chart-context)', shape: 'rect' },
-          { label: { en: 'F8 band', zh: 'F8 門檻' }, color: 'var(--muted)', shape: 'line' },
-        ]}
-      />
-      <div ref={ref} className="chart chart-tall" style={{ height: `${Math.max(240, rows.length * 52 + 48)}px` }} role="img" aria-label={bi(label)} />
-    </figure>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // N6: allocation donut, three lenses

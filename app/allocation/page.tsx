@@ -1,14 +1,14 @@
 import Link from 'next/link';
 
-import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocation-charts';
+import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAllocationData, type AllocationData } from '@/lib/data';
-import { percent, points } from '@/lib/format';
+import { percent, points, twd } from '@/lib/format';
 import { DRIFT_ICON, DRIFT_STATUS, LABELS, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
-import { allocation, classDrifts, satelliteCheck, sleeveTargets, type DriftStatus } from '@/lib/models/allocation';
+import { allocation, classDrifts, satelliteCheck, sleeveTargets, type ClassDrift, type DriftStatus, type SatelliteCheck } from '@/lib/models/allocation';
 import { targetReturn } from '@/lib/models/cma';
 import type { Scope } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
@@ -85,15 +85,6 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
   const total = portfolio.pool.totalTwd;
   const drifts = classDrifts(portfolio.classes, data.bands, total);
   const satellite = satelliteCheck(portfolio.pool, data.caps);
-  const rows: DriftRow[] = drifts.map((row) => ({
-    id: row.assetClass.id,
-    label: { en: row.assetClass.nameEn, zh: row.assetClass.nameZh },
-    target: row.assetClass.targetWeight,
-    weight: row.weight,
-    drift: row.drift,
-    band: row.band,
-    status: row.status,
-  }));
   return (
     <section className="card form">
       <div className="row spread">
@@ -121,13 +112,11 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
               <Bi en="The F8_DRIFT rule is off in the rules table, so no class is coloured." zh="rules 表中的 F8_DRIFT 規則未啟用，因此不顯示顏色。" />
             </p>
           )}
-          <DriftChart
-            rows={rows}
-            label={{
-              en: 'Horizontal bar chart of each asset class’s drift from its target, coloured by status; the table below lists the values.',
-              zh: '各資產類別與目標權重偏離的橫條圖，依狀態上色；下方表格列出數值。',
-            }}
-          />
+          <BandBars drifts={drifts} satellite={satellite} total={total} />
+          <details>
+            <summary>
+              <Bi en="Show as a table" zh="以表格顯示" />
+            </summary>
           <div className="table-wrap">
             <table>
               <thead>
@@ -194,9 +183,115 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
               )}
             </table>
           </div>
+          </details>
         </>
       )}
     </section>
+  );
+}
+
+const BAND_ICON: Record<DriftStatus, string> = { ok: '✓', watch: '!', rebalance: '✕', unchecked: '' };
+
+/** One class on the scale: its weight filled, its target a tick, its F8 band a paler stripe, the TWD over or under. */
+function BandRow({ label, weight, target, band, status, top, gapTwd }: { label: Bilingual; weight: number; target: number; band: number | null; status: DriftStatus; top: number; gapTwd: number | null }) {
+  const at = (value: number) => `${Math.max(0, Math.min(100, (value / top) * 100)).toFixed(1)}%`;
+  return (
+    <li className="band-row">
+      <div className="band-top">
+        <span>
+          {BAND_ICON[status] && (
+            <span className={`status-icon ${status}`} aria-hidden="true">
+              {BAND_ICON[status]}
+            </span>
+          )}
+          <Bi {...label} label />
+        </span>
+        <span className="band-figures">
+          <b>{percent(weight)}</b> ／ {percent(target, 0)}
+        </span>
+      </div>
+      <div className="band-track" role="img" aria-label={`${label.zh} 實際 ${percent(weight)}，目標 ${percent(target, 0)}`}>
+        {band !== null && <i className="band" style={{ left: at(Math.max(0, target - band)), width: at(Math.min(top, target + band) - Math.max(0, target - band)) }} />}
+        <i className={`fill ${status}`} style={{ width: at(weight) }} />
+        <i className="tick" style={{ left: at(target) }} />
+      </div>
+      {gapTwd !== null && Math.abs(gapTwd) >= 1 && (
+        <div className="band-gap">
+          <Bi en={`${gapTwd > 0 ? 'over by' : 'under by'} ${twd(Math.abs(gapTwd))}`} zh={`${gapTwd > 0 ? '多' : '少'} ${twd(Math.abs(gapTwd))}`} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * F6's drift as bars on one scale (PRD Section 5, "Phone redesign", step 4): a core class past its
+ * paler stripe is where F8 drafts a rebalance; the satellite classes are watched together by R2.
+ */
+function BandBars({ drifts, satellite, total }: { drifts: readonly ClassDrift[]; satellite: SatelliteCheck | undefined; total: number }) {
+  const core = drifts.filter((row) => row.assetClass.sleeve === 'core');
+  const others = drifts.filter((row) => row.assetClass.sleeve !== 'core');
+  // One scale for every bar: a little past the largest weight, target or band edge.
+  const top = Math.max(0.1, ...drifts.flatMap((row) => [row.weight, row.assetClass.targetWeight + (row.band ?? 0)])) * 1.06;
+  const sum = (rows: readonly ClassDrift[], pick: (row: ClassDrift) => number) => rows.reduce((totalSoFar, row) => totalSoFar + pick(row), 0);
+  const row = (drift: ClassDrift) => (
+    <BandRow
+      key={drift.assetClass.id}
+      label={{ en: drift.assetClass.nameEn, zh: drift.assetClass.nameZh }}
+      weight={drift.weight}
+      target={drift.assetClass.targetWeight}
+      band={drift.band}
+      status={drift.status}
+      top={top}
+      gapTwd={drift.assetClass.sleeve === 'core' ? drift.drift * total : null}
+    />
+  );
+  return (
+    <div className="bands">
+      <div className="band-group">
+        <h3>
+          <Bi {...SLEEVE.core} /> {percent(sum(core, (drift) => drift.weight))}
+          <small>
+            <Bi en={`target ${percent(sum(core, (drift) => drift.assetClass.targetWeight), 0)}`} zh={`目標 ${percent(sum(core, (drift) => drift.assetClass.targetWeight), 0)}`} />
+          </small>
+        </h3>
+        <ul>{core.map(row)}</ul>
+      </div>
+      {others.length > 0 && (
+        <div className="band-group">
+          <h3>
+            <Bi {...SLEEVE.satellite} /> {percent(satellite?.weight ?? sum(others, (drift) => drift.weight))}
+            {satellite && (
+              <small>
+                <span className={`status-icon ${satellite.status}`} aria-hidden="true">
+                  {BAND_ICON[satellite.status]}
+                </span>
+                <Bi en={`target ${percent(satellite.target, 0)} · trigger ${percent(satellite.trigger, 0)}`} zh={`目標 ${percent(satellite.target, 0)}・上限 ${percent(satellite.trigger, 0)}`} />
+              </small>
+            )}
+          </h3>
+          <ul>{others.map(row)}</ul>
+        </div>
+      )}
+      <ul className="chart-legend">
+        {(['ok', 'watch', 'rebalance'] as const).map((status) => (
+          <li key={status}>
+            <span className={`status-icon ${status}`} aria-hidden="true">
+              {DRIFT_ICON[status]}
+            </span>
+            <Bi {...DRIFT_STATUS[status]} />
+          </li>
+        ))}
+        <li>
+          <span className="chart-key line" style={{ background: 'var(--text)' }} aria-hidden="true" />
+          <Bi {...LABELS.target} />
+        </li>
+        <li>
+          <span className="chart-key rect" style={{ background: 'var(--accent-soft)' }} aria-hidden="true" />
+          <Bi en="F8 band" zh="F8 門檻" />
+        </li>
+      </ul>
+    </div>
   );
 }
 
