@@ -273,6 +273,7 @@ function Headline({ result, from }: { result: PeriodReturn; from: string }) {
         <Stat
           label={{ en: 'Time-weighted return (TWR)', zh: '時間加權報酬（TWR）' }}
           value={signedPercent(shown.twr)}
+          move={shown.twr}
           note={shown.perYear ? { en: `per year; ${signedPercent(result.twr)} in all`, zh: `年化；累計 ${signedPercent(result.twr)}` } : { en: 'over the period', zh: '期間報酬' }}
         />
         <Stat
@@ -291,7 +292,8 @@ function Headline({ result, from }: { result: PeriodReturn; from: string }) {
         />
         <Stat
           label={{ en: 'Gain, after money in and out', zh: '損益（扣除資金進出）' }}
-          value={twd(result.gain)}
+          value={signedTwd(result.gain)}
+          move={result.gain}
           note={{ en: `Worth ${twd(result.endValue)} at the close of ${result.to}`, zh: `${result.to} 收盤市值 ${twd(result.endValue)}` }}
         />
       </div>

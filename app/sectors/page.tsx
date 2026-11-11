@@ -32,6 +32,9 @@ const PERIOD: Record<Period, Bilingual> = {
   '1Y': { en: '1 year', zh: '1 年' },
 };
 /** The periods as the heatmap names them on a phone. */
+/** The periods the heatmap draws on a phone (1 week, 3 months, 1 year); the table under it lists all five. */
+const PHONE_PERIODS = [0, 2, 4] as const;
+
 const PERIOD_SHORT: Record<Period, Bilingual> = {
   '1W': { en: '1W', zh: '1 週' },
   '1M': { en: '1M', zh: '1 月' },
@@ -135,11 +138,11 @@ function Heatmap({ view, market, convention }: { view: SectorView; market: Marke
   const rows = view.rows.filter((row) => market === 'all' || row.market === market);
   const heat: HeatRow[] = rows.map((row) => {
     const sector = sectorText(row.sector);
-    return { label: rowLabel(row), lines: [sector.en, `${sector.zh} · ${row.market === 'US' ? 'US 美' : 'TW 台'}`], values: PERIODS.map((period) => row.returns[period]) };
+    return { label: rowLabel(row), lines: [sector.en, `${sector.zh} · ${row.market === 'US' ? '美' : '台'}`], values: PERIODS.map((period) => row.returns[period]) };
   });
   return (
     <>
-      <SectorHeatmap rows={heat} columns={PERIODS.map((period) => PERIOD[period])} shortColumns={PERIODS.map((period) => PERIOD_SHORT[period])} convention={convention} label={{ en: 'Each sector’s return by period', zh: '各產業各期間報酬' }} />
+      <SectorHeatmap rows={heat} columns={PERIODS.map((period) => PERIOD[period])} shortColumns={PERIODS.map((period) => PERIOD_SHORT[period])} phoneColumns={PHONE_PERIODS} convention={convention} label={{ en: 'Each sector’s return by period', zh: '各產業各期間報酬' }} />
       <div className="table-wrap">
         <table className="compact" id="sector-returns">
           <thead>

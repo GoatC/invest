@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 import { percent, signedPercent } from '@/lib/format';
 import { bi, EFFECT, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // Waterfall
@@ -67,13 +67,13 @@ function waterfallOption(steps: readonly WaterfallStep[], colors: Colors): Optio
       formatter: (params) => {
         const step = steps[dataIndex(params) ?? -1];
         if (!step) return '';
-        return tooltip(bi(step.label), [
+        return tooltip(chartText(step.label), [
           { value: step.kind === 'total' ? percent(step.value, 2) : signedPercent(step.value, 2), label: step.kind === 'total' ? { en: 'return', zh: '報酬' } : { en: 'effect', zh: '效果' } },
           ...(step.kind === 'effect' ? [{ value: percent(step.level, 2), label: { en: 'running total', zh: '累計' } }] : []),
         ]);
       },
     },
-    xAxis: { type: 'category', data: steps.map((step) => bi(step.label)), axisTick: { show: false }, axisLine: { lineStyle: { color: colors.grid } }, axisLabel: { color: colors.muted, interval: 0, fontSize: 11 } },
+    xAxis: { type: 'category', data: steps.map((step) => chartText(step.label)), axisTick: { show: false }, axisLine: { lineStyle: { color: colors.grid } }, axisLabel: { color: colors.muted, interval: 0, fontSize: 11 } },
     yAxis: { type: 'value', axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
     series: [
       { name: 'base', type: 'bar', stack: 'steps', data: base, itemStyle: { color: 'transparent' }, silent: true, emphasis: { disabled: true } },
@@ -143,8 +143,8 @@ function quadrantOption(points: readonly QuadrantPoint[], colors: Colors): Optio
         ]);
       },
     },
-    xAxis: { type: 'value', name: bi({ en: 'Active weight', zh: '主動權重' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
-    yAxis: { type: 'value', name: bi({ en: 'Return vs benchmark', zh: '相對基準報酬' }), nameTextStyle: { color: colors.muted, align: 'left' }, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
+    xAxis: { type: 'value', name: chartText({ en: 'Active weight', zh: '主動權重' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
+    yAxis: { type: 'value', name: chartText({ en: 'Return vs benchmark', zh: '相對基準報酬' }), nameTextStyle: { color: colors.muted, align: 'left' }, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
     series: [dots],
   };
 }
@@ -195,7 +195,7 @@ function cumulativeOption(rows: readonly CumulativeRow[], colors: Colors): Optio
     yAxis: { type: 'value', axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
     series: KEYS.map(
       (key, i): LineSeriesOption => ({
-        name: bi(EFFECT[key]),
+        name: chartText(EFFECT[key]),
         type: 'line',
         data: rows.map((row) => row[key]),
         showSymbol: rows.length <= 24,

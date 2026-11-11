@@ -52,6 +52,20 @@ function readColors(element: HTMLElement): Colors {
 /** Below this width a chart lays out for a phone. */
 export const NARROW = 520;
 
+/** How long a chart takes to draw or to move to new data: short, so motion only marks a change. */
+const MOTION_MS = 300;
+
+/** Whether the chart drawn last is phone-sized; every chart on a page shares the screen, so one flag serves them all. */
+let narrowNow = false;
+
+/**
+ * A text inside a chart (a series or axis name, a tooltip line): by the Chinese-first rule, and in
+ * Chinese alone on a phone, as names are everywhere else there (PRD principle 7).
+ */
+export function chartText(text: Bilingual, label = false): string {
+  return narrowNow && text.en !== text.zh ? text.zh : bi(text, label);
+}
+
 type Core = typeof import('./echarts-core');
 
 /** The ECharts modules once they have arrived; until then `loading` is the fetch under way. */
@@ -108,7 +122,10 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const dark = window.matchMedia('(prefers-color-scheme: dark)');
     let narrow = element.clientWidth < NARROW;
-    const draw = () => chart.setOption({ animation: !motion.matches, ...build(readColors(element), element.clientWidth) }, true);
+    const draw = () => {
+      narrowNow = element.clientWidth < NARROW;
+      chart.setOption({ animation: !motion.matches, animationDuration: MOTION_MS, animationDurationUpdate: MOTION_MS, animationEasing: 'cubicOut', ...build(readColors(element), element.clientWidth) }, true);
+    };
     draw();
     ready?.(chart);
     dark.addEventListener('change', draw);
@@ -159,7 +176,7 @@ export function tooltip(title: string, rows: ReadonlyArray<{ value: string; labe
     const value = document.createElement('strong');
     value.textContent = row.value;
     const label = document.createElement('span');
-    label.textContent = bi(row.label);
+    label.textContent = chartText(row.label);
     line.append(key, value, label);
     box.append(line);
   }
@@ -171,6 +188,13 @@ export function tooltipStyle(colors: Colors, trigger: 'axis-line' | 'axis-shadow
   return {
     trigger: trigger === 'item' ? 'item' : 'axis',
     confine: true,
+    // On a phone the figures sit on a line along the chart's top edge, clear of the finger that asks for them.
+    position: (point, _params, _dom, _rect, size) => {
+      const [width] = size.viewSize;
+      const [boxWidth] = size.contentSize;
+      if (width >= NARROW) return [point[0] + 12, point[1] + 12];
+      return [Math.max(2, Math.min(point[0] - boxWidth / 2, width - boxWidth - 2)), 2];
+    },
     ...(trigger === 'item'
       ? {}
       : {

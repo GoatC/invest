@@ -17,7 +17,7 @@ import { bi, LENS, SLICE, type Bilingual } from '@/lib/i18n';
 import { LENSES, type Lens, type Slice } from '@/lib/models/allocation';
 
 import { Bi } from './bi';
-import { dataIndex, Legend, mount, NARROW, tooltip, tooltipStyle, type Chart, type Colors, type Option } from './echarts';
+import { chartText, dataIndex, Legend, mount, NARROW, tooltip, tooltipStyle, type Chart, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // N6: allocation donut, three lenses
@@ -92,7 +92,7 @@ function donutOption(slices: readonly Slice[], colors: Colors, width: number, wi
       formatter: (params) => {
         const slice = slices[dataIndex(params) ?? -1];
         if (!slice) return '';
-        return tooltip(bi(sliceLabel(slice.key)), [
+        return tooltip(chartText(sliceLabel(slice.key)), [
           { value: percent(slice.weight), label: { en: 'Actual', zh: '實際' }, key: { color: color(slice.key), shape: 'rect' } },
           ...(slice.target === null ? [] : [{ value: percent(slice.target), label: { en: 'Target', zh: '目標' } }]),
           { value: twd(slice.valueTwd), label: { en: 'Value', zh: '市值' } },

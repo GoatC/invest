@@ -13,7 +13,7 @@ import { useEffect, useRef } from 'react';
 import { percent } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface Spot {
   name: string;
@@ -48,7 +48,7 @@ function point(spot: Spot, color: string, symbol: string, size: number, colors: 
 
 function frontierOption(curve: readonly Curve[], line: readonly Curve[], classes: readonly Spot[], current: Spot | null, target: Spot | null, best: Spot | null, riskFree: number, colors: Colors): Option {
   const frontier: LineSeriesOption = {
-    name: bi(SERIES.frontier),
+    name: chartText(SERIES.frontier),
     type: 'line',
     data: curve.map((p): [number, number] => [p.vol, p.ret]),
     showSymbol: false,
@@ -58,7 +58,7 @@ function frontierOption(curve: readonly Curve[], line: readonly Curve[], classes
     emphasis: { disabled: true },
   };
   const market: LineSeriesOption = {
-    name: bi(SERIES.line),
+    name: chartText(SERIES.line),
     type: 'line',
     data: line.map((p): [number, number] => [p.vol, p.ret]),
     showSymbol: false,
@@ -69,7 +69,7 @@ function frontierOption(curve: readonly Curve[], line: readonly Curve[], classes
     silent: true,
   };
   const dots: ScatterSeriesOption = {
-    name: bi(SERIES.classes),
+    name: chartText(SERIES.classes),
     type: 'scatter',
     z: 3,
     data: classes.map((spot) => point(spot, colors.context, 'circle', 9, colors)),
@@ -92,14 +92,14 @@ function frontierOption(curve: readonly Curve[], line: readonly Curve[], classes
       formatter: (params) => {
         const item = params as { seriesType?: string; value?: [number, number]; name?: string };
         const [vol, ret] = item.value ?? [0, 0];
-        return tooltip(item.name && item.seriesType === 'scatter' ? item.name : bi(item.seriesType === 'line' ? SERIES.frontier : { en: 'Point', zh: '點' }), [
+        return tooltip(item.name && item.seriesType === 'scatter' ? item.name : chartText(item.seriesType === 'line' ? SERIES.frontier : { en: 'Point', zh: '點' }), [
           { value: percent(ret, 2), label: { en: 'expected return', zh: '預期報酬' } },
           { value: percent(vol, 2), label: { en: 'volatility', zh: '波動度' } },
         ]);
       },
     },
-    xAxis: { type: 'value', name: bi({ en: 'Volatility σ', zh: '波動度 σ' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, min: 0, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
-    yAxis: { type: 'value', name: bi({ en: 'Expected return', zh: '預期報酬' }), nameTextStyle: { color: colors.muted, align: 'left' }, min: Math.min(0, riskFree), scale: true, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
+    xAxis: { type: 'value', name: chartText({ en: 'Volatility σ', zh: '波動度 σ' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, min: 0, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
+    yAxis: { type: 'value', name: chartText({ en: 'Expected return', zh: '預期報酬' }), nameTextStyle: { color: colors.muted, align: 'left' }, min: Math.min(0, riskFree), scale: true, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
     series: [market, frontier, dots, marks],
   };
 }
@@ -147,7 +147,7 @@ function weightsOption(rows: readonly WeightRow[], names: readonly string[], col
         return tooltip(`σ ${percent(row.vol, 2)}`, names.map((name, i) => ({ value: percent(row.weights[i], 1), label: { en: name, zh: name }, key: { color: colors.slots[i % colors.slots.length] as string, shape: 'rect' as const } })).filter((_, i) => (row.weights[i] ?? 0) > 0.0005));
       },
     },
-    xAxis: { type: 'category', boundaryGap: false, data: rows.map((row) => percent(row.vol, 1)), name: bi({ en: 'Volatility σ', zh: '波動度 σ' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, axisLabel: { color: colors.muted, hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: colors.grid } } },
+    xAxis: { type: 'category', boundaryGap: false, data: rows.map((row) => percent(row.vol, 1)), name: chartText({ en: 'Volatility σ', zh: '波動度 σ' }), nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: colors.muted }, axisLabel: { color: colors.muted, hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: colors.grid } } },
     yAxis: { type: 'value', max: 1, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } } },
     series: names.map(
       (name, i): LineSeriesOption => ({

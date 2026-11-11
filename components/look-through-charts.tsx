@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { percent, twd } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface TreemapBox {
   name: string;
@@ -37,7 +37,7 @@ function treemapOption(boxes: readonly TreemapBox[], colors: Colors, width: numb
         return tooltip(box.name, [
           { value: twd(box.valueTwd), label: { en: 'Exposure', zh: '曝險' }, key: { color: boxColor(colors, box.slot), shape: 'rect' } },
           { value: percent(box.share), label: { en: 'of the portfolio', zh: '占投資組合' } },
-          { value: bi(box.sector), label: { en: 'Sector', zh: '產業' } },
+          { value: chartText(box.sector), label: { en: 'Sector', zh: '產業' } },
         ]);
       },
     },

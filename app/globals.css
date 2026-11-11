@@ -2084,15 +2084,16 @@ details.ticker-menu a:hover {
   --down-text: var(--danger-text);
 }
 
-.glance .up {
+/* A gain or a loss anywhere in the app (components/stat.tsx `move`, a holding's page). */
+.up {
   color: var(--up-text);
 }
 
-.glance .down {
+.down {
   color: var(--down-text);
 }
 
-.glance .flat {
+.flat {
   color: var(--muted);
 }
 

@@ -17,7 +17,7 @@ import type { Bin, VarPoint } from '@/lib/models/risk';
 import type { Horizon } from '@/lib/risk-text';
 
 import { Bi } from './bi';
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // The figure: VaR, share of the portfolio, toggle, 52-week line
@@ -150,7 +150,7 @@ function histogramOption(bins: readonly Bin[], cutoff: number, cutoffLabel: Bili
       animation: false,
       lineStyle: { color: colors.ink, width: 2, type: 'solid' },
       // Short beside the line; the legend names it in full.
-      label: { show: true, position: 'end', color: colors.ink, fontFamily: colors.font, fontSize: 12, formatter: `${bi({ en: 'VaR', zh: '風險值' })} ${signedPercent(-cutoff)}` },
+      label: { show: true, position: 'end', color: colors.ink, fontFamily: colors.font, fontSize: 12, formatter: `${chartText({ en: 'VaR', zh: '風險值' })} ${signedPercent(-cutoff)}` },
       data: [{ xAxis: -cutoff }],
     },
   };

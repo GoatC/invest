@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { signedPercent } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 const slot = (colors: Colors, index: number) => colors.slots[index % colors.slots.length] as string;
 const cssSlot = (index: number) => `var(--chart-${(index % 8) + 1})`;
@@ -87,7 +87,7 @@ function rollingOption(lines: readonly Line[], colors: Colors): Option {
   const series: LineSeriesOption[] = lines.map((line, index) => {
     const byDate = new Map(line.points.map((point) => [point.date, point.value]));
     return {
-      name: bi(line.label),
+      name: chartText(line.label),
       type: 'line',
       data: dates.map((date) => byDate.get(date) ?? null),
       connectNulls: true,
