@@ -159,6 +159,50 @@ await step('holdings: R1 and R2 are worked out on screen with the demo figures',
   check(text.includes('單一個股最多可持有 NT$3,960'), 'Chinese R1 line');
 });
 
+await step('holdings at a glance: a card per holding with its moves and signals, four other views, sub-tabs and a + on a phone', async () => {
+  await page.goto(`${BASE}/holdings`);
+  const glance = page.locator('#glance');
+  const card = async (ticker) => (await glance.locator('.hold-card', { hasText: ticker }).first().innerText()).replace(/\s+/g, ' ');
+  const vt = await card('VT');
+  check(/NT\$10,225 12\.9%/.test(vt) && /▲\d+\.\d% Day 今日 ▲6\.8% Total 累計/.test(vt), `VT's value, weight and moves, got ${vt}`);
+  check(vt.includes('下次扣款優先') && vt.includes('類別低配 15.1 pp'), `the next contribution buys VT's class, got ${vt}`);
+  const aapl = await card('AAPL');
+  check(aapl.includes('超過個股上限 9.7%／5%') && aapl.includes('紅旗黃燈'), `AAPL's R1 breach and amber light, got ${aapl}`);
+  check((await glance.locator('.hold-card .spark').count()) === 7, 'a line of closes on each of the seven cards');
+  check((await glance.locator('.hold-card', { hasText: 'AAPL' }).locator('.spark path[d*=" l-4.2 7 "]').count()) === 1, "AAPL's one buy marked on its line");
+  check(/NT\$\d/.test(await fact('Last session')), 'the last session in TWD');
+  await glance.getByRole('link', { name: /Ranking/ }).click();
+  await page.waitForURL(/view=rank/);
+  const ranked = await glance.locator('.rank-row:not(.rank-head)').allInnerTexts();
+  check(ranked.length === 7 && /^VT\s+▲6\.8%/.test(ranked[0].replace(/\n/g, ' ')), `seven holdings ranked, VT first, got ${ranked[0]}`);
+  await page.goto(`${BASE}/holdings?view=cost`);
+  check((await glance.locator('.cost-row svg circle').count()) === 7 && (await glance.locator('.cost-scale').innerText()).includes('成本'), 'each holding on the cost scale');
+  await page.goto(`${BASE}/holdings?view=map`);
+  check((await glance.locator('.hold-map .map-name').allTextContents()).includes('VT'), 'the map names VT');
+  check((await glance.locator('.hold-map .map-flag').count()) >= 2, 'the map marks the holdings to act on');
+  await page.goto(`${BASE}/holdings?view=signals`);
+  const row = glance.locator('.sig-matrix tbody tr', { hasText: 'AAPL' });
+  check((await glance.locator('.sig-matrix tbody tr').count()) === 7 && (await row.locator('.sig-dot.act').count()) === 1 && (await row.locator('.sig-dot.watch').count()) === 1, "the matrix: AAPL's rule to act on and its light to watch");
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await page.goto(`${BASE}/holdings`);
+    const tabs = page.getByRole('tablist', { name: /Holdings/ });
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '總覽', 'the overview first');
+    check(!(await page.locator('#add-trade').isVisible()) && !(await page.locator('#trades').isVisible()) && (await glance.isVisible()), 'only the overview shows');
+    await page.getByRole('link', { name: /Add trade/ }).last().click();
+    await page.locator('#add-trade').waitFor();
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '交易' && !(await glance.isVisible()), 'the + opens the trade form on its tab');
+    await tabs.getByRole('tab', { name: /Cash flows/ }).click();
+    check((await page.locator('#cash-flows').isVisible()) && !(await page.locator('#add-trade').isVisible()), 'the cash flows on their tab');
+    await page.goto(`${BASE}/holdings#valuation`);
+    await page.locator('#valuation').waitFor();
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '觀察清單', 'a link to the valuations opens the watchlist tab');
+    await snap('phone-holdings', page, false);
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
 await step("holdings: a holding's name opens its price chart, with its trades marked and a range and step to pick", async () => {
   await page.goto(`${BASE}/holdings`);
   await page.locator('a.holding-chart-link', { hasText: 'Apple Inc.' }).first().click();
