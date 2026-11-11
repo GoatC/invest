@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { Bi } from '@/components/bi';
 import { DataHealthBanner, hasNotice } from '@/components/data-status';
 import { DataToast } from '@/components/data-toast';
-import { SiteNav } from '@/components/site-nav';
+import { SiteNav, SubNav } from '@/components/site-nav';
 import { TableCards } from '@/components/table-cards';
 import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, orDataError } from '@/lib/data';
@@ -73,6 +73,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <DataHealthBanner health={health} threshold={jobs.threshold} quiet />
           </DataToast>
         )}
+        {signedIn && <SubNav />}
         <main className="page">{children}</main>
         {signedIn && <TableCards />}
         <footer className="site-footer">

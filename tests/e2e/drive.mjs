@@ -1573,7 +1573,7 @@ await step('push job: plans the weekly review and the open proposal, sends each 
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
-await step('dashboard: the band with the value and the three lines, then VaR, watchlist, coming week, donut, windfall, actual vs plan and the proposals last, in that order', async () => {
+await step('dashboard: the band with the value and the three lines, the waiting proposal next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();
   const text = await body();
@@ -1582,10 +1582,11 @@ await step('dashboard: the band with the value and the three lines, then VaR, wa
   check(text.includes('市值：尚無淨值快照。'), 'no snapshot before the nightly job');
   const band = await page.locator('#this-week').innerText();
   check(band.includes('本週') && /NT\$[\d,]+/.test(band) && band.includes('both pools'), `the band with the value of both pools, got ${band}`);
-  // A proposal waits, so the band jumps to the proposals at the foot of the page.
+  // A proposal waits, so the proposals come second on the page and the band jumps to them; the band also dates the closes and offers the refresh.
+  check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await page.locator('#this-week').getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the band, got ${band}`);
   await page.locator('#this-week').getByRole('link', { name: /1 proposal waiting/ }).waitFor();
   const headings = await page.locator('main h2').allInnerTexts();
-  const order = ['Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan', 'Proposals'];
+  const order = ['Proposals', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
   check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
   check(!headings.some((heading) => heading.startsWith('與目標權重的偏離')), 'the drift bars are on Allocation only');
@@ -2156,15 +2157,37 @@ await step('phone turned upright: charts drawn sideways shrink back to the scree
   check(wide.length === 0, `overflows after turning upright: ${wide.join(', ')}`);
 });
 
-await step('navigation: four pages as pills, four groups that list their pages below, a tab bar and a "More" sheet on a phone', async () => {
+await step('navigation: four pages as pills with their sub-tabs, three groups that list their pages below, a tab bar and a "More" sheet on a phone', async () => {
   await page.goto(`${BASE}/holdings`);
   const nav = page.getByRole('navigation', { name: /Main/ });
   // The labels are Chinese only; each name keeps the English, and the page you are on is marked.
   check((await nav.getByRole('link', { name: /Holdings/ }).getAttribute('aria-current')) === 'page', 'Holdings is the current page');
   check((await nav.getByRole('link', { name: /Holdings/ }).innerText()) === '持倉', 'a Chinese label');
-  await nav.getByRole('button', { name: /Analysis/ }).click();
-  const menu = nav.locator('#nav-analysis');
-  check((await menu.getByRole('link').allInnerTexts()).join(' ') === '合併透視 壓力測試 效率前緣 績效歸因 回歸分析 產業熱圖 波動警報', `the Analysis list, got ${await menu.innerText()}`);
+  check((await page.locator('.sub-nav:not(.ticker-tabs)').count()) === 0, 'no sub-tabs on a tab of one page');
+  // A tab that takes in analysis pages shows them as sub-tabs under the header; the tab stays marked on each.
+  await nav.getByRole('link', { name: /Performance/ }).click();
+  await page.waitForURL('**/performance');
+  const sub = page.getByRole('navigation', { name: /Performance/ });
+  check((await sub.getByRole('link').allInnerTexts()).join(' ') === '報酬 歸因 費用與稅', `the Performance sub-tabs, got ${await sub.innerText()}`);
+  await sub.getByRole('link', { name: /Attribution/ }).click();
+  await page.waitForURL('**/attribution');
+  check((await nav.getByRole('link', { name: /Performance/ }).getAttribute('aria-current')) === 'page' && (await sub.getByRole('link', { name: /Attribution/ }).getAttribute('aria-current')) === 'page', 'Attribution sits under Performance');
+  await page.goto(`${BASE}/sectors`);
+  check((await page.getByRole('navigation', { name: /Allocation/ }).getByRole('link').allInnerTexts()).join(' ') === '目標 合併透視 產業熱圖 壓力測試 效率前緣', 'the Allocation sub-tabs');
+  await page.goto(`${BASE}/volatility`);
+  check((await page.getByRole('navigation', { name: /Dashboard/ }).getByRole('link').allInnerTexts()).join(' ') === '本週 波動警報', 'the Dashboard sub-tabs');
+  // A security's analyses are one row of tabs: a stock's chart, valuation, red flags and β.
+  await page.goto(`${BASE}/holdings/chart/AAPL`);
+  const ticker = page.getByRole('navigation', { name: /AAPL/ });
+  check((await ticker.getByRole('link').allInnerTexts()).join(' ') === '‹ 持倉 走勢 估值 紅旗 β', `AAPL's tabs, got ${await ticker.innerText()}`);
+  await ticker.getByRole('link', { name: /Red flags/ }).click();
+  await page.waitForURL(/red-flags\?t=AAPL/);
+  check((await page.getByRole('navigation', { name: /AAPL/ }).getByRole('link', { name: /Red flags/ }).getAttribute('aria-current')) === 'page', "AAPL's red flags, its tab marked");
+  await page.goto(`${BASE}/holdings/chart/VT`);
+  check((await page.getByRole('navigation', { name: /VT/ }).getByRole('link').allInnerTexts()).join(' ') === '‹ 持倉 走勢 β', 'a fund has no valuation or red flags');
+  await nav.getByRole('button', { name: /Research/ }).click();
+  const menu = nav.locator('#nav-research');
+  check((await menu.getByRole('link').allInnerTexts()).join(' ') === '回歸分析 權益成本', `the Research list, got ${await menu.innerText()}`);
   await page.keyboard.press('Escape');
   check((await menu.count()) === 0, 'Escape closes the list');
   await nav.getByRole('button', { name: /Life planning/ }).click();

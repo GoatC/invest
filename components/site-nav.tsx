@@ -9,10 +9,13 @@ import { LABELS, type Bilingual } from '@/lib/i18n';
 import { RefreshData } from './refresh-data';
 
 /**
- * The main navigation: four pages as pills, and four groups that open a short list below their
- * button. Labels show in Chinese only; each link's accessible name adds the English. On a phone the
- * pills become a bottom tab bar whose "More" opens the four groups as a sheet. The More group also
- * holds the button that refreshes the data now (components/refresh-data.tsx).
+ * The main navigation: four pages as pills, each answering one question and taking in the analysis
+ * pages that answer it too (PRD Section 5, "Phone redesign", step 5), and three groups that open a
+ * short list below their button for what is used less often. Labels show in Chinese only; each
+ * link's accessible name adds the English. On a phone the pills become a bottom tab bar whose
+ * "More" opens the groups as a sheet. The settings group also holds the button that refreshes the
+ * data now (components/refresh-data.tsx). `SubNav` is the row of sub-tabs under the header on a
+ * page that belongs to a tab with several pages.
  */
 
 interface Page {
@@ -20,6 +23,8 @@ interface Page {
   label: Bilingual;
   /** Other paths that belong to this page (sub-pages, and pages folded into it). */
   also?: readonly string[];
+  /** The tab's own pages, as sub-tabs: the first is the tab itself under a shorter name. */
+  sub?: readonly Page[];
 }
 
 interface Group {
@@ -29,35 +34,39 @@ interface Group {
 }
 
 const MAIN: readonly Page[] = [
-  { href: '/', label: LABELS.dashboard, also: ['/proposals', '/risk', '/rules', '/notifications'] },
-  { href: '/holdings', label: LABELS.holdings, also: ['/assets', '/cash-flows', '/securities', '/valuation', '/history'] },
-  { href: '/performance', label: LABELS.performance },
-  { href: '/allocation', label: LABELS.allocation },
-];
-
-const GROUPS: readonly Group[] = [
   {
-    key: 'analysis',
-    label: { en: 'Analysis', zh: '分析區' },
-    pages: [
-      { href: '/look-through', label: LABELS.lookThrough },
-      { href: '/stress', label: LABELS.stress },
-      { href: '/frontier', label: LABELS.frontier },
-      { href: '/attribution', label: LABELS.attribution },
-      { href: '/regression', label: LABELS.regression },
-      { href: '/sectors', label: LABELS.sectors },
+    href: '/',
+    label: LABELS.dashboard,
+    also: ['/proposals', '/risk'],
+    sub: [
+      { href: '/', label: { en: 'This week', zh: '本週' }, also: ['/proposals', '/risk'] },
       { href: '/volatility', label: LABELS.volatility },
     ],
   },
+  { href: '/holdings', label: LABELS.holdings, also: ['/assets', '/cash-flows', '/securities', '/valuation', '/history', '/red-flags'] },
   {
-    key: 'risks',
-    label: { en: 'Other risks', zh: '其他風險' },
-    pages: [
-      { href: '/red-flags', label: LABELS.redFlags },
-      { href: '/capm', label: LABELS.costOfEquity },
-      { href: '/costs', label: LABELS.costs },
+    href: '/performance',
+    label: LABELS.performance,
+    sub: [
+      { href: '/performance', label: { en: 'Returns', zh: '報酬' } },
+      { href: '/attribution', label: { en: 'Attribution', zh: '歸因' } },
+      { href: '/costs', label: { en: 'Costs & tax', zh: '費用與稅' } },
     ],
   },
+  {
+    href: '/allocation',
+    label: LABELS.allocation,
+    sub: [
+      { href: '/allocation', label: { en: 'Targets', zh: '目標' } },
+      { href: '/look-through', label: LABELS.lookThrough },
+      { href: '/sectors', label: LABELS.sectors },
+      { href: '/stress', label: LABELS.stress },
+      { href: '/frontier', label: LABELS.frontier },
+    ],
+  },
+];
+
+const GROUPS: readonly Group[] = [
   {
     key: 'life',
     label: { en: 'Life planning', zh: '人生規劃' },
@@ -69,9 +78,19 @@ const GROUPS: readonly Group[] = [
     ],
   },
   {
-    key: 'more',
-    label: { en: 'More', zh: '其他' },
+    key: 'research',
+    label: { en: 'Research', zh: '研究' },
     pages: [
+      { href: '/regression', label: LABELS.regression },
+      { href: '/capm', label: LABELS.costOfEquity },
+    ],
+  },
+  {
+    key: 'more',
+    label: { en: 'Settings', zh: '設定' },
+    pages: [
+      { href: '/rules', label: LABELS.rules },
+      { href: '/notifications', label: LABELS.notifications },
       { href: '/data', label: LABELS.dataStatus },
       { href: '/import', label: LABELS.importCsv },
     ],
@@ -115,7 +134,7 @@ function Pending() {
 
 function matches(page: Page, path: string): boolean {
   const under = (base: string) => (base === '/' ? path === '/' : path === base || path.startsWith(`${base}/`));
-  return under(page.href) || (page.also ?? []).some(under);
+  return under(page.href) || (page.also ?? []).some(under) || (page.sub ?? []).some((sub) => matches(sub, path));
 }
 
 /** Visible in Chinese; the accessible name starts with the same words and adds the English. */
@@ -128,6 +147,29 @@ function Chevron({ open }: { open: boolean }) {
     <svg className={`nav-chevron${open ? ' open' : ''}`} width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+/**
+ * The sub-tabs of the tab the page belongs to, in one row under the header (it slides sideways on
+ * a phone); nothing on a page of a tab with no other page, or of a group.
+ */
+export function SubNav() {
+  const path = usePathname();
+  const tab = MAIN.find((page) => page.sub && matches(page, path));
+  if (!tab?.sub) return null;
+  return (
+    <nav className="sub-nav" aria-label={`${tab.label.en} ${tab.label.zh}`}>
+      {tab.sub.map((page) => {
+        const here = matches(page, path);
+        return (
+          <Link key={page.href} href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={here ? 'page' : undefined} className={here ? 'current' : undefined}>
+            {page.label.zh}
+            <Pending />
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

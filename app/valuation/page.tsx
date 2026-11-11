@@ -1,3 +1,4 @@
+import { TickerTabs } from '@/components/ticker-tabs';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -114,6 +115,7 @@ function Workbench({ bench, data, settings, saved, savedWhat, today }: { bench: 
 
   return (
     <>
+      <TickerTabs ticker={security.ticker} stock current="value" />
       <section className="card form">
         <p className="muted small">
           <Link href="/holdings#valuation">
