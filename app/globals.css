@@ -2630,3 +2630,88 @@ details.ticker-menu a:hover {
   border-top: 1px solid var(--border);
   padding-top: 0.4rem;
 }
+
+/* The sub-tabs of a tab with several pages, and of a security's analyses (components/site-nav.tsx
+   SubNav, components/ticker-tabs.tsx): one row under the header that slides sideways when narrow. */
+.sub-nav {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0.75rem 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sub-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.sub-nav a {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  border: var(--card-border);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sub-nav a.current {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* A security's row sits inside the page, above its first card. */
+.sub-nav.ticker-tabs {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ticker-tabs strong {
+  flex: none;
+  padding: 0 0.3rem;
+  font-size: 1rem;
+}
+
+.ticker-tabs a.back {
+  background: none;
+  box-shadow: none;
+  border: none;
+  padding: 0 0.3rem 0 0;
+  color: var(--accent);
+}
+
+.sub-nav + .page {
+  padding-top: 0.9rem;
+}
+
+.hero-data {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+}
+
+.hero-data .refresh-data {
+  display: contents;
+}
+
+.hero-data .refresh-data button {
+  width: auto;
+}
+
+.hero-data .refresh-data p {
+  flex-basis: 100%;
+  margin: 0;
+}

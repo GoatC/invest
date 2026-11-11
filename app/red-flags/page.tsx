@@ -1,3 +1,4 @@
+import { TickerTabs } from '@/components/ticker-tabs';
 import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
@@ -237,6 +238,7 @@ function Company({ company, settings, today, saved }: { company: FlagCompany; se
   ];
   return (
     <>
+      <TickerTabs ticker={security.ticker} stock current="flags" />
       <section className="card form">
         <p>
           <Link href="/red-flags">

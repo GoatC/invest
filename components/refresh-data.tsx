@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore, useId } from 'react';
 
 import { refreshStatus, startRefresh } from '@/app/actions';
 import type { RefreshState } from '@/lib/refresh';
@@ -86,8 +86,9 @@ const MESSAGES: Record<View['phase'], { en: string; zh: string }> = {
   unset: { en: 'The page was reloaded. To run the job from here, set GITHUB_DISPATCH_TOKEN on Vercel (docs/nightly-job.md).', zh: '已重新整理畫面。若要從這裡執行排程，請在 Vercel 設定 GITHUB_DISPATCH_TOKEN（見 docs/nightly-job.md）。' },
 };
 
-export function RefreshData() {
+export function RefreshData({ quiet = false }: { quiet?: boolean } = {}) {
   const router = useRouter();
+  const noteId = useId();
   const state = useSyncExternalStore(subscribe, () => view, () => view);
 
   useEffect(() => {
@@ -111,11 +112,11 @@ export function RefreshData() {
   const url = 'url' in state ? state.url : undefined;
   return (
     <div className="refresh-data" data-phase={state.phase}>
-      <button type="button" className="primary" onClick={() => void start()} disabled={busy} aria-describedby="refresh-note">
+      <button type="button" className={quiet ? 'button' : 'primary'} onClick={() => void start()} disabled={busy} aria-describedby={noteId}>
         {busy && <span className="refresh-spinner" aria-hidden="true" />}
         <Bi en={busy ? 'Refreshing…' : state.phase === 'done' ? 'Refresh again' : 'Refresh the latest data'} zh={busy ? '更新中…' : state.phase === 'done' ? '再更新一次' : '更新最新資料'} />
       </button>
-      <p id="refresh-note" className="muted small" role="status" aria-live="polite">
+      <p id={noteId} className="muted small" role="status" aria-live="polite">
         <Bi {...MESSAGES[state.phase]} />
         {url && (
           <>

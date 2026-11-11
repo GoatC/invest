@@ -6,6 +6,7 @@ import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { ProposalsPanel } from '@/components/proposals-panel';
+import { RefreshData } from '@/components/refresh-data';
 import { RiskCard } from '@/components/risk-card';
 import { RiskDetails } from '@/components/risk-details';
 import { requireSession } from '@/lib/auth';
@@ -94,6 +95,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     ...(value instanceof DataError ? { valueTwd: null, weekAgoTwd: null } : value),
   });
 
+  // A proposal that waits for a decision or a trade comes second on the page; with none, the proposals close it.
+  const waitingFirst = summary.openProposals + summary.approvedProposals > 0;
+  const panel =
+    proposals instanceof DataError ? (
+      <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} />
+    ) : (
+      <ProposalsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
+    );
   const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
   const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
 
@@ -105,7 +114,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         regularTwd={portfolio.pool.totalTwd}
         windfallTwd={windfallTwd}
         driftStatus={drifts.find((row) => summary.largestDrift && row.assetClass.nameEn === summary.largestDrift.name.en)?.status}
+        dataDate={portfolio.holdings.reduce<string | null>((newest, holding) => (holding.ticker && holding.priceDate && (newest === null || holding.priceDate > newest) ? holding.priceDate : newest), null)}
       />
+      {waitingFirst && panel}
       <div className="dash-row">
         <div className="dash-main">
           {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
@@ -136,11 +147,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </div>
       {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
       {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
-      {proposals instanceof DataError ? (
-        <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} />
-      ) : (
-        <ProposalsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
-      )}
+      {!waitingFirst && panel}
     </>
   );
 }
@@ -164,8 +171,11 @@ function Hero({
   regularTwd,
   windfallTwd,
   driftStatus,
+  dataDate,
 }: {
   today: string;
+  /** The newest close among the listed holdings; null when none is priced. */
+  dataDate: string | null;
   summary: ReturnType<typeof weeklySummary>;
   regularTwd: number;
   windfallTwd: number;
@@ -224,6 +234,14 @@ function Hero({
           <Link href="/notifications" className="small">
             <Bi en="Notifications" zh="推播設定" />
           </Link>
+        </div>
+        <div className="hero-data">
+          {dataDate && (
+            <span className="muted small">
+              <Bi en={`Closes to ${dataDate}`} zh={`收盤價至 ${dataDate}`} />
+            </span>
+          )}
+          <RefreshData quiet />
         </div>
       </div>
     </section>

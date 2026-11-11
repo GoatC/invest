@@ -1,3 +1,4 @@
+import { TickerTabs } from '@/components/ticker-tabs';
 import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
@@ -86,6 +87,8 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
 
   return (
     <>
+      {/* Reached from a holding (its ticker in the address): the holding's other analyses are one tap away. */}
+      {security && one(params, 't')?.toUpperCase() === ticker && <TickerTabs ticker={ticker} stock={security.productType === 'stock'} current="beta" />}
       <section className="card form">
         <div className="row spread">
           <h1>

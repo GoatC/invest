@@ -6,6 +6,7 @@ import { DataProblem } from '@/components/data-problem';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { PriceHistoryChart } from '@/components/price-history-chart';
+import { TickerTabs } from '@/components/ticker-tabs';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingsData, loadPriceHistory, orDataError } from '@/lib/data';
 import { money, percent, quantity, twd } from '@/lib/format';
@@ -55,13 +56,9 @@ export default async function HoldingChartPage({ params }: { params: Promise<{ t
 
   return (
     <>
+      <TickerTabs ticker={ticker} stock={security.productType === 'stock'} current="chart" />
       <section className="card form">
-        <div className="row spread">
-          <h1>{ticker}</h1>
-          <Link href="/holdings" className="small">
-            <Bi en="Back to holdings" zh="回持倉" />
-          </Link>
-        </div>
+        <h1>{ticker}</h1>
         <p className="muted small">{`${security.name} · ${security.currency}`}</p>
         <Facts facts={facts} />
       </section>
