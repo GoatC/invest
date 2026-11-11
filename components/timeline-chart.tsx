@@ -13,7 +13,7 @@ import { useEffect, useRef } from 'react';
 import { twd } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { Legend, mount, tooltip, tooltipStyle, type Colors, type MarkArea, type Option } from './echarts';
+import { chartText, Legend, mount, tooltip, tooltipStyle, type Colors, type MarkArea, type Option } from './echarts';
 
 export interface TimelinePoint {
   /** YYYY-MM-DD. */
@@ -60,7 +60,7 @@ const SERIES = {
 
 function option(points: readonly TimelinePoint[], actual: readonly TimelineActual[], phases: readonly TimelinePhase[], goals: readonly TimelineGoal[], bandText: string, colors: Colors): Option {
   const line = (name: Bilingual, color: string, data: Array<[string, number]>, z: number, dashed = false): LineSeriesOption => ({
-    name: bi(name),
+    name: chartText(name),
     type: 'line',
     data,
     z,
@@ -70,7 +70,7 @@ function option(points: readonly TimelinePoint[], actual: readonly TimelineActua
     emphasis: { disabled: true },
   });
   const stripes = phases.map((phase): MarkArea => [
-    { name: bi(phase.label), xAxis: phase.from, itemStyle: { color: phase.tone === 0 ? colors.slots[0] : colors.slots[2], opacity: 0.07 }, label: { color: colors.muted, position: 'insideTopLeft' as const } },
+    { name: chartText(phase.label), xAxis: phase.from, itemStyle: { color: phase.tone === 0 ? colors.slots[0] : colors.slots[2], opacity: 0.07 }, label: { color: colors.muted, position: 'insideTopLeft' as const } },
     { xAxis: phase.to },
   ]);
   return {
@@ -124,7 +124,7 @@ function option(points: readonly TimelinePoint[], actual: readonly TimelineActua
         },
       },
       {
-        name: bi(SERIES.band),
+        name: chartText(SERIES.band),
         type: 'line',
         stack: 'band',
         data: points.map((point): [string, number] => [point.date, point.high - point.low]),

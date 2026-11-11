@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { money } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface ValueRange {
   label: Bilingual;
@@ -24,14 +24,14 @@ export interface ValueRange {
 const slot = (colors: Colors, index: number) => colors.slots[index % colors.slots.length] as string;
 
 function rangeOption(rows: readonly ValueRange[], marks: { price: number; buy: number | null; trim: number | null }, currency: string, colors: Colors, width: number): Option {
-  const names = rows.map((row) => bi(row.label));
+  const names = rows.map((row) => chartText(row.label));
   const all = [...rows.flatMap((row) => [row.bear, row.bull]), marks.price, ...(marks.buy ? [marks.buy] : []), ...(marks.trim ? [marks.trim] : [])];
   const span = Math.max(...all) - Math.min(...all) || Math.max(...all) * 0.1 || 1;
   const markLine = (value: number, label: Bilingual, color: string, type: 'solid' | 'dashed') => ({
     xAxis: value,
     lineStyle: { color, width: type === 'solid' ? 2 : 1, type },
     // The category axis runs top down, so a line's start is its top: the label sits above the bars.
-    label: { formatter: bi(label), color: colors.muted, fontSize: 12, position: 'start' as const },
+    label: { formatter: chartText(label), color: colors.muted, fontSize: 12, position: 'start' as const },
   });
   return {
     textStyle: { fontFamily: colors.font },
@@ -41,7 +41,7 @@ function rangeOption(rows: readonly ValueRange[], marks: { price: number; buy: n
       formatter: (params) => {
         const row = rows[dataIndex(params) ?? -1];
         if (!row) return '';
-        return tooltip(bi(row.label), [
+        return tooltip(chartText(row.label), [
           { value: money(row.bull, currency), label: { en: 'Bull', zh: '樂觀' } },
           { value: money(row.base, currency), label: { en: 'Base', zh: '基本' }, key: { color: slot(colors, row.slot), shape: 'dot' } },
           { value: money(row.bear, currency), label: { en: 'Bear', zh: '悲觀' } },
@@ -78,7 +78,7 @@ function rangeOption(rows: readonly ValueRange[], marks: { price: number; buy: n
       },
       {
         type: 'scatter',
-        data: rows.map((row) => ({ value: [row.base, bi(row.label)], itemStyle: { color: slot(colors, row.slot), borderColor: colors.surface, borderWidth: 2 } })),
+        data: rows.map((row) => ({ value: [row.base, chartText(row.label)], itemStyle: { color: slot(colors, row.slot), borderColor: colors.surface, borderWidth: 2 } })),
         symbolSize: 12,
         z: 3,
       },

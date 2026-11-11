@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 import { percent, signedPercent, twd } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, Legend, mount, NARROW, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, Legend, mount, NARROW, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export type Convention = 'red_up' | 'green_up';
 
@@ -55,13 +55,18 @@ function heatmapHeight(rows: number, narrow: boolean): number {
  * cell fills its own column: on a phone the long bilingual sector names wrap onto two lines and
  * the column names shorten, rather than the cells and their figures piling into each other.
  */
-function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], shortColumns: readonly Bilingual[] | undefined, convention: Convention, colors: Colors, width: number): Option {
+function heatmapOption(allRows: readonly HeatRow[], allColumns: readonly Bilingual[], allShort: readonly Bilingual[] | undefined, convention: Convention, colors: Colors, width: number, phoneColumns?: readonly number[]): Option {
+  // On a phone only the periods picked are drawn, wide enough to read; the table under the chart keeps them all.
+  const keep = width < NARROW && phoneColumns ? phoneColumns.filter((x) => x < allColumns.length) : allColumns.map((_, x) => x);
+  const columns = keep.map((x) => allColumns[x] as Bilingual);
+  const shortColumns = allShort ? keep.map((x) => allShort[x] as Bilingual) : undefined;
+  const rows = allRows.map((row) => ({ ...row, values: keep.map((x) => row.values[x] ?? null) }));
   const caps = columns.map((_, x) => Math.max(0.01, ...rows.map((row) => Math.abs(row.values[x] ?? 0))));
   const narrow = width < NARROW;
-  const labelWidth = narrow ? Math.min(136, Math.round(width * 0.36)) : Math.min(300, Math.round(width * 0.36));
+  const labelWidth = narrow ? Math.min(124, Math.round(width * 0.34)) : Math.min(300, Math.round(width * 0.36));
   const band = (width - labelWidth - 8) / Math.max(1, columns.length);
   const cell = Math.max(20, Math.min(96, Math.floor(band) - 3));
-  const fontSize = narrow ? 10 : 11;
+  const fontSize = 11;
   return {
     textStyle: { fontFamily: colors.font },
     grid: { left: labelWidth, right: 8, top: narrow ? HEAT_TOP.narrow : HEAT_TOP.wide, bottom: 8, containLabel: false },
@@ -73,14 +78,14 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
         const column = columns[x];
         if (!row || !column) return '';
         const value = row.values[x] ?? null;
-        return tooltip(`${row.label} · ${bi(column)}`, [{ value: value === null ? '—' : signedPercent(value), label: { en: 'Return', zh: '報酬' } }]);
+        return tooltip(`${row.label} · ${chartText(column)}`, [{ value: value === null ? '—' : signedPercent(value), label: { en: 'Return', zh: '報酬' } }]);
       },
     },
     xAxis: {
       type: 'category',
       data: columns.map((column, x) => {
         const short = narrow ? shortColumns?.[x] : undefined;
-        return short ? `${short.en}\n${short.zh}` : bi(column);
+        return short ? short.zh : chartText(column);
       }),
       position: 'top',
       axisLabel: { color: colors.muted, fontSize, lineHeight: 12, interval: 0, width: Math.max(24, band - 2), overflow: 'break' },
@@ -89,7 +94,7 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
     },
     yAxis: {
       type: 'category',
-      data: rows.map((row) => (narrow && row.lines ? row.lines.join('\n') : row.label)),
+      data: rows.map((row) => (narrow && row.lines ? row.lines[1] : row.label)),
       inverse: true,
       axisLabel: { color: colors.ink, fontSize, lineHeight: 12, width: labelWidth - 10, overflow: 'break', margin: 8 },
       axisTick: { show: false },
@@ -106,7 +111,7 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
             return {
               value: [x, y],
               itemStyle: { color: fill.color, opacity: fill.opacity },
-              label: { show: true, formatter: value === null ? '—' : signedPercent(value), color: fill.opacity > 0.6 ? '#ffffff' : colors.ink, fontSize: band < 46 ? 9 : narrow ? 10 : 11, fontWeight: 600 as const },
+              label: { show: true, formatter: value === null ? '—' : signedPercent(value), color: fill.opacity > 0.6 ? '#ffffff' : colors.ink, fontSize: band < 46 ? 9 : 11, fontWeight: 600 as const },
             };
           }),
         ),
@@ -115,17 +120,17 @@ function heatmapOption(rows: readonly HeatRow[], columns: readonly Bilingual[], 
   };
 }
 
-/** Sectors down, periods across, each cell its return; `shortColumns` name the periods on a phone. */
-export function SectorHeatmap({ rows, columns, shortColumns, convention, label }: { rows: readonly HeatRow[]; columns: readonly Bilingual[]; shortColumns?: readonly Bilingual[]; convention: Convention; label: Bilingual }) {
+/** Sectors down, periods across, each cell its return; on a phone `shortColumns` name the periods and `phoneColumns` pick which are drawn. */
+export function SectorHeatmap({ rows, columns, shortColumns, phoneColumns, convention, label }: { rows: readonly HeatRow[]; columns: readonly Bilingual[]; shortColumns?: readonly Bilingual[]; phoneColumns?: readonly number[]; convention: Convention; label: Bilingual }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(
     () =>
       mount(ref.current, (colors, width) => {
         // Taller rows on a phone, for the two-line labels; the chart resizes when its height changes.
         if (ref.current) ref.current.style.height = `${heatmapHeight(rows.length, width < NARROW)}px`;
-        return heatmapOption(rows, columns, shortColumns, convention, colors, width);
+        return heatmapOption(rows, columns, shortColumns, convention, colors, width, phoneColumns);
       }),
-    [rows, columns, shortColumns, convention],
+    [rows, columns, shortColumns, phoneColumns, convention],
   );
   return (
     <figure className="chart-figure">
@@ -229,7 +234,7 @@ function bubbleOption(bubbles: readonly Bubble[], portfolio: { ret: number; vola
       formatter: (params) => {
         const name = (params as { name?: string }).name ?? '';
         const bubble = bubbles.find((one) => one.label === name);
-        if (!bubble) return portfolio ? tooltip(bi({ en: 'Portfolio', zh: '投資組合' }), [{ value: signedPercent(portfolio.ret), label: { en: '1-year return', zh: '一年報酬' } }, { value: percent(portfolio.volatility), label: { en: 'Volatility', zh: '波動度' } }]) : '';
+        if (!bubble) return portfolio ? tooltip(chartText({ en: 'Portfolio', zh: '投資組合' }), [{ value: signedPercent(portfolio.ret), label: { en: '1-year return', zh: '一年報酬' } }, { value: percent(portfolio.volatility), label: { en: 'Volatility', zh: '波動度' } }]) : '';
         return tooltip(bubble.label, [
           { value: signedPercent(bubble.ret), label: { en: '1-year return', zh: '一年報酬' }, key: { color: colors.slots[MARKET_SLOT[bubble.market]] as string, shape: 'dot' } },
           { value: percent(bubble.volatility), label: { en: 'Volatility', zh: '波動度' } },
@@ -237,8 +242,8 @@ function bubbleOption(bubbles: readonly Bubble[], portfolio: { ret: number; vola
         ]);
       },
     },
-    xAxis: { type: 'value', name: bi({ en: '1-year return', zh: '一年報酬' }), nameLocation: 'middle', nameGap: 26, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } }, nameTextStyle: { color: colors.muted } },
-    yAxis: { type: 'value', name: bi({ en: 'Volatility', zh: '波動度' }), axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } }, nameTextStyle: { color: colors.muted } },
+    xAxis: { type: 'value', name: chartText({ en: '1-year return', zh: '一年報酬' }), nameLocation: 'middle', nameGap: 26, axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } }, nameTextStyle: { color: colors.muted } },
+    yAxis: { type: 'value', name: chartText({ en: 'Volatility', zh: '波動度' }), axisLabel: { color: colors.muted, formatter: axisPercent }, splitLine: { lineStyle: { color: colors.grid } }, nameTextStyle: { color: colors.muted } },
     series: [
       ...series,
       ...(portfolio ? [{ type: 'scatter' as const, name: 'portfolio', data: [{ value: [portfolio.ret, portfolio.volatility], name: '' }], symbol: 'diamond', symbolSize: 16, itemStyle: { color: colors.ink }, z: 4 }] : []),

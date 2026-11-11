@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 import { signedPercent } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface UnderwaterPoint {
   /** YYYY-MM. */
@@ -31,7 +31,7 @@ const SERIES = {
 function option(points: readonly UnderwaterPoint[], tiers: readonly number[], colors: Colors): Option {
   const showGauge = points.some((point) => point.gauge !== null);
   const line = (name: Bilingual, color: string, data: Array<number | null>, z: number): LineSeriesOption => ({
-    name: bi(name),
+    name: chartText(name),
     type: 'line',
     data,
     z,
@@ -49,7 +49,7 @@ function option(points: readonly UnderwaterPoint[], tiers: readonly number[], co
       symbol: 'none',
       lineStyle: { color: colors.muted, width: 1, type: 'dashed' },
       label: { color: colors.muted, formatter: (info) => String(info.name), position: 'insideEndTop' },
-      data: showGauge ? tiers.map((tier) => ({ name: bi({ en: `F3 tier ${Math.round(tier * 100)}%`, zh: `F3 級距 ${Math.round(tier * 100)}%` }), yAxis: -tier })) : [],
+      data: showGauge ? tiers.map((tier) => ({ name: chartText({ en: `F3 tier ${Math.round(tier * 100)}%`, zh: `F3 級距 ${Math.round(tier * 100)}%` }), yAxis: -tier })) : [],
     },
   };
   return {

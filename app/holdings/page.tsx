@@ -12,7 +12,7 @@ import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
 import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadFxHistory, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
-import { money, percent, quantity, twd } from '@/lib/format';
+import { money, percent, quantity, signedTwd, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
 import { flowTotals } from '@/lib/models/cash-flows';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
@@ -330,7 +330,8 @@ function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio
       />
       <Stat
         label={{ en: 'Unrealised gain, listed holdings', zh: '上市持股未實現損益' }}
-        value={twd(gainTwd)}
+        value={signedTwd(gainTwd)}
+        move={gainTwd}
         note={{ en: `${percent(costTwd > 0 ? gainTwd / costTwd : null)} on a cost of ${twd(costTwd)}`, zh: `成本 ${twd(costTwd)}，報酬率 ${percent(costTwd > 0 ? gainTwd / costTwd : null)}` }}
       />
     </div>

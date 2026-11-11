@@ -9,7 +9,7 @@ import { PriceHistoryChart } from '@/components/price-history-chart';
 import { TickerTabs } from '@/components/ticker-tabs';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingsData, loadPriceHistory, orDataError } from '@/lib/data';
-import { money, percent, quantity, twd } from '@/lib/format';
+import { money, percent, quantity, signedTwd, twd } from '@/lib/format';
 import { ACTION, leverageText, POOL } from '@/lib/i18n';
 import { buildPortfolio } from '@/lib/models/portfolio';
 
@@ -48,9 +48,8 @@ export default async function HoldingChartPage({ params }: { params: Promise<{ t
     { label: { en: 'Market value (TWD)', zh: '市值（台幣）' }, value: valued.length > 0 ? twd(valueTwd) : '—' },
     {
       label: { en: 'Unrealised gain', zh: '未實現損益' },
-      value: valued.length > 0 ? twd(gainTwd) : '—',
+      value: valued.length > 0 ? <span className={gainTwd > 0 ? 'up' : gainTwd < 0 ? 'down' : 'flat'}>{signedTwd(gainTwd)}</span> : '—',
       ...(valued.length > 0 && costTwd > 0 ? { note: { en: percent(gainTwd / costTwd), zh: percent(gainTwd / costTwd) } } : {}),
-      tone: valued.length === 0 ? 'none' : gainTwd >= 0 ? 'ok' : 'alert',
     },
   ];
 

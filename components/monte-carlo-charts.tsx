@@ -15,7 +15,7 @@ import { twd } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 import type { ValueBin, YearFigures } from '@/lib/models/monte-carlo';
 
-import { dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 /** Axis ticks in TWD, short: "NT$1.2M", "NT$850K". */
 function axisTwd(value: number): string {
@@ -59,7 +59,7 @@ function fanOption(fan: readonly YearFigures[], basis: Basis, band: readonly [nu
   const shown = fan.map((point) => pick(point, basis));
   const real = (value: number, year: number) => (basis === 'real' ? value / (1 + inflation) ** year : value);
   const line = (name: Bilingual, color: string, data: number[], z: number, dashed = false): LineSeriesOption => ({
-    name: bi(name),
+    name: chartText(name),
     type: 'line',
     data,
     z,
@@ -78,7 +78,7 @@ function fanOption(fan: readonly YearFigures[], basis: Basis, band: readonly [nu
         const point = fan[at];
         const edge = shown[at];
         if (!point || !edge) return '';
-        return tooltip(bi({ en: `Year ${point.year}`, zh: `第 ${point.year} 年` }), [
+        return tooltip(chartText({ en: `Year ${point.year}`, zh: `第 ${point.year} 年` }), [
           { value: twd(edge.high), label: { en: `${Math.round(band[1] * 100)}th percentile`, zh: `第 ${Math.round(band[1] * 100)} 百分位` }, key: { color: colors.slots[0], shape: 'rect' } },
           { value: twd(edge.median), label: SERIES.median, key: { color: colors.slots[0], shape: 'line' } },
           { value: twd(edge.low), label: { en: `${Math.round(band[0] * 100)}th percentile`, zh: `第 ${Math.round(band[0] * 100)} 百分位` }, key: { color: colors.slots[0], shape: 'rect' } },
@@ -100,7 +100,7 @@ function fanOption(fan: readonly YearFigures[], basis: Basis, band: readonly [nu
       // The band is two stacked areas: an invisible one up to the low edge, the shaded one on it.
       { name: 'base', type: 'line', stack: 'band', data: shown.map((edge) => edge.low), symbol: 'none', lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 }, silent: true, emphasis: { disabled: true } },
       {
-        name: bi(SERIES.band),
+        name: chartText(SERIES.band),
         type: 'line',
         stack: 'band',
         data: shown.map((edge) => edge.high - edge.low),
@@ -155,7 +155,7 @@ function spreadOption(bins: readonly ValueBin[], goal: number | null, total: num
       silent: true,
       symbol: 'none',
       lineStyle: { color: colors.ink, width: 2, type: 'solid' },
-      label: { formatter: bi({ en: `Goal ${axisTwd(goal)}`, zh: `目標 ${axisTwd(goal)}` }), color: colors.ink, position: 'end' },
+      label: { formatter: chartText({ en: `Goal ${axisTwd(goal)}`, zh: `目標 ${axisTwd(goal)}` }), color: colors.ink, position: 'end' },
       data: [{ xAxis: goalAt + (goal - goalBin.from) / (goalBin.to - goalBin.from) - 0.5 }],
     };
   }

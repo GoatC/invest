@@ -11,7 +11,7 @@ import { bi, type Bilingual } from '@/lib/i18n';
 import type { Status } from '@/lib/models/red-flags';
 import { LIGHT_ICON, STATUS_TEXT } from '@/lib/red-flag-text';
 
-import { Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface FlagCell {
   status: Status;
@@ -53,12 +53,12 @@ function gridOption(rows: readonly FlagGridRow[], columns: readonly Bilingual[],
         const one = row?.cells[x];
         const column = columns[x];
         if (!row || !one || !column) return '';
-        return tooltip(`${row.ticker} · ${bi(column)}`, [{ value: one.value, label: STATUS_TEXT[one.status] }]);
+        return tooltip(`${row.ticker} · ${chartText(column)}`, [{ value: one.value, label: STATUS_TEXT[one.status] }]);
       },
     },
     xAxis: {
       type: 'category',
-      data: columns.map((column) => bi(column)),
+      data: columns.map((column) => chartText(column)),
       position: 'top',
       axisLabel: { color: colors.muted, rotate: narrow ? 60 : 30, fontSize: 11, interval: 0 },
       axisTick: { show: false },

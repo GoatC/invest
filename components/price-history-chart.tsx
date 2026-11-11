@@ -140,11 +140,11 @@ export function PriceHistoryChart({ ticker, currency, points, trades, avgCost }:
         ))}
       </div>
       <ul className="facts" aria-live="polite">
-        <li className={`fact ${moved === null ? 'none' : moved >= 0 ? 'ok' : 'alert'}`}>
+        <li className="fact">
           <span className="fact-label">
             <Bi en="Change in range" zh="區間漲跌" label />
           </span>
-          <strong className="fact-value">{moved === null ? '—' : signedPercent(moved)}</strong>
+          <strong className={`fact-value ${moved === null || moved === 0 ? 'flat' : moved > 0 ? 'up' : 'down'}`}>{moved === null ? '—' : `${moved > 0 ? '▲' : moved < 0 ? '▼' : ''}${signedPercent(moved).replace(/^[+−]/, '')}`}</strong>
         </li>
         <li className="fact">
           <span className="fact-label">

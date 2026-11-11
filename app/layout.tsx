@@ -8,7 +8,7 @@ import { DataToast } from '@/components/data-toast';
 import { SiteNav, SubNav } from '@/components/site-nav';
 import { TableCards } from '@/components/table-cards';
 import { requireSession, signedInUser } from '@/lib/auth';
-import { DataError, loadJobRuns, orDataError } from '@/lib/data';
+import { DataError, loadJobRuns, loadSectorSettings, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
 
@@ -43,9 +43,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const jobs = signedIn ? await orDataError(loadJobRuns((await requireSession()).supabase)) : undefined;
   const health = jobs && !(jobs instanceof DataError) ? dataHealth(jobs.runs, jobs.threshold, taipeiToday()) : undefined;
 
+  // Price moves wear one colour convention on every page (config sectors: Taiwan's red up by default).
+  const sectors = signedIn ? await orDataError(loadSectorSettings((await requireSession()).supabase)) : undefined;
+  const greenUp = sectors !== undefined && !(sectors instanceof DataError) && sectors.colour === 'green_up';
+
   return (
     <html lang="zh-Hant">
-      <body className={signedIn ? 'signed-in' : undefined}>
+      <body className={signedIn ? `signed-in ${greenUp ? 'green-up' : 'red-up'}` : undefined}>
         <header className="site-header">
           <div className="site-header-inner">
             <Link href={signedIn ? '/' : '/login'} className="brand" aria-label="長期投資 Long-View Invest">
