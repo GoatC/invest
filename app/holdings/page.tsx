@@ -5,11 +5,12 @@ import { Bi } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
+import { PhoneTabs } from '@/components/phone-tabs';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
-import { DataError, loadAssumptions, loadCashFlows, loadFxHistory, loadHoldingsData, loadProposals, loadRules, orDataError, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadFxHistory, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
@@ -27,6 +28,7 @@ import { breachAlert } from '@/lib/rule-text';
 
 import { SecuritiesMaster } from '../securities/master';
 import { ValuationOverview } from '../valuation/overview';
+import { HoldingsOverview, VIEWS } from './overview';
 import { tickerLinks } from './ticker-links';
 import { TradeForm } from './trade-form';
 import { tradeInitial } from './trade-initial';
@@ -75,7 +77,7 @@ function sum(values: readonly number[]): number {
 export default async function HoldingsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
   const params = await searchParams;
-  let data: HoldingsData;
+  let data: AllocationData;
   let flows: CashFlowRecord[];
   let rates: FxQuote[];
   // The proposals only add to the page, so a failed read of them does not hide the holdings.
@@ -83,7 +85,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const today = taipeiToday();
   try {
     [data, flows, rates, proposals] = await Promise.all([
-      loadHoldingsData(supabase),
+      loadAllocationData(supabase),
       loadCashFlows(supabase),
       loadFxHistory(supabase),
       orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
@@ -93,6 +95,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
     throw err;
   }
   const portfolio = buildPortfolio(data);
+  const view = VIEWS.find((option) => option === param(params, 'view')) ?? 'cards';
   const saved = savedMessage(params);
   const empty = data.trades.length === 0 && data.manualAssets.length === 0;
   const priced = new Set(data.prices.map((price) => price.ticker));
@@ -141,7 +144,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       )}
       {!(proposals instanceof DataError) && <OpenProposals proposals={proposals[0]} rules={proposals[1]} />}
       <AlertTiles heading={{ en: 'Sells larger than the holding: fix these trades', zh: '賣出超過持有：請修正這些交易' }} tone="alert" items={portfolio.shortfalls.map(shortfallAlert)} />
-      <section className="card form" id="add-trade">
+      <section className="card page-head">
         <div className="row spread">
           <h1>持倉</h1>
           <div className="row small">
@@ -156,37 +159,66 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
             </Link>
           </div>
         </div>
-        <h2>
-          <Bi {...LABELS.addTrade} />
-        </h2>
-        {proposal !== undefined && (
-          <p className="muted">
-            <Bi
-              en={`Filled in from proposal #${proposal}: change the price, fee and FX rate to what your broker's confirmation says.`}
-              zh={`已依提案 #${proposal} 填入：請把價格、手續費與匯率改成券商成交單上的數字。`}
-            />
-          </p>
-        )}
-        <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} {...(proposal === undefined ? {} : { proposal })} compact />
       </section>
-      {!empty && (
-        <>
-          <section className="card form" aria-label="Summary 總覽">
-            <Summary data={data} portfolio={portfolio} />
-          </section>
-          <RulesStatus data={data} portfolio={portfolio} />
-          <ListedHoldings data={data} portfolio={portfolio} priced={priced} />
-        </>
-      )}
-      <ValuationOverview supabase={supabase} today={today} params={params} />
-      <ManualAssets data={data} portfolio={portfolio} />
-      {data.trades.length > 0 && <Trades data={data} showAll={param(params, 'trades') === 'all'} />}
-      <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} />
-      <SecuritiesMaster data={data} saved={param(params, 'securities')} />
-      {!empty && <Footnotes />}
+      <PhoneTabs
+        label="Holdings 持倉"
+        initial={empty ? 'trades' : 'overview'}
+        tabs={TABS}
+        parts={[
+          {
+            tab: 'trades',
+            content: (
+              <section className="card form" id="add-trade">
+                <h2>
+                  <Bi {...LABELS.addTrade} />
+                </h2>
+                {proposal !== undefined && (
+                  <p className="muted">
+                    <Bi
+                      en={`Filled in from proposal #${proposal}: change the price, fee and FX rate to what your broker's confirmation says.`}
+                      zh={`已依提案 #${proposal} 填入：請把價格、手續費與匯率改成券商成交單上的數字。`}
+                    />
+                  </p>
+                )}
+                <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} {...(proposal === undefined ? {} : { proposal })} compact />
+              </section>
+            ),
+          },
+          {
+            tab: 'overview',
+            content: !empty && (
+              <>
+                <section className="card form" aria-label="Summary 總覽">
+                  <Summary data={data} portfolio={portfolio} />
+                </section>
+                <HoldingsOverview supabase={supabase} data={data} portfolio={portfolio} today={today} view={view} proposals={proposals instanceof DataError ? [] : proposals[0]} rules={proposals instanceof DataError ? [] : proposals[1]} />
+                <RulesStatus data={data} portfolio={portfolio} />
+                <ListedHoldings data={data} portfolio={portfolio} priced={priced} />
+              </>
+            ),
+          },
+          { tab: 'watch', content: <ValuationOverview supabase={supabase} today={today} params={params} /> },
+          { tab: 'overview', content: <ManualAssets data={data} portfolio={portfolio} /> },
+          { tab: 'trades', content: data.trades.length > 0 && <Trades data={data} showAll={param(params, 'trades') === 'all'} /> },
+          { tab: 'flows', content: <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} /> },
+          { tab: 'watch', content: <SecuritiesMaster data={data} saved={param(params, 'securities')} /> },
+          { tab: 'overview', content: !empty && <Footnotes /> },
+        ]}
+      />
+      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade">
+        ＋
+      </a>
     </>
   );
 }
+
+/** The holdings page's sub-tabs on a phone; a wide screen shows every part at once. */
+const TABS = [
+  { key: 'overview', label: { en: 'Overview', zh: '總覽' } },
+  { key: 'trades', label: { en: 'Trades', zh: '交易' } },
+  { key: 'flows', label: LABELS.cashFlows },
+  { key: 'watch', label: { en: 'Watchlist', zh: '觀察清單' } },
+] as const;
 
 /** After a trade is saved: this ticker's analyses, whether they must wait for tonight's prices, and its class's auto-scored assumption. */
 function NextSteps({
@@ -392,7 +424,7 @@ function ListedHoldings({ data, portfolio, priced }: { data: HoldingsData; portf
   if (listed.length === 0) return null;
   const total = portfolio.pool.totalTwd;
   return (
-    <section className="card form">
+    <section className="card form wide-only">
       <div className="row spread">
         <h2>
           <Bi en="Listed holdings" zh="上市持股" />

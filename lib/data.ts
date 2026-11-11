@@ -1630,6 +1630,20 @@ export async function loadPriceHistory(supabase: SupabaseClient, ticker: string)
   return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
 }
 
+/**
+ * Each ticker's daily closes from a date on, oldest first, for the holdings overview (the cards'
+ * three months, the last session's move, the 52-week range): one read per ticker, all at once.
+ */
+export async function loadHoldingCloses(supabase: SupabaseClient, tickers: readonly string[], from: string): Promise<Map<string, Array<{ date: string; close: number }>>> {
+  const unique = [...new Set(tickers)];
+  const found = await Promise.all(
+    unique.map((ticker) =>
+      rows<{ price_date: string; close: number }>('prices', supabase.from('prices').select('price_date, close').eq('ticker', ticker).gte('price_date', from).order('price_date')),
+    ),
+  );
+  return new Map(unique.map((ticker, index) => [ticker, (found[index] ?? []).map((row) => ({ date: row.price_date, close: Number(row.close) }))]));
+}
+
 /** What the two windfall rules read; the plan is null until one is started (or before the migration). */
 export async function loadWindfallInput(supabase: SupabaseClient, today: string): Promise<WindfallInput | undefined> {
   const [plan, gauge, settings] = await Promise.all([
