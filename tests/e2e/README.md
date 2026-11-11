@@ -3,12 +3,12 @@
 `npm run test:e2e` builds the app, runs it against a local stand-in for Supabase loaded with the
 migrations and the demo seed, and walks through it in Chromium: the web app manifest, icons and
 security headers, sign-in, the holdings view and its
-R1 / R2 figures, adding, editing and deleting a trade, a refused oversized sell, gold and cash
+R1 / R2 figures, the holdings at a glance (a card per holding with its closes, buys, moves and signals; the ranking, cost, map and signal views; the sub-tabs and the + on a phone), adding, editing and deleting a trade, a refused oversized sell, gold and cash
 balances, cash flows (a USD dividend, the windfall arriving, an edit and a delete), adding a
 security, a Big5 broker-statement import (including a dividend row, an unknown ticker and a
 second import of the same file), trade-date FX rates, the performance page (TWR against the SAA
 benchmark, XIRR, the monthly and per-holding FX split, a chart tooltip, the windfall pool alone,
-dark mode), the allocation page (drift coloured by the 5/25 rule, the three donut lenses with a
+dark mode; by holding, each holding's part of the return adding up to the TWR), the allocation page (each class as a bar against its target and 5/25 band with the TWD over or under, the three donut lenses with a
 slice's holdings, targets that must add up to 100% and are logged, capital market assumptions, a satellite class left blank auto-scored from its holdings by CAPM with the lines left out named, yours winning once typed, the setting logged),
 the Value at Risk card on the dashboard and its folded details (the 1-week figure and its share from the seed's three years of
 weekly demo closes, the 1-month toggle at × √4.33, the histogram with its cutoff, TWD balances

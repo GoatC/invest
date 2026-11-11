@@ -9,6 +9,7 @@ import {
   benchmarkWeights,
   buildSeries,
   chain,
+  contributions,
   cumulativeReturns,
   firstDay,
   fxSplit,
@@ -381,6 +382,40 @@ describe('buildSeries', () => {
   });
 });
 
+describe('contributions', () => {
+  // Two TWD lines of 100 each: 0050 gains 10% on day two, 2330 loses 10% on day three.
+  const days = buildSeries(
+    input({
+      trades: [
+        trade({ tradeDate: '2026-01-01', ticker: '0050', qty: 1, price: 100, currency: 'TWD', fxRate: 1 }),
+        trade({ tradeDate: '2026-01-01', ticker: '2330', qty: 1, price: 100, currency: 'TWD', fxRate: 1, pool: 'windfall' }),
+      ],
+      prices: [close('0050', '2026-01-01', 100), close('0050', '2026-01-02', 110), close('2330', '2026-01-01', 100), close('2330', '2026-01-02', 100), close('2330', '2026-01-03', 90)],
+    }),
+  );
+
+  it('gives each holding its part of the return, carried at the growth so far, adding up to the TWR', () => {
+    const parts = contributions(days, 'all', '2025-12-31', '2026-01-03');
+    assert.deepEqual(parts.map((part) => part.key), ['regular:0050', 'windfall:2330']);
+    // Day two: 10 on 200. Day three: −10 on 210, carried at the 1.05 the portfolio had grown by.
+    near(parts[0]?.contribution, 0.05);
+    near(parts[1]?.contribution, (-10 / 210) * 1.05);
+    near(parts[0]?.gainTwd, 10);
+    near(parts[1]?.gainTwd, -10);
+    near(parts.reduce((sum, part) => sum + part.contribution, 0), periodReturn(days, 'all', '2025-12-31', '2026-01-03').twr ?? Number.NaN);
+  });
+
+  it('keeps to the scope and the period asked for', () => {
+    const regular = contributions(days, 'regular', '2025-12-31', '2026-01-03');
+    assert.deepEqual(regular.map((part) => part.key), ['regular:0050']);
+    near(regular[0]?.contribution, 0.1);
+    const lastDay = contributions(days, 'all', '2026-01-02', '2026-01-03');
+    near(lastDay.find((part) => part.key === 'windfall:2330')?.contribution, -10 / 210);
+    near(lastDay.find((part) => part.key === 'regular:0050')?.contribution, 0);
+    assert.deepEqual(contributions(days, 'all', '2026-01-03', '2026-01-03'), []);
+  });
+});
+
 describe('periodReturn', () => {
   const days = buildSeries(
     input({
@@ -571,6 +606,7 @@ describe('snapshots', () => {
       ret: { all: null, regular: null, windfall: null },
       local: { all: null, regular: null, windfall: null },
       classDay: {},
+      heldDay: {},
       benchmark: null,
       estimated: false,
     };
@@ -587,6 +623,7 @@ describe('snapshots', () => {
       ret: { all: null, regular: null, windfall: null },
       local: { all: null, regular: null, windfall: null },
       classDay: {},
+      heldDay: {},
       benchmark: null,
       estimated: false,
     });

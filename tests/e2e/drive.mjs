@@ -159,6 +159,50 @@ await step('holdings: R1 and R2 are worked out on screen with the demo figures',
   check(text.includes('單一個股最多可持有 NT$3,960'), 'Chinese R1 line');
 });
 
+await step('holdings at a glance: a card per holding with its moves and signals, four other views, sub-tabs and a + on a phone', async () => {
+  await page.goto(`${BASE}/holdings`);
+  const glance = page.locator('#glance');
+  const card = async (ticker) => (await glance.locator('.hold-card', { hasText: ticker }).first().innerText()).replace(/\s+/g, ' ');
+  const vt = await card('VT');
+  check(/NT\$10,225 12\.9%/.test(vt) && /▲\d+\.\d% Day 今日 ▲6\.8% Total 累計/.test(vt), `VT's value, weight and moves, got ${vt}`);
+  check(vt.includes('下次扣款優先') && vt.includes('類別低配 15.1 pp'), `the next contribution buys VT's class, got ${vt}`);
+  const aapl = await card('AAPL');
+  check(aapl.includes('超過個股上限 9.7%／5%') && aapl.includes('紅旗黃燈'), `AAPL's R1 breach and amber light, got ${aapl}`);
+  check((await glance.locator('.hold-card .spark').count()) === 7, 'a line of closes on each of the seven cards');
+  check((await glance.locator('.hold-card', { hasText: 'AAPL' }).locator('.spark path[d*=" l-4.2 7 "]').count()) === 1, "AAPL's one buy marked on its line");
+  check(/NT\$\d/.test(await fact('Last session')), 'the last session in TWD');
+  await glance.getByRole('link', { name: /Ranking/ }).click();
+  await page.waitForURL(/view=rank/);
+  const ranked = await glance.locator('.rank-row:not(.rank-head)').allInnerTexts();
+  check(ranked.length === 7 && /^VT\s+▲6\.8%/.test(ranked[0].replace(/\n/g, ' ')), `seven holdings ranked, VT first, got ${ranked[0]}`);
+  await page.goto(`${BASE}/holdings?view=cost`);
+  check((await glance.locator('.cost-row svg circle').count()) === 7 && (await glance.locator('.cost-scale').innerText()).includes('成本'), 'each holding on the cost scale');
+  await page.goto(`${BASE}/holdings?view=map`);
+  check((await glance.locator('.hold-map .map-name').allTextContents()).includes('VT'), 'the map names VT');
+  check((await glance.locator('.hold-map .map-flag').count()) >= 2, 'the map marks the holdings to act on');
+  await page.goto(`${BASE}/holdings?view=signals`);
+  const row = glance.locator('.sig-matrix tbody tr', { hasText: 'AAPL' });
+  check((await glance.locator('.sig-matrix tbody tr').count()) === 7 && (await row.locator('.sig-dot.act').count()) === 1 && (await row.locator('.sig-dot.watch').count()) === 1, "the matrix: AAPL's rule to act on and its light to watch");
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await page.goto(`${BASE}/holdings`);
+    const tabs = page.getByRole('tablist', { name: /Holdings/ });
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '總覽', 'the overview first');
+    check(!(await page.locator('#add-trade').isVisible()) && !(await page.locator('#trades').isVisible()) && (await glance.isVisible()), 'only the overview shows');
+    await page.getByRole('link', { name: /Add trade/ }).last().click();
+    await page.locator('#add-trade').waitFor();
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '交易' && !(await glance.isVisible()), 'the + opens the trade form on its tab');
+    await tabs.getByRole('tab', { name: /Cash flows/ }).click();
+    check((await page.locator('#cash-flows').isVisible()) && !(await page.locator('#add-trade').isVisible()), 'the cash flows on their tab');
+    await page.goto(`${BASE}/holdings#valuation`);
+    await page.locator('#valuation').waitFor();
+    check((await tabs.getByRole('tab', { selected: true }).innerText()) === '觀察清單', 'a link to the valuations opens the watchlist tab');
+    await snap('phone-holdings', page, false);
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
 await step("holdings: a holding's name opens its price chart, with its trades marked and a range and step to pick", async () => {
   await page.goto(`${BASE}/holdings`);
   await page.locator('a.holding-chart-link', { hasText: 'Apple Inc.' }).first().click();
@@ -479,11 +523,7 @@ await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split a
   check(tile('SAA benchmark') && text.includes('組合減基準'), 'benchmark tile with the difference');
   check(tile('Money-weighted return \\(XIRR\\)'), 'XIRR tile');
   check(text.includes('Since the start') && text.includes('Returns by period'), 'period table');
-  const splits = await page.locator('section', { hasText: 'FX split per foreign holding' }).innerText();
-  for (const ticker of ['VT', 'BNDW', 'GLDM', 'BIL']) check(splits.includes(ticker), `FX split lists ${ticker}`);
-  // AAPL was sold by the CSV import; 2330 and 00692 trade in TWD.
-  check(!/\b(AAPL|2330|00692)\b/.test(splits), 'sold-out and TWD holdings are not split');
-  check(text.includes('時間加權報酬') && text.includes('資金加權報酬') && text.includes('匯率拆解'), 'Chinese labels');
+  check(text.includes('時間加權報酬') && text.includes('資金加權報酬') && text.includes('匯率與交叉項'), 'Chinese labels');
   await snap('performance');
   // The README image: the headline figures and the whole cumulative chart.
   await page.setViewportSize({ width: 1280, height: 1360 });
@@ -506,6 +546,26 @@ await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split a
   await snap('performance-tables');
 });
 
+await step("performance by holding: each holding's part adds up to the TWR, and the FX split per foreign holding", async () => {
+  await page.goto(`${BASE}/performance`);
+  const twr = /Time-weighted return \(TWR\)[^+−]*([+−]\d+\.\d)%/.exec((await body()).replace(/\s+/g, ' '))?.[1];
+  await page.getByRole('group', { name: /View/ }).getByRole('link', { name: /By holding/ }).click();
+  await page.waitForURL(/view=each/);
+  const rows = (await page.locator('#contributions .rank-row:not(.rank-head)').allInnerTexts()).map((row) => row.replace(/\s+/g, ' '));
+  check(rows.length >= 8 && rows.some((row) => row.startsWith('VT ')) && rows.some((row) => /NT\$/.test(row)), `a bar per holding with its TWD gain, got ${rows.join(' | ')}`);
+  const points = (row) => Number((/([+−]\d+\.\d\d)/.exec(row)?.[1] ?? 'x').replace('−', '-'));
+  const total = points(rows[rows.length - 1]);
+  const sum = rows.slice(0, -1).reduce((all, row) => all + points(row), 0);
+  check(rows[rows.length - 1].startsWith('Total 合計') && Math.abs(sum - total) < 0.06, `the parts add up to the total: ${sum.toFixed(2)} against ${total}`);
+  check(twr !== undefined && Math.abs(total - Number(twr.replace('−', '-'))) < 0.06, `the total is the TWR: ${total} against ${twr}`);
+  const splits = await page.locator('section', { hasText: 'FX split per foreign holding' }).innerText();
+  for (const ticker of ['VT', 'BNDW', 'GLDM', 'BIL']) check(splits.includes(ticker), `FX split lists ${ticker}`);
+  // AAPL was sold by the CSV import; 2330 and 00692 trade in TWD.
+  check(!/\b(AAPL|2330|00692)\b/.test(splits), 'sold-out and TWD holdings are not split');
+  check((await body()).includes('匯率拆解') && (await body()).includes('各持股的貢獻'), 'Chinese labels');
+  await snap('performance-by-holding');
+});
+
 await step('performance: the windfall pool alone, year to date, and dark mode', async () => {
   // The e2e added a windfall cash balance today: a value, but no return until the next close.
   await page.goto(`${BASE}/performance?scope=windfall`);
@@ -523,7 +583,12 @@ await step('performance: the windfall pool alone, year to date, and dark mode', 
 await step('allocation: drift from the targets coloured by the 5/25 rule, satellite left to R2', async () => {
   await page.goto(`${BASE}/allocation`);
   await page.getByRole('heading', { level: 1, name: '資產配置' }).waitFor();
-  await page.locator('.chart svg').first().waitFor();
+  // Each class as a bar against its target and band; the table is folded under them.
+  const bar = async (name) => (await page.locator('.band-row', { hasText: name }).innerText()).replace(/\s+/g, ' ');
+  check((await page.locator('.band-row').count()) === 8, 'a bar per asset class');
+  check(/多 NT\$[\d,]+/.test(await bar('Strategic cash')) && (await page.locator('.band-row', { hasText: 'Strategic cash' }).locator('.fill.rebalance').count()) === 1, `strategic cash over its band, in TWD, got ${await bar('Strategic cash')}`);
+  check(/Core 核心 \d+\.\d%/.test((await page.locator('.band-group').first().innerText()).replace(/\s+/g, ' ')) && (await page.locator('.band-group').nth(1).innerText()).includes('上限 25%'), 'the core and satellite totals, with R2\'s trigger');
+  await page.locator('section', { hasText: '與目標權重的偏離' }).getByText('Show as a table').click();
   const rows = page.locator('table').first().locator('tbody tr');
   check((await rows.count()) === 8, `eight asset classes, got ${await rows.count()}`);
   const row = (name) => page.locator('table').first().locator('tbody tr', { hasText: name }).innerText();
@@ -567,7 +632,7 @@ await step('targets: must add up to 100%, are saved together and logged', async 
   await page.fill('input[name=target_tw_market_cap]', '13');
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=targets');
-  check((await page.locator('table').first().locator('tbody tr', { hasText: 'Taiwan market-cap' }).innerText()).includes('13.0%'), 'new Taiwan target shown');
+  check(/／ 13%/.test(await page.locator('.band-row', { hasText: 'Taiwan market-cap' }).innerText()), 'new Taiwan target shown');
   await page.goto(`${BASE}/allocation/targets`);
   const log = (await page.locator('section', { hasText: 'Edit history' }).textContent()) ?? '';
   check(/Changed[\s\S]*US \/ global equity[\s\S]*Target\s*目標: 0\.28 → 0\.27/.test(log), 'edit history shows 0.28 → 0.27');

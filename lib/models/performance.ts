@@ -75,6 +75,11 @@ export interface DayPoint {
    * and its sum of value × return in TWD and in own currencies; a class held nothing of is absent.
    */
   classDay: Record<string, { base: number; twd: number; local: number }>;
+  /**
+   * Each line held at the previous close, keyed as `held` is: its value then and the TWD it gained
+   * or lost that day, for each holding's part of the return (`contributions`).
+   */
+  heldDay: Record<string, { pool: Pool; base: number; gain: number }>;
   /** The SAA benchmark's TWD return that day; null when a proxy has no price yet. */
   benchmark: number | null;
   /** Some value rests on a trade price or a hand-entered value instead of a close. */
@@ -192,7 +197,9 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
     const twdSum = perScope(0);
     const localSum = perScope(0);
     const classDay: DayPoint['classDay'] = {};
-    const add = (pool: Pool, value: number, twd: number, local: number, assetClassId: string) => {
+    const heldDay: DayPoint['heldDay'] = {};
+    const add = (key: string, pool: Pool, value: number, twd: number, local: number, assetClassId: string) => {
+      heldDay[key] = { pool, base: value, gain: value * twd };
       for (const scope of ['all', pool] as const) {
         base[scope] += value;
         twdSum[scope] += value * twd;
@@ -217,7 +224,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
           const rate = market.fx(held.currency, date) ?? held.lastFx;
           const nowLocal = heldEquity(held, price);
           const twd = (nowLocal * rate) / value - 1;
-          add(held.pool, value, twd, was && was > 0 ? nowLocal / was - 1 : twd, held.assetClassId);
+          add(key, held.pool, value, twd, was && was > 0 ? nowLocal / was - 1 : twd, held.assetClassId);
           continue;
         }
         // Valued at the trade price yesterday (no close yet): today's close against that price.
@@ -225,7 +232,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
         const price = market.growth(held.ticker, then, date) ?? (close === undefined ? 1 : close / held.lastPrice);
         const rate = market.fx(held.currency, date);
         const fx = market.fxGrowth(held.currency, then, date) ?? (rate === undefined ? 1 : rate / held.lastFx);
-        add(held.pool, value, price * fx - 1, price - 1, held.assetClassId);
+        add(key, held.pool, value, price * fx - 1, price - 1, held.assetClassId);
       }
       for (const { id, was, wasPrice } of assets) {
         const value = closing.get(`manual:${id}`);
@@ -233,7 +240,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
         const twd = (was.quantity * wasPrice.price) / value - 1;
         // Gold is priced in US dollars (XAU/USD × USD/TWD): its local return leaves the dollar's move out.
         const usd = was.unit === 'grams' ? market.fxGrowth('USD', then, date) : undefined;
-        add(was.pool, value, twd, usd === undefined ? twd : (1 + twd) / usd - 1, was.assetClassId);
+        add(`manual:${id}`, was.pool, value, twd, usd === undefined ? twd : (1 + twd) / usd - 1, was.assetClassId);
       }
     }
     const ret = {} as MaybePerScope;
@@ -375,6 +382,7 @@ export function buildSeries(input: PerformanceInput): DayPoint[] {
       ret,
       local,
       classDay,
+      heldDay,
       benchmark: benchmarkReturn,
       estimated,
     });
@@ -457,6 +465,42 @@ export function periodReturn(days: readonly DayPoint[], scope: Scope, from: stri
 }
 
 /** The periods the performance page reports, shortest first. */
+export interface Contribution {
+  /** The line, keyed as on the holdings page: "regular:VT", "regular:VOO:short", "manual:3". */
+  key: string;
+  /** Its part of the scope's time-weighted return, as a fraction: 0.0062 is 0.62 percentage points. */
+  contribution: number;
+  /** What the line gained or lost over the period, TWD. */
+  gainTwd: number;
+}
+
+/**
+ * Each holding's part of the scope's time-weighted return from the close of `from` to the close of
+ * `to`, largest first: each day, what the line gained over what the scope was worth at the previous
+ * close, carried at the scope's growth up to that day, so the parts add up to the TWR exactly.
+ */
+export function contributions(days: readonly DayPoint[], scope: Scope, from: string, to: string): Contribution[] {
+  const parts = new Map<string, { contribution: number; gainTwd: number }>();
+  let growth = 1;
+  for (const day of days) {
+    if (day.date <= from || day.date > to) continue;
+    const ret = day.ret[scope];
+    if (ret === null) continue;
+    const lines = Object.entries(day.heldDay).filter(([, line]) => scope === 'all' || line.pool === scope);
+    const base = lines.reduce((sum, [, line]) => sum + line.base, 0);
+    if (base > 0) {
+      for (const [key, line] of lines) {
+        const part = parts.get(key) ?? { contribution: 0, gainTwd: 0 };
+        part.contribution += (line.gain / base) * growth;
+        part.gainTwd += line.gain;
+        parts.set(key, part);
+      }
+    }
+    growth *= 1 + ret;
+  }
+  return [...parts].map(([key, part]) => ({ key, ...part })).sort((a, b) => b.contribution - a.contribution);
+}
+
 export const PERIODS = ['1m', '3m', 'ytd', '1y', '3y', '5y', 'all'] as const;
 export type Period = (typeof PERIODS)[number];
 

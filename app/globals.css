@@ -2065,3 +2065,568 @@ details.ticker-menu a:hover {
     padding-block: 0.65rem;
   }
 }
+
+/* The holdings at a glance (app/holdings/overview.tsx): a card per holding, the gain ranking, the
+   cost scale, the map and the signal matrix. Price moves take --up and --down from the colour
+   convention (config sectors: Taiwan's red up by default), always beside ▲ or ▼; a status keeps
+   its own icon. */
+.red-up {
+  --up: var(--status-critical);
+  --down: var(--status-good);
+  --up-text: var(--danger-text);
+  --down-text: var(--ok-text);
+}
+
+.green-up {
+  --up: var(--status-good);
+  --down: var(--status-critical);
+  --up-text: var(--ok-text);
+  --down-text: var(--danger-text);
+}
+
+.glance .up {
+  color: var(--up-text);
+}
+
+.glance .down {
+  color: var(--down-text);
+}
+
+.glance .flat {
+  color: var(--muted);
+}
+
+.hold-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 0.75rem;
+}
+
+.hold-card {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  padding: 0.75rem 0.85rem;
+  background: var(--bg);
+  border-radius: 14px;
+  min-width: 0;
+}
+
+.hold-top,
+.hold-mid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.hold-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: var(--tap-min);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.hold-name b {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.hold-name span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hold-value {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hold-value small {
+  color: var(--muted);
+}
+
+.spark,
+.spark-empty {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 46px;
+  display: block;
+}
+
+.moves {
+  flex: none;
+  display: flex;
+  gap: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.moves > span {
+  display: grid;
+  justify-items: end;
+}
+
+.moves small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.sigs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.sig {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.6rem 0.1rem 0.25rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.sig.info {
+  padding-left: 0.6rem;
+  color: var(--muted);
+}
+
+.sig.act {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.sig-dot {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  background: var(--border);
+  color: var(--muted);
+}
+
+.sig-dot.big {
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.9rem;
+}
+
+.sig-dot.ok {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.sig-dot.buy {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.sig-dot.watch {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.sig-dot.act {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.sig-none {
+  color: var(--border-strong);
+}
+
+.glance .tk {
+  font-weight: 800;
+  color: var(--text);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.2rem;
+}
+
+.rank {
+  display: grid;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) 4.2rem 4rem;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: right;
+}
+
+.rank-row > :first-child {
+  text-align: left;
+}
+
+.rank-head {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.zero-bar {
+  position: relative;
+  height: 1.5rem;
+}
+
+.zero-bar::before {
+  content: '';
+  position: absolute;
+  left: var(--zero, 0%);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.zero-bar i {
+  position: absolute;
+  top: 0.35rem;
+  height: 0.8rem;
+}
+
+.zero-bar i.pos {
+  background: var(--up);
+  border-radius: 0 4px 4px 0;
+}
+
+.zero-bar i.neg {
+  background: var(--down);
+  border-radius: 4px 0 0 4px;
+}
+
+.cost {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 34rem;
+}
+
+.cost .chart-legend svg {
+  height: 0.75rem;
+  width: auto;
+}
+
+.cost-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) 4rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-row svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cost-row > b {
+  text-align: right;
+}
+
+.cost-zone {
+  font-size: 9px;
+  fill: var(--muted);
+}
+
+.cost-scale {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  margin: 0 4.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cost-scale span:last-child {
+  text-align: right;
+}
+
+.hold-map {
+  width: 100%;
+  max-width: 34rem;
+  height: auto;
+  display: block;
+}
+
+.map-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  fill: var(--text);
+}
+
+.map-num {
+  font-size: 10.5px;
+  fill: var(--text);
+}
+
+.map-flag {
+  font-size: 9.5px;
+  font-weight: 800;
+  fill: var(--danger-text);
+}
+
+.sig-matrix {
+  width: 100%;
+  max-width: 34rem;
+}
+
+.sig-matrix th,
+.sig-matrix td {
+  text-align: center;
+  padding: 0.3rem 0.2rem;
+  vertical-align: middle;
+}
+
+.sig-matrix tr > :first-child {
+  text-align: left;
+}
+
+.sig-matrix tbody th {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.sig-matrix tbody th a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sig-matrix td a {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  text-decoration: none;
+}
+
+/* A long page as sub-tabs on a phone (components/phone-tabs.tsx); a wide screen shows every part. */
+.phone-tabs,
+.fab {
+  display: none;
+}
+
+.tab-part {
+  display: contents;
+}
+
+.page-head h1 {
+  margin: 0;
+}
+
+@media (max-width: 759px) {
+  .phone-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--border);
+  }
+
+  .phone-tabs button {
+    flex: 1;
+    min-height: 38px;
+    padding: 0 0.3rem;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .phone-tabs button.selected {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .phone-tabs-top {
+    scroll-margin-top: 0.5rem;
+  }
+
+  .tab-part.off,
+  .wide-only {
+    display: none;
+  }
+
+  /* Room under the last line of a page with a "+", so the button never covers a figure for good. */
+  .page:has(.fab) {
+    padding-bottom: 5.5rem;
+  }
+
+  /* The "+" that opens the new-trade form, over the tab bar's right end. */
+  .fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(76px + 16px + env(safe-area-inset-bottom));
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 1.6rem;
+    line-height: 1;
+    text-decoration: none;
+    box-shadow: 0 4px 14px rgba(31, 42, 58, 0.28);
+  }
+
+  .hold-card {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .glance .segmented a {
+    padding: 0.45rem 0.8rem;
+  }
+}
+
+/* F6's drift as bars on one scale (app/allocation/page.tsx): the weight filled, the target a tick,
+   F8's band a paler stripe behind them. */
+.bands,
+.band-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.band-group h3 {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.6rem;
+}
+
+.band-group h3 small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.band-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+  max-width: 40rem;
+}
+
+.band-row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.band-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.band-figures {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.band-figures b {
+  color: var(--text);
+}
+
+.band-track {
+  position: relative;
+  height: 0.95rem;
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.band-track .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
+.band-track .fill {
+  position: absolute;
+  left: 0;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-context);
+}
+
+.band-track .fill.ok {
+  background: var(--status-good);
+}
+
+.band-track .fill.watch {
+  background: var(--status-warning);
+}
+
+.band-track .fill.rebalance {
+  background: var(--status-critical);
+}
+
+.band-track .tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+}
+
+.band-gap {
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each holding's part of the return (app/performance/page.tsx): the ranking's rows with a total. */
+.contrib .rank-row {
+  grid-template-columns: 5.2rem minmax(0, 1fr) 3.6rem 5.4rem;
+}
+
+.contrib .tk {
+  overflow-wrap: anywhere;
+}
+
+.rank-total {
+  border-top: 1px solid var(--border);
+  padding-top: 0.4rem;
+}
