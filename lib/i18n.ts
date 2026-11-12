@@ -116,7 +116,7 @@ export const LABELS = {
   lookThrough: { en: 'Look-through', zh: '合併透視' },
   sectors: { en: 'Sectors', zh: '產業熱圖' },
   volatility: { en: 'Volatility alert', zh: '波動警報' },
-  proposals: { en: 'Proposals', zh: '提案' },
+  proposals: { en: 'Rule warnings', zh: '規則警示' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
   dashboard: { en: 'Dashboard', zh: '儀表板' },

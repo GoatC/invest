@@ -99,8 +99,8 @@ export default async function VolatilityPage({ searchParams }: { searchParams: P
         </details>
         <Info>
           <Bi
-            en={`Each component scores 0 at its calm figure and 10 at its panic figure (see Settings); the score is 1 + 0.9 × their weighted mean. Figures older than ${data.settings.maxAgeDays} days are left out; under ${Math.round(data.settings.minCoverage * 100)}% of the weight there is no score. Crossing 6 (tense) or 8 (panic) pushes a proposal (VOLATILITY_ALERT), even in the quiet hours; below 4 a small hedge (VOLATILITY_HEDGE). Sources: ${result.components.map((row) => `${COMPONENT_TEXT[row.id].name.en}, ${COMPONENT_TEXT[row.id].source}`).join('; ')}. Market data only; not advice.`}
-            zh={`每個成分在平靜值得 0 分、恐慌值得 10 分（見設定）；總分 = 1 ＋ 0.9 × 加權平均。超過 ${data.settings.maxAgeDays} 天的數值不計入；涵蓋權重低於 ${Math.round(data.settings.minCoverage * 100)}% 時不計分。穿越 6（緊張）或 8（恐慌）時推播提案（VOLATILITY_ALERT），安靜時段照送；低於 4 時小量避險（VOLATILITY_HEDGE）。來源：${result.components.map((row) => `${COMPONENT_TEXT[row.id].name.zh}，${COMPONENT_TEXT[row.id].source}`).join('；')}。僅為市場數據，不構成投資建議。`}
+            en={`Each component scores 0 at its calm figure and 10 at its panic figure (see Settings); the score is 1 + 0.9 × their weighted mean. Figures older than ${data.settings.maxAgeDays} days are left out; under ${Math.round(data.settings.minCoverage * 100)}% of the weight there is no score. Crossing 6 (tense) or 8 (panic) pushes a warning (VOLATILITY_ALERT), even in the quiet hours; below 4 a small hedge (VOLATILITY_HEDGE). Sources: ${result.components.map((row) => `${COMPONENT_TEXT[row.id].name.en}, ${COMPONENT_TEXT[row.id].source}`).join('; ')}. Market data only; not advice.`}
+            zh={`每個成分在平靜值得 0 分、恐慌值得 10 分（見設定）；總分 = 1 ＋ 0.9 × 加權平均。超過 ${data.settings.maxAgeDays} 天的數值不計入；涵蓋權重低於 ${Math.round(data.settings.minCoverage * 100)}% 時不計分。穿越 6（緊張）或 8（恐慌）時推播警示（VOLATILITY_ALERT），安靜時段照送；低於 4 時小量避險（VOLATILITY_HEDGE）。來源：${result.components.map((row) => `${COMPONENT_TEXT[row.id].name.zh}，${COMPONENT_TEXT[row.id].source}`).join('；')}。僅為市場數據，不構成投資建議。`}
           />
         </Info>
         <details id="settings" open={saved === 'settings'}>
@@ -217,7 +217,7 @@ function ShadowLog({ rows }: { rows: ShadowRow[] | DataError }) {
       {rows.length > 0 && (
         <details>
           <summary>
-            <Bi en={`Proposals (${rows.length})`} zh={`提案（${rows.length}）`} />
+            <Bi en={`Warnings (${rows.length})`} zh={`警示（${rows.length}）`} />
           </summary>
           <div className="table-wrap">
             <table className="compact" id="shadow-list">
@@ -239,7 +239,7 @@ function ShadowLog({ rows }: { rows: ShadowRow[] | DataError }) {
                   return (
                     <tr key={row.proposal.id}>
                       <td className="nowrap">
-                        <a href={`/proposals/${row.proposal.id}`}>{row.proposal.date}</a>
+                        <a href={`/#proposal-${row.proposal.id}`}>{row.proposal.date}</a>
                       </td>
                       <td>
                         {band ? <Bi {...(BAND_TEXT[band.band] ?? { en: band.band, zh: band.band })} /> : '—'} {band?.score.toFixed(1)}
@@ -260,8 +260,8 @@ function ShadowLog({ rows }: { rows: ShadowRow[] | DataError }) {
       )}
       <Info>
         <Bi
-          en="Each alert and hedge proposal, traded or not: its trades from the price drafted at to the close 5, 20 and 60 trading days later, amount-weighted (a buy gains when the price rises, a sale when it falls); strategic cash, exchange rates and dividends left out. A hit is a return above 0. Judge it over several alerts before real money follows them."
-          zh="每份警報與避險提案（不論是否下單）：各筆交易自提出價到 5、20、60 個交易日後收盤的報酬，依金額加權（買進漲則賺、賣出跌則賺），不計戰略現金、匯率與股利。報酬大於 0 即命中。請累積多次後再決定是否以真錢跟隨。"
+          en="Each alert and hedge warning, traded or not: its trades from the price drafted at to the close 5, 20 and 60 trading days later, amount-weighted (a buy gains when the price rises, a sale when it falls); strategic cash, exchange rates and dividends left out. A hit is a return above 0. Judge it over several alerts before real money follows them."
+          zh="每則警報與避險警示（不論是否下單）：各筆交易自提出價到 5、20、60 個交易日後收盤的報酬，依金額加權（買進漲則賺、賣出跌則賺），不計戰略現金、匯率與股利。報酬大於 0 即命中。請累積多次後再決定是否以真錢跟隨。"
         />
       </Info>
     </section>

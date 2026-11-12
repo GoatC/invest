@@ -10,7 +10,7 @@ export function volatilitySummary(run: VolatilityRun): string[] {
   const score = run.detail.score;
   if (score) lines.push(`  Score 波動分數 ${score.date}: ${score.score === null ? '—' : score.score.toFixed(1)} / 10 (coverage 涵蓋 ${Math.round(score.coverage * 100)}%)`);
   if (run.detail.events) lines.push(`  Events 事件: ${Object.entries(run.detail.events).map(([kind, count]) => `${kind} ${count}`).join(', ') || 'none'}`);
-  if (run.detail.rules) lines.push(`  Rules 規則: ${run.detail.rules.created} proposals drafted, ${run.detail.rules.closed} closed 新提案 ${run.detail.rules.created} 份，關閉 ${run.detail.rules.closed} 份`);
+  if (run.detail.rules) lines.push(`  Rules 規則: ${run.detail.rules.created} warnings raised, ${run.detail.rules.closed} cleared 新警示 ${run.detail.rules.created} 則，解除 ${run.detail.rules.closed} 則`);
   for (const warning of run.detail.warnings) lines.push(`  warning 警告: ${warning}`);
   for (const error of run.detail.errors) lines.push(`  error 錯誤: ${error}`);
   return lines;

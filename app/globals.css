@@ -1092,21 +1092,21 @@ tr.selected td {
   overflow-wrap: anywhere;
 }
 
-/* Proposals (rules engine): each one a bordered block inside its section. */
+/* Rule warnings (rules engine): wider tiles, each with its line and its figures folded under it. */
 
-.proposal {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.9rem 1rem;
+#proposals .alert-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
 }
 
-.proposal h3 {
+.alert-more {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+.alert-more > p {
   margin: 0;
-  font-size: 1.05rem;
-}
-
-.proposal form.row {
-  align-items: end;
 }
 
 .rule-row {

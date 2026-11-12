@@ -13,7 +13,7 @@ export const TABLE_LABELS: Record<string, Bilingual> = {
   cash_flows: { en: 'Cash flow', zh: '現金流' },
   config: { en: 'Setting', zh: '設定' },
   watchlist: { en: 'Watchlist', zh: '觀察清單' },
-  proposals: { en: 'Proposal', zh: '提案' },
+  proposals: { en: 'Rule warning', zh: '規則警示' },
   windfall_plan: { en: 'Windfall plan', zh: '大額資金計畫' },
   windfall_tranches: { en: 'Windfall tranche', zh: '大額資金分批' },
   red_flag_entries: { en: 'Red flag entry', zh: '紅旗紀錄' },

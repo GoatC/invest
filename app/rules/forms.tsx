@@ -122,7 +122,7 @@ export function RuleForm({ id, enabled, cooldownDays, threshold }: { id: string;
 const SETTING_LABELS: Record<EngineSettingsField, Bilingual> = {
   dcaAmountTwd: { en: 'Monthly DCA amount, NT$', zh: '每月定期定額金額，台幣' },
   dcaDay: { en: 'DCA debit day of the month', zh: '每月扣款日' },
-  expiryDays: { en: 'Days a proposal stays open', zh: '提案保留天數' },
+  expiryDays: { en: 'Days the monthly contribution stays', zh: '每月投入提醒天數' },
   fractionalUs: { en: 'US shares in fractions (複委託 零股)', zh: '美股以零股（小數股）下單' },
   fractionalUk: { en: 'UK shares in fractions', zh: '英股以零股（小數股）下單' },
   shareDecimals: { en: 'Decimals of a share', zh: '股數小數位數' },

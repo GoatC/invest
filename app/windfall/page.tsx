@@ -24,7 +24,7 @@ type Params = Record<string, string | string[] | undefined>;
 function savedMessage(saved: unknown): Bilingual | undefined {
   switch (saved) {
     case 'plan':
-      return { en: 'Plan saved: each tranche is proposed when it falls due.', zh: '已儲存計畫：每一批到期時會產生提案。' };
+      return { en: 'Plan saved: each tranche raises a warning when it falls due.', zh: '已儲存計畫：每一批到期時會發出警示。' };
     case 'deleted':
       return { en: 'Plan deleted; the edit history keeps it.', zh: '已刪除計畫；修改紀錄會保留。' };
     case 'settings':
@@ -127,8 +127,8 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
         <Facts facts={facts} />
         <Info>
           <Bi
-            en="The windfall goes into the core classes only, never the satellite, in monthly tranches: fewer when the market is cheap, more when it is dear (by the S&P 500's CAPE against its history), and sooner when the world market (ACWI) falls 15%, 25% or 35% from its 52-week high. Each tranche is a proposal you approve and trade yourself (L2)."
-            zh="大額資金只投入核心類別，不投入衛星部位，每月分批：市場便宜時批數少、昂貴時批數多（以 S&P 500 的 CAPE 對照其歷史），全球股市（ACWI）自 52 週高點下跌 15%、25% 或 35% 時提前投入。每一批都是一份提案，由你核准並自行下單（L2）。"
+            en="The windfall goes into the core classes only, never the satellite, in monthly tranches: fewer when the market is cheap, more when it is dear (by the S&P 500's CAPE against its history), and sooner when the world market (ACWI) falls 15%, 25% or 35% from its 52-week high. Each tranche raises a warning and you trade yourself (L2); dismissing it counts the tranche as dealt with."
+            zh="大額資金只投入核心類別，不投入衛星部位，每月分批：市場便宜時批數少、昂貴時批數多（以 S&P 500 的 CAPE 對照其歷史），全球股市（ACWI）自 52 週高點下跌 15%、25% 或 35% 時提前投入。每一批到期時發出一則警示，由你自行下單（L2）；忽略警示即視為該批已處理。"
           />
           {!plan && (
             <Bi
@@ -163,7 +163,7 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
               const ruleRecord = rulesById.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
               return (
                 <li key={proposal.id}>
-                  <Link href={`/proposals#proposal-${proposal.id}`}>
+                  <Link href={`/#proposal-${proposal.id}`}>
                     <Bi {...proposalTitle(ruleRecord)} />
                   </Link>{' '}
                   <span className="muted small">
@@ -278,7 +278,7 @@ function Schedule({ plan, proposals }: { plan: NonNullable<WindfallData['plan']>
                   {proposal && (
                     <>
                       {' '}
-                      <Link href={`/proposals#proposal-${proposal.id}`} className="small">
+                      <Link href={`/#proposal-${proposal.id}`} className="small">
                         #{proposal.id}
                       </Link>
                     </>
@@ -291,8 +291,8 @@ function Schedule({ plan, proposals }: { plan: NonNullable<WindfallData['plan']>
       </table>
       <Info>
         <Bi
-          en="Planned amounts are the total over the tranche count. When a tranche falls due, its proposal deploys the cash still waiting over the tranches still to go, so a tranche pulled forward, or one deployed late, evens out."
-          zh="規劃金額為總額除以批數。每一批到期時，提案以「仍在等待的現金 ÷ 剩下的批數」投入，因此提前投入或延後投入的批次會自動平衡。"
+          en="Planned amounts are the total over the tranche count. When a tranche falls due, its warning deploys the cash still waiting over the tranches still to go, so a tranche pulled forward, or one deployed late, evens out."
+          zh="規劃金額為總額除以批數。每一批到期時，警示以「仍在等待的現金 ÷ 剩下的批數」投入，因此提前投入或延後投入的批次會自動平衡。"
         />
       </Info>
     </div>

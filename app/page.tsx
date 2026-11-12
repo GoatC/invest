@@ -5,7 +5,7 @@ import { Bi } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
-import { ProposalsPanel } from '@/components/proposals-panel';
+import { WarningsPanel } from '@/components/warnings-panel';
 import { RefreshData } from '@/components/refresh-data';
 import { RiskCard } from '@/components/risk-card';
 import { RiskDetails } from '@/components/risk-details';
@@ -95,13 +95,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     ...(value instanceof DataError ? { valueTwd: null, weekAgoTwd: null } : value),
   });
 
-  // A proposal that waits for a decision or a trade comes second on the page; with none, the proposals close it.
-  const waitingFirst = summary.openProposals + summary.approvedProposals > 0;
+  // A standing warning comes second on the page; with none, the warnings section closes it.
+  const waitingFirst = summary.openProposals > 0;
   const panel =
     proposals instanceof DataError ? (
-      <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} />
+      <Unavailable what={{ en: 'rule warnings', zh: '規則警示' }} error={proposals} />
     ) : (
-      <ProposalsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
+      <WarningsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
     );
   const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
   const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
@@ -182,7 +182,7 @@ function Hero({
   driftStatus: string | undefined;
 }) {
   const [rulesLine, driftLine, valueLine] = summaryLines(summary);
-  const waiting = summary.openProposals + summary.approvedProposals;
+  const waiting = summary.openProposals;
   const drift = driftStatus === 'watch' || driftStatus === 'rebalance' ? driftStatus : 'ok';
   const lines: Array<{ line: Bilingual | undefined; icon: string; tone: string; href?: string; link?: Bilingual }> = [
     { line: rulesLine, icon: waiting > 0 ? '!' : '✓', tone: waiting > 0 ? 'watch' : 'ok' },
@@ -227,8 +227,8 @@ function Hero({
         </ul>
         <div className="row">
           {waiting > 0 && (
-            <Link href={`/${summary.openProposals === 0 ? '?p=approved' : ''}#proposals`} className="button primary pill">
-              <Bi en={`${waiting} proposal${waiting === 1 ? '' : 's'} waiting`} zh={`${waiting} 份提案待處理`} /> ↓
+            <Link href="/#proposals" className="button primary pill">
+              <Bi en={`${waiting} warning${waiting === 1 ? '' : 's'}`} zh={`${waiting} 則警示`} /> ↓
             </Link>
           )}
           <Link href="/notifications" className="small">

@@ -27,9 +27,22 @@ function Gauge({ gauge }: { gauge: AlertGauge }) {
  * icon, a code, the name, the figure, a gauge against the limit and a few short chips. An optional
  * heading names the group in a few words, e.g. "會違反規則（仍可儲存）".
  * `actions` gives a tile its own buttons, by item key (a question to answer, such as a dividend to
- * record or skip); such a tile is not itself a link.
+ * record or skip); such a tile is not itself a link. `more` adds a line or a fold under a tile's
+ * buttons, by item key (a rule warning's suggestion and its figures).
  */
-export function AlertTiles({ items, heading, tone, actions }: { items: readonly AlertItem[]; heading?: Bilingual; tone?: AlertTone; actions?: Readonly<Record<string, ReactNode>> }) {
+export function AlertTiles({
+  items,
+  heading,
+  tone,
+  actions,
+  more,
+}: {
+  items: readonly AlertItem[];
+  heading?: Bilingual;
+  tone?: AlertTone;
+  actions?: Readonly<Record<string, ReactNode>>;
+  more?: Readonly<Record<string, ReactNode>>;
+}) {
   if (items.length === 0) return null;
   const groupTone = tone ?? items[0]?.tone ?? 'info';
   return (
@@ -73,7 +86,7 @@ export function AlertTiles({ items, heading, tone, actions }: { items: readonly 
             </>
           );
           return (
-            <li key={item.key} className={`alert-tile ${item.tone}`}>
+            <li key={item.key} className={`alert-tile ${item.tone}`} {...(item.anchor ? { id: item.anchor } : {})}>
               {item.href && !actions?.[item.key] ? (
                 <Link href={item.href} className="alert-link">
                   {body}
@@ -82,6 +95,7 @@ export function AlertTiles({ items, heading, tone, actions }: { items: readonly 
                 body
               )}
               {actions?.[item.key] && <span className="alert-actions">{actions[item.key]}</span>}
+              {more?.[item.key] && <div className="alert-more">{more[item.key]}</div>}
             </li>
           );
         })}

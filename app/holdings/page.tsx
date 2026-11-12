@@ -121,14 +121,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           held: portfolio.holdings.some((holding) => holding.ticker === savedTicker.ticker && holding.qty > 0 && holding.direction === 'long'),
         }
       : undefined;
-  const { initial, proposal } = tradeInitial(data, rates, today, {
+  const { initial } = tradeInitial(data, rates, today, {
     ticker: param(params, 'ticker'),
     side: param(params, 'side'),
     qty: param(params, 'qty'),
     pool: param(params, 'pool'),
-    proposal: param(params, 'proposal'),
-    fee: param(params, 'fee'),
-    tax: param(params, 'tax'),
   });
 
   return (
@@ -177,15 +174,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
                 <h2>
                   <Bi {...LABELS.addTrade} />
                 </h2>
-                {proposal !== undefined && (
-                  <p className="muted">
-                    <Bi
-                      en={`Filled in from proposal #${proposal}: change the price, fee and FX rate to what your broker's confirmation says.`}
-                      zh={`已依提案 #${proposal} 填入：請把價格、手續費與匯率改成券商成交單上的數字。`}
-                    />
-                  </p>
-                )}
-                <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} {...(proposal === undefined ? {} : { proposal })} compact />
+                <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} compact />
               </section>
             ),
           },
@@ -311,20 +300,15 @@ function NextSteps({
   );
 }
 
-/** Proposals waiting on a decision or a trade, as tiles: first on the page, as on the weekly dashboard (PRD Section 5). */
+/** The standing rule warnings, as tiles that open them on the dashboard: first on the page (PRD Section 5). */
 function OpenProposals({ proposals, rules }: { proposals: readonly Proposal[]; rules: readonly RuleRecord[] }) {
-  const waiting = proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved');
+  const waiting = proposals.filter((proposal) => proposal.status === 'open');
   if (waiting.length === 0) return null;
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
-  const open = waiting.filter((proposal) => proposal.status === 'open').length;
   const items: AlertItem[] = waiting.map((proposal) => proposalAlert(proposal, byId.get(proposal.ruleId)));
   return (
     <div id="open-proposals">
-      <AlertTiles
-        heading={{ en: `Proposals waiting: ${waiting.length}`, zh: `待處理提案 ${waiting.length}${open < waiting.length ? `（${waiting.length - open} 份待下單）` : ''}` }}
-        tone="info"
-        items={items}
-      />
+      <AlertTiles heading={{ en: `Rule warnings: ${waiting.length}`, zh: `規則警示 ${waiting.length}` }} tone="watch" items={items} />
     </div>
   );
 }
@@ -381,7 +365,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
         <div className="form">
           <AlertTiles items={breaches.map((breach) => breachAlert(breach, data.caps))} tone="alert" />
           <Link href="/#proposals">
-            <Bi en="The rules engine drafts the trim as a proposal" zh="規則引擎會把減碼擬成提案" />
+            <Bi en="The rules engine raises the trim as a warning" zh="規則引擎會把減碼列為警示" />
           </Link>
         </div>
       ) : (

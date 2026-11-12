@@ -98,7 +98,7 @@ describe('volatility job (N8)', () => {
     assert.equal(runs.length, 1);
     assert.deepEqual(run.detail.rules, { created: 1, closed: 0 });
     assert.ok(volatilitySummary(run).some((line) => line.includes('/ 10')));
-    assert.ok(volatilitySummary(run).some((line) => line.startsWith('  Rules 規則: 1 proposals drafted')));
+    assert.ok(volatilitySummary(run).some((line) => line.startsWith('  Rules 規則: 1 warnings raised')));
   });
 
   it('replaces the feeds\' events from today on: a meeting moved, a past one left out', async () => {

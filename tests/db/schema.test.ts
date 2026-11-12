@@ -433,7 +433,7 @@ describe('proposals (step 9)', () => {
   it('keep one open proposal per rule and state, and log every change to one', async () => {
     await as(db, 'owner', async (tx) => {
       const insert = (state: string) =>
-        tx.query(`insert into public.proposals (rule_id, state, orders, detail, expires_at) values ('R1', $1, '[]', '{"weight": 0.055}', now() + interval '14 days') returning id`, [state]);
+        tx.query(`insert into public.proposals (rule_id, state, orders, detail, expires_at) values ('R1', $1, '[]', '{"weight": 0.055}', null) returning id`, [state]);
       const { rows } = await insert('2330');
       const id = (rows[0] as { id: number }).id;
       // A refused statement aborts the transaction; the savepoint lets the test carry on.
@@ -450,6 +450,8 @@ describe('proposals (step 9)', () => {
       const log = await tx.query(`select row_key, action, new_row ->> 'status' as status, changed_by from public.audit_log where table_name = 'proposals'`);
       assert.deepEqual(log.rows, [{ row_key: String(id), action: 'update', status: 'expired', changed_by: OWNER_ID }]);
       assert.equal(await refused(() => tx.query(`update public.proposals set closed_reason = 'whatever' where id = $1`, [id])), '23514');
+      // A standing warning since 2026-11-12: nothing is approved any more.
+      assert.equal(await refused(() => tx.query(`update public.proposals set status = 'approved' where id = $1`, [id])), '23514');
     });
     await as(db, 'stranger', async (tx) => {
       assert.equal(await scalar(tx, 'select count(*) from public.proposals'), 0);

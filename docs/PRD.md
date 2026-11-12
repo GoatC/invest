@@ -407,23 +407,22 @@ Every analysis page opens with a chart and puts its table underneath; charts use
 
 ## 4. Rules Engine, L2 Automation & Push 規則引擎、自動化與推播
 
-Automation is conditional: the app evaluates written rules after every data refresh, drafts a proposal when one fires, and stops there until Hugo confirms. 自動化是有條件的：每次資料更新後，App 會評估書面規則；規則觸發時產生提案，之後停下等待 Hugo 確認。
+Automation is conditional: the app evaluates written rules after every data refresh, raises a warning when one fires, and stops there: Hugo decides and trades. 自動化是有條件的：每次資料更新後，App 會評估書面規則；規則觸發時發出警示，之後停下，由 Hugo 決定並自行下單。
 
 **Rules engine 規則引擎** — the Investment Policy Statement in executable form. Each rule stores: id, plain-language description (EN / 中文), condition, threshold, action, cooldown, enabled flag. Every edit is logged with date and old / new value. The two Investment Principles rules load as R1 and R2. 規則引擎即可執行版本的投資政策聲明。每條規則記錄：編號、中英文說明、條件、門檻、動作、冷卻期、啟用狀態；每次修改都記錄日期與新舊數值。投資原則的兩條規則即為 R1 與 R2。
 
-**L2 proposal flow 提案流程**
+**L2 warning flow 警示流程** (changed by Hugo on 2026-11-12: a proposal is now a standing warning that can be dismissed; before it, a proposal was approved, its orders edited, and marked filled, and it expired after 14 days 2026-11-12 Hugo 要求：提案改為可忽略的常駐警示；之前的提案需核准、可修改下單清單、標記成交，並於 14 天後失效)
 
 1. Scheduled job refreshes data, then evaluates all enabled rules. 排程工作更新資料後，評估所有啟用中的規則。
-2. A fired rule creates a proposal with a draft order list. 觸發的規則產生一份附建議下單清單的提案。
+2. A fired rule raises a warning (a row in proposals) with its figures, a line of what it suggests and the orders it suggests, for reference. 觸發的規則發出一則警示（proposals 的一列），附依據數字、一行建議動作與建議下單清單（僅供參考）。
 3. Push notification sent to phone and Mac. 推播到手機與 Mac。
-4. Hugo opens the proposal: approve, edit or dismiss (optional reason). Hugo 打開提案：核准、修改或略過（可附理由）。
-5. Approved → an execution checklist (ticker, quantity, amount); Hugo trades at the broker. 核准後顯示執行清單，由 Hugo 到券商下單。
-6. Hugo marks it filled with actual price and quantity, or imports the broker statement CSV; transactions update. Hugo 標記成交價量，或匯入券商對帳單 CSV，交易紀錄隨之更新。
-7. Unactioned proposals expire after 14 days and are re-evaluated. 14 天內未處理的提案會失效並重新評估。
+4. The warning stands, as tiles on the dashboard and the holdings page and as the in-app banner elsewhere, until Hugo dismisses it, its rule no longer fires (cleared), or a new state supersedes it. It never times out; config `proposal_expiry_days` only says how many days after the debit the monthly contribution still fires. 警示會一直顯示（儀表板與持倉頁的小卡、其他頁的 App 內橫幅），直到 Hugo 按「忽略」、規則不再觸發（解除），或被新的狀態取代；不會逾時關閉。config `proposal_expiry_days` 只決定每月投入在扣款後持續幾天。
+5. Hugo trades at the broker if he chooses, and records the trade on the holdings page or by the broker statement CSV, as any trade. 若 Hugo 決定下單，到券商交易後在持倉頁或以券商對帳單 CSV 登錄，與其他交易相同。
+6. A dismissed state waits out its cooldown; a dismissed period (a month's contribution, a year's review, a volatility run) is not raised again. A windfall warning dismissed moves its tranche to done (an acceleration's pulled-forward tranches to accelerated): the cash not bought stays in the pool and the tranches left spread it. 忽略後的狀態須等冷卻期結束；已忽略的期間（某月投入、某年檢查、一波波動）不再發出。忽略大額資金的警示即視為該批已處理（加速批次標為加速）：未買進的現金留在資金池，由剩下的批次分攤。
 
 **Push rules 推播規則** (all thresholds editable 所有門檻皆可調整)
 
-| Trigger 觸發事件 | Condition 條件 | Proposal 提案內容 | Source 來源 |
+| Trigger 觸發事件 | Condition 條件 | Warning suggests 警示建議 | Source 來源 |
 | --- | --- | --- | --- |
 | Monthly contribution 每月投入 | Day after the DCA date 定期定額扣款隔日 | Confirm fill; allocate new cash to underweight classes 確認成交、新資金補足低配類別 | F8 |
 | Drift rebalance 偏離再平衡 | 5/25 rule breached 違反 5/25 規則 | Draft rebalance list 再平衡清單 | F8 |
@@ -455,20 +454,20 @@ Once a week a three-line push summary opens a dashboard that leads with rule sta
 
 **Push text 推播內容 (max 3 lines 最多三行)**
 
-1. Rules: all on track, or N proposals waiting 規則：全部正常，或有 N 份提案待處理
+1. Rules: all on track, or N warnings 規則：全部正常，或有 N 則警示
 2. Allocation: largest drift in percentage points 配置：最大偏離百分點
 3. Portfolio value and change since last week, in TWD 投資組合價值與週變化（台幣）
 
 **Dashboard weekly view 儀表板週檢視** (top to bottom 由上而下)
 
-1. This week: the portfolio's value (both pools), the date of the newest close with the button that refreshes the data (2026-11-11), and the three push lines, each with its status icon; when a proposal waits, a button jumps to the proposals at the foot 本週：投資組合總市值（兩個資金池）與三行摘要（各附狀態圖示）；有提案待處理時，按鈕直接跳到頁尾的提案
+1. This week: the portfolio's value (both pools), the date of the newest close with the button that refreshes the data (2026-11-11), and the three push lines, each with its status icon; when a warning stands, a button jumps to the warnings 本週：投資組合總市值（兩個資金池）與三行摘要（各附狀態圖示）；有警示時，按鈕直接跳到警示
 2. VaR card: 95% one-week Value at Risk in NT$ and % (N4), its distribution and make-up folded under it 風險值卡片：95% 一週風險值（台幣與百分比），分布圖與組成收合在下方
 3. Watchlist: distance to buy and trim zones, and red-flag light per company 觀察清單：距離買入區與減碼區的幅度，以及紅旗燈號
 4. Coming week: DCA date, tranche dates, earnings dates of holdings 下週事件：扣款日、分批日、持股財報日
 5. Allocation donut with three lens tabs (N6) 資產配置圓餅圖，三種分法分頁
 6. Windfall progress: deployed vs remaining, on schedule or accelerated 大額資金進度：已投入與剩餘、依排程或加速中
 7. Actual vs projected path (F2) 實際與預測路徑對照
-8. Proposals (second on the page, right under the band, while one waits for a decision or a trade; 2026-11-11 有提案待處理時移到第二個區塊): open (approve / edit / dismiss), approved and waiting for trades, decided and closed, with "check the rules now" 提案：待處理（核准／修改／略過）、已核准待下單、已關閉，以及「立即檢查規則」
+8. Rule warnings (second on the page, right under the band, while one stands; 2026-11-12 有警示時移到第二個區塊): each a tile with its rule, what it fired on and since when, and a dismiss button, its suggestion in a line, its figures and suggested orders folded under it; the dismissed and cleared folded at the foot; with "check the rules now" 規則警示：每則一張小卡（規則、觸發對象、起始日、「忽略」按鈕）、一行建議動作，依據數字與建議下單收合在下方；已忽略與已解除的收合在最下方；以及「立即檢查規則」
 
 The SAA drift bars, colour-coded green / amber / red, sit on the Allocation page only, so the dashboard does not repeat them; the largest drift is the band's second line. 以綠／黃／紅標示的 SAA 偏離長條只放在資產配置頁，儀表板不重複；最大偏離列在本週摘要第二行。
 
@@ -483,7 +482,7 @@ The SAA drift bars, colour-coded green / amber / red, sit on the Allocation page
 5. Navigation 功能分區 (done 完成; components/site-nav.tsx `SubNav`, components/ticker-tabs.tsx; the holdings tab keeps its own sub-tabs from step 3 and takes in red flags through the watchlist and each stock's tabs 持倉沿用第 3 步的子分頁，紅旗指標經觀察清單與個股分頁進入): the four tabs stay; each gains a row of sub-tabs and takes in the analysis pages that answer its question (addresses unchanged). 儀表板 Dashboard: 本週｜提案｜波動警報, a waiting proposal second on the page, the data's date and the refresh button at the top. 持倉 Holdings: as step 3, the watchlist holding valuation and red flags. 績效 Performance: 整體｜逐檔｜歸因｜費用與稅. 配置 Allocation: 目標｜合併透視｜產業熱圖｜壓力測試 (the efficient frontier beside the stress test). 更多 More: life planning, regression, cost of equity, rules, notifications, data and import. One page per stock, with sub-tabs for its chart, valuation, red flags and β. 四個分頁不變，各加一排子分頁並收進回答同一問題的分析頁（網址不變）；一檔股票一個入口。
 6. Charts 圖表 (done 完成, 2026-11-11): on a phone a value read by touch shows along the chart's top edge, clear of the finger; a text inside a chart (a series or axis name, a tooltip line) is in Chinese alone there, as names are (`chartText` in components/echarts.tsx; accessible names keep both languages); the sector heatmap draws three periods on a phone (1 week, 3 months, 1 year; the table under it keeps all five) with each sector's Chinese name on one line; one colour convention for gains and losses across the app, config `sectors.colour`, red up and green down by default (Hugo, 2026-11-10), set once on the page and worn by every figure that is a move, each with its sign or ▲▼, while a status keeps its ✓ ! ✕ icon; a chart takes 0.3 s to draw or to move to new data and nothing moves with reduced motion on. No chart plays by itself, and a figure does not animate when it changes. 手機上以觸控讀值時，數值顯示在圖表上緣，不被手指遮住；圖表內的文字（數列與座標軸名稱、提示列）在手機上只用中文（無障礙名稱仍為中英）；產業熱圖在手機畫三個期間（1 週、3 月、1 年，下方表格保留五個）、產業名稱中文一行；漲跌配色全 App 一致，讀 config `sectors.colour`，預設紅漲綠跌，凡是漲跌的數字都套用並附正負號或 ▲▼，狀態維持 ✓ ! ✕ 圖示；圖表繪製與更新為 0.3 秒，開啟「減少動態效果」時不動。沒有自動播放的圖，數字改變時也不做動畫。
 
-**In-app banner App 內橫幅** (asked by Hugo on 2026-11-12, to lead the next step; lib/models/banners.ts, components/guide-banner.tsx): one line under the header, on every page, with a button that goes where the thing is done. The app decides when one is needed, from what is saved, the most pressing first: (1) a dividend's payment day has come and no cash flow records it (one is named with its estimate and offers "record" and "skip"; several show as a count); (2) a proposal is approved and waits for its trade, else one is open and waits for a decision; (3) the windfall arrived as a cash flow but its pool holds no TWD balance and nothing was bought from it; (4) the windfall pool holds cash and no tranche plan was started; (5) a TWD balance was last updated more than `balance_stale_days` (45) ago, the oldest only; (6) nothing is recorded yet, else (7) no device has push on. One shows at a time, "＋n" opens the rest; a banner never shows on the page it leads to, nor where the same thing already shows as tiles (proposals on the dashboard and the holdings page). ✕ hides it for `snooze_days` (7) on every device (banner\_dismissals); its key changes with its subject, so a new dividend or proposal shows at once. Config `banners` turns each kind off. It is worked out when a page loads and after every save, and streamed after the page so it never holds one back. 頁首下方的一行提醒，每頁都有，附一顆直達處理位置的按鈕。App 依已存資料判斷何時需要，最急的排最前：（1）配息已到發放日而尚未登錄（單筆時列出標的與估計金額，可「記一筆」或「略過」；多筆時顯示筆數）；（2）有提案已核准待下單，否則有提案待決定；（3）大額資金已登錄入帳，但大額資金池沒有台幣餘額、也尚未買進；（4）大額資金池有現金但尚未建立分批計畫；（5）台幣餘額超過 `balance_stale_days`（45）天未更新，只提最久的一筆；（6）尚無任何紀錄，否則（7）沒有裝置開啟推播。一次顯示一則，「＋n」展開其餘；橫幅不會出現在它要帶你去的頁面，也不會出現在已用小卡顯示同一件事的頁面（儀表板與持倉頁的提案）。按 ✕ 後 `snooze_days`（7）天內所有裝置都不再顯示（banner\_dismissals）；橫幅的識別碼隨內容改變，因此新的配息或提案會立刻顯示。config `banners` 可分別關閉各類。於頁面載入與每次儲存後重新判斷，並在頁面之後串流送出，不拖慢頁面。
+**In-app banner App 內橫幅** (asked by Hugo on 2026-11-12, to lead the next step; lib/models/banners.ts, components/guide-banner.tsx): one line under the header, on every page, with a button that goes where the thing is done. The app decides when one is needed, from what is saved, the most pressing first: (1) a dividend's payment day has come and no cash flow records it (one is named with its estimate and offers "record" and "skip"; several show as a count); (2) a rule warning stands (one is named by number, several as a count); (3) the windfall arrived as a cash flow but its pool holds no TWD balance and nothing was bought from it; (4) the windfall pool holds cash and no tranche plan was started; (5) a TWD balance was last updated more than `balance_stale_days` (45) ago, the oldest only; (6) nothing is recorded yet, else (7) no device has push on. One shows at a time, "＋n" opens the rest; a banner never shows on the page it leads to, nor where the same thing already shows as tiles (warnings on the dashboard and the holdings page). ✕ hides it for `snooze_days` (7) on every device (banner\_dismissals); its key changes with its subject, so a new dividend or warning shows at once. Config `banners` turns each kind off. It is worked out when a page loads and after every save, and streamed after the page so it never holds one back. 頁首下方的一行提醒，每頁都有，附一顆直達處理位置的按鈕。App 依已存資料判斷何時需要，最急的排最前：（1）配息已到發放日而尚未登錄（單筆時列出標的與估計金額，可「記一筆」或「略過」；多筆時顯示筆數）；（2）有規則警示（單則時連到該則，多則時顯示則數）；（3）大額資金已登錄入帳，但大額資金池沒有台幣餘額、也尚未買進；（4）大額資金池有現金但尚未建立分批計畫；（5）台幣餘額超過 `balance_stale_days`（45）天未更新，只提最久的一筆；（6）尚無任何紀錄，否則（7）沒有裝置開啟推播。一次顯示一則，「＋n」展開其餘；橫幅不會出現在它要帶你去的頁面，也不會出現在已用小卡顯示同一件事的頁面（儀表板與持倉頁的警示）。按 ✕ 後 `snooze_days`（7）天內所有裝置都不再顯示（banner\_dismissals）；橫幅的識別碼隨內容改變，因此新的配息或警示會立刻顯示。config `banners` 可分別關閉各類。於頁面載入與每次儲存後重新判斷，並在頁面之後串流送出，不拖慢頁面。
 
 Signals on a holding 持股訊號 come from the rules the app already runs, no forecast: R1's cap, N3's light, F8's drift (a class among the two most underweight reads "next contribution buys this"), F12's buy and trim zones, a filing due within seven days, a proposal waiting. "The last session's move" is the newest close against the one before it, loaded nightly: display only, no push (principle 2). 訊號全部來自既有規則，不做預測：R1 上限、N3 燈號、F8 偏離（屬於最低配的兩個類別時顯示「下次扣款優先」）、F12 買入區與減碼區、七天內的財報日、等待中的提案。「最近交易日漲跌」為最新收盤對前一收盤，每夜載入；只顯示、不推播（原則 2）。
 
@@ -538,7 +537,7 @@ Nineteen Postgres tables cover holdings, market data, rules and model outputs; a
 | nav\_snapshots 淨值快照 | date, total\_twd, weights\_by\_class, var\_95\_1w | F1, F8, F18 |
 | rules 規則 | id, desc\_en, desc\_zh, condition, threshold, action, cooldown\_days, enabled | Rules engine |
 | rule\_changes 規則變更 | rule\_id, date, old\_value, new\_value | Rules engine |
-| proposals 提案 | id, rule\_id, created\_at, status, orders, dismiss\_reason, state, detail, closed\_reason (step 9) | Rules engine |
+| proposals 規則警示 | id, rule\_id, created\_at, status (open/dismissed/expired; filled only before 2026-11-12), orders (suggested), state, detail, closed\_reason (step 9; expires\_at, filled\_at and dismiss\_reason kept for the history before 2026-11-12) | Rules engine |
 | windfall\_tranches 分批計畫 | plan\_id, due\_date, amount\_twd, status (scheduled/accelerated/done) | F3 |
 | valuations 估值 | ticker, date, model, iv\_bear, iv\_base, iv\_bull, inputs | F12 |
 | analyst\_estimates 分析師共識預估 (added 2026-11-04) | ticker, as\_of, currency, estimates (years, targetPrice, ratings), source | F12 forward P/E |
@@ -882,7 +881,8 @@ Rules:
 | N5 dividend, no payment date | VT ex-dividend 2026-09-18, lag 7 days | Asked from 2026-09-25, marked as an estimate |
 | N5 dividend answered | A dividend cash flow of the same security and pool dated 2026-07-21 to 2026-09-09 (30 days after the payment) | Not asked; one dated 2026-09-10, of another pool or of another security answers nothing; one flow answers one dividend |
 | N5 dividend off the closes | VT 2026-09-17 close 159.22, adjusted 158.81; 2026-09-18 close and adjusted 158.55 | Ex-dividend 2026-09-18, 159.22 × (1 − 158.81 ÷ 159.22) = US$0.41 (paid: 0.4084) |
-| Banner (added 2026-11-12) | One dividend due, an open proposal, no device with push | Dividend, then proposal, then push; the dividend closed with ✕ until 2026-11-19 is hidden on 11-18 and back on 11-19; another dividend shows at once |
+| Banner (added 2026-11-12) | One dividend due, a standing warning, no device with push | Dividend, then warning, then push; the dividend closed with ✕ until 2026-11-19 is hidden on 11-18 and back on 11-19; another dividend shows at once |
+| Standing warning (added 2026-11-12) | R1 fires on AAPL; a warning stands from 2026-10-01; rules checked on 2026-10-21 | No new draft, nothing closed: it stays open (no time-out); dismissed, the same state waits out `cooldown_days` |
 | Banner, windfall | NT$5.5M arrived, no TWD balance; then a balance; then a plan | "Add its balance"; "no tranche plan"; nothing |
 | Banner, stale balance | Balances valued 45 and 103 days ago, threshold 45 | Only the 103-day one is asked about |
 

@@ -10,7 +10,6 @@ import {
   maxBuyClasses,
   orderTotals,
   readOrders,
-  resized,
   type DraftOrder,
   type EngineClass,
   type EngineInput,
@@ -522,13 +521,12 @@ describe('windfall tranches and their acceleration (F3)', () => {
 
 describe('deciding what to save', () => {
   const holdings = onTarget(200_000, [listed('AAPL', 'us_stocks', 11_000, { productType: 'stock' }), listed('THEME', 'tactical_themes', 29_000, { productType: 'theme_etf' })]);
-  const record = (overrides: Partial<ProposalRecord>): ProposalRecord => ({ id: 1, ruleId: 'R1', state: 'AAPL', status: 'open', createdAt: '2026-10-21T01:00:00.000Z', expiresAt: '2026-11-04T01:00:00.000Z', ...overrides });
+  const record = (overrides: Partial<ProposalRecord>): ProposalRecord => ({ id: 1, ruleId: 'R1', state: 'AAPL', status: 'open', createdAt: '2026-10-21T01:00:00.000Z', expiresAt: null, ...overrides });
 
-  it('drafts a firing rule once, with its expiry 14 days on', () => {
+  it('drafts a firing rule once, as a standing warning', () => {
     const outcome = evaluate(input({ holdings }));
-    assert.equal(draftOf(outcome, 'R1')?.expiresAt, '2026-11-05T13:00:00.000Z');
+    assert.equal(draftOf(outcome, 'R1')?.state, 'AAPL');
     assert.deepEqual(evaluate(input({ holdings, proposals: [record({})] })).create, []);
-    assert.deepEqual(evaluate(input({ holdings, proposals: [record({ status: 'approved' })] })).create, []);
   });
 
   it('supersedes an open proposal whose state changed, despite the cooldown', () => {
@@ -543,11 +541,11 @@ describe('deciding what to save', () => {
     assert.ok(draftOf(evaluate(input({ holdings, today: '2026-10-23', now: '2026-10-23T01:00:00.000Z', proposals: [dismissed] })), 'R1'));
   });
 
-  it('times out an unactioned proposal and evaluates it afresh', () => {
+  it('keeps a warning open while its rule fires, however old (and an expiry saved before 2026-11-12 is ignored)', () => {
     const old = record({ createdAt: '2026-10-01T01:00:00.000Z', expiresAt: '2026-10-15T01:00:00.000Z' });
     const outcome = evaluate(input({ holdings, proposals: [old] }));
-    assert.deepEqual(outcome.close, [{ id: 1, reason: 'timed_out' }]);
-    assert.ok(draftOf(outcome, 'R1'));
+    assert.deepEqual(outcome.close, []);
+    assert.equal(draftOf(outcome, 'R1'), undefined);
   });
 
   it('clears an open proposal once its rule stops firing or is turned off, and leaves the rules other checks watch alone', () => {
@@ -713,12 +711,5 @@ describe('saved orders', () => {
     const balance = { kind: 'balance', assetId: 5, label: 'Savings', side: 'withdraw', amountTwd: 2_000, assetClassId: 'strategic_cash' };
     assert.deepEqual(readOrders(JSON.parse(JSON.stringify([sell, balance, { kind: 'trade', ticker: 'X' }, 'junk']))), [sell, balance]);
     assert.deepEqual(readOrders(null), []);
-  });
-
-  it('resize a trade by shares and a balance by amount; 0 drops the order', () => {
-    assert.deepEqual(resized(sell, 2), { ...sell, qty: 2, amountTwd: 2 * 236 * 32.4 });
-    assert.equal(resized(sell, 0), undefined);
-    const balance: DraftOrder = { kind: 'balance', assetId: 5, label: 'Savings', side: 'deposit', amountTwd: 2_000, assetClassId: 'strategic_cash' };
-    assert.deepEqual(resized(balance, 1_500), { ...balance, amountTwd: 1_500 });
   });
 });

@@ -68,7 +68,7 @@ describe('holdings overview (PRD Section 5, phone redesign step 3)', () => {
     assert.equal(over[0]?.label.zh, '類別超配 28.5 pp');
     assert.equal(holdingSignals({ ticker: '2330', zone: { zone: 'buy', toBuy: 0, toTrim: 0.6 } })[0]?.kind, 'buy');
     assert.equal(holdingSignals({ ticker: '2330', light: 'red' })[0]?.kind, 'act');
-    assert.equal(holdingSignals({ ticker: '2330', proposal: true })[0]?.label.zh, '提案待處理');
+    assert.equal(holdingSignals({ ticker: '2330', proposal: true })[0]?.label.zh, '規則警示');
   });
 
   it('names the most underweight core classes, at most the limit, never the satellite', () => {

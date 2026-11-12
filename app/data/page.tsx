@@ -107,10 +107,10 @@ function LatestRun({ run }: { run: JobRun }) {
         <p className="muted small">
           <Bi
             en={`Checked the rules: ${detail.rules.created} new proposal${detail.rules.created === 1 ? '' : 's'}, ${detail.rules.closed} closed.`}
-            zh={`已檢查規則：新增 ${detail.rules.created} 份提案，關閉 ${detail.rules.closed} 份。`}
+            zh={`已檢查規則：新增 ${detail.rules.created} 則警示，解除 ${detail.rules.closed} 則。`}
           />{' '}
           <Link href="/#proposals">
-            <Bi en="Proposals" zh="提案" />
+            <Bi en="Rule warnings" zh="規則警示" />
           </Link>
         </p>
       )}
@@ -162,7 +162,7 @@ function LatestRun({ run }: { run: JobRun }) {
       )}
       {rulesErrors.length > 0 && (
         <div className="banner warn">
-          <Bi en="The rules could not be checked; use Check the rules now on the proposals page:" zh="無法檢查規則；請到提案頁按「立即檢查規則」：" />
+          <Bi en="The rules could not be checked; use Check the rules now under the dashboard's rule warnings:" zh="無法檢查規則；請到儀表板的規則警示按「立即檢查規則」：" />
           <ul>
             {rulesErrors.map((line) => (
               <li key={line}>{line}</li>

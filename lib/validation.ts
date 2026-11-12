@@ -5,7 +5,6 @@
 import { isIsoDate, isMonth } from './dates';
 import type { Bilingual } from './i18n';
 import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './models/costs';
-import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
 import type { LookThroughSettings } from './models/look-through';
 import type { FrontierSettings } from './models/frontier';
@@ -45,8 +44,6 @@ export const MESSAGES = {
   stepUp: { en: 'Enter a yearly step-up from 0% to 30%, with at most two decimals.', zh: '請輸入 0% 到 30% 之間的每年調升比例，最多兩位小數。' },
   inflation: { en: 'Enter a yearly inflation from −5% to 20%, with at most two decimals.', zh: '請輸入 −5% 到 20% 之間的年通膨率，最多兩位小數。' },
   years: { en: 'Enter a whole number of years from 1 to 60.', zh: '請輸入 1 到 60 之間的整數年數。' },
-  shares: { en: 'Enter whole shares, 0 or more; 0 drops the order.', zh: '請輸入整數股數（0 或以上）；0 代表刪除這筆。' },
-  wholeTwd: { en: 'Enter whole NT$, 0 or more; 0 drops the order.', zh: '請輸入整數台幣金額（0 或以上）；0 代表刪除這筆。' },
   fraction: { en: 'Enter a number between 0 and 1, e.g. 0.05 for 5%.', zh: '請輸入 0 到 1 之間的數字，例如 5% 填 0.05。' },
   wholeNumber: { en: 'Enter a whole number, 0 or more.', zh: '請輸入 0 或以上的整數。' },
   cooldown: { en: 'Enter whole days from 0 to 365.', zh: '請輸入 0 到 365 的整數天數。' },
@@ -494,37 +491,6 @@ export function parsePlanForm(raw: RawForm): Parsed<SavedPlan, PlanField> {
 }
 
 // ---------------------------------------------------------------------------
-// Proposal orders (edit before approving)
-// ---------------------------------------------------------------------------
-
-/** Field name of an order's size: shares for a trade, NT$ for a balance. */
-export function sizeField(index: number): string {
-  return `size_${index}`;
-}
-
-/** The message for a fractional order's share count. */
-export function fractionalShares(decimals: number): Bilingual {
-  return { en: `Enter shares, 0 or more, with at most ${decimals} decimals; 0 drops the order.`, zh: `請輸入股數（0 或以上），最多 ${decimals} 位小數；0 代表刪除這筆。` };
-}
-
-/** Each order's new size: shares (whole, or to the order's decimals) for a trade, whole NT$ for a balance; 0 drops it. */
-export function parseOrderSizes(raw: RawForm, orders: readonly DraftOrder[]): { sizes: number[]; errors: FieldErrors<string> } {
-  const errors: FieldErrors<string> = {};
-  const sizes = orders.map((order, index) => {
-    const name = sizeField(index);
-    const value = parseNumber(raw[name]);
-    const decimals = order.kind === 'trade' ? (order.decimals ?? 0) : 0;
-    const scaled = value === undefined ? Number.NaN : value * 10 ** decimals;
-    if (value === undefined || value < 0 || Math.abs(scaled - Math.round(scaled)) > 1e-6) {
-      errors[name] = order.kind === 'balance' ? MESSAGES.wholeTwd : decimals > 0 ? fractionalShares(decimals) : MESSAGES.shares;
-      return 0;
-    }
-    return value;
-  });
-  return { sizes, errors };
-}
-
-// ---------------------------------------------------------------------------
 // Rules and the engine's settings (rules page)
 // ---------------------------------------------------------------------------
 
@@ -582,7 +548,7 @@ export interface EngineSettingsInput {
 
 export type EngineSettingsField = keyof EngineSettingsInput;
 
-/** The monthly DCA (config dca), how long a proposal stays open (config proposal_expiry_days) and how orders round shares (config orders). */
+/** The monthly DCA (config dca), how many days after the debit its warning still fires (config proposal_expiry_days) and how orders round shares (config orders). */
 export function parseEngineSettings(raw: RawForm): Parsed<EngineSettingsInput, EngineSettingsField> {
   const errors: FieldErrors<EngineSettingsField> = {};
   const dcaAmountTwd = parseNumber(raw['dcaAmountTwd']);
