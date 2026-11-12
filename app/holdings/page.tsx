@@ -10,11 +10,11 @@ import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
-import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadFxHistory, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadDividendView, loadFxHistory, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type DividendView, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, signedTwd, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
-import { flowTotals } from '@/lib/models/cash-flows';
+import { LEDGER_FILTERS } from '@/lib/models/cash-flows';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
@@ -28,6 +28,7 @@ import { breachAlert } from '@/lib/rule-text';
 
 import { SecuritiesMaster } from '../securities/master';
 import { ValuationOverview } from '../valuation/overview';
+import { CashBook } from './cash-book';
 import { HoldingsOverview, VIEWS } from './overview';
 import { tickerLinks } from './ticker-links';
 import { TradeForm } from './trade-form';
@@ -42,8 +43,8 @@ function param(params: Params, key: string): string | undefined {
 
 /** The confirmation after a save, keyed by the ?saved= value the actions redirect with. */
 const SAVED: Record<string, Bilingual> = {
-  added: { en: 'Trade added.', zh: '已新增交易。' },
-  updated: { en: 'Trade updated.', zh: '已更新交易。' },
+  added: { en: 'Trade added; the cash-flow book counts it.', zh: '已新增交易，現金流已計入。' },
+  updated: { en: 'Trade updated; the cash-flow book follows.', zh: '已更新交易，現金流同步更新。' },
   deleted: { en: 'Trade deleted; the edit history keeps a copy.', zh: '已刪除交易，修改紀錄中保留一份副本。' },
   'asset-added': { en: 'Non-listed asset added.', zh: '已新增非上市資產。' },
   'asset-updated': { en: 'Non-listed asset updated.', zh: '已更新非上市資產。' },
@@ -51,6 +52,8 @@ const SAVED: Record<string, Bilingual> = {
   'flow-added': { en: 'Cash flow added.', zh: '已新增現金流。' },
   'flow-updated': { en: 'Cash flow updated.', zh: '已更新現金流。' },
   'flow-deleted': { en: 'Cash flow deleted; the edit history keeps a copy.', zh: '已刪除現金流，修改紀錄中保留一份副本。' },
+  'dividend-skipped': { en: 'Dividend skipped: not asked again.', zh: '已略過這筆配息，不再詢問。' },
+  'dividend-setting': { en: 'Dividend prompt setting saved.', zh: '已儲存配息詢問設定。' },
 };
 
 function savedMessage(params: Params): Bilingual | undefined {
@@ -68,7 +71,6 @@ function savedMessage(params: Params): Bilingual | undefined {
 
 /** How many trades and cash flows the lists show before "Show all". */
 const RECENT_TRADES = 50;
-const RECENT_FLOWS = 24;
 
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
@@ -82,13 +84,16 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   let rates: FxQuote[];
   // The proposals only add to the page, so a failed read of them does not hide the holdings.
   let proposals: [Proposal[], RuleRecord[]] | DataError;
+  // Likewise the dividend prompts: without them the book still shows.
+  let dividends: DividendView | undefined | DataError;
   const today = taipeiToday();
   try {
-    [data, flows, rates, proposals] = await Promise.all([
+    [data, flows, rates, proposals, dividends] = await Promise.all([
       loadAllocationData(supabase),
       loadCashFlows(supabase),
       loadFxHistory(supabase),
       orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
+      orDataError(loadDividendView(supabase, today)),
     ]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
@@ -200,7 +205,20 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           { tab: 'watch', content: <ValuationOverview supabase={supabase} today={today} params={params} /> },
           { tab: 'overview', content: <ManualAssets data={data} portfolio={portfolio} /> },
           { tab: 'trades', content: data.trades.length > 0 && <Trades data={data} showAll={param(params, 'trades') === 'all'} /> },
-          { tab: 'flows', content: <CashFlows flows={flows} showAll={param(params, 'flows') === 'all'} /> },
+          {
+            tab: 'flows',
+            content: (
+              <CashBook
+                data={data}
+                flows={flows}
+                portfolio={portfolio}
+                dividends={dividends instanceof DataError ? undefined : dividends}
+                filter={LEDGER_FILTERS.find((option) => option === param(params, 'flow')) ?? 'all'}
+                showAll={param(params, 'flows') === 'all'}
+                settingsOpen={param(params, 'saved') === 'dividend-setting'}
+              />
+            ),
+          },
           { tab: 'watch', content: <SecuritiesMaster data={data} saved={param(params, 'securities')} /> },
           { tab: 'overview', content: !empty && <Footnotes /> },
         ]}
@@ -712,103 +730,6 @@ function Trades({ data, showAll }: { data: HoldingsData; showAll: boolean }) {
             <Bi en={`Show all ${data.trades.length} trades`} zh={`顯示全部 ${data.trades.length} 筆交易`} />
           </Link>
         </p>
-      )}
-    </section>
-  );
-}
-
-function CashFlows({ flows, showAll }: { flows: CashFlowRecord[]; showAll: boolean }) {
-  // Loaded newest first.
-  const shown = showAll ? flows : flows.slice(0, RECENT_FLOWS);
-  const totals = flowTotals(flows);
-  return (
-    <section className="card form" id="cash-flows">
-      <div className="row spread">
-        <h2>
-          <Bi {...LABELS.cashFlows} />
-        </h2>
-        <Link href="/cash-flows/new" className="button">
-          <Bi {...LABELS.addCashFlow} />
-        </Link>
-      </div>
-      {flows.length === 0 ? (
-        <p className="muted">
-          <Bi en="None yet." zh="尚無。" />
-        </p>
-      ) : (
-        <>
-          <Facts
-            facts={[
-              { label: FLOW_TYPE.contribution, value: twd(totals.contribution) },
-              { label: FLOW_TYPE.windfall, value: twd(totals.windfall) },
-              { label: FLOW_TYPE.dividend, value: twd(totals.dividend) },
-              { label: FLOW_TYPE.withdrawal, value: twd(totals.withdrawal) },
-            ]}
-          />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    <Bi {...LABELS.flowDate} />
-                  </th>
-                  <th>
-                    <Bi {...LABELS.flowType} />
-                  </th>
-                  <th>
-                    <Bi {...LABELS.ticker} />
-                  </th>
-                  <th className="num">
-                    <Bi {...LABELS.amount} />
-                  </th>
-                  <th className="num">
-                    <Bi en="FX rate" zh="匯率" />
-                  </th>
-                  <th className="num">
-                    <Bi {...LABELS.amountTwd} />
-                  </th>
-                  <th>
-                    <Bi {...LABELS.pool} />
-                  </th>
-                  <th>
-                    <Bi {...LABELS.note} />
-                  </th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((flow) => (
-                  <tr key={flow.id}>
-                    <td className="nowrap">{flow.flowDate}</td>
-                    <td className="nowrap">
-                      <Bi {...FLOW_TYPE[flow.type]} />
-                    </td>
-                    <td>{flow.ticker ? <strong>{flow.ticker}</strong> : '—'}</td>
-                    <td className="num">{`${quantity(flow.amount)} ${flow.currency}`}</td>
-                    <td className="num">{flow.currency === 'TWD' ? '—' : flow.fxRate}</td>
-                    <td className="num">{twd(flow.amountTwd)}</td>
-                    <td className="nowrap">
-                      <Bi {...POOL[flow.pool]} />
-                    </td>
-                    <td className="small">{flow.note ?? ''}</td>
-                    <td className="nowrap">
-                      <Link href={`/cash-flows/${flow.id}`} prefetch={false}>
-                        <Bi {...LABELS.edit} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!showAll && flows.length > RECENT_FLOWS && (
-            <p>
-              <Link href="/holdings?flows=all#cash-flows">
-                <Bi en={`Show all ${flows.length} cash flows`} zh={`顯示全部 ${flows.length} 筆現金流`} />
-              </Link>
-            </p>
-          )}
-        </>
       )}
     </section>
   );

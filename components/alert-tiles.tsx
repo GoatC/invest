@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { AlertItem, AlertGauge, AlertTone } from '@/lib/alerts';
 import type { Bilingual } from '@/lib/i18n';
 
@@ -26,8 +26,10 @@ function Gauge({ gauge }: { gauge: AlertGauge }) {
  * Warnings as small tiles that read at a glance (in place of a sentence per warning): a status
  * icon, a code, the name, the figure, a gauge against the limit and a few short chips. An optional
  * heading names the group in a few words, e.g. "會違反規則（仍可儲存）".
+ * `actions` gives a tile its own buttons, by item key (a question to answer, such as a dividend to
+ * record or skip); such a tile is not itself a link.
  */
-export function AlertTiles({ items, heading, tone }: { items: readonly AlertItem[]; heading?: Bilingual; tone?: AlertTone }) {
+export function AlertTiles({ items, heading, tone, actions }: { items: readonly AlertItem[]; heading?: Bilingual; tone?: AlertTone; actions?: Readonly<Record<string, ReactNode>> }) {
   if (items.length === 0) return null;
   const groupTone = tone ?? items[0]?.tone ?? 'info';
   return (
@@ -72,13 +74,14 @@ export function AlertTiles({ items, heading, tone }: { items: readonly AlertItem
           );
           return (
             <li key={item.key} className={`alert-tile ${item.tone}`}>
-              {item.href ? (
+              {item.href && !actions?.[item.key] ? (
                 <Link href={item.href} className="alert-link">
                   {body}
                 </Link>
               ) : (
                 body
               )}
+              {actions?.[item.key] && <span className="alert-actions">{actions[item.key]}</span>}
             </li>
           );
         })}

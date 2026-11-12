@@ -2716,3 +2716,231 @@ details.ticker-menu a:hover {
   flex-basis: 100%;
   margin: 0;
 }
+
+/* The in-app banner (components/guide-banner.tsx): one line under the header that says what waits
+   and takes Hugo there; the action is a pill, "skip" and ✕ sit quietly beside it. */
+.guide {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0.75rem 1rem 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.guide + .page {
+  padding-top: 0.9rem;
+}
+
+.guide-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.8rem;
+  border-radius: 12px;
+  border-left: 4px solid var(--info-text);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: guide-in 250ms ease-out both;
+}
+
+.guide-banner.act {
+  border-left-color: var(--warn-text);
+}
+
+.guide-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--info-text);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.guide-banner.act .guide-icon {
+  background: var(--warn-text);
+}
+
+.guide-text {
+  flex: 1 1 7rem;
+  min-width: 0;
+  padding: 0.35rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.guide-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: auto;
+}
+
+.guide-go {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.guide-actions form {
+  display: flex;
+}
+
+.guide-actions button {
+  min-width: var(--tap-min);
+  padding: 0 0.6rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.guide-actions button:hover {
+  background: none;
+  color: var(--text);
+}
+
+.guide-actions .guide-more {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-banner {
+    animation: none;
+  }
+}
+
+/* The dividends to confirm: wide enough for both answers side by side. */
+#dividends-due .alert-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+
+/* A tile that asks a question carries its answers (components/alert-tiles.tsx actions). */
+.alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+}
+
+.alert-actions form {
+  display: flex;
+}
+
+.alert-actions .button,
+.alert-actions button {
+  padding: 0 0.9rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The cash-flow book (app/holdings/cash-book.tsx): date, what it was, the money in TWD. */
+.cash-book .segmented.slide {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cash-book .segmented.slide::-webkit-scrollbar {
+  display: none;
+}
+
+table.book td {
+  vertical-align: top;
+}
+
+.book-entry {
+  text-decoration: none;
+  color: var(--text);
+}
+
+.book-entry strong {
+  color: var(--accent);
+}
+
+.book-detail {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* What a line is, as a small coloured label: money put to work, money back, income, the windfall. */
+.kind {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--info-text);
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.kind.sell,
+.kind.withdrawal,
+.kind.contribution {
+  background: var(--border);
+  color: var(--muted);
+}
+
+.kind.dividend {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+.kind.windfall {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+table.book tr.uncounted .num {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+@media (max-width: 759px) {
+  /* On a phone the date column stays narrow and the amount keeps to one line. */
+  table.book th:first-child,
+  table.book td:first-child {
+    padding-right: 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  table.book td.num {
+    white-space: nowrap;
+  }
+
+  /* The entry is the row's tap target. */
+  .page table.book td a.book-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: var(--tap-min);
+  }
+}

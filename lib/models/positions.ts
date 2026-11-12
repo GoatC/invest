@@ -52,6 +52,29 @@ export interface Shortfall {
   direction?: Direction;
 }
 
+/**
+ * A trade's own money: what an opening trade put in (a long's fee and tax included), what a closing
+ * one freed (after its fee and tax). The cash-flow book reads it, so a buy is recorded once.
+ */
+export interface TradeMoney {
+  /** The trade's id, when it has one. */
+  id?: number;
+  tradeDate: string;
+  ticker: string;
+  pool: Pool;
+  direction: Direction;
+  /** True for a buy that opens a long or a sell that opens a short. */
+  opens: boolean;
+  qty: number;
+  price: number;
+  currency: string;
+  fxRate: number;
+  /** In the trade currency. */
+  local: number;
+  /** At the trade's own FX rate. */
+  twd: number;
+}
+
 const EPSILON = 1e-9;
 
 /** A trade's direction, long for every trade saved before direction existed. */
@@ -120,10 +143,25 @@ interface Book extends Position {
  * kept apart, so windfall money never mixes into the regular pool's cost or weights, and a short
  * never nets against a long.
  */
-export function buildPositions(trades: readonly Trade[]): { positions: Position[]; shortfalls: Shortfall[]; sales: Sale[] } {
+export function buildPositions(trades: readonly Trade[]): { positions: Position[]; shortfalls: Shortfall[]; sales: Sale[]; money: TradeMoney[] } {
   const book = new Map<string, Book>();
   const shortfalls: Shortfall[] = [];
   const sales: Sale[] = [];
+  const money: TradeMoney[] = [];
+  const moved = (trade: Trade, direction: Direction, local: number): TradeMoney => ({
+    ...(trade.id === undefined ? {} : { id: trade.id }),
+    tradeDate: trade.tradeDate,
+    ticker: trade.ticker,
+    pool: trade.pool,
+    direction,
+    opens: opens(trade),
+    qty: trade.qty,
+    price: trade.price,
+    currency: trade.currency,
+    fxRate: trade.fxRate,
+    local,
+    twd: local * trade.fxRate,
+  });
   for (const trade of chronological(trades)) {
     const direction = directionOf(trade);
     const key = positionKey(trade.pool, trade.ticker, direction);
@@ -156,6 +194,7 @@ export function buildPositions(trades: readonly Trade[]): { positions: Position[
       position.notionalLocal += gross;
       position.ownLocal += own;
       position.leverage = position.ownLocal > 0 ? position.notionalLocal / position.ownLocal : 1;
+      money.push(moved(trade, direction, marginLocal));
     } else {
       if (trade.qty - position.qty > EPSILON) {
         shortfalls.push({ ticker: trade.ticker, pool: trade.pool, tradeDate: trade.tradeDate, missingQty: trade.qty - position.qty, ...(direction === 'short' ? { direction } : {}) });
@@ -178,6 +217,7 @@ export function buildPositions(trades: readonly Trade[]): { positions: Position[
       position.ownLocal -= position.ownLocal * share;
       position.realizedTwd += gainTwd;
       sales.push({ tradeDate: trade.tradeDate, ticker: trade.ticker, pool: trade.pool, direction, gainTwd });
+      money.push(moved(trade, direction, freedLocal));
       if (position.qty < EPSILON) {
         position.qty = 0;
         position.costLocal = 0;
@@ -192,5 +232,5 @@ export function buildPositions(trades: readonly Trade[]): { positions: Position[
     book.set(key, position);
   }
   const positions = [...book.values()].map(({ notionalLocal: _n, ownLocal: _o, ...position }) => position);
-  return { positions, shortfalls, sales };
+  return { positions, shortfalls, sales, money };
 }

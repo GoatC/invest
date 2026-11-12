@@ -141,6 +141,14 @@ function LatestRun({ run }: { run: JobRun }) {
           />
         </p>
       )}
+      {detail.dividends && (
+        <p className="muted small" id="dividends">
+          <Bi
+            en={`Dividends: looked up ${Object.entries(detail.dividends.checked).map(([ticker, source]) => `${ticker} (${feedLabel(source).en})`).join(', ') || 'none'}; ${detail.dividends.saved} saved${detail.dividends.failed.length > 0 ? `; failed: ${detail.dividends.failed.join('; ')}` : ''}.`}
+            zh={`配息：已查詢 ${Object.entries(detail.dividends.checked).map(([ticker, source]) => `${ticker}（${feedLabel(source).zh}）`).join('、') || '（無）'}；存入 ${detail.dividends.saved} 筆${detail.dividends.failed.length > 0 ? `；查詢失敗：${detail.dividends.failed.join('；')}` : ''}。`}
+          />
+        </p>
+      )}
       {Object.keys(detail.holdings).length > 0 && (
         <p className="muted small" id="holdings-files">
           <Bi

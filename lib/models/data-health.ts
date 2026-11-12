@@ -63,6 +63,8 @@ export interface RunDetail {
   holdings: Record<string, Loaded>;
   /** The analysts' estimates loaded (F12 forward P/E) and those refused; null when none was due. */
   estimates: { saved: string[]; failed: string[] } | null;
+  /** The holdings' dividends looked up (the dividend prompt): each ticker's source, the rows saved and the lookups that failed; null when none was held. */
+  dividends: { checked: Record<string, string>; saved: number; failed: string[] } | null;
 }
 
 export interface JobRun {
@@ -116,6 +118,7 @@ export function parseRunDetail(value: unknown): RunDetail {
     redFlags: readRedFlagRun(detail['redFlags']),
     holdings: loadedMap(detail['holdings']),
     estimates: detail['estimates'] === undefined ? null : { saved: lines(record(detail['estimates'])['saved']), failed: lines(record(detail['estimates'])['failed']) },
+    dividends: readDividendRun(detail['dividends']),
   };
 }
 
@@ -146,6 +149,14 @@ export function dataHealth(runs: readonly JobRun[], threshold: number | null, to
   const nightsWithoutRun = Math.max(0, daysBetween(taipeiToday(new Date(latest.finishedAt)), today) - 1);
   const misses = failedInARow + nightsWithoutRun;
   return { latest, misses, alert: threshold !== null && misses >= threshold };
+}
+
+function readDividendRun(value: unknown): RunDetail['dividends'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const { checked, saved, failed } = value as Record<string, unknown>;
+  if (typeof saved !== 'number') return null;
+  const sources = Object.fromEntries(Object.entries(record(checked)).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  return { checked: sources, saved, failed: lines(failed) };
 }
 
 function readRedFlagRun(value: unknown): RunDetail['redFlags'] {

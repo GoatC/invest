@@ -133,7 +133,7 @@ export function lastWeeklyReview(at: Date, review: WeeklyReview): { key: string;
 // The messages
 // ---------------------------------------------------------------------------
 
-export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event' | 'news';
+export type NotificationKind = 'proposal' | 'weekly' | 'data_failure' | 'test' | 'event' | 'news' | 'dividend';
 
 /** A push: a title and a line, in Chinese (CLAUDE.md, the Chinese-first rule), and the page it opens. */
 export interface Message {
@@ -336,6 +336,8 @@ export interface PlanInput {
   reminders?: readonly Message[];
   /** Breaking-news alerts not planned before (N8 step 4); urgent: through the quiet hours (config news.push_in_quiet_hours). */
   news?: { messages: readonly Message[]; urgent: boolean };
+  /** Dividends paid and not recorded, not pushed before (lib/models/dividends); they wait out the quiet hours. */
+  dividends?: readonly Message[];
 }
 
 /** The pushes due now, each with when it may go: now, or the end of the quiet hours. */
@@ -351,6 +353,7 @@ export function plan(input: PlanInput): Array<Message & { sendAfter: Date }> {
   if (failure) out.push({ ...failure, sendAfter });
   for (const reminder of input.reminders ?? []) out.push({ ...reminder, sendAfter });
   for (const message of input.news?.messages ?? []) out.push({ ...message, sendAfter: input.news?.urgent ? input.now : sendAfter });
+  for (const message of input.dividends ?? []) out.push({ ...message, sendAfter });
   return out;
 }
 

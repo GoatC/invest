@@ -12,15 +12,15 @@ insert into public.securities (ticker, name, market, product_type, asset_class_i
   ('AAPL', 'Apple Inc.', 'US', 'stock', 'us_stocks', 'USD', 'US'),
   ('2330', '台積電', 'TW', 'stock', 'tw_stocks', 'TWD', 'TW');
 
--- Six monthly contributions and one dividend.
+-- One dividend. Buys count in the cash-flow book by themselves (lib/models/cash-flows), so no
+-- contribution is typed in.
 insert into public.cash_flows (flow_date, type, amount, currency, fx_rate, pool, ticker, note) values
-  ('2026-05-06', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
-  ('2026-06-05', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
-  ('2026-07-06', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
-  ('2026-08-06', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
-  ('2026-09-07', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
-  ('2026-10-06', 'contribution', 10000, 'TWD', 1, 'regular', null, 'demo'),
   ('2026-09-15', 'dividend', 0.62, 'USD', 32.20, 'regular', 'VT', 'demo');
+
+-- The dividend behind it, as the nightly job would save it: 2 shares × US$0.4429, 30% withheld,
+-- is the US$0.62 above, so the app has nothing to ask about.
+insert into public.dividend_events (ticker, ex_date, pay_date, amount, currency, source) values
+  ('VT', '2026-09-10', '2026-09-15', 0.4429, 'USD', 'demo');
 
 insert into public.transactions (trade_date, ticker, side, qty, price, currency, fee, tax, fx_rate, source, pool, note) values
   ('2026-05-07', 'VT', 'buy', 2, 150.00, 'USD', 1.00, 0, 31.80, 'manual', 'regular', 'demo'),

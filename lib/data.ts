@@ -15,6 +15,8 @@ import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose,
 import { shadowRows, type ShadowProposal, type ShadowRow } from './models/shadow';
 import { newsMessage, readNewsSettings, type Headline, type NewsAlert, type NewsSettings } from './models/news';
 import { eventMessage, remindersDue, type EventKind, type EventSource, type MarketEvent } from './models/events';
+import { guideBanners, readBannerSettings, type Banner, type BannerSettings } from './models/banners';
+import { dividendHoldings, dividendPushes, dividendsDue, eventsSince, readDividendSettings, type DividendDue, type DividendEvent, type DividendPlan, type DividendSecurity, type DividendSettings } from './models/dividends';
 import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
   evaluate,
@@ -565,7 +567,7 @@ export async function loadCsvMappings(supabase: SupabaseClient): Promise<SavedMa
 }
 
 /** Every cash flow, newest first. */
-export async function loadCashFlows(supabase: SupabaseClient): Promise<CashFlowRecord[]> {
+async function loadCashFlowsUncached(supabase: SupabaseClient): Promise<CashFlowRecord[]> {
   const found = await allRows<CashFlowRow>('cash_flows', (from, to) =>
     supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).order('flow_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
   );
@@ -1277,7 +1279,7 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     loadRules(supabase),
     loadAssetClasses(supabase),
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
-    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event', 'news']).gte('created_at', addDays(today, -400))),
+    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event', 'news', 'dividend']).gte('created_at', addDays(today, -400))),
     loadWeeklySummary(supabase, today),
     loadJobRuns(supabase),
   ]);
@@ -1291,6 +1293,9 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
   const newsKeys = new Set(planned.filter((row) => row.kind === 'news').map((row) => row.key));
   const fresh = newsSettings ? await loadNewsAlerts(supabase, newsSettings, new Date(Date.now() - NEWS_PUSH_HOURS * 3_600_000).toISOString(), 50) : null;
   const news = newsSettings && fresh ? { messages: fresh.filter((alert) => !newsKeys.has(String(alert.id))).map(newsMessage), urgent: newsSettings.pushInQuietHours } : undefined;
+  // Dividends paid and not recorded (2026-11-12): one push each, on the day; none before config dividends exists.
+  const dividendView = await loadDividendView(supabase, today);
+  const dividends = dividendView ? dividendPushes(dividendView.due, dividendView.settings, today, new Set(planned.filter((row) => row.kind === 'dividend').map((row) => row.key))) : [];
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const pushed = new Set(planned.filter((row) => row.kind === 'proposal').map((row) => row.key));
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -1312,6 +1317,7 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     quiet: readQuietHours(value('quiet_hours')),
     reminders,
     ...(news ? { news } : {}),
+    dividends,
   };
 }
 
@@ -3219,6 +3225,160 @@ export async function loadEstimatePlan(supabase: SupabaseClient, today: string):
 }
 
 // ---------------------------------------------------------------------------
+// Dividend prompts and the in-app banner (asked by Hugo on 2026-11-12)
+// ---------------------------------------------------------------------------
+
+/** config dividends; undefined before its migration. */
+async function loadDividendSettingsUncached(supabase: SupabaseClient): Promise<DividendSettings | undefined> {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'dividends'));
+  return row ? readDividendSettings(row.value) : undefined;
+}
+
+interface DividendEventRow {
+  id: number;
+  ticker: string;
+  ex_date: string;
+  pay_date: string | null;
+  amount: number;
+  currency: string;
+  source: string;
+  skipped_pools: string[] | null;
+}
+
+async function loadDividendEvents(supabase: SupabaseClient, since: string): Promise<DividendEvent[]> {
+  const found = await rows<DividendEventRow>(
+    'dividend_events',
+    supabase.from('dividend_events').select('id, ticker, ex_date, pay_date, amount, currency, source, skipped_pools').gte('ex_date', since).order('ex_date', { ascending: false }),
+  );
+  return found.map((row) => ({
+    id: Number(row.id),
+    ticker: row.ticker,
+    exDate: row.ex_date,
+    payDate: row.pay_date,
+    amount: Number(row.amount),
+    currency: row.currency,
+    source: row.source,
+    skippedPools: (row.skipped_pools ?? []).filter((pool): pool is Pool => pool === 'regular' || pool === 'windfall'),
+  }));
+}
+
+/** One dividend by its id, for the cash-flow form a prompt opens. */
+export async function loadDividendEvent(supabase: SupabaseClient, id: number): Promise<DividendEvent | undefined> {
+  const [row] = await rows<DividendEventRow>('dividend_events', supabase.from('dividend_events').select('id, ticker, ex_date, pay_date, amount, currency, source, skipped_pools').eq('id', id));
+  return row ? { id: Number(row.id), ticker: row.ticker, exDate: row.ex_date, payDate: row.pay_date, amount: Number(row.amount), currency: row.currency, source: row.source, skippedPools: [] } : undefined;
+}
+
+/** Every security with what the dividend model reads, the reinvesting flag included (a column the main read leaves out, so it works before the migration). */
+async function loadDividendSecurities(supabase: SupabaseClient): Promise<DividendSecurity[]> {
+  const found = await rows<{ ticker: string; name: string; market: Market; domicile: string; currency: string; dividends_reinvested: boolean; dividends_checked_on: string | null }>(
+    'securities',
+    supabase.from('securities').select('ticker, name, market, domicile, currency, dividends_reinvested, dividends_checked_on').order('ticker'),
+  );
+  return found.map((row) => ({ ticker: row.ticker, name: row.name, market: row.market, domicile: row.domicile, currency: row.currency, reinvested: row.dividends_reinvested, checkedOn: row.dividends_checked_on }));
+}
+
+/** The dividends to ask about and those ahead, with what they were worked out from. */
+export interface DividendView {
+  settings: DividendSettings;
+  due: DividendDue[];
+  upcoming: DividendDue[];
+  securities: DividendSecurity[];
+}
+
+/** Undefined before config dividends exists (the migration is not applied yet). */
+async function loadDividendViewUncached(supabase: SupabaseClient, today: string): Promise<DividendView | undefined> {
+  const settings = await loadDividendSettings(supabase);
+  if (!settings) return undefined;
+  const [holdings, flows, events, securities] = await Promise.all([loadHoldingsData(supabase), loadCashFlows(supabase), loadDividendEvents(supabase, eventsSince(settings, today)), loadDividendSecurities(supabase)]);
+  const fx = new Map([...latestFx(holdings.fx, holdings.trades)].map(([currency, quote]) => [currency, quote.value]));
+  return { settings, securities, ...dividendsDue({ events, trades: holdings.trades, splits: holdings.splits, securities, flows, fx }, settings, today) };
+}
+
+/** What the nightly job's dividend step looks up; undefined before config dividends exists. */
+export async function loadDividendPlan(supabase: SupabaseClient, today: string): Promise<DividendPlan | undefined> {
+  const settings = await loadDividendSettings(supabase);
+  if (!settings) return undefined;
+  const since = eventsSince(settings, today);
+  const [holdings, events, securities] = await Promise.all([loadHoldingsData(supabase), loadDividendEvents(supabase, since), loadDividendSecurities(supabase)]);
+  const stocks = new Set(holdings.securities.filter((security) => security.productType === 'stock').map((security) => security.ticker));
+  return {
+    since,
+    holdings: dividendHoldings(holdings.trades, holdings.splits, securities, since).map((security) => ({
+      ticker: security.ticker,
+      market: security.market,
+      currency: security.currency,
+      etf: !stocks.has(security.ticker),
+      known: Object.fromEntries(events.filter((event) => event.ticker === security.ticker).map((event) => [event.exDate, { payDate: event.payDate, source: event.source }])),
+      checkedOn: security.checkedOn ?? null,
+    })),
+  };
+}
+
+/** Upserts dividends by security and ex-dividend date; the pools already answered "skip" stay as they are. */
+export async function saveDividendEvents(supabase: SupabaseClient, events: ReadonlyArray<Omit<DividendEvent, 'id' | 'skippedPools'>>): Promise<void> {
+  if (events.length === 0) return;
+  const { error } = await supabase
+    .from('dividend_events')
+    .upsert(events.map((event) => ({ ticker: event.ticker, ex_date: event.exDate, pay_date: event.payDate, amount: event.amount, currency: event.currency, source: event.source })), { onConflict: 'ticker,ex_date' });
+  if (error) throw new DataError('dividend_events', error.message);
+}
+
+/** Notes the day Alpha Vantage answered for these securities' dividends (securities.dividends_checked_on). */
+export async function markDividendsChecked(supabase: SupabaseClient, tickers: readonly string[], today: string): Promise<void> {
+  if (tickers.length === 0) return;
+  const { error } = await supabase.from('securities').update({ dividends_checked_on: today }).in('ticker', [...tickers]);
+  if (error) throw new DataError('securities', error.message);
+}
+
+/** config banners; undefined before its migration. */
+async function loadBannerSettings(supabase: SupabaseClient): Promise<BannerSettings | undefined> {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'banners'));
+  return row ? readBannerSettings(row.value) : undefined;
+}
+
+/** How long ✕ hides a banner; undefined before config banners exists. */
+export async function loadBannerSnooze(supabase: SupabaseClient): Promise<number | undefined> {
+  return (await loadBannerSettings(supabase))?.snoozeDays;
+}
+
+/** The in-app banners needed now (lib/models/banners), the most pressing first; none before config banners exists. */
+export async function loadBanners(supabase: SupabaseClient, today: string): Promise<Banner[]> {
+  const settings = await loadBannerSettings(supabase);
+  if (!settings?.enabled) return [];
+  const [holdings, flows, dividends, plan, proposals, devices, dismissals] = await Promise.all([
+    loadHoldingsData(supabase),
+    loadCashFlows(supabase),
+    loadDividendView(supabase, today),
+    loadWindfallPlan(supabase),
+    loadProposals(supabase, today),
+    rows<{ id: number }>('push_subscriptions', supabase.from('push_subscriptions').select('id').limit(1)),
+    rows<{ key: string; until: string }>('banner_dismissals', supabase.from('banner_dismissals').select('key, until').gt('until', today)),
+  ]);
+  const arrivals = flows.filter((flow) => flow.type === 'windfall');
+  const cash = holdings.manualAssets.filter((asset) => asset.unit === 'TWD');
+  return guideBanners(
+    {
+      dividends: dividends?.due ?? [],
+      proposals: proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved').map((proposal) => ({ id: proposal.id, status: proposal.status })),
+      windfall: {
+        arrivedTwd: arrivals.reduce((sum, flow) => sum + flow.amountTwd, 0),
+        lastArrival: arrivals.reduce<string | null>((newest, flow) => (newest === null || flow.flowDate > newest ? flow.flowDate : newest), null),
+        cashTwd: cash.filter((asset) => asset.pool === 'windfall').reduce((sum, asset) => sum + asset.quantity, 0),
+        traded: holdings.trades.some((trade) => trade.pool === 'windfall'),
+        hasPlan: plan !== undefined,
+      },
+      balances: cash.map((asset) => ({ id: asset.id, name: asset.name, valuedOn: asset.valuedOn })),
+      trades: holdings.trades.length,
+      assets: holdings.manualAssets.length,
+      devices: devices.length,
+      dismissed: new Map(dismissals.map((row) => [row.key, row.until])),
+    },
+    settings,
+    today,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // One read per request
 // ---------------------------------------------------------------------------
 
@@ -3227,6 +3387,9 @@ export async function loadEstimatePlan(supabase: SupabaseClient, today: string):
 // runs once for the same client and arguments, and its callers share the result. Outside a render
 // (server actions, the nightly job) React's cache runs the loader every time.
 export const loadSecurities = cache(loadSecuritiesUncached);
+export const loadCashFlows = cache(loadCashFlowsUncached);
+export const loadDividendSettings = cache(loadDividendSettingsUncached);
+export const loadDividendView = cache(loadDividendViewUncached);
 export const loadAssetClasses = cache(loadAssetClassesUncached);
 export const loadSplits = cache(loadSplitsUncached);
 export const loadHoldingsData = cache(loadHoldingsDataUncached);

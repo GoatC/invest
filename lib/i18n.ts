@@ -209,6 +209,8 @@ export const FEED: Record<string, Bilingual> = {
   vanguard: { en: 'Vanguard', zh: 'Vanguard' },
   fubon: { en: 'Fubon', zh: '富邦投信' },
   demo: { en: 'Demo data', zh: '示範資料' },
+  nasdaq: { en: 'Nasdaq', zh: 'Nasdaq' },
+  adjusted_close: { en: 'Adjusted closes', zh: '還原收盤價' },
 };
 
 /** A windfall tranche's status (F3). */
