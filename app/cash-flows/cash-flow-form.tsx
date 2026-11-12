@@ -26,12 +26,12 @@ const INITIAL_STATE: CashFlowFormState = { errors: {}, message: null };
 
 const TYPE_HINT: Record<FlowType, Bilingual> = {
   contribution: {
-    en: 'Money you put in, such as the monthly DCA debit; record the shares it buys as trades too.',
-    zh: '你投入的資金，例如每月定期定額扣款；買到的股數另外記成交易。',
+    en: 'An entry from before buys counted by themselves: listed, no longer added, as its buy already counts.',
+    zh: '買進自動計入之前的舊紀錄：仍會列出，但不再加總（買進已計入）。',
   },
-  windfall: { en: 'The windfall arriving; it always goes to the windfall pool.', zh: '大額資金入帳，一律計入大額資金池。' },
+  windfall: { en: 'The windfall arriving; it always goes to the windfall pool. Its buys are recorded as trades in that pool.', zh: '大額資金入帳，一律計入大額資金池；之後分批買進時，交易的資金池選「大額資金」。' },
   dividend: { en: 'Cash a holding paid out, after any tax withheld.', zh: '持股發放的現金股利，填扣除預扣稅後實際收到的金額。' },
-  withdrawal: { en: 'Money taken out of the portfolio.', zh: '從投資組合提領出去的資金。' },
+  withdrawal: { en: 'Money taken out of the portfolio, after a sale for instance.', zh: '從投資組合提領出去的資金，例如賣出後轉回銀行帳戶。' },
 };
 
 function isFlowType(value: string): value is FlowType {
@@ -50,7 +50,9 @@ export function CashFlowForm({ data, rates, today, id, initial }: { data: Holdin
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
   const history = useMemo(() => rateHistory(rates), [rates]);
   const positions = useMemo(() => buildPositions(restateTrades(data.trades, data.splits)).positions, [data.trades, data.splits]);
-  const type = isFlowType(values.type) ? values.type : 'contribution';
+  const type = isFlowType(values.type) ? values.type : 'dividend';
+  // A buy counts by itself (lib/models/cash-flows), so a contribution is offered only when editing one typed in earlier.
+  const offered = FLOW_TYPES.filter((option) => option !== 'contribution' || initial.type === 'contribution');
   const currency = values.currency.trim().toUpperCase();
   const security = type === 'dividend' ? securities.get(values.ticker.trim().toUpperCase()) : undefined;
 
@@ -102,7 +104,7 @@ export function CashFlowForm({ data, rates, today, id, initial }: { data: Holdin
       <div className="form-grid">
         <Field label={LABELS.flowType} error={error('type')} hint={<Bi {...TYPE_HINT[type]} />}>
           <select name="type" value={values.type} onChange={(e) => change('type', e.target.value)}>
-            {FLOW_TYPES.map((option) => (
+            {offered.map((option) => (
               <option key={option} value={option}>
                 {bi(FLOW_TYPE[option])}
               </option>

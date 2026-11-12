@@ -27,6 +27,7 @@ export function fullSummary(run: JobRun): string[] {
   if (detail.attribution) lines.push(`Attribution 績效歸因: ${detail.attribution.months} month(s) saved 已存入 ${detail.attribution.months} 個月`);
   if (detail.valued) lines.push(`Valuations 估值: ${detail.valued.join(', ')} valued after a new filing 依新財報重新估值`);
   if (detail.redFlags) lines.push(`Red flags 紅旗: ${detail.redFlags.scanned.join(', ') || 'none due 無'} scanned 已掃描, ${detail.redFlags.events} events found 找到事件`);
+  if (detail.dividends) lines.push(`Dividends 配息: ${Object.keys(detail.dividends.checked).join(', ') || 'none 無'} looked up 已查詢, ${detail.dividends.saved} saved 存入${detail.dividends.failed.length > 0 ? `; failed 失敗: ${detail.dividends.failed.join('; ')}` : ''}`);
   for (const warning of detail.warnings) lines.push(`  warning 警告: ${warning}`);
   for (const error of detail.errors) lines.push(`  error 錯誤: ${error}`);
   return lines;

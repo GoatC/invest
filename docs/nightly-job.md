@@ -19,6 +19,7 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 - **歷史年數**（第三階段第 4 步，F7）：價格載入的範圍取風險值、回歸分析區、蒙地卡羅與效率前緣中最長者（效率前緣預設十年，所以第一次執行會載入較多資料，之後只更新新的幾天）。
 - **績效歸因**（第三階段第 5 步，N2）：每夜把尚未存入的完整月份（第一層依資產類別、第二層依產業）的 Brinson 效果存入 `attribution`；公開的執行紀錄只寫月數，不寫任何報酬。
 - **分析師預估**（2026-11-04 加入，F12 本益比診斷）：持有或觀察中的美股，每 7 天（config `pe_check.refresh_days`）向 Alpha Vantage 讀一次分析師共識預估（各會計年度 EPS 的平均、最高、最低、分析師人數、30 天前的平均與上修／下修人數，以及平均目標價與評等），存入 `analyst_estimates`。**需要 `ALPHAVANTAGE_API_KEY`**；免費 key 每天 25 次，每檔用 2 次。被拒絕（額度用完）時沿用已存的預估，不會讓當晚變成「部分失敗」，資料狀態頁會寫出來。台股沒有免費的共識來源，請在該股的估值頁自行輸入。
+- **配息**（2026-11-12 加入，配息詢問）：每夜查詢所有持有的台股與美股標的的現金配息（除息日、每股配息、發放日），存入 `dividend_events`，App 到發放日就會問你要不要記一筆股利。台股用 FinMind；美股中 Nasdaq 掛牌的用 Nasdaq 的配息紀錄（免金鑰），其他交易所的（例如 VT、BIL）先由當晚載入的還原收盤價推算除息日與金額，再向 Alpha Vantage 查發放日（每檔每週一次，有新配息時立即查；**需要 `ALPHAVANTAGE_API_KEY`**，沒有時以除息日加 7 天估計）。查詢失敗只會記在資料狀態頁，不影響當晚的狀態。
 - **規則與推播**：最後以剛載入的資料檢查規則、產生提案，並送出推播（[推播通知](web-push.md)）。
 - **失敗時**：App 沿用最後一次成功的資料；連續 2 晚失敗（`DATA_FAILURE`）就顯示警示並推播一次。公開的執行紀錄只寫數量，不寫代號與提案內容。
 
@@ -42,6 +43,7 @@ Every night GitHub Actions loads closes, FX, gold, the monthly market series, in
 | 台灣 10 年期公債殖利率（每月） | 中央銀行開放資料（EG43M01） | 權益成本的設定值 |
 | 隱含股票風險溢酬（每月） | Damodaran Online（ERPbymonth.xlsx） | 權益成本的設定值 |
 | 美股分析師共識預估（每週，F12 本益比診斷） | Alpha Vantage `EARNINGS_ESTIMATES` 與 `OVERVIEW` | 沿用已存的預估，或在估值頁自行輸入 |
+| 持有標的的配息（每夜，配息詢問） | 台股 FinMind `TaiwanStockDividend`；美股 Nasdaq 配息紀錄 | 美股改由還原收盤價推算，並以 Alpha Vantage `DIVIDENDS` 補發放日；都失敗時沿用已存資料，也可自行在「新增現金流」登錄股利 |
 | 台股分析師共識預估 | 尚無免費來源 | 在估值頁自行輸入（例如券商或財經網站上的共識） |
 | 美股財報（每季，第二階段第 4 步） | SEC EDGAR company facts（10-K、10-Q） | 估值頁自行輸入的數字 |
 | 台股財報與現金股利（每季） | FinMind 三大報表與除權息結果 | 估值頁自行輸入的數字 |
@@ -151,6 +153,7 @@ The refresh button in the More menu dispatches `.github/workflows/refresh.yml` t
 
 | 「更新最新資料」顯示「排程未完成」 | 點「GitHub 上的執行紀錄」看是哪一步失敗，對照上面各列；`GitHub HTTP 401` 或 `403` 表示 `GITHUB_DISPATCH_TOKEN` 過期或權限不是 Actions「Read and write」，照第 6 步重新產生 |
 | 資料狀態頁寫「分析師預估：未能載入 … Alpha Vantage refused」 | 免費 key 當天額度用完；已存的預估照用，7 天內會再試 |
+| 資料狀態頁寫「配息：… 查詢失敗：… alphavantage: Alpha Vantage refused」 | 免費 key 每秒只能查一次、每天 25 次；當晚先用還原收盤價推算的除息日與金額，隔夜會再試。不影響其他資料 |
 
 ## 在 Mac 上手動執行 Run it on your Mac (optional)
 

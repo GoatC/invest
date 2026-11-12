@@ -10,6 +10,8 @@ import type { PerformanceInput, Snapshot } from '../../../lib/models/performance
 import { readLookThroughSettings } from '../../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
+import type { DividendPlan } from '../../../lib/models/dividends.ts';
+import type { DividendRow } from '../feeds/dividends.ts';
 import type { IndexClose } from '../feeds/indices.ts';
 import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
@@ -389,7 +391,8 @@ const deps = (get: Get, store: Store, alphaVantageKey?: string, bytes: GetBytes 
   finmindToken: 'token',
   alphaVantageKey,
   today: TODAY,
-  now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++)),
+  // A second later at each call, within the minute however many runs came before.
+  now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++ % 60)),
 });
 
 describe("analysts' estimates (F12 forward P/E)", () => {
@@ -424,6 +427,88 @@ describe("analysts' estimates (F12 forward P/E)", () => {
     const run = await runNightly(deps(avGet(fakeGet().get), store));
     assert.equal(asked, false);
     assert.equal(run.detail.estimates, undefined);
+  });
+});
+
+describe("the holdings' dividends (the dividend prompt)", () => {
+  const plan: DividendPlan = {
+    since: '2026-08-01',
+    holdings: [
+      { ticker: '0050', market: 'TW', currency: 'TWD', etf: true, known: {}, checkedOn: null },
+      { ticker: 'VT', market: 'US', currency: 'USD', etf: true, known: {}, checkedOn: null },
+      { ticker: 'AAPL', market: 'US', currency: 'USD', etf: false, known: {}, checkedOn: null },
+    ],
+  };
+  const replies = (alphaVantage: string): Record<string, string> => ({
+    'dataset=TaiwanStockDividend&': ok([
+      { CashEarningsDistribution: 0.6, CashExDividendTradingDate: '2026-07-21', CashDividendPaymentDate: '2026-08-10' },
+      { CashEarningsDistribution: 1, CashExDividendTradingDate: '2026-10-16', CashDividendPaymentDate: '2026-11-10' },
+    ]),
+    // VT's adjusted close steps on 2026-10-16: 159.22 × (1 − 158.81 ÷ 159.22) = 0.41.
+    'dataset=USStockPrice&data_id=VT': ok([{ date: '2026-10-15', Close: 159.22, Adj_Close: 158.81 }, { date: '2026-10-16', Close: 158.55, Adj_Close: 158.55 }, { date: '2026-10-20', Close: 157.8, Adj_Close: 157.8 }]),
+    'api.nasdaq.com/api/quote/VT/': JSON.stringify({ data: { dividends: { rows: null } }, message: 'Dividend History for Non-Nasdaq symbols is not available', status: { rCode: 200 } }),
+    'api.nasdaq.com/api/quote/AAPL/dividends?assetclass=stocks': JSON.stringify({ data: { dividends: { rows: [{ exOrEffDate: '08/10/2026', type: 'Cash', amount: '$0.27', paymentDate: '08/13/2026' }] } }, status: { rCode: 200 } }),
+    'function=DIVIDENDS&symbol=VT': alphaVantage,
+  });
+  const dividendGet = (base: Get, known: Record<string, string>, asked: string[] = []): Get => async (url, headers) => {
+    const key = Object.keys(known).find((piece) => url.includes(piece));
+    if (key === undefined) return base(url, headers);
+    asked.push(key);
+    return known[key] as string;
+  };
+  const paid = JSON.stringify({ symbol: 'VT', data: [{ ex_dividend_date: '2026-10-16', payment_date: '2026-10-20', amount: '0.4084' }, { ex_dividend_date: '2026-06-18', payment_date: '2026-06-23', amount: '0.5627' }] });
+  const withPlan = (found: DividendPlan, saved: DividendRow[]) => Object.assign(new MemoryStore(), { dividendPlan: async () => found, saveDividends: async (rows: readonly DividendRow[]) => void saved.push(...rows) });
+
+  it('looks up each holding at its source and keeps the ex-dates since the plan’s start', async () => {
+    const saved: DividendRow[] = [];
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(paid)), withPlan(plan, saved), 'key'));
+    assert.equal(run.status, before.status);
+    assert.deepEqual(run.detail.dividends, { checked: { '0050': 'finmind', VT: 'alphavantage', AAPL: 'nasdaq' }, saved: 3, failed: [] });
+    assert.deepEqual(saved, [
+      { ticker: '0050', exDate: '2026-10-16', payDate: '2026-11-10', amount: 1, currency: 'TWD', source: 'finmind' },
+      { ticker: 'VT', exDate: '2026-10-16', payDate: '2026-10-20', amount: 0.4084, currency: 'USD', source: 'alphavantage' },
+      { ticker: 'AAPL', exDate: '2026-08-10', payDate: '2026-08-13', amount: 0.27, currency: 'USD', source: 'nasdaq' },
+    ]);
+  });
+
+  it('keeps the dividend read off the closes when Alpha Vantage refuses, without changing the status', async () => {
+    const saved: DividendRow[] = [];
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' }))), withPlan(plan, saved), 'key'));
+    assert.equal(run.status, before.status);
+    assert.equal(run.detail.dividends?.checked['VT'], 'adjusted_close');
+    assert.match(run.detail.dividends?.failed[0] ?? '', /^VT: alphavantage: Alpha Vantage refused/);
+    assert.deepEqual(saved.find((row) => row.ticker === 'VT'), { ticker: 'VT', exDate: '2026-10-16', payDate: null, amount: 0.41, currency: 'USD', source: 'adjusted_close' });
+  });
+
+  it('asks Alpha Vantage once a week, and sooner for a new dividend without its payment date; a saved one is never rewritten from the closes', async () => {
+    const run = async (known: DividendPlan['holdings'][number]['known'], checkedOn: string | null, today = TODAY) => {
+      const saved: DividendRow[] = [];
+      const asked: string[] = [];
+      const marked: string[] = [];
+      const holdings = [{ ticker: 'VT', market: 'US', currency: 'USD', etf: true, known, checkedOn }];
+      const store = Object.assign(withPlan({ since: plan.since, holdings }, saved), { markDividendsChecked: async (tickers: readonly string[], on: string) => void marked.push(...tickers.map((ticker) => `${ticker} ${on}`)) });
+      await runNightly({ ...deps(dividendGet(fakeGet().get, replies(paid), asked), store, 'key'), today });
+      return { saved: saved.map((row) => row.source), alphaVantage: asked.includes('function=DIVIDENDS&symbol=VT'), marked };
+    };
+    const dated = { '2026-10-16': { payDate: '2026-10-20', source: 'alphavantage' } };
+    // Answered three days ago and nothing new: not asked, and the saved row is left alone.
+    assert.deepEqual(await run(dated, '2026-10-18'), { saved: [], alphaVantage: false, marked: [] });
+    // A week on, or never asked: asked, and the day is noted.
+    assert.deepEqual(await run(dated, '2026-10-14'), { saved: ['alphavantage'], alphaVantage: true, marked: ['VT 2026-10-21'] });
+    assert.deepEqual((await run({}, null)).marked, ['VT 2026-10-21']);
+    // Saved from the closes without a payment date: asked at once while it is new.
+    assert.deepEqual(await run({ '2026-10-16': { payDate: null, source: 'adjusted_close' } }, '2026-10-18'), { saved: ['alphavantage'], alphaVantage: true, marked: ['VT 2026-10-21'] });
+  });
+
+  it('does nothing before the migration, and reads the closes without an Alpha Vantage key', async () => {
+    const none = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    assert.equal(none.detail.dividends, undefined);
+    const saved: DividendRow[] = [];
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(paid)), withPlan(plan, saved)));
+    assert.equal(run.detail.dividends?.checked['VT'], 'adjusted_close');
+    assert.deepEqual(run.detail.dividends?.failed, []);
   });
 });
 

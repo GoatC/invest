@@ -237,7 +237,7 @@ await step("trade form: picking VT fills USD and the trade date's rate; an exist
   await snap('trade-form');
   await saveTrade();
   await page.waitForURL('**/holdings?saved=added&t=VT');
-  await page.getByText('已新增交易。').waitFor();
+  await page.getByText('已新增交易，現金流已計入。').waitFor();
   // The next step: VT's analyses, from the saved message.
   const next = await page.locator('.next-steps').innerText();
   check(next.includes('Look-through') && next.includes('Regression'), `next steps for a fund, got ${next}`);
@@ -342,13 +342,44 @@ await step('a cash balance can be added in the windfall pool, outside R1 and R2'
   check(text.includes('Windfall pool') && text.includes('NT$50,000'), 'windfall NT$50,000');
 });
 
-await step("cash flows: the seed's contributions and dividend are listed, with totals in TWD", async () => {
+/** A tile of the cash-flow book as one line. */
+const bookFact = async (label) => (await page.locator('#cash-flows .fact', { hasText: label }).first().innerText()).replace(/\s+/g, ' ');
+/** The stand-in's Data API with the secret key, as the nightly job writes. */
+const asJob = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', prefer: 'return=representation', ...(init.headers ?? {}) } });
+/** A day in Taipei, so many days from today. */
+const taipeiDay = (offset = 0) => new Date(Date.now() + 8 * 3_600_000 + offset * 86_400_000).toISOString().slice(0, 10);
+
+await step("cash flows: the book counts the seed's buys and sell by themselves, beside its dividend; a contribution is no longer typed in", async () => {
   await page.goto(`${BASE}/holdings`);
   const section = page.locator('#cash-flows');
-  const text = await section.innerText();
-  // Six NT$10,000 contributions and 0.62 USD of VT dividends at 32.20.
-  check(/Contribution[\s\S]*?NT\$60,000/.test(text) && /Dividend[\s\S]*?NT\$20\b/.test(text), `totals per type, got ${text.slice(0, 300)}`);
-  check(text.includes('投入資金') && text.includes('股利'), 'Chinese type labels');
+  // Seven buys with their fees at their own rates add up to NT$59,079.50; the 00692 sale frees NT$1,818.16.
+  const net = await bookFact('Net put in');
+  check(net.includes('NT$57,261') && net.includes('買進 NT$59,080 − 賣出 NT$1,818'), `net put in from the trades, got ${net}`);
+  // 0.62 USD of VT dividends at 32.20; its dividend is in dividend_events, so nothing is asked.
+  const dividends = await bookFact('Dividends');
+  check(dividends.includes('NT$20') && dividends.includes('1 筆') && !dividends.includes('待確認'), `the dividend, got ${dividends}`);
+  check((await section.locator('#dividends-due').count()) === 0, 'no dividend to confirm');
+  const rows = section.locator('table.book tbody tr');
+  check((await rows.count()) === 9, `eight trades and one dividend, got ${await rows.count()}`);
+  const first = (await rows.first().innerText()).replace(/\s+/g, ' ');
+  check(first.includes('2026-10-15') && first.includes('Sell 賣出') && first.includes('00692') && first.includes('20 × 92 TWD') && first.includes('NT$1,818'), `the sale first, as the newest, got ${first}`);
+  const last = (await rows.last().innerText()).replace(/\s+/g, ' ');
+  check(last.includes('2026-05-07') && last.includes('Buy 買進') && last.includes('2 × 150 USD') && last.includes('NT$9,572'), `the first buy at its own rate with its fee, got ${last}`);
+  await snap('cash-book');
+  // One part at a time; a line opens what it was recorded as.
+  await section.getByRole('link', { name: 'Dividends 股利' }).click();
+  await page.waitForURL('**/holdings?flow=dividends**');
+  check((await rows.count()) === 1 && (await rows.first().innerText()).includes('0.62 USD × 32.2'), 'the dividends alone');
+  check((await section.getByRole('link', { name: 'Windfall 大額資金' }).count()) === 0, 'no windfall part before one arrives');
+  await section.getByRole('link', { name: 'Trades 買賣' }).click();
+  await page.waitForURL('**/holdings?flow=trades**');
+  check((await rows.count()) === 8, 'the trades alone');
+  await rows.first().getByRole('link').click();
+  await page.waitForURL(/\/holdings\/\d+$/);
+  check((await page.inputValue('input[name=ticker]')) === '00692', "a trade's line opens the trade");
+  await page.goto(`${BASE}/cash-flows/new`);
+  const types = await page.locator('select[name=type] option').evaluateAll((options) => options.map((option) => option.value));
+  check(types.join() === 'windfall,dividend,withdrawal' && (await page.inputValue('select[name=type]')) === 'dividend', `what no trade tells, got ${types}`);
 });
 
 let flowId;
@@ -388,12 +419,130 @@ await step('cash flows: the windfall arriving always lands in the windfall pool,
   await page.waitForURL('**/holdings?saved=flow-added**');
   const row = page.locator('#cash-flows tbody tr', { hasText: 'Windfall arrives' });
   check((await row.innerText()).includes('NT$1,000,000'), 'listed in TWD');
+  // The windfall's own tiles and part of the book: nothing bought from it yet.
+  check((await bookFact('Windfall arrived')).includes('NT$1,000,000'), 'the windfall arrived');
+  const deployed = await bookFact('Windfall deployed');
+  check(deployed.includes('NT$0') && deployed.includes('0%・等待 NT$1,000,000'), `none deployed yet, got ${deployed}`);
+  check((await page.locator('#cash-flows').getByRole('link', { name: 'Windfall 大額資金' }).count()) === 1, 'the windfall part is offered');
   await row.getByRole('link').click();
   await page.waitForURL(/\/cash-flows\/\d+$/);
   await page.getByRole('button', { name: /Delete/ }).click();
   await page.waitForURL('**/holdings?saved=flow-deleted**');
   await page.getByText('已刪除現金流').waitFor();
   check((await page.locator('#cash-flows tbody tr', { hasText: 'Windfall arrives' }).count()) === 0, 'gone from the list');
+});
+
+await step('dividends: one paid is asked about with its amount worked out, recorded from its tile or skipped; one ahead waits; a reinvesting fund is not asked; the banner leads there and ✕ hides it', async () => {
+  // As the nightly job saves them: 00692 paid today, BIL read off the closes (no payment date), BNDW paid weeks ago, 2330 still ahead.
+  const saved = await asJob('dividend_events', {
+    method: 'POST',
+    body: JSON.stringify([
+      { ticker: '00692', ex_date: taipeiDay(-20), pay_date: taipeiDay(0), amount: 1.92, currency: 'TWD', source: 'finmind' },
+      { ticker: 'BIL', ex_date: taipeiDay(-9), pay_date: null, amount: 0.31, currency: 'USD', source: 'adjusted_close' },
+      { ticker: 'BNDW', ex_date: taipeiDay(-30), pay_date: taipeiDay(-27), amount: 0.2, currency: 'USD', source: 'nasdaq' },
+      { ticker: '2330', ex_date: taipeiDay(-3), pay_date: taipeiDay(18), amount: 7, currency: 'TWD', source: 'finmind' },
+    ]),
+  });
+  check(saved.ok, `the dividends saved as the job would, got ${saved.status}`);
+  const events = await saved.json();
+  let recorded;
+  try {
+    await page.goto(`${BASE}/holdings`);
+    const due = page.locator('#dividends-due .alert-tile');
+    check((await due.count()) === 3, `three to confirm, got ${await due.count()}`);
+    // 80 shares of 00692 were held before the ex-dividend date: 80 × 1.92 = NT$153.60.
+    const tw = (await due.filter({ hasText: '00692' }).innerText()).replace(/\s+/g, ' ');
+    check(tw.includes('≈ NT$154') && tw.includes(`發放 ${taipeiDay(0)}`) && tw.includes('股數 80') && tw.includes('每股 1.92 TWD') && !tw.includes('預扣'), `the Taiwan dividend, got ${tw}`);
+    // 3 BIL × US$0.31, 30% withheld = US$0.65, NT$21 at 32.40; asked 7 days after the ex-dividend date.
+    const us = (await due.filter({ hasText: 'BIL' }).innerText()).replace(/\s+/g, ' ');
+    check(us.includes('≈ NT$21') && us.includes(`除息 ${taipeiDay(-9)}`) && us.includes('預扣 30%') && us.includes('每股 0.31 USD'), `the US dividend, got ${us}`);
+    check((await bookFact('Dividends')).includes('待確認 3 筆'), 'the tile counts them');
+    await page.locator('#dividends-upcoming summary').click();
+    const ahead = (await page.locator('#dividends-upcoming').innerText()).replace(/\s+/g, ' ');
+    check(ahead.includes('即將配息 1 筆') && ahead.includes('2330') && ahead.includes(taipeiDay(18)) && ahead.includes('NT$21'), `2330 is still ahead, got ${ahead}`);
+    await snap('dividends-due');
+
+    // On a phone the tiles and the banner fit the screen, and every answer is a fingertip tall.
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await page.goto(`${BASE}/holdings#dividends-due`);
+      await due.first().waitFor();
+      const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+      const small = (selector) => page.evaluate((query) => [...document.querySelectorAll(query)].filter((el) => el.checkVisibility() && el.getBoundingClientRect().height < 44).length, selector);
+      check((await fits()) && (await small('#dividends-due .alert-actions a, #dividends-due .alert-actions button')) === 0, 'the tiles fit a phone');
+      await snap('dividends-due-phone', page, false);
+      await page.goto(`${BASE}/performance`);
+      await page.locator('.guide-banner').first().waitFor();
+      check((await fits()) && (await small('.guide-banner a, .guide-banner button')) === 0, 'the banner fits a phone');
+      await snap('banner-phone', page, false);
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+
+    // On another page the banner says so and leads here.
+    await page.goto(`${BASE}/performance`);
+    const banner = page.locator('.guide-banner').first();
+    await banner.waitFor();
+    check((await banner.innerText()).includes('3 筆配息待確認。'), `the banner counts them, got ${await banner.innerText()}`);
+    await banner.getByRole('link', { name: /查看/ }).click();
+    await page.waitForURL('**/holdings#dividends-due');
+    check((await page.locator('.guide-banner', { hasText: '配息' }).count()) === 0, 'no dividend banner on the page that shows them');
+
+    // A holding whose income is reinvested by itself is not asked about; set back, it is again.
+    await page.locator('#dividend-settings summary').click();
+    await page.getByRole('button', { name: /BNDW 不再詢問/ }).click();
+    await page.waitForURL('**/holdings?saved=dividend-setting**');
+    await page.getByText('已儲存配息詢問設定。').waitFor();
+    check((await due.count()) === 2 && (await page.locator('#dividend-settings tr', { hasText: 'BNDW' }).innerText()).includes('自動再投入：不詢問'), 'BNDW no longer asked');
+    await page.getByRole('button', { name: /BNDW 改為詢問/ }).click();
+    await page.waitForURL('**/holdings?saved=dividend-setting**');
+    await due.nth(2).waitFor();
+    // Skipped: not asked again.
+    await due.filter({ hasText: 'BNDW' }).getByRole('button', { name: /Skip/ }).click();
+    await page.waitForURL('**/holdings?saved=dividend-skipped**');
+    await page.getByText('已略過這筆配息，不再詢問。').waitFor();
+    check((await due.count()) === 2 && (await due.filter({ hasText: 'BNDW' }).count()) === 0, 'BNDW skipped');
+
+    // Recorded from its tile: the form comes filled in, and the amount is what the broker paid.
+    await due.filter({ hasText: '00692' }).getByRole('link', { name: /Record/ }).click();
+    await page.waitForURL('**/cash-flows/new?dividend=**');
+    const field = (name) => page.inputValue(`[name=${name}]`);
+    check((await field('type')) === 'dividend' && (await field('ticker')) === '00692' && (await field('amount')) === '153.6' && (await field('flowDate')) === taipeiDay(0) && (await field('pool')) === 'regular', `the form filled in, got ${await field('ticker')} ${await field('amount')} ${await field('flowDate')}`);
+    check((await field('note')) === `${taipeiDay(-20)} 除息` && (await page.locator('#dividend-filled').innerText()).includes('80 股 × 1.92 TWD'), 'the note says what it was worked out from');
+    await page.fill('input[name=amount]', '154');
+    await page.click('main button[type=submit]');
+    await page.waitForURL('**/holdings?saved=flow-added**');
+    const row = page.locator('#cash-flows table.book tbody tr').first();
+    check((await row.innerText()).replace(/\s+/g, ' ').includes('Dividend 股利 00692') && (await row.innerText()).includes('NT$154'), 'the dividend is in the book');
+    check((await due.count()) === 1 && (await due.innerText()).includes('BIL'), 'answered: only BIL is left');
+    await row.getByRole('link').click();
+    await page.waitForURL(/\/cash-flows\/\d+$/);
+    recorded = page.url().split('/').pop();
+
+    // One left: the banner names it, with the form one tap away; ✕ puts it off on every device.
+    await page.goto(`${BASE}/performance`);
+    const one = page.locator('.guide-banner', { hasText: 'BIL' });
+    await one.waitFor();
+    check((await one.innerText()).includes('BIL 配息約 NT$21，要記一筆嗎？') && (await one.getByRole('link').getAttribute('href'))?.startsWith('/cash-flows/new?dividend='), `the banner asks, got ${await one.innerText()}`);
+    check((await one.getByRole('button', { name: /略過/ }).count()) === 1, 'with a skip');
+    await snap('banner', page, false);
+    await one.getByRole('button', { name: /稍後再說/ }).click();
+    await one.waitFor({ state: 'detached' });
+    await page.reload();
+    await page.getByRole('heading', { level: 1 }).waitFor();
+    check((await page.locator('.guide-banner', { hasText: 'BIL' }).count()) === 0, 'still hidden after a reload');
+    const bil = events.find((event) => event.ticker === 'BIL');
+    const closed = await (await asJob(`banner_dismissals?select=key,until&key=eq.dividend:${bil.id}:regular`)).json();
+    check(closed.length === 1 && closed[0].until === taipeiDay(7), `hidden for 7 days, got ${JSON.stringify(closed)}`);
+    // The tile on the holdings page still asks: ✕ only puts the banner off.
+    await page.goto(`${BASE}/holdings`);
+    check((await due.count()) === 1, 'the tile stays');
+  } finally {
+    // The steps after this read the seed's dividends and returns: the demo is put back.
+    if (recorded) check((await asJob(`cash_flows?id=eq.${recorded}`, { method: 'DELETE' })).ok, 'the recorded dividend removed');
+    check((await asJob(`dividend_events?id=in.(${events.map((event) => event.id).join(',')})`, { method: 'DELETE' })).ok, 'the dividends removed');
+    check((await asJob('banner_dismissals?key=like.dividend*', { method: 'DELETE' })).ok, 'the closed banner forgotten');
+  }
 });
 
 await step('adding a security leads to a new trade in it', async () => {
@@ -1839,6 +1988,22 @@ await step('breaking news: an alert saved by the job is listed with its outlets 
   }
 });
 
+await step('dividends: the push job asks once on the day a dividend is paid', async () => {
+  const saved = await asJob('dividend_events', { method: 'POST', body: JSON.stringify([{ ticker: '2330', ex_date: taipeiDay(-20), pay_date: taipeiDay(0), amount: 7, currency: 'TWD', source: 'finmind' }]) });
+  check(saved.ok, `a dividend saved as the job would, got ${saved.status}`);
+  const [event] = await saved.json();
+  try {
+    const notify = () => promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/notify.ts'], { cwd: REPO, timeout: 120_000, env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`, SUPABASE_SECRET_KEY: SECRET_KEY } });
+    await notify();
+    await notify();
+    const planned = await (await asJob('notifications?select=key,title,body,url&kind=eq.dividend')).json();
+    check(planned.length === 1 && planned[0].key === `${event.id}:regular` && planned[0].title === '2330 配息', `pushed once, got ${JSON.stringify(planned)}`);
+    check(new RegExp(`^${taipeiDay(0)} 發放，約 NT\\$[\\d,]+：要記一筆股利嗎？$`).test(planned[0].body) && planned[0].url === `/cash-flows/new?dividend=${event.id}&pool=regular`, `a title and one line, opening the form, got ${JSON.stringify(planned)}`);
+  } finally {
+    check((await asJob(`dividend_events?id=eq.${event.id}`, { method: 'DELETE' })).ok, 'the dividend removed');
+  }
+});
+
 await step('volatility alert: a score crossing 8 drafts the panic proposal, explained, with its push through the quiet hours and its row in the alert record (N8 step 3)', async () => {
   const rest = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) } });
   const yesterday = new Date(Date.parse(`${taipeiToday}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
@@ -2420,6 +2585,22 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const apple = await page.locator('main table').first().innerText();
     check(new RegExp(`Going-concern opinion[\\s\\S]*檢查於 ${taipeiToday}`).test(apple), 'the going-concern search ran');
     await snap('red-flags-after-job');
+  });
+
+  await step("dividends after the job: each holding's live dividends looked up at its source and saved (the dividend prompt)", async () => {
+    const res = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/job_runs?select=detail&job=eq.nightly_prices&order=id`, { headers: { apikey: SECRET_KEY } });
+    const [first] = (await res.json()).map((row) => row.detail?.dividends ?? null);
+    // Taiwan from FinMind, a Nasdaq-listed stock from Nasdaq, an NYSE Arca fund from Alpha Vantage or its adjusted closes.
+    check(first?.checked?.['2330'] === 'finmind' && first?.checked?.AAPL === 'nasdaq' && ['alphavantage', 'adjusted_close'].includes(first?.checked?.VT) && first.saved >= 2, `looked up at each source, got ${JSON.stringify(first)}`);
+    check(!('AGGU' in first.checked), 'a reinvesting fund is not looked up');
+    const saved = await (await fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/dividend_events?select=ticker,ex_date,pay_date,amount,source&source=neq.demo&order=ticker,ex_date`, { headers: { apikey: SECRET_KEY } })).json();
+    // Both pay every quarter, so the last three months hold one of each, with its payment date.
+    for (const [ticker, source] of [['2330', 'finmind'], ['AAPL', 'nasdaq']]) {
+      const rows = saved.filter((row) => row.ticker === ticker);
+      check(rows.length >= 1 && rows.every((row) => row.source === source && row.pay_date >= row.ex_date && row.amount > 0), `${ticker} from ${source} with its payment date, got ${JSON.stringify(rows)}`);
+    }
+    await page.goto(`${BASE}/data`);
+    check(/配息：已查詢 [^\n]*2330（FinMind）/.test(await page.locator('#dividends').innerText()), 'the data status page lists the lookups');
   });
 
   await step("look-through after the job: VT's live file from Vanguard and 00692's from Fubon, with sectors (F14)", async () => {

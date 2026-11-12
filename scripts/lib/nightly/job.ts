@@ -16,8 +16,10 @@
  * week's scan of each company due one, before the rules read it. Since step 6, once a month, it
  * reads each held fund's holdings file from its issuer and the GICS sectors of the companies in
  * them, for the combined look-through (F14). Since step 7 it loads the sector tab's proxies (N7):
- * the Select Sector SPDR funds' and the TWSE industry indices' daily closes. Everything outside this file
- * is injected, so the whole run can be tested without a network or a database.
+ * the Select Sector SPDR funds' and the TWSE industry indices' daily closes. Since 2026-11-12 it
+ * looks up each holding's cash dividends (the dividend prompt): ex-dividend date, cash a share and
+ * payment date, from FinMind, Nasdaq, the adjusted closes it just loaded and Alpha Vantage.
+ * Everything outside this file is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
 import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
@@ -28,8 +30,10 @@ import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '..
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
 import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
+import type { DividendPlan } from '../../../lib/models/dividends.ts';
 import { avDaily, avEstimates, avOverview, avSymbol, avUrl, avWeeklyAdjusted } from '../feeds/alphavantage.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, FinMind, goldCloses, splitFactors, taiwanPrices, usPrices } from '../feeds/finmind.ts';
+import { avDividends, avDividendUrl, dividendsFromAdjusted, finmindDividends, NASDAQ_HEADERS, nasdaqDividends, nasdaqDividendUrl, type DividendRow } from '../feeds/dividends.ts';
 import { FRED_SERIES, fredMonthly, fredRates, fredUrl } from '../feeds/fred.ts';
 import { frenchSeries, frenchUrl } from '../feeds/french.ts';
 import { REGIONS } from '../../../lib/models/five-factor.ts';
@@ -144,7 +148,20 @@ export interface Store {
   estimatesPlan?(today: string): Promise<Array<{ ticker: string; currency: string }> | undefined>;
   /** Replaces each stock's saved consensus (analyst_estimates). */
   saveEstimates?(rows: readonly EstimateRow[]): Promise<void>;
+  /** The holdings whose dividends to look up (config dividends), with those already saved; undefined before its migration. */
+  dividendPlan?(today: string): Promise<DividendPlan | undefined>;
+  /** Upserts dividends by security and ex-dividend date (dividend_events); Hugo's "skip" stays. */
+  saveDividends?(rows: readonly DividendRow[]): Promise<void>;
+  /** Notes the day Alpha Vantage answered for these securities' dividends (securities.dividends_checked_on). */
+  markDividendsChecked?(tickers: readonly string[], today: string): Promise<void>;
 }
+
+/** A dividend read off the closes is asked about at Alpha Vantage only while it is this new: the free key allows 25 requests a day. */
+const AV_DIVIDEND_DAYS = 14;
+/** And each security Nasdaq does not carry once in this many days: FinMind's adjusted closes can take over ten days to show a dividend. */
+const AV_DIVIDEND_EVERY = 7;
+/** FinMind dates a Taiwan distribution by its announcement, up to a year before the ex-dividend date. */
+const TW_DIVIDEND_DAYS = 400;
 
 /** A stock's consensus as analyst_estimates keeps it. */
 export interface EstimateRow {
@@ -189,6 +206,8 @@ export interface RunDetail {
   redFlags?: { scanned: string[]; events: number };
   /** The analysts' estimates loaded tonight (F12 forward P/E), and those Alpha Vantage refused; neither changes the run's status. */
   estimates?: { saved: string[]; failed: string[] };
+  /** The holdings' dividends looked up tonight (the dividend prompt): each ticker's source, the rows saved, and the lookups that failed; none changes the run's status. */
+  dividends?: { checked: Record<string, string>; saved: number; failed: string[] };
   /** The funds' holdings files read tonight (F14); `rows` is the lines, `latest` the file's date. */
   holdings?: Record<string, Loaded>;
 }
@@ -776,6 +795,67 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
       if (due.length > 0) detail.estimates = { saved: rows.map((row) => row.ticker), failed };
     } catch (err) {
       detail.estimates = { saved: [], failed: [`${DATABASE_ERRORS[1]}: ${message(err)}`] };
+    }
+  }
+
+  // Each holding's cash dividends, for the dividend prompt: Taiwan from FinMind (both dates); US
+  // from Nasdaq where it carries the symbol, else read off the adjusted closes loaded above, with
+  // Alpha Vantage asked once a week and for the payment date of a dividend that new. Optional
+  // data: a lookup that fails is noted and leaves what is saved, without marking the night partial.
+  if (store.dividendPlan && store.saveDividends) {
+    try {
+      const plan = await store.dividendPlan(today);
+      if (plan) {
+        const rows: DividendRow[] = [];
+        const checked: Record<string, string> = {};
+        const failed: string[] = [];
+        const answered: string[] = [];
+        for (const { ticker, market, currency, etf, known, checkedOn } of plan.holdings) {
+          try {
+            if (market === 'TW') {
+              rows.push(...finmindDividends(await finmind.rows('TaiwanStockDividend', { dataId: ticker, start: addDays(plan.since, -TW_DIVIDEND_DAYS) }), ticker));
+              checked[ticker] = 'finmind';
+            } else if (market === 'US') {
+              let listed: DividendRow[] | undefined;
+              try {
+                listed = nasdaqDividends(await get(nasdaqDividendUrl(ticker, etf), NASDAQ_HEADERS), ticker, currency);
+              } catch (err) {
+                failed.push(`${ticker}: nasdaq: ${message(err)}`);
+              }
+              if (listed) {
+                rows.push(...listed);
+                checked[ticker] = 'nasdaq';
+                continue;
+              }
+              // A dividend already saved keeps its row: only a new ex-date is added from the closes.
+              const read = dividendsFromAdjusted(prices, ticker, currency, plan.since).filter((row) => !known[row.exDate]);
+              const fresh = addDays(today, -AV_DIVIDEND_DAYS);
+              const wanting = read.some((row) => row.exDate >= fresh) || Object.entries(known).some(([exDate, saved]) => exDate >= fresh && saved.payDate === null);
+              const due = checkedOn === null || checkedOn <= addDays(today, -AV_DIVIDEND_EVERY);
+              let paid: DividendRow[] = [];
+              if ((wanting || due) && avKey) {
+                try {
+                  paid = avDividends(await get(avDividendUrl(ticker, avKey)), ticker, currency);
+                  answered.push(ticker);
+                } catch (err) {
+                  failed.push(`${ticker}: alphavantage: ${message(err)}`);
+                }
+              }
+              const dated = new Set(paid.map((row) => row.exDate));
+              rows.push(...paid, ...read.filter((row) => !dated.has(row.exDate)));
+              checked[ticker] = answered.includes(ticker) ? 'alphavantage' : 'adjusted_close';
+            }
+          } catch (err) {
+            failed.push(`${ticker}: ${message(err)}`);
+          }
+        }
+        const keep = unique(rows.filter((row) => row.exDate >= plan.since), (row) => `${row.ticker}|${row.exDate}`);
+        if (keep.length > 0) await store.saveDividends(keep);
+        if (answered.length > 0) await store.markDividendsChecked?.(answered, today);
+        if (plan.holdings.length > 0) detail.dividends = { checked, saved: keep.length, failed };
+      }
+    } catch (err) {
+      detail.dividends = { checked: {}, saved: 0, failed: [`${DATABASE_ERRORS[1]}: ${message(err)}`] };
     }
   }
 

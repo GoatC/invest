@@ -22,6 +22,7 @@ const KIND: Record<NotificationRecord['kind'], Bilingual> = {
   test: { en: 'Test', zh: '測試' },
   event: { en: 'Event reminder', zh: '事件提醒' },
   news: { en: 'Breaking news', zh: '前沿新聞' },
+  dividend: { en: 'Dividend paid', zh: '配息入帳' },
 };
 
 function hhmm(minutes: number): string {

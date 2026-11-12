@@ -1,7 +1,7 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadEstimatePlan, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshCmaEstimates, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { loadDividendPlan, loadEstimatePlan, markDividendsChecked, saveDividendEvents, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshCmaEstimates, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
 import { readFactorSettings } from '../../../lib/models/five-factor.ts';
 import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
@@ -149,6 +149,9 @@ export function supabaseStore(client: SupabaseClient): Store {
       );
       check('analyst_estimates', error);
     },
+    dividendPlan: (today) => loadDividendPlan(client, today),
+    saveDividends: (rows) => saveDividendEvents(client, rows),
+    markDividendsChecked: (tickers, today) => markDividendsChecked(client, tickers, today),
     redFlagCompanies: (today) => loadRedFlagCompanies(client, today),
     async saveProfiles(rows) {
       const { error } = await client.from('company_profiles').upsert(rows.map(profileColumns), { onConflict: 'ticker' });

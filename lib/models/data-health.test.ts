@@ -78,6 +78,7 @@ describe('parseRunDetail', () => {
       redFlags: { scanned: ['AAPL'], events: 2 },
       holdings: {},
       estimates: null,
+      dividends: null,
     });
   });
 

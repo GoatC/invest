@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 import { Bi } from '@/components/bi';
 import { DataHealthBanner, hasNotice } from '@/components/data-status';
@@ -13,6 +13,7 @@ import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
 
 import { signOut } from './actions';
+import { Banners } from './banner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -78,6 +79,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           </DataToast>
         )}
         {signedIn && <SubNav />}
+        {signedIn && (
+          <Suspense fallback={null}>
+            <Banners />
+          </Suspense>
+        )}
         <main className="page">{children}</main>
         {signedIn && <TableCards />}
         <footer className="site-footer">

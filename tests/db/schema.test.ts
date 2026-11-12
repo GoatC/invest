@@ -18,6 +18,8 @@ import { readRegressionSettings } from '../../lib/models/regression.ts';
 import { readVolatilitySettings } from '../../lib/models/volatility.ts';
 import { readNewsSettings } from '../../lib/models/news.ts';
 import { readAutoCmaSettings } from '../../lib/models/auto-cma.ts';
+import { readBannerSettings } from '../../lib/models/banners.ts';
+import { readDividendSettings } from '../../lib/models/dividends.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -33,7 +35,8 @@ const KEY_MISSING = '23503';
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
 // analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
-// F6's auto-scored assumptions add cma_estimates.
+// F6's auto-scored assumptions add cma_estimates; the dividend prompt and the in-app banner (2026-11-12)
+// add dividend_events and banner_dismissals.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
@@ -41,6 +44,7 @@ const EXPECTED_TABLES = [
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
   'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts', 'cma_estimates',
+  'dividend_events', 'banner_dismissals',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -60,7 +64,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts and cma_estimates', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events and banner_dismissals', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1176,5 +1180,65 @@ describe('auto-scored assumptions (F6)', () => {
     await db.query(`update public.cma_estimates set volatility = 0.2 where class_id = 'tactical_themes'`);
     assert.equal(await scalar(db, `select count(*) from public.audit_log where table_name = 'cma_estimates'`), 0);
     await db.query('delete from public.cma_estimates');
+  });
+});
+
+describe('dividend prompts and the in-app banner (2026-11-12)', () => {
+  it('seeds config dividends and banners, readable by the models', async () => {
+    const dividends = readDividendSettings(await scalar(db, `select value from public.config where key = 'dividends'`));
+    assert.deepEqual(dividends, { lookbackDays: 60, matchDays: 30, payLagDays: { US: 7, TW: 30, UK: 14 }, withholding: { US: 0.3 }, push: true, pushDays: 3 });
+    const banners = readBannerSettings(await scalar(db, `select value from public.config where key = 'banners'`));
+    assert.deepEqual([banners?.enabled, banners?.snoozeDays, banners?.balanceStaleDays], [true, 7, 45]);
+    assert.deepEqual(Object.entries(banners?.kinds ?? {}).filter(([, on]) => !on), []);
+  });
+
+  it('marks the accumulating Irish class as reinvesting, and every other security as asked about', async () => {
+    assert.equal(await scalar(db, `select dividends_reinvested from public.securities where ticker = 'AGGU'`), true);
+    assert.equal(await scalar(db, `select count(*) from public.securities where dividends_reinvested and ticker <> 'AGGU'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.securities where dividends_checked_on is not null`), 0);
+  });
+
+  it('keeps one dividend per security and ex-date; the job upserts it and the owner’s skip stays', async () => {
+    const insert = (values: string) => `insert into public.dividend_events (ticker, ex_date, pay_date, amount, currency, source) values ${values}`;
+    // The job saves it read off the closes; the owner skips it; the next night Alpha Vantage gives the payment date and the exact amount.
+    await db.query(insert(`('VT', '2026-09-18', null, 0.41, 'USD', 'adjusted_close')`));
+    await as(db, 'owner', async (tx) => assert.equal((await tx.query(`update public.dividend_events set skipped_pools = '{regular}' where ticker = 'VT' and ex_date = '2026-09-18'`)).affectedRows, 1));
+    await db.query(`update public.dividend_events set skipped_pools = '{regular}' where ticker = 'VT' and ex_date = '2026-09-18'`);
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(`${insert(`('VT', '2026-09-18', '2026-09-22', 0.4084, 'USD', 'alphavantage')`)} on conflict (ticker, ex_date) do update set pay_date = excluded.pay_date, amount = excluded.amount, source = excluded.source`);
+      const row = (await tx.query<{ pay_date: string; amount: string; skipped_pools: string[] }>(`select pay_date::text, amount, skipped_pools from public.dividend_events where ticker = 'VT' and ex_date = '2026-09-18'`)).rows[0];
+      assert.deepEqual([row?.pay_date, Number(row?.amount), row?.skipped_pools], ['2026-09-22', 0.4084, ['regular']]);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-09-18', null, 0.41, 'USD', 'demo')`)))), '23505');
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-06-18', '2026-06-01', 0.56, 'USD', 'demo')`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-06-18', null, 0, 'USD', 'demo')`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('NOPE', '2026-06-18', null, 0.56, 'USD', 'demo')`)))), KEY_MISSING);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`update public.dividend_events set skipped_pools = '{satellite}' where ticker = 'VT'`))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(insert(`('VT', '2026-06-18', null, 0.56, 'USD', 'demo')`)))), DENIED);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.dividend_events'), 0));
+    await db.query(`delete from public.dividend_events where ticker = 'VT' and ex_date = '2026-09-18'`);
+  });
+
+  it('remembers a closed banner for the owner only', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.banner_dismissals (key, until) values ('push', '2026-11-19')`);
+      await tx.query(`insert into public.banner_dismissals (key, until) values ('push', '2026-11-26') on conflict (key) do update set until = excluded.until`);
+      assert.equal(await scalar(tx, `select until::text from public.banner_dismissals where key = 'push'`), '2026-11-26');
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`insert into public.banner_dismissals (key, until) values ('', '2026-11-19')`))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(`insert into public.banner_dismissals (key, until) values ('first_trade', '2026-11-19')`))), DENIED);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.banner_dismissals'), 0));
+    await db.query('delete from public.banner_dismissals');
+  });
+
+  it('lets the push job plan a dividend push, once', async () => {
+    const insert = `insert into public.notifications (kind, key, title, body, url, send_after) values ('dividend', '1:regular', 'VT 配息', '2026-09-22 發放，約 NT$18：要記一筆股利嗎？', '/cash-flows/new?dividend=1&pool=regular', now())`;
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(insert);
+      assert.equal(await scalar(tx, `select count(*) from public.notifications where kind = 'dividend'`), 1);
+    });
+    await db.query(insert);
+    assert.equal(await errorCode(as(db, 'service_role', (tx) => tx.query(insert))), '23505');
+    await db.query(`delete from public.notifications where kind = 'dividend'`);
   });
 });
