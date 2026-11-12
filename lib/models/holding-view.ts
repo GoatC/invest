@@ -129,7 +129,7 @@ export function holdingSignals(input: SignalInput): Signal[] {
     else if (status === 'watch') out.push({ column: 'mix', kind: 'watch', label: side, href: '/allocation' });
     else if (status === 'ok') out.push({ column: 'mix', kind: 'ok', label: { en: 'Class on target', zh: '類別符合目標' }, href: '/allocation' });
   }
-  if (input.proposal) out.push({ column: 'event', kind: 'wait', label: { en: 'Proposal waiting', zh: '提案待處理' }, href: '/#proposals' });
+  if (input.proposal) out.push({ column: 'event', kind: 'wait', label: { en: 'Rule warning', zh: '規則警示' }, href: '/#proposals' });
   if (input.filing) out.push({ column: 'event', kind: 'wait', label: { en: `Filing due ${shortDate(input.filing.date)}`, zh: `${shortDate(input.filing.date)} 財報` }, href: `/valuation?t=${t}` });
   return out.sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
 }

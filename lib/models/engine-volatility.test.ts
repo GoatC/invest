@@ -135,7 +135,7 @@ describe('volatility rules', () => {
     const volatility = { scores: scores(5, 6.4), maxAgeDays: 5 };
     const dismissed = { id: 3, ruleId: 'VOLATILITY_ALERT', state: 'tense:2026-11-02', status: 'dismissed' as const, createdAt: '2026-11-02T08:00:00.000Z', expiresAt: null };
     assert.equal(draftOf(evaluate(input({ volatility, proposals: [dismissed], watch: [] })), 'VOLATILITY_ALERT'), undefined);
-    const open = { ...dismissed, status: 'open' as const, expiresAt: '2026-11-16T08:00:00.000Z' };
+    const open = { ...dismissed, status: 'open' as const };
     const panic = evaluate(input({ volatility: { scores: scores(5, 6.4, 8.1), maxAgeDays: 5 }, proposals: [open] }));
     assert.equal(draftOf(panic, 'VOLATILITY_ALERT')?.state, 'panic:2026-11-03');
     assert.deepEqual(panic.close, [{ id: 3, reason: 'superseded' }]);

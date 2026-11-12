@@ -61,8 +61,8 @@
  * as an amount; gold held in grams cannot be ordered and is reported as such.
  *
  * Noise control: a rule fires at most once per cooldown_days unless its state (what it fired on)
- * changes; an open proposal closes when it times out (config proposal_expiry_days), when its rule
- * no longer fires, or when a new state supersedes it.
+ * changes. A proposal is a standing warning (Hugo, 2026-11-12): it stays open until Hugo dismisses
+ * it, its rule no longer fires, or a new state supersedes it; it never times out.
  */
 import { isPlain } from './positions';
 import { addDays } from '../dates';
@@ -104,9 +104,14 @@ export interface EngineQuote {
   decimals: number;
 }
 
-export type ProposalStatus = 'open' | 'approved' | 'dismissed' | 'filled' | 'expired';
-export const PROPOSAL_STATUSES: readonly ProposalStatus[] = ['open', 'approved', 'dismissed', 'filled', 'expired'];
+/**
+ * open: a standing warning; dismissed: Hugo set it aside; expired: the engine closed it.
+ * filled is history only: proposals approved and marked traded before 2026-11-12.
+ */
+export type ProposalStatus = 'open' | 'dismissed' | 'filled' | 'expired';
+export const PROPOSAL_STATUSES: readonly ProposalStatus[] = ['open', 'dismissed', 'filled', 'expired'];
 
+/** timed_out is history only: before 2026-11-12 an open proposal closed after proposal_expiry_days. */
 export type ClosedReason = 'timed_out' | 'cleared' | 'superseded';
 
 /** What the engine needs to know about a proposal already saved. */
@@ -123,7 +128,7 @@ export interface ProposalRecord {
 export interface EngineInput {
   /** Today in Taipei, YYYY-MM-DD. */
   today: string;
-  /** The current time, ISO; open proposals expire against it. */
+  /** The current time, ISO. */
   now: string;
   /** Every holding, valued as on the holdings page; the engine keeps the regular pool. */
   holdings: readonly Holding[];
@@ -133,9 +138,9 @@ export interface EngineInput {
   rules: readonly EngineRule[];
   /** config dca. */
   dca: { amountTwd: number | null; dayOfMonth: number | null };
-  /** config proposal_expiry_days; null: proposals do not expire. */
+  /** config proposal_expiry_days: how many days after the debit the monthly contribution still fires. */
   expiryDays: number | null;
-  /** Proposals of the last while (every open and approved one, and recent others for the cooldown). */
+  /** Proposals of the last while (every open one, and recent others for the cooldown). */
   proposals: readonly ProposalRecord[];
   /** Each security's domicile, ISO code (US_ESTATE_TAX); without it the rule waits. */
   domiciles?: ReadonlyMap<string, string>;
@@ -371,7 +376,7 @@ export interface Check {
 
 export interface Outcome {
   checks: Check[];
-  create: Array<Draft & { expiresAt: string | null }>;
+  create: Draft[];
   close: Array<{ id: number; reason: ClosedReason }>;
   /** The windfall plan's record of the tiers fired, when a tier fired in this run. */
   windfall?: { planId: number; tiersFired: FiredTier[]; peakClose: number };
@@ -631,7 +636,7 @@ interface Context {
   classes: readonly EngineClass[];
   classById: ReadonlyMap<string, EngineClass>;
   maxBuy: number;
-  /** TWD that R1's live proposal sells of each satellite stock: drafted now or still open or approved. */
+  /** TWD that R1's live proposal sells of each satellite stock: drafted now or still open. */
   r1Trims: Map<string, number>;
   /** R1's trims as evaluated, before the decision on its proposal. */
   pendingTrims: Map<string, number>;
@@ -1502,7 +1507,6 @@ export function evaluate(raw: EngineInput): Outcome {
   const create: Outcome['create'] = [];
   const close: Outcome['close'] = [];
   let windfall: Outcome['windfall'];
-  const now = Date.parse(input.now);
 
   for (const rule of [...input.rules].sort((a, b) => order(a) - order(b) || a.id.localeCompare(b.id))) {
     const known = (CONDITIONS as readonly string[]).includes(rule.condition);
@@ -1529,12 +1533,7 @@ export function evaluate(raw: EngineInput): Outcome {
     if (!known) continue;
 
     const mine = input.proposals.filter((proposal) => proposal.ruleId === rule.id);
-    let open = mine.filter((proposal) => proposal.status === 'open');
-    // Unactioned proposals time out and are evaluated afresh.
-    for (const proposal of open) {
-      if (proposal.expiresAt !== null && Date.parse(proposal.expiresAt) <= now) close.push({ id: proposal.id, reason: 'timed_out' });
-    }
-    open = open.filter((proposal) => !close.some((closed) => closed.id === proposal.id));
+    const open = mine.filter((proposal) => proposal.status === 'open');
 
     const created = create.length;
     const live = decide(rule, check, mine, open);
@@ -1542,7 +1541,7 @@ export function evaluate(raw: EngineInput): Outcome {
     // The month's contribution leaves its satellite share to a buy-zone proposal of the month, live or filled.
     if (rule.condition === 'price_at_or_below_value_multiple') {
       const month = `${input.today.slice(0, 7)}:`;
-      const spent = mine.some((proposal) => proposal.state.startsWith(month) && ['open', 'approved', 'filled'].includes(proposal.status) && !close.some((closed) => closed.id === proposal.id));
+      const spent = mine.some((proposal) => proposal.state.startsWith(month) && ['open', 'filled'].includes(proposal.status) && !close.some((closed) => closed.id === proposal.id));
       if (live || spent) context.buyZoneTwd = (input.dca.amountTwd ?? 0) * satelliteShare(input.rules);
     }
     // A tier fires once per drawdown: the plan keeps the record once its proposal is drafted.
@@ -1560,18 +1559,16 @@ export function evaluate(raw: EngineInput): Outcome {
       for (const proposal of open) close.push({ id: proposal.id, reason: 'cleared' });
       return false;
     }
-    const active = [...open, ...mine.filter((proposal) => proposal.status === 'approved')];
-    if (active.some((proposal) => proposal.state === draft.state)) return true;
+    if (open.some((proposal) => proposal.state === draft.state)) return true;
     for (const proposal of open) close.push({ id: proposal.id, reason: 'superseded' });
-    // A contribution or a year's review dismissed or done is not proposed again; one that timed out is.
+    // A contribution or a year's review dismissed (or, before 2026-11-12, done) is not proposed again.
     if (PERIODIC.includes(rule.condition) && mine.some((proposal) => proposal.state === draft.state && (proposal.status === 'dismissed' || proposal.status === 'filled'))) return false;
     const last = [...mine].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     if (last && last.state === draft.state && daysBetween(taipeiDate(last.createdAt), input.today) < rule.cooldownDays) {
       check.cooldownUntil = addDays(taipeiDate(last.createdAt), rule.cooldownDays);
       return false;
     }
-    const expiresAt = input.expiryDays === null ? null : new Date(now + input.expiryDays * 86_400_000).toISOString();
-    create.push({ ...draft, expiresAt });
+    create.push(draft);
     return true;
   }
   return { checks, create, close, ...(windfall ? { windfall } : {}) };
@@ -1620,13 +1617,6 @@ export function readOrders(value: unknown): DraftOrder[] {
     }
   }
   return out;
-}
-
-/** An order with a new quantity (a trade) or amount (a balance); 0 drops it. */
-export function resized(order: DraftOrder, size: number): DraftOrder | undefined {
-  if (size <= 0) return undefined;
-  if (order.kind === 'trade') return { ...order, qty: size, amountTwd: size * order.price * order.fxRate };
-  return { ...order, amountTwd: size };
 }
 
 /** Money the orders take in (sales, withdrawals) and spend (purchases, deposits), TWD. */

@@ -8,7 +8,7 @@
  */
 import { money, percent, points, signedPercent, signedTwd, twd } from '../format';
 import type { Bilingual } from '../i18n';
-import { stateText } from '../proposal-text';
+import { suggestionLine } from '../proposal-text';
 import type { DataHealth } from './data-health';
 import { dcaDate, firstSaturday, type ProposalDetail } from './engine';
 import type { ClassWeight } from './rules';
@@ -150,58 +150,6 @@ function both(text: Bilingual): string {
   return text.zh;
 }
 
-/** What a proposal asks for, in a line each language. */
-function proposalAction(condition: string, state: string, detail: ProposalDetail, names: ReadonlyMap<string, Bilingual>): Bilingual {
-  switch (condition) {
-    case 'single_stock_weight_above': {
-      const cap = percent(detail.limit ?? 0, 0);
-      return { en: `Trim ${stateText(state)} back to the ${cap} cap.`, zh: `${stateText(state)} 減碼回 ${cap} 上限。` };
-    }
-    case 'satellite_weight_above': {
-      const from = percent(detail.weight ?? 0);
-      const to = percent(detail.target ?? 0, 0);
-      return { en: `Trim the satellite from ${from} back to ${to}.`, zh: `衛星部位由 ${from} 減碼回 ${to}。` };
-    }
-    case 'class_drift_exceeds': {
-      const classes = (detail.classes ?? []).map((row) => ({ name: names.get(row.id) ?? { en: row.id, zh: row.id }, drift: points(row.weight - row.target) }));
-      return {
-        en: `Rebalance: ${classes.map((row) => `${row.name.en} ${row.drift}`).join(', ')}.`,
-        zh: `再平衡：${classes.map((row) => `${row.name.zh} ${row.drift}`).join('、')}。`,
-      };
-    }
-    case 'day_after_dca':
-      return {
-        en: `Invest the ${twd(detail.contributionTwd ?? 0)} debited on ${detail.dcaDate ?? '—'} in the most underweight classes.`,
-        zh: `把 ${detail.dcaDate ?? '—'} 扣款的 ${twd(detail.contributionTwd ?? 0)} 投入最低配的類別。`,
-      };
-    case 'first_weekend_of_month':
-      return { en: 'The yearly review: rebalance the core to its targets and look over the rules.', zh: '年度檢查：核心類別回到目標，並檢視規則。' };
-    case 'tranche_due':
-      return { en: `Deploy ${twd(detail.cashTwd)} of the windfall: the tranche due ${detail.dueDate ?? '—'}.`, zh: `投入大額資金 ${twd(detail.cashTwd)}：${detail.dueDate ?? '—'} 到期的分批。` };
-    case 'index_drawdown_tier':
-      return {
-        en: `ACWI ${percent(detail.drawdown ?? 0)} below its high: deploy ${twd(detail.cashTwd)} more of the windfall now.`,
-        zh: `ACWI 自高點下跌 ${percent(detail.drawdown ?? 0)}：現在多投入大額資金 ${twd(detail.cashTwd)}。`,
-      };
-    case 'volatility_score_crosses': {
-      const row = detail.volatility;
-      const score = row ? row.score.toFixed(1) : '—';
-      return row?.band === 'panic'
-        ? { en: `Volatility ${score}/10, panic: sell the VIX hedge, buy the core in a first stage.`, zh: `波動分數 ${score}/10，恐慌：賣出 VIX 避險，分批買進核心。` }
-        : { en: `Volatility ${score}/10, tense: the watchlist stocks nearest their buy price.`, zh: `波動分數 ${score}/10，緊張：觀察清單中最接近買入價的個股。` };
-    }
-    case 'volatility_score_calm':
-      return { en: `Volatility ${detail.volatility?.score.toFixed(1) ?? '—'}/10, calm: a small hedge while protection is cheap.`, zh: `波動分數 ${detail.volatility?.score.toFixed(1) ?? '—'}/10，平靜：保護便宜時小量避險。` };
-    case 'us_situs_value_above': {
-      const total = money(detail.situsUsd ?? 0, 'USD', 0);
-      const limit = money(detail.limitUsd ?? 0, 'USD', 0);
-      return { en: `US assets ${total}, above the ${limit} exemption: consider Irish-domiciled ETFs.`, zh: `美國資產 ${total}，超過 ${limit} 免稅額：可考慮愛爾蘭註冊 ETF。` };
-    }
-    default:
-      return { en: 'A rule fired.', zh: '有規則觸發。' };
-  }
-}
-
 export interface ProposalForPush {
   id: number;
   /** Pushed at once, through the quiet hours (VOLATILITY_ALERT's push_in_quiet_hours, N8). */
@@ -226,15 +174,15 @@ export function proposalMessage(proposal: ProposalForPush, names: ReadonlyMap<st
     kind: 'proposal',
     key: String(proposal.id),
     title: ruleTitle(proposal.ruleId, proposal.title.zh),
-    body: both(proposalAction(proposal.condition, proposal.state, proposal.detail, names)),
+    body: both(suggestionLine(proposal.condition, proposal.state, proposal.detail, names)),
     url: `/#proposal-${proposal.id}`,
   };
 }
 
 /** The weekly review's figures (PRD Section 5). */
 export interface WeeklySummary {
+  /** Standing rule warnings (open proposals). */
   openProposals: number;
-  approvedProposals: number;
   /** The core class furthest from its target in the regular pool; null with nothing held. */
   largestDrift: { name: Bilingual; drift: number } | null;
   /** Both pools, TWD, at the newest NAV snapshot and the one a week before it. */
@@ -243,7 +191,7 @@ export interface WeeklySummary {
 }
 
 /**
- * The figures from what the app holds: proposals by status, the regular pool's class weights, and
+ * The figures from what the app holds: the standing warnings, the regular pool's class weights, and
  * both pools' value at the newest NAV snapshot and the one a week before.
  */
 export function weeklySummary(input: {
@@ -257,7 +205,6 @@ export function weeklySummary(input: {
   const furthest = core.reduce<ClassWeight | undefined>((top, row) => (!top || Math.abs(row.drift) > Math.abs(top.drift) ? row : top), undefined);
   return {
     openProposals: input.statuses.filter((status) => status === 'open').length,
-    approvedProposals: input.statuses.filter((status) => status === 'approved').length,
     largestDrift: furthest ? { name: { en: furthest.assetClass.nameEn, zh: furthest.assetClass.nameZh }, drift: furthest.drift } : null,
     valueTwd: input.valueTwd,
     weekAgoTwd: input.weekAgoTwd,
@@ -266,14 +213,11 @@ export function weeklySummary(input: {
 
 /** The three lines: rules, allocation, value (PRD Section 5); the dashboard shows the same. */
 export function summaryLines(summary: WeeklySummary): Bilingual[] {
-  const waiting = summary.openProposals + summary.approvedProposals;
+  const waiting = summary.openProposals;
   const rules: Bilingual =
     waiting === 0
       ? { en: 'Rules: all on track.', zh: '規則：全部正常。' }
-      : {
-          en: `Rules: ${waiting} proposal${waiting === 1 ? '' : 's'} waiting${summary.approvedProposals > 0 ? ` (${summary.approvedProposals} approved, to trade)` : ''}.`,
-          zh: `規則：${waiting} 份提案待處理${summary.approvedProposals > 0 ? `（其中 ${summary.approvedProposals} 份已核准、待下單）` : ''}。`,
-        };
+      : { en: `Rules: ${waiting} warning${waiting === 1 ? '' : 's'}.`, zh: `規則：${waiting} 則警示。` };
   const drift: Bilingual = summary.largestDrift
     ? { en: `Allocation: largest drift ${summary.largestDrift.name.en} ${points(summary.largestDrift.drift)}.`, zh: `配置：最大偏離為${summary.largestDrift.name.zh} ${points(summary.largestDrift.drift)}。` }
     : { en: 'Allocation: nothing held yet.', zh: '配置：尚無持股。' };
@@ -399,7 +343,7 @@ export function comingWeek(
       const debit = dcaDate(candidate, dcaDay);
       if (inWeek(debit)) events.push({ date: debit, what: { en: 'DCA debit', zh: '定期定額扣款' } });
       const proposal = addDays(debit, 1);
-      if (inWeek(proposal)) events.push({ date: proposal, what: { en: 'Monthly-contribution proposal', zh: '每月投入提案' } });
+      if (inWeek(proposal)) events.push({ date: proposal, what: { en: 'Monthly-contribution warning', zh: '每月投入提醒' } });
     }
   }
   if (weekly) {
@@ -410,7 +354,7 @@ export function comingWeek(
   if (annualMonth !== null) {
     for (const year of new Set([today.slice(0, 4), last.slice(0, 4)])) {
       const review = firstSaturday(`${year}-${String(annualMonth).padStart(2, '0')}`);
-      if (inWeek(review)) events.push({ date: review, what: { en: 'Annual review proposal', zh: '年度檢查提案' } });
+      if (inWeek(review)) events.push({ date: review, what: { en: 'Annual review warning', zh: '年度檢查提醒' } });
     }
   }
   for (const tranche of tranches) {

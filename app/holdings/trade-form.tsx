@@ -45,7 +45,6 @@ export function TradeForm({
   today,
   id,
   initial,
-  proposal,
   compact = false,
 }: {
   data: HoldingsData;
@@ -53,8 +52,6 @@ export function TradeForm({
   today: string;
   id?: number;
   initial: TradeValues;
-  /** The approved proposal this trade fills, to return to it once saved. */
-  proposal?: number;
   /** A quick entry at the top of the holdings page: date, ticker, side, quantity and price in a row, the rest folded. */
   compact?: boolean;
 }) {
@@ -64,8 +61,7 @@ export function TradeForm({
   // A rate typed by hand, or saved with the trade being edited, is never replaced by a suggestion.
   const [ownRate, setOwnRate] = useState(id !== undefined);
   const [state, formAction, pending] = useActionState(saveTrade, INITIAL_STATE);
-  // A trade from a proposal shows every field, since its fee, tax and rate need checking.
-  const [moreOpen, setMoreOpen] = useState(proposal !== undefined);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
@@ -239,7 +235,6 @@ export function TradeForm({
       className="form"
     >
       {id !== undefined && <input type="hidden" name="id" value={id} />}
-      {proposal !== undefined && <input type="hidden" name="proposal" value={proposal} />}
       {compact ? (
         <>
           <div className="form-grid quick-entry">

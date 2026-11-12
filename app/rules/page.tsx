@@ -9,7 +9,7 @@ import { DataError, loadEngineInput, loadRuleChanges, type OrderSettings, type P
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { CONDITIONS, evaluate, type Check, type EngineInput } from '@/lib/models/engine';
-import { checkText, proposalTitle, STATUS } from '@/lib/proposal-text';
+import { checkText, proposalTitle } from '@/lib/proposal-text';
 
 import { RuleForm, SettingsForm } from './forms';
 
@@ -57,14 +57,14 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
         )}
         <p>
           <Link href="/#proposals">
-            <Bi en="Go to the proposals" zh="前往提案" />
+            <Bi en="Go to the rule warnings" zh="前往規則警示" />
           </Link>
         </p>
       </section>
 
       <section id="settings" className="card form">
         <h2>
-          <Bi en="Monthly DCA, proposals and orders" zh="每月定期定額、提案與下單" />
+          <Bi en="Monthly DCA and orders" zh="每月定期定額與下單" />
         </h2>
         <SettingsForm
           initial={{
@@ -120,7 +120,7 @@ const ICON: Record<Check['outcome'], [string, string]> = {
 
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
   const evaluated = check && check.outcome !== 'later';
-  const live = proposals.find((proposal) => proposal.status === 'open' || proposal.status === 'approved');
+  const live = proposals.find((proposal) => proposal.status === 'open');
   const title: Bilingual = evaluated ? proposalTitle(rule) : { en: `${rule.id} · ${rule.feature}`, zh: `${rule.id} · ${rule.feature}` };
   return (
     <article id={`rule-${rule.id}`} className="rule-row form">
@@ -141,12 +141,9 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           {live && (
             <>
               {' '}
-              <Link href={`/${live.status === 'approved' ? '?p=approved' : ''}#proposal-${live.id}`}>
-                <Bi en={`Proposal #${live.id}`} zh={`提案 #${live.id}`} />
-              </Link>{' '}
-              <span className="small">
-                (<Bi {...STATUS[live.status]} />)
-              </span>
+              <Link href={`/#proposal-${live.id}`}>
+                <Bi en={`Warning #${live.id}`} zh={`警示 #${live.id}`} />
+              </Link>
             </>
           )}
         </p>

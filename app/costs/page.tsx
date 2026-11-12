@@ -596,12 +596,12 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
           zh={`典型下單：${twd(orderTwd)}（以 ${usdTwd} 計約 ${money(orderTwd / usdTwd, 'USD')}）。在海外買進的比例：一般投入資金池目標的 ${percent(foreignShare, 0)}，即基金在美國或倫敦上市的核心類別。`}
         />
         <Bi
-          en="Each broker's fee and FX spread on a typical order, and with its custody fee what it would cost over the plan on the share bought abroad. The broker chosen below prices the orders in proposals; the prices are starting values from a public comparison, so check each against the broker's own page."
-          zh="每家券商在一筆典型下單上的手續費與換匯價差，加上保管費在計畫期間（以在海外買進的比例計）的成本。下方選定的券商用於估算提案的下單費用；費率是公開比較文章的起始值，請到各券商官網確認。"
+          en="Each broker's fee and FX spread on a typical order, and with its custody fee what it would cost over the plan on the share bought abroad. The broker chosen below prices the orders warnings suggest; the prices are starting values from a public comparison, so check each against the broker's own page."
+          zh="每家券商在一筆典型下單上的手續費與換匯價差，加上保管費在計畫期間（以在海外買進的比例計）的成本。下方選定的券商用於估算警示建議下單的費用；費率是公開比較文章的起始值，請到各券商官網確認。"
         />
         <Bi
-          en="On the order: the fee in dollars and, with the FX spread, the share of the order it costs. A minimum fee weighs most on small orders, which is why F8 sends each month's cash to at most two classes. Over the plan counts the single-order fee, as proposals are placed as orders; a broker's DCA plan can cost less."
-          zh="這筆下單：美元手續費，以及加上換匯價差後占下單金額的比例。低消對小額下單影響最大，因此 F8 每月最多只投入兩個類別。計畫期間的成本以單筆下單費用計算（提案以單筆下單執行）；券商的定期定額可能更便宜。"
+          en="On the order: the fee in dollars and, with the FX spread, the share of the order it costs. A minimum fee weighs most on small orders, which is why F8 sends each month's cash to at most two classes. Over the plan counts the single-order fee, as suggested orders are placed one by one; a broker's DCA plan can cost less."
+          zh="這筆下單：美元手續費，以及加上換匯價差後占下單金額的比例。低消對小額下單影響最大，因此 F8 每月最多只投入兩個類別。計畫期間的成本以單筆下單費用計算（建議以單筆下單執行）；券商的定期定額可能更便宜。"
         />
       </Info>
       {bars.length > 0 && <CostBars bars={bars} label={{ en: 'What each broker would cost over the plan', zh: '各券商在計畫期間的成本' }} current={{ en: 'The broker you use', zh: '你使用的券商' }} />}

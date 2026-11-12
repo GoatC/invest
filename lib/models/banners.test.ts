@@ -54,11 +54,11 @@ describe('when a banner is needed', () => {
     assert.deepEqual([many?.text.zh, many?.action.href, many?.skip], ['2 筆配息待確認。', '/holdings#dividends-due', undefined]);
   });
 
-  it('puts an approved proposal before an open one, and names a single one', () => {
-    const [approved] = guideBanners({ ...quiet, proposals: [{ id: 12, status: 'approved' }, { id: 13, status: 'open' }] }, SETTINGS, '2026-11-12');
-    assert.deepEqual([approved?.text.zh, approved?.action.href], ['提案 #12 已核准：成交後記錄交易。', '/?p=approved#proposal-12']);
-    const [open] = guideBanners({ ...quiet, proposals: [{ id: 13, status: 'open' }, { id: 14, status: 'open' }] }, SETTINGS, '2026-11-12');
-    assert.deepEqual([open?.text.zh, open?.action.href, open?.key], ['2 份提案待決定。', '/#proposals', 'proposals:open:14']);
+  it('counts the standing warnings and leads to the one, or to all', () => {
+    const [one] = guideBanners({ ...quiet, proposals: [{ id: 12 }] }, SETTINGS, '2026-11-12');
+    assert.deepEqual([one?.text.zh, one?.action.href, one?.key], ['1 則規則警示。', '/#proposal-12', 'proposals:open:12']);
+    const [many] = guideBanners({ ...quiet, proposals: [{ id: 13 }, { id: 14 }] }, SETTINGS, '2026-11-12');
+    assert.deepEqual([many?.text.zh, many?.action.href, many?.key], ['2 則規則警示。', '/#proposals', 'proposals:open:14']);
   });
 
   it('leads the windfall step by step: its balance first, then its plan, then nothing', () => {
@@ -85,7 +85,7 @@ describe('when a banner is needed', () => {
   });
 
   it('orders by urgency, hides a dismissed one until its day, and follows the settings', () => {
-    const busy: BannerInput = { ...quiet, dividends: [due(5)], proposals: [{ id: 13, status: 'open' }], devices: 0 };
+    const busy: BannerInput = { ...quiet, dividends: [due(5)], proposals: [{ id: 13 }], devices: 0 };
     assert.deepEqual(kinds(busy), ['dividend', 'proposals', 'push']);
     assert.deepEqual(kinds({ ...busy, dismissed: new Map([['dividend:5:regular', '2026-11-19']]) }), ['proposals', 'push']);
     assert.deepEqual(kinds({ ...busy, dismissed: new Map([['dividend:5:regular', '2026-11-19']]) }, '2026-11-19'), ['dividend', 'proposals', 'push']);

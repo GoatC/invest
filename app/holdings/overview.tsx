@@ -111,7 +111,7 @@ export async function HoldingsOverview({ supabase, data, portfolio, today, view,
   const drifts = classDrifts(portfolio.classes, data.bands, total);
   const driftOf = new Map(drifts.map((row) => [row.assetClass.id, row]));
   const nextBuy = new Set(nextBuyClasses(drifts, Math.min(maxBuyClasses(rules), drifts.length)));
-  const waiting = new Set(proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved').flatMap((proposal) => proposal.orders.flatMap((order) => ('ticker' in order && typeof order.ticker === 'string' ? [order.ticker] : []))));
+  const waiting = new Set(proposals.filter((proposal) => proposal.status === 'open').flatMap((proposal) => proposal.orders.flatMap((order) => ('ticker' in order && typeof order.ticker === 'string' ? [order.ticker] : []))));
   const securities = new Map(data.securities.map((security) => [security.ticker, security]));
 
   const rows: Row[] = listed.map((holding) => {
@@ -192,7 +192,7 @@ export async function HoldingsOverview({ supabase, data, portfolio, today, view,
       <Info>
         <Bi
           en="The last session is the newest close against the one before it, loaded every night: not a live quote, and the currencies are held still. Total is market value against cost in TWD. ▲ marks a buy at its recorded price, the dashed line the average cost. Signals come from the app's own rules: R1's cap, the red-flag light (N3), the class's drift (F8; the next contribution buys the two most underweight core classes), the buy and trim zones (F12), a filing due within seven days, a proposal waiting."
-          zh="最近交易日＝最新收盤對前一個收盤，每夜載入，不是即時報價，且不計匯率變動。累計＝台幣市值對成本。▲ 為買進（登錄的成交價），虛線為平均成本。訊號全部來自 App 既有的規則：R1 個股上限、紅旗燈號（N3）、所屬類別的偏離（F8；下次扣款優先補最低配的兩個核心類別）、買入區與減碼區（F12）、七天內的財報日、等待中的提案。"
+          zh="最近交易日＝最新收盤對前一個收盤，每夜載入，不是即時報價，且不計匯率變動。累計＝台幣市值對成本。▲ 為買進（登錄的成交價），虛線為平均成本。訊號全部來自 App 既有的規則：R1 個股上限、紅旗燈號（N3）、所屬類別的偏離（F8；下次扣款優先補最低配的兩個核心類別）、買入區與減碼區（F12）、七天內的財報日、規則警示。"
         />
       </Info>
     </section>

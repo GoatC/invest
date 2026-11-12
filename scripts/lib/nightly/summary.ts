@@ -20,7 +20,7 @@ export function fullSummary(run: JobRun): string[] {
     const withVar = risk === undefined ? '' : `; with a 1-week VaR 含一週風險值: ${risk} days 天`;
     lines.push(`NAV snapshots 淨值快照: ${detail.snapshots.days} days 天, ${detail.snapshots.from} → ${detail.snapshots.to}${withVar}`);
   }
-  if (detail.rules) lines.push(`Rules 規則: ${detail.rules.created} proposals drafted 新提案, ${detail.rules.closed} closed 關閉`);
+  if (detail.rules) lines.push(`Rules 規則: ${detail.rules.created} warnings raised 新警示, ${detail.rules.closed} cleared 解除`);
   if (detail.betas) lines.push(`Betas β: ${detail.betas.saved} saved for the month 已存入本月 β`);
   if (detail.cma) lines.push(`Auto CMA 自動評分: ${detail.cma.saved.join(', ') || 'none 無'} scored 已評分${detail.cma.unscored.length > 0 ? `, ${detail.cma.unscored.join(', ')} not scorable yet 尚無可評分持股` : ''}`);
   if (detail.monteCarlo) lines.push('Monte Carlo 蒙地卡羅: re-run for the month 本月重新模擬');

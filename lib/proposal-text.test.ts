@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DraftOrder } from './models/engine';
-import { checkText, howLines, orderLine, proposalAlert, proposalTitle, stateLabel, whyLines } from './proposal-text';
+import { checkText, howLines, orderLine, proposalAlert, proposalTitle, stateLabel, suggestionLine, whyLines } from './proposal-text';
 
 const NAMES = new Map([
   ['global_bonds', { en: 'Global bonds', zh: '全球債券' }],
@@ -169,20 +169,28 @@ describe('proposal text', () => {
 });
 
 describe('proposalAlert', () => {
-  it('names the rule in place of its code and reads the volatility band', () => {
-    const tile = proposalAlert({ id: 12, ruleId: 'VOLATILITY_ALERT', state: 'tense:2026-11-07', status: 'open' }, { id: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses' });
+  it('names the rule in place of its code, reads the volatility band, and gives the Taipei day it stands since', () => {
+    const tile = proposalAlert({ id: 12, ruleId: 'VOLATILITY_ALERT', state: 'tense:2026-11-07', createdAt: '2026-11-07T17:30:00.000Z' }, { id: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses' });
     assert.equal(tile.code, undefined);
+    assert.equal(tile.tone, 'watch');
     assert.deepEqual(tile.title, { en: 'Volatility alert', zh: '波動警報' });
-    assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['狀態 待決定', '觸發 緊張 · 2026-11-07']);
+    assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['觸發 緊張 · 2026-11-07', '起 2026-11-08']);
     assert.equal(tile.href, '/#proposal-12');
   });
 
-  it('keeps a short rule code, and sends an approved proposal to its tab', () => {
-    const tile = proposalAlert({ id: 3, ruleId: 'R1', state: '2330,NVDA', status: 'approved' }, { id: 'R1', condition: 'single_stock_weight_above' });
+  it('keeps a short rule code', () => {
+    const tile = proposalAlert({ id: 3, ruleId: 'R1', state: '2330,NVDA', createdAt: '2026-11-01T01:00:00.000Z' }, { id: 'R1', condition: 'single_stock_weight_above' });
     assert.equal(tile.code, 'R1');
-    assert.equal(tile.tone, 'info');
-    assert.deepEqual(tile.chips?.map((chip) => chip.value), ['待下單', '2330, NVDA']);
-    assert.equal(tile.href, '/?p=approved#proposal-3');
+    assert.deepEqual(tile.chips?.map((chip) => chip.value), ['2330, NVDA', '2026-11-01']);
     assert.equal(stateLabel('satellite'), undefined);
+    assert.equal(stateLabel('global_bonds:under,strategic_cash:over'), undefined);
+  });
+});
+
+describe('suggestionLine', () => {
+  it('says what a warning suggests in a line', () => {
+    assert.deepEqual(suggestionLine('single_stock_weight_above', '2330', { poolTwd: 200_000, cashTwd: 0, leftTwd: 0, limit: 0.05 }, new Map()), { en: 'Trim 2330 back to the 5% cap.', zh: '2330 減碼回 5% 上限。' });
+    assert.deepEqual(suggestionLine('red_flag_worsens', 'AAPL:2026-10-14', { poolTwd: 0, cashTwd: 0, leftTwd: 0 }, new Map()), { en: 'AAPL: the red-flag light worsened; review it.', zh: 'AAPL 的紅旗燈號轉差：請重新檢視。' });
+    assert.deepEqual(suggestionLine('unknown', '', { poolTwd: 0, cashTwd: 0, leftTwd: 0 }, new Map()), { en: 'A rule fired.', zh: '有規則觸發。' });
   });
 });

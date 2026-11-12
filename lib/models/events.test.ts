@@ -68,7 +68,7 @@ describe('event calendar', () => {
       names: new Map(),
       weekly: null,
       weeklyKeys: new Set<string>(),
-      summary: { openProposals: 0, approvedProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
+      summary: { openProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
       health: { alert: false, misses: 0 },
       lastGoodRunId: null,
       quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },

@@ -69,8 +69,7 @@ describe('the weekly review time', () => {
 });
 
 const SUMMARY: WeeklySummary = {
-  openProposals: 2,
-  approvedProposals: 1,
+  openProposals: 3,
   largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.129 },
   valueTwd: 101_000,
   weekAgoTwd: 100_000,
@@ -79,11 +78,11 @@ const SUMMARY: WeeklySummary = {
 describe('messages', () => {
   it('sums the week up in three lines: rules, allocation, value', () => {
     assert.deepEqual(summaryLines(SUMMARY), [
-      { en: 'Rules: 3 proposals waiting (1 approved, to trade).', zh: '規則：3 份提案待處理（其中 1 份已核准、待下單）。' },
+      { en: 'Rules: 3 warnings.', zh: '規則：3 則警示。' },
       { en: 'Allocation: largest drift Global bonds −12.9 pp.', zh: '配置：最大偏離為全球債券 −12.9 pp。' },
       { en: 'Value: NT$101,000, +NT$1,000 (+1.0%) this week.', zh: '市值：NT$101,000，本週 +NT$1,000（+1.0%）。' },
     ]);
-    const quiet = summaryLines({ openProposals: 0, approvedProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null });
+    const quiet = summaryLines({ openProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null });
     assert.deepEqual(
       quiet.map((line) => line.en),
       ['Rules: all on track.', 'Allocation: nothing held yet.', 'Value: no NAV snapshot yet.'],
@@ -173,20 +172,20 @@ describe('weeklySummary', () => {
     assert.ok(bonds && stocks);
     bonds.drift = -0.05;
     stocks.drift = 0.08;
-    const summary = weeklySummary({ statuses: ['open', 'approved', 'open'], classes, poolTwd: 100_000, valueTwd: 100_000, weekAgoTwd: null });
+    const summary = weeklySummary({ statuses: ['open', 'dismissed', 'open'], classes, poolTwd: 100_000, valueTwd: 100_000, weekAgoTwd: null });
     // The satellite class drifts more, but R2 watches the satellite as a whole: the core's largest is bonds.
-    assert.deepEqual(summary, { openProposals: 2, approvedProposals: 1, largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.05 }, valueTwd: 100_000, weekAgoTwd: null });
+    assert.deepEqual(summary, { openProposals: 2, largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.05 }, valueTwd: 100_000, weekAgoTwd: null });
     assert.equal(weeklySummary({ statuses: [], classes, poolTwd: 0, valueTwd: null, weekAgoTwd: null }).largestDrift, null);
   });
 });
 
 describe('comingWeek', () => {
-  it('lists the DCA debit and the proposal after it, the weekly review and January review in the next seven days', () => {
+  it('lists the DCA debit and the warning after it, the weekly review and January review in the next seven days', () => {
     // Thursday 22 October 2026, DCA on the 26th: the debit, the proposal the day after, Sunday's review.
     assert.deepEqual(comingWeek('2026-10-22', 26, SUNDAY_8PM, 1), [
       { date: '2026-10-25', time: '20:00', what: { en: 'Weekly review push', zh: '每週檢視推播' } },
       { date: '2026-10-26', what: { en: 'DCA debit', zh: '定期定額扣款' } },
-      { date: '2026-10-27', what: { en: 'Monthly-contribution proposal', zh: '每月投入提案' } },
+      { date: '2026-10-27', what: { en: 'Monthly-contribution warning', zh: '每月投入提醒' } },
     ]);
   });
 
@@ -214,11 +213,11 @@ describe('comingWeek', () => {
       events.map((event) => [event.date, event.what.en]),
       [
         ['2027-01-02', 'DCA debit'],
-        ['2027-01-02', 'Annual review proposal'],
-        ['2027-01-03', 'Monthly-contribution proposal'],
+        ['2027-01-02', 'Annual review warning'],
+        ['2027-01-03', 'Monthly-contribution warning'],
       ],
     );
-    assert.deepEqual(comingWeek('2027-01-01', null, null, 1), [{ date: '2027-01-02', what: { en: 'Annual review proposal', zh: '年度檢查提案' } }]);
+    assert.deepEqual(comingWeek('2027-01-01', null, null, 1), [{ date: '2027-01-02', what: { en: 'Annual review warning', zh: '年度檢查提醒' } }]);
     assert.deepEqual(comingWeek('2026-10-22', null, null, null), []);
   });
 });
@@ -236,7 +235,7 @@ describe('the volatility alert through the quiet hours (N8 step 3)', () => {
       names: new Map(),
       weekly: null,
       weeklyKeys: new Set(),
-      summary: { openProposals: 0, approvedProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
+      summary: { openProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
       health: { alert: false, misses: 0 } as unknown as Parameters<typeof plan>[0]['health'],
       lastGoodRunId: null,
       quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },

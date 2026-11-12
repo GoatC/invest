@@ -27,9 +27,7 @@ import {
   parseMonteCarloForm,
   parseNumber,
   parseTimelineForm,
-  fractionalShares,
   parseEngineSettings,
-  parseOrderSizes,
   parsePaceForm,
   parseCapmForm,
   parseRegressionForm,
@@ -296,29 +294,6 @@ describe('parsePlanForm', () => {
     });
     assert.ok(!parsePlanForm({ ...typed, years: '61' }).ok);
     assert.ok(!parsePlanForm({ ...typed, years: '0' }).ok);
-  });
-});
-
-describe('parseOrderSizes', () => {
-  const orders = [
-    { kind: 'trade', ticker: 'AAPL', side: 'sell', qty: 3, price: 236, currency: 'USD', fxRate: 32.4, amountTwd: 22_939.2, assetClassId: 'us_stocks' },
-    { kind: 'balance', assetId: 5, label: 'Savings', side: 'deposit', amountTwd: 5_000, assetClassId: 'strategic_cash' },
-  ] as const;
-
-  it('reads whole shares and whole NT$, 0 dropping an order', () => {
-    assert.deepEqual(parseOrderSizes({ size_0: '2', size_1: '4,500' }, orders), { sizes: [2, 4_500], errors: {} });
-    assert.deepEqual(parseOrderSizes({ size_0: '0', size_1: '0' }, orders).sizes, [0, 0]);
-  });
-
-  it('takes a fractional US order to its decimals', () => {
-    const fractional = [{ ...orders[0], decimals: 4 }];
-    assert.deepEqual(parseOrderSizes({ size_0: '0.1641' }, fractional), { sizes: [0.1641], errors: {} });
-    assert.deepEqual(parseOrderSizes({ size_0: '0.16411' }, fractional).errors, { size_0: fractionalShares(4) });
-  });
-
-  it('refuses fractions, negatives and blanks', () => {
-    assert.deepEqual(parseOrderSizes({ size_0: '1.5', size_1: '' }, orders).errors, { size_0: MESSAGES.shares, size_1: MESSAGES.wholeTwd });
-    assert.deepEqual(parseOrderSizes({ size_0: '-1', size_1: '10' }, orders).errors, { size_0: MESSAGES.shares });
   });
 });
 

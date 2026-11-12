@@ -32,4 +32,6 @@ export interface AlertItem {
   gauge?: AlertGauge;
   chips?: readonly AlertChip[];
   href?: string;
+  /** The tile's id, for a link to it (e.g. proposal-12). */
+  anchor?: string;
 }

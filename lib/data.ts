@@ -1096,7 +1096,7 @@ function toProposal(row: ProposalRow): Proposal {
 /** How far back the engine and the page read decided proposals: past a year's review. */
 const PROPOSAL_DAYS = 400;
 
-/** Every open and approved proposal, and the others of the last 400 days, newest first. */
+/** Every open proposal (a standing warning), and the others of the last 400 days, newest first. */
 async function loadProposalsUncached(supabase: SupabaseClient, today: string): Promise<Proposal[]> {
   const since = addDays(today, -PROPOSAL_DAYS);
   const found = await rows<ProposalRow>(
@@ -1104,7 +1104,7 @@ async function loadProposalsUncached(supabase: SupabaseClient, today: string): P
     supabase
       .from('proposals')
       .select(PROPOSAL_COLUMNS)
-      .or(`status.in.(open,approved),created_at.gte.${since}`)
+      .or(`status.eq.open,created_at.gte.${since}`)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false }),
   );
@@ -1215,7 +1215,7 @@ export async function saveOutcome(supabase: SupabaseClient, outcome: Outcome): P
   let created = 0;
   let tierDrafted = false;
   for (const draft of outcome.create) {
-    const { error } = await supabase.from('proposals').insert({ rule_id: draft.ruleId, state: draft.state, orders: draft.orders, detail: draft.detail, expires_at: draft.expiresAt });
+    const { error } = await supabase.from('proposals').insert({ rule_id: draft.ruleId, state: draft.state, orders: draft.orders, detail: draft.detail });
     if (error && error.code !== '23505') throw new DataError('proposals', error.message);
     if (!error) created += 1;
     if (!error && draft.state.startsWith('tier:')) tierDrafted = true;
@@ -1265,7 +1265,7 @@ export async function loadValueWeek(supabase: SupabaseClient, today: string): Pr
 export async function loadWeeklySummary(supabase: SupabaseClient, today: string): Promise<WeeklySummary> {
   const [holdings, proposals, value] = await Promise.all([
     loadHoldingsData(supabase),
-    rows<{ status: ProposalStatus }>('proposals', supabase.from('proposals').select('status').in('status', ['open', 'approved'])),
+    rows<{ status: ProposalStatus }>('proposals', supabase.from('proposals').select('status').eq('status', 'open')),
     loadValueWeek(supabase, today),
   ]);
   const portfolio = buildPortfolio(holdings);
@@ -3359,7 +3359,7 @@ export async function loadBanners(supabase: SupabaseClient, today: string): Prom
   return guideBanners(
     {
       dividends: dividends?.due ?? [],
-      proposals: proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved').map((proposal) => ({ id: proposal.id, status: proposal.status })),
+      proposals: proposals.filter((proposal) => proposal.status === 'open').map((proposal) => ({ id: proposal.id })),
       windfall: {
         arrivedTwd: arrivals.reduce((sum, flow) => sum + flow.amountTwd, 0),
         lastArrival: arrivals.reduce<string | null>((newest, flow) => (newest === null || flow.flowDate > newest ? flow.flowDate : newest), null),

@@ -23,7 +23,7 @@ const run = (status: JobRun['status'], errors: string[]): JobRun => ({
 describe('nightly summaries', () => {
   it('prints every ticker and the snapshot days in a run by hand', () => {
     const text = fullSummary(run('partial', ['NVDA: finmind: HTTP 503'])).join('\n');
-    for (const piece of ['2330', 'VT', 'USD/TWD', 'NVDA', '168 days 天, 2026-05-07 → 2026-10-21', 'VaR 含一週風險值: 161 days 天', 'Rules 規則: 2 proposals drafted 新提案, 1 closed 關閉']) assert.ok(text.includes(piece), piece);
+    for (const piece of ['2330', 'VT', 'USD/TWD', 'NVDA', '168 days 天, 2026-05-07 → 2026-10-21', 'VaR 含一週風險值: 161 days 天', 'Rules 規則: 2 warnings raised 新警示, 1 cleared 解除']) assert.ok(text.includes(piece), piece);
   });
 
   it('keeps tickers out of the public Actions log, flagging the run by its status', () => {

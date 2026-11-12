@@ -48,7 +48,7 @@ export function PlanForm({ capes, pace, initial, replacing }: { capes: readonly 
     setEdited((previous) => new Set(previous).add(name));
     setValues((previous) => ({ ...previous, [name]: value }));
   };
-  const confirmText: Bilingual = { en: 'Replace the plan? Its tranches are replaced; proposals already drafted stay.', zh: '要取代目前的計畫嗎？分批會重新排定；已產生的提案保留不變。' };
+  const confirmText: Bilingual = { en: 'Replace the plan? Its tranches are replaced; warnings already raised stay.', zh: '要取代目前的計畫嗎？分批會重新排定；已發出的警示保留不變。' };
   return (
     <form
       action={formAction}

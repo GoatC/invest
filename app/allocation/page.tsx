@@ -441,8 +441,8 @@ function Method() {
       zh: '實際權重：各類別市值 ÷ 一般資金池，估值方式與持倉頁相同；大額資金池不計入，因為目標權重以一般投入資金為基礎。',
     },
     {
-      en: 'The 5/25 band and the amber share live in the database (rules F8_DRIFT, config drift_display), not in code. Proposals and pushes for drift arrive with the rules engine (step 9) and Web Push (step 10).',
-      zh: '5/25 門檻與黃色比例存在資料庫（rules 表 F8_DRIFT、config 表 drift_display），不寫在程式中。偏離的提案與推播將在規則引擎（第 9 步）與推播（第 10 步）完成。',
+      en: 'The 5/25 band and the amber share live in the database (rules F8_DRIFT, config drift_display), not in code. Warnings and pushes for drift arrive with the rules engine (step 9) and Web Push (step 10).',
+      zh: '5/25 門檻與黃色比例存在資料庫（rules 表 F8_DRIFT、config 表 drift_display），不寫在程式中。偏離的警示與推播將在規則引擎（第 9 步）與推播（第 10 步）完成。',
     },
     {
       en: 'The nightly job saves each day’s class weights with the NAV snapshot, so drift can be followed over time later.',

@@ -1102,88 +1102,89 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await snap('rules');
 });
 
-await step('proposals: checking the rules drafts R1, F8 and the monthly contribution, each explained, with whole-share orders', async () => {
+/** A rule warning's tile on the dashboard (components/warnings-panel.tsx), its figures and suggested orders unfolded. */
+async function warning(name) {
+  const article = page.locator('#proposals .alert-tile').filter({ hasText: name });
+  const details = article.locator('details.warning-more');
+  if (!(await details.evaluate((element) => element.open))) await details.locator('> summary').click();
+  return article;
+}
+
+await step('warnings: checking the rules raises R1, F8 and the monthly contribution as standing warnings, each explained, with whole-share orders', async () => {
   await page.goto(`${BASE}/proposals`);
   await page.waitForURL(`${BASE}/#proposals`);
-  check((await page.locator('#proposals').innerText()).includes('沒有需要決定的事'), 'none before a check');
+  check((await page.locator('#proposals').innerText()).includes('沒有警示'), 'none before a check');
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check(/已檢查規則：新增 [3-9] 份提案，關閉 0 份。/.test(await body()), `three or more drafted, got ${await body()}`);
-  const open = page.locator('article.proposal');
-  const titles = await open.locator('h3').allInnerTexts();
-  check(titles.some((title) => title.startsWith('R1 · Single-stock trim')), `R1 drafted, got ${titles}`);
-  check(titles.some((title) => title.startsWith('F8_DRIFT · Drift rebalance')), 'F8 drafted');
-  check(titles.some((title) => title.startsWith('MONTHLY_CONTRIBUTION · Monthly contribution')), 'monthly drafted');
-  const r1 = open.filter({ hasText: 'Single-stock trim' });
+  check(/已檢查規則：新增 [3-9] 則，解除 0 則。/.test(await body()), `three or more raised, got ${await body()}`);
+  const tiles = (await page.locator('#proposals .alert-tile').allInnerTexts()).map((text) => text.replace(/\s+/g, ' '));
+  check(tiles.some((tile) => tile.includes('R1') && tile.includes('Single-stock trim')), `R1 raised, got ${tiles}`);
+  check(tiles.some((tile) => tile.includes('Drift rebalance')), 'F8 raised');
+  check(tiles.some((tile) => tile.includes('Monthly contribution')), 'monthly raised');
+  // Nothing to approve, edit or mark filled: one button, to dismiss.
+  check((await page.locator('#proposals').getByRole('button', { name: /Approve|Mark filled/ }).count()) === 0 && (await page.locator('#proposals').getByRole('link', { name: /Edit the orders/ }).count()) === 0, 'no approval steps');
+  check((await page.locator('#proposals .alert-tile').first().getByRole('button', { name: /忽略/ }).count()) === 1, 'a dismiss button');
+  const r1 = await warning('Single-stock trim');
   const r1Text = await r1.innerText();
+  check(/減碼回 5% 上限。/.test(r1Text), `R1's line, got ${r1Text}`);
   check(/：占一般投入資金池 [\d.]+%（NT\$[\d,]+ 中的 NT\$[\d,]+）> 5% 上限 · 賣出約 NT\$[\d,]+/.test(r1Text) && !r1Text.includes('減碼金額 ='), `R1 explained, the method folded, got ${r1Text}`);
   check(/Sell 賣出\s+\S+\s+\d+/.test(r1Text) && r1Text.includes('單一個股減碼'), 'a sell order with its shares, bilingual');
   // The demo savings (NT$20,000) put strategic cash far over its 8%: money out of the balance funds the buys.
-  const f8Text = await open.filter({ hasText: 'Drift rebalance' }).innerText();
+  const f8Text = await (await warning('Drift rebalance')).innerText();
   check(/戰略現金：[\d.]+% \/ 目標 8%/.test(f8Text) && f8Text.includes('Take out'), `F8 explained with a balance order, got ${f8Text}`);
-  const monthlyText = await open.filter({ hasText: 'Monthly contribution' }).innerText();
-  check(monthlyText.includes(`${taipeiYesterday} 扣款 NT$10,000 → 最低於目標的核心類別`) && /Buy 買進\s+\S+\s+\d+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
+  const monthlyText = await (await warning('Monthly contribution')).innerText();
+  check(monthlyText.includes(`${taipeiYesterday} 扣款 NT$10,000 → 最低於目標的核心類別`) && /Buy 買進\s+\S+\s+[\d.]+/.test(monthlyText), `monthly explained, got ${monthlyText.replace(/\s+/g, ' ')}`);
   await snap('proposals');
   await docShot('proposals', page.locator('#proposals'));
-  // Checking again drafts nothing twice (from a fresh page, so the redirect is a new address).
+  // Checking again raises nothing twice (from a fresh page, so the redirect is a new address).
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check((await body()).includes('已檢查規則：新增 0 份提案，關閉 0 份。'), 'no duplicates');
+  check((await body()).includes('已檢查規則：新增 0 則，解除 0 則。'), 'no duplicates');
 });
 
-await step('proposals: edit the orders, approve, record the trade from the checklist, mark filled; dismiss with a reason', async () => {
-  await page.goto(`${BASE}/proposals`);
-  const monthly = page.locator('article.proposal').filter({ hasText: 'Monthly contribution' });
-  await monthly.getByRole('link', { name: /Edit the orders/ }).click();
-  await page.waitForURL(/\/proposals\/\d+$/);
-  // US funds are ordered in fractions, to four decimals (config orders).
-  await page.fill('input[name=size_0]', '1.23456');
-  await page.getByText('最多 4 位小數').waitFor();
-  await page.fill('input[name=size_0]', '1.2345');
-  await page.click('main button[type=submit]');
-  await page.waitForURL(/\?saved=edited/);
-  check((await body()).includes('已儲存下單清單'), 'edited');
-
-  const r1 = page.locator('article.proposal').filter({ hasText: 'Single-stock trim' });
+await step('warnings: a trade taken on R1 is recorded as any trade; dismissed, a warning goes to the folded record and its state waits out the cooldown', async () => {
+  await page.goto(`${BASE}/#proposals`);
+  const r1 = await warning('Single-stock trim');
   const id = (await r1.getAttribute('id'))?.replace('proposal-', '');
-  await r1.getByRole('button', { name: /^Approve/ }).click();
-  await page.waitForURL(/\?saved=approved&p=approved/);
-  const approved = page.locator(`#proposal-${id}`);
-  check((await approved.innerText()).includes('執行清單'), 'the checklist');
-  await approved.getByRole('link', { name: /Record the trade/ }).first().click();
-  await page.waitForURL(/\/holdings\?ticker=/);
+  // R1's first sale is 2330: recorded on the holdings page like any trade, at the latest close, with the Taiwan minimum fee and the 0.3% tax.
+  const [, ticker, qty, price] = await r1.locator('tbody tr').first().locator('td').allInnerTexts();
+  check(ticker === '2330' && Number(qty) > 0, `the sale suggested, got ${ticker} ${qty}`);
+  await tradeForm(`?ticker=${ticker}&side=sell&qty=${qty}`);
   check((await page.inputValue('select[name=side]')) === 'sell', 'a sell');
-  check(Number(await page.inputValue('input[name=qty]')) > 0 && Number(await page.inputValue('input[name=price]')) > 0, 'shares and the latest close filled in');
-  // R1's first sale is 2330: the Taiwan minimum commission, and the 0.3% transaction tax on one share at 2,405.
-  check((await page.inputValue('input[name=fee]')) === '20' && (await page.inputValue('input[name=tax]')) === '7', `the estimated fee and tax, got ${await page.inputValue('input[name=fee]')} and ${await page.inputValue('input[name=tax]')}`);
-  check((await body()).includes(`已依提案 #${id} 填入`), 'says where it came from');
+  await page.fill('input[name=price]', price.replace(/[^\d.]/g, ''));
+  await page.fill('input[name=fee]', '20');
+  await page.fill('input[name=tax]', '7');
   await saveTrade();
-  await page.waitForURL(/\?saved=trade&p=approved/);
-  check((await body()).includes('已登錄交易'), 'back at the proposal');
-  await page.locator(`#proposal-${id}`).getByRole('button', { name: /Mark filled/ }).click();
-  await page.waitForURL(/\?saved=filled/);
-
-  await page.goto(`${BASE}/?p=open#proposals`);
-  const f8 = page.locator('article.proposal').filter({ hasText: 'Drift rebalance' });
-  await f8.locator('input[name=reason]').fill('Demo: keep the savings 示範');
-  await f8.getByRole('button', { name: /^Dismiss/ }).click();
+  await page.waitForURL(/\/holdings\?saved=added/);
+  // Still firing or not, the warning is set aside with its button.
+  await page.goto(`${BASE}/#proposals`);
+  const live = page.locator(`#proposal-${id}`);
+  if (await live.count()) {
+    await live.getByRole('button', { name: /忽略/ }).click();
+    await page.waitForURL(/\?saved=dismissed/);
+  }
+  // From a fresh address, so the next redirect is a new one to wait for.
+  await page.goto(`${BASE}/#proposals`);
+  await page.locator('#proposals .alert-tile').filter({ hasText: 'Drift rebalance' }).getByRole('button', { name: /忽略/ }).click();
   await page.waitForURL(/\?saved=dismissed/);
-  await page.goto(`${BASE}/?p=closed#proposals`);
-  const decided = await page.locator('#proposals').innerText();
-  check(/Filled/.test(decided) && /Dismissed[\s\S]*Demo: keep the savings/.test(decided), `decided listed, got ${decided}`);
+  check((await body()).includes('已忽略。'), 'dismissed');
+  const panel = page.locator('#proposals');
+  check((await panel.locator('.alert-tile').filter({ hasText: 'Drift rebalance' }).count()) === 0, 'gone from the warnings');
+  await panel.locator('details > summary', { hasText: '已忽略與已解除' }).click();
+  const decided = await panel.innerText();
+  check(/Drift rebalance[\s\S]*已忽略/.test(decided), `the record lists it, got ${decided}`);
   // A dismissed state is held back for its cooldown.
   await page.goto(`${BASE}/rules`);
   check(/冷卻至 \d{4}-\d{2}-\d{2}/.test(await page.locator('#rule-F8_DRIFT').innerText()), 'F8 in its cooldown');
   await page.goto(`${BASE}/history`);
-  const history = await body();
-  check(history.includes('Proposal') && history.includes('Demo: keep the savings'), 'proposal changes in the edit history');
+  check((await body()).includes('Rule warning'), 'warning changes in the edit history');
 });
 
-await step('holdings: the open proposals come first; dark mode and the proposals page', async () => {
+await step('holdings: the standing warnings come first; dark mode and the warnings', async () => {
   await page.goto(`${BASE}/holdings`);
   const banner = await page.locator('#open-proposals').innerText();
-  check(banner.includes('待處理提案') && banner.includes('每月投入'), `open proposals tiles, got ${banner}`);
+  check(banner.includes('規則警示') && banner.includes('每月投入'), `warning tiles, got ${banner}`);
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto(`${BASE}/proposals`);
   await snap('proposals-dark');
@@ -1232,7 +1233,7 @@ await step('costs: the yearly drag, each fund and broker over the plan, the Taiw
   check(((await page.locator('#fund-VT > summary').textContent()) ?? '').includes(`${taipeiToday} 已確認`), 'checked today');
 
   await page.goto(`${BASE}/proposals`);
-  const monthly = await page.locator('article.proposal').filter({ hasText: 'Monthly contribution' }).innerText();
+  const monthly = await (await warning('Monthly contribution')).innerText();
   check(monthly.includes('3.00 USD') && /預估費用與稅 ≈ NT\$[\d,]+（國泰[^）]*）/.test(monthly), `fees on the orders, got ${monthly.replace(/\s+/g, ' ')}`);
 });
 
@@ -1247,18 +1248,15 @@ await step('US estate tax: a windfall buy takes US-situs assets past US$60,000; 
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  const estate = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
-  const text = await estate.innerText();
-  check(/美國資產：6\d,\d{3} USD > 免稅額 60,000 USD/.test(text) && text.includes('愛爾蘭註冊的同類 ETF') && text.includes('沒有下單清單'), `explained, got ${text.replace(/\s+/g, ' ')}`);
+  const text = await (await warning('US estate tax')).innerText();
+  check(/美國資產：6\d,\d{3} USD > 免稅額 60,000 USD/.test(text) && text.includes('愛爾蘭註冊的同類 ETF') && text.includes('沒有建議下單'), `explained, got ${text.replace(/\s+/g, ' ')}`);
   await page.goto(`${BASE}/costs#estate-tax`);
   const section = await page.locator('#estate-tax').innerText();
   check(section.includes('VWRA') && section.includes('AGGU') && (await page.locator('#estate-tax .meter.over').count()) === 1, `over the exemption, alternatives named, got ${section}`);
   await snap('costs-estate');
   // Leave the later steps the demo as it was: dismiss the suggestion and delete the windfall buy.
   await page.goto(`${BASE}/proposals`);
-  const open = page.locator('article.proposal').filter({ hasText: 'US estate tax' });
-  await open.locator('input[name=reason]').fill('Demo: a test buy 示範');
-  await open.getByRole('button', { name: /^Dismiss/ }).click();
+  await page.locator('#proposals .alert-tile').filter({ hasText: 'US estate tax' }).getByRole('button', { name: /忽略/ }).click();
   await page.waitForURL(/\?saved=dismissed/);
   await page.goto(`${BASE}/holdings`);
   await page.locator('#trades tbody tr').first().getByRole('link').click();
@@ -1328,7 +1326,7 @@ await step('windfall: the money arrives as a cash flow and a TWD balance; the pl
   await form.getByRole('button', { name: /Start the plan/ }).click();
   await page.waitForURL('**/windfall?saved=plan**');
   const text = await body();
-  check(text.includes('已儲存計畫：每一批到期時會產生提案。'), 'saved');
+  check(text.includes('已儲存計畫：每一批到期時會發出警示。'), 'saved');
   check((await fact('Plan')).includes(`0 / 24 NT$1,200,000 · 下一批 ${taipeiToday}`), `the plan in a tile, got ${await fact('Plan')}`);
   const rows = await page.locator('#plan tbody tr').allInnerTexts();
   check(rows.length === 24 && /^1\s+\S+\s+NT\$50,000\s+Scheduled/.test(rows[0]) && rows[23].includes(monthsLater(taipeiToday, 23)), `24 tranches of NT$50,000, got ${rows[0]} … ${rows[23]}`);
@@ -1340,15 +1338,15 @@ await step('windfall: the money arrives as a cash flow and a TWD balance; the pl
   check(/Coming week[\s\S]*Windfall tranche due/.test(home), 'the tranche in the coming week');
 });
 
-await step('windfall: the tranche due drafts its proposal in the windfall pool, core classes only; filled, the tranche is done', async () => {
+await step('windfall: the tranche due raises its warning in the windfall pool, core classes only; dismissed, the tranche is done', async () => {
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check(/已檢查規則：新增 1 份提案，關閉 0 份。/.test(await body()), 'only the tranche: ACWI is 5.6% down, no tier');
-  const proposal = page.locator('article.proposal').filter({ hasText: 'Windfall tranche' });
+  check(/已檢查規則：新增 1 則，解除 0 則。/.test(await body()), 'only the tranche: ACWI is 5.6% down, no tier');
+  const proposal = await warning('Windfall tranche');
   trancheProposal = (await proposal.getAttribute('id'))?.replace('proposal-', '');
   const text = await proposal.innerText();
-  check(text.includes('WINDFALL_TRANCHE_DUE · Windfall tranche'), 'its rule and title');
+  check(text.includes('Windfall tranche') && text.includes('投入大額資金 NT$50,000'), `its title and line, got ${text.replace(/\s+/g, ' ')}`);
   check(text.includes(`${taipeiToday} 到期分批：NT$1,200,000 ÷ 24 批 = NT$50,000，依核心目標權重`), `explained, got ${text.replace(/\s+/g, ' ')}`);
   // Strategic cash's 8 of the core's 80 stays in the deposit, which is strategic cash already.
   check(text.includes('戰略現金的部分 NT$5,000 留在原帳戶'), 'strategic cash stays');
@@ -1356,15 +1354,9 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
   const tickers = orders.map((row) => row.split('\t')[1]?.trim());
   check(/^Take out/.test(orders[0] ?? '') && (orders[0] ?? '').includes('Time deposit (demo)'), `paid from the largest windfall balance, got ${orders[0]}`);
   check(['VT', '0050', 'BNDW', 'GLDM'].every((ticker) => tickers.includes(ticker)) && !tickers.some((ticker) => ['AAPL', '2330', 'VOO', 'NVDA'].includes(ticker)), `the core benchmarks, no satellite, got ${tickers}`);
-  await proposal.getByRole('button', { name: /^Approve/ }).click();
-  await page.waitForURL(/\?saved=approved/);
-  // The checklist records each trade in the windfall pool, so R1 and R2 never count it.
-  await page.locator(`#proposal-${trancheProposal}`).getByRole('link', { name: /Record the trade/ }).first().click();
-  await page.waitForURL(/\/holdings\?ticker=/);
-  check(page.url().includes('pool=windfall') && (await page.inputValue('select[name=pool]')) === 'windfall', 'the trade form in the windfall pool');
-  await page.goto(`${BASE}/?p=approved#proposals`);
-  await page.locator(`#proposal-${trancheProposal}`).getByRole('button', { name: /Mark filled/ }).click();
-  await page.waitForURL(/\?saved=filled/);
+  // Dismissed, the tranche is dealt with: the cash not bought stays in the pool for the tranches left.
+  await proposal.getByRole('button', { name: /忽略/ }).click();
+  await page.waitForURL(/\?saved=dismissed/);
 
   await page.goto(`${BASE}/windfall`);
   await page.locator('.chart-backtest svg').waitFor();
@@ -1380,7 +1372,7 @@ await step('windfall: the tranche due drafts its proposal in the windfall pool, 
 });
 
 await step('windfall: the demo put back for the steps that follow; the edit history keeps the plan', async () => {
-  // The plan, the deposit and the cash flow go: the push and dashboard steps expect one proposal waiting and NT$50,000 in the pool.
+  // The plan, the deposit and the cash flow go: the push and dashboard steps expect one warning standing and NT$50,000 in the pool.
   await page.goto(`${BASE}/windfall`);
   await page.locator('#plan details > summary', { hasText: 'Replace or delete the plan' }).click();
   await page.locator('#plan').getByRole('button', { name: /^Delete/ }).click();
@@ -1691,7 +1683,7 @@ await step('notifications: a test push reaches a device encrypted to its keys an
   await snap('notifications');
 });
 
-await step('push job: plans the weekly review and the open proposal, sends each once, and holds pushes in the quiet hours', async () => {
+await step('push job: plans the weekly review and the standing warning, sends each once, and holds pushes in the quiet hours', async () => {
   await page.goto(`${BASE}/notifications`);
   // The review an hour ago today, and quiet hours that start later: both pushes go out now.
   const review = taipeiClock(-60);
@@ -1710,8 +1702,8 @@ await step('push job: plans the weekly review and the open proposal, sends each 
   const received = phonePushes().slice(before);
   const weekly = received.find((push) => push.title === '每週檢視');
   const monthly = received.find((push) => push.title === '每月投入');
-  check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('規則：1 份提案待處理。') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
-  check(monthly && /^把 \d{4}-\d{2}-\d{2} 扣款的 NT\$10,000 投入/.test(monthly.body) && /^\/#proposal-\d+$/.test(monthly.url), `the proposal names its action, got ${JSON.stringify(monthly)}`);
+  check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('規則：1 則警示。') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
+  check(monthly && /^把 \d{4}-\d{2}-\d{2} 扣款的 NT\$10,000 投入/.test(monthly.body) && /^\/#proposal-\d+$/.test(monthly.url), `the warning names its action, got ${JSON.stringify(monthly)}`);
   const again = await notify();
   check(/Web Push: 0 planned, 0 sent/.test(again.stdout) && phonePushes().length === before + 2, 'nothing twice');
   await page.reload();
@@ -1722,37 +1714,36 @@ await step('push job: plans the weekly review and the open proposal, sends each 
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
-await step('dashboard: the band with the value and the three lines, the waiting proposal next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
+await step('dashboard: the band with the value and the three lines, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();
   const text = await body();
-  check(text.includes('規則：1 份提案待處理。'), 'the rules line, in Chinese');
+  check(text.includes('規則：1 則警示。'), 'the rules line, in Chinese');
   check(/配置：最大偏離為[^\n]+ [+−][\d.]+ pp。/.test(text), 'the largest drift');
   check(text.includes('市值：尚無淨值快照。'), 'no snapshot before the nightly job');
   const band = await page.locator('#this-week').innerText();
   check(band.includes('本週') && /NT\$[\d,]+/.test(band) && band.includes('both pools'), `the band with the value of both pools, got ${band}`);
-  // A proposal waits, so the proposals come second on the page and the band jumps to them; the band also dates the closes and offers the refresh.
+  // A warning stands, so the warnings come second on the page and the band jumps to them; the band also dates the closes and offers the refresh.
   check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await page.locator('#this-week').getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the band, got ${band}`);
-  await page.locator('#this-week').getByRole('link', { name: /1 proposal waiting/ }).waitFor();
+  await page.locator('#this-week').getByRole('link', { name: /1 warning/ }).waitFor();
   const headings = await page.locator('main h2').allInnerTexts();
-  const order = ['Proposals', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
+  const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
   check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
   check(!headings.some((heading) => heading.startsWith('與目標權重的偏離')), 'the drift bars are on Allocation only');
   check(/Deployed [^\n]*NT\$[\d,]+ [\d.]+%/.test(await fact('Deployed')) && /NT\$[\d,]+/.test(await fact('Waiting as cash')), `windfall deployed and waiting, got ${await fact('Deployed')} / ${await fact('Waiting as cash')}`);
   check(text.includes('尚無分批計畫。'), 'no windfall plan, since the demo was put back');
   check(text.includes('Weekly review push'), 'the coming week lists the review');
-  check((await page.locator('#proposals').innerText()).includes('Monthly contribution'), 'the open proposal at the foot, with approve and dismiss');
+  check((await page.locator('#proposals').innerText()).includes('Monthly contribution'), 'the standing warning, with its dismiss button');
   await snap('dashboard');
   await page.setViewportSize({ width: 1280, height: 1500 });
   await docShot('dashboard', page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  // Approving from the dashboard opens the checklist.
-  await page.locator('#proposals').getByRole('button', { name: /^Approve/ }).click();
-  await page.waitForURL(/\?saved=approved/);
-  check((await body()).includes('執行清單'), 'approved from the dashboard');
-  await page.goto(`${BASE}/`);
-  check((await body()).includes('規則：1 份提案待處理（其中 1 份已核准、待下單）。'), 'the approved one still waits on trades');
+  // A standing warning stays: checking the rules again keeps it, with the same number.
+  const id = await page.locator('#proposals .alert-tile').first().getAttribute('id');
+  await page.locator('#proposals').getByRole('button', { name: /Check the rules now/ }).click();
+  await page.waitForURL(/\?saved=checked/);
+  check((await page.locator(`#${id}`).count()) === 1 && (await body()).includes('規則：1 則警示。'), 'the warning still stands');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
   await page.locator('.chart-donut svg').waitFor();
@@ -1800,9 +1791,10 @@ await step('red flags: every indicator by company, coverage, an entry that scans
   await page.goto(`${BASE}/proposals`);
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  const review = (await page.locator('article.proposal', { hasText: 'Red flag worsens' }).innerText()).replace(/\s+/g, ' ');
-  check(review.includes(`2330：綠燈 → 黃燈，自 ${taipeiToday}`) && review.includes('不產生下單清單'), `the review prompt, got ${review}`);
-  await page.locator('article.proposal', { hasText: 'Red flag worsens' }).getByRole('button', { name: /^Dismiss/ }).click();
+  const flagged = await warning('Red flag worsens');
+  const review = (await flagged.innerText()).replace(/\s+/g, ' ');
+  check(review.includes('2330 的紅旗燈號轉差') && review.includes(`2330：綠燈 → 黃燈，自 ${taipeiToday}`) && review.includes('不產生下單清單'), `the review prompt, got ${review}`);
+  await flagged.getByRole('button', { name: /忽略/ }).click();
   await page.waitForURL(/\?saved=dismissed/);
 
   // The entry deleted: the edit history keeps it, and 2330 is green again.
@@ -2004,7 +1996,7 @@ await step('dividends: the push job asks once on the day a dividend is paid', as
   }
 });
 
-await step('volatility alert: a score crossing 8 drafts the panic proposal, explained, with its push through the quiet hours and its row in the alert record (N8 step 3)', async () => {
+await step('volatility alert: a score crossing 8 raises the panic warning, explained, with its push through the quiet hours and its row in the alert record (N8 step 3)', async () => {
   const rest = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) } });
   const yesterday = new Date(Date.parse(`${taipeiToday}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   const scores = [
@@ -2016,9 +2008,9 @@ await step('volatility alert: a score crossing 8 drafts the panic proposal, expl
     await page.goto(`${BASE}/proposals`);
     await page.getByRole('button', { name: /Check the rules now/ }).click();
     await page.waitForURL(/\?saved=checked/);
-    const proposal = page.locator('article.proposal').filter({ hasText: 'Volatility alert' });
+    const proposal = await warning('Volatility alert');
     const text = (await proposal.innerText()).replace(/\s+/g, ' ');
-    check(text.includes(`VOLATILITY_ALERT · Volatility alert`) && text.includes(`波動分數 8.6（${taipeiToday}）≥ 8 · 自 ${taipeiToday} 起恐慌`), `the panic proposal explained, got ${text}`);
+    check(text.includes('Volatility alert') && text.includes('恐慌：賣出 VIX 避險') && text.includes(`波動分數 8.6（${taipeiToday}）≥ 8 · 自 ${taipeiToday} 起恐慌`), `the panic warning explained, got ${text}`);
     check(/預算為一般投入資金池的 5%，NT\$[\d,]+ · 由戰略現金支應 NT\$[\d,]+/.test(text) && text.includes('依目標權重買進核心股票類別'), `its budget and buys, got ${text}`);
     await snap('volatility-alert');
     // Rules page: both rules on, the switch for the quiet hours shown.
@@ -2029,12 +2021,12 @@ await step('volatility alert: a score crossing 8 drafts the panic proposal, expl
     check(rules.includes('VOLATILITY_ALERT') && rules.includes('VOLATILITY_HEDGE') && (await quietSwitch.count()) === 1 && (await quietSwitch.isChecked()), 'the two rules and the quiet-hours switch on the Rules page');
     // The alert record follows it from today.
     await page.goto(`${BASE}/volatility#shadow`);
-    await page.locator('#shadow summary', { hasText: 'Proposals' }).click();
+    await page.locator('#shadow summary', { hasText: 'Warnings' }).click();
     const record = await page.locator('#shadow-list').innerText();
     check(record.includes(taipeiToday) && /Panic[\s\S]*8\.6/.test(record), `the alert record lists it, got ${record}`);
   } finally {
     // Leave the steps after this one as they were: no alert, no scores.
-    check((await rest('proposals?rule_id=eq.VOLATILITY_ALERT', { method: 'DELETE' })).ok, 'the proposal removed');
+    check((await rest('proposals?rule_id=eq.VOLATILITY_ALERT', { method: 'DELETE' })).ok, 'the warning removed');
     check((await rest(`volatility_scores?score_date=in.(${yesterday},${taipeiToday})`, { method: 'DELETE' })).ok, 'the scores removed');
   }
 });
@@ -2473,7 +2465,7 @@ if (FINMIND_TOKEN && E2E_NIGHTLY !== '0') {
     const cape = await page.locator('#market-series tr', { hasText: 'us_cape' }).innerText();
     check(/\d{4}-\d{2}\s+[\d.]+\s+(Shiller's data|multpl\.com)/.test(cape) && !cape.includes('Demo data'), `CAPE loaded live, got ${cape.replace(/\s+/g, ' ')}`);
     // After the refresh the job checks the rules, with the secret key, as the owner's Check now does.
-    check(/已檢查規則：新增 \d+ 份提案，關閉 \d+ 份。/.test(text), 'the rules checked after the refresh');
+    check(/已檢查規則：新增 \d+ 則警示，解除 \d+ 則。/.test(text), 'the rules checked after the refresh');
     await snap('data-status-after');
     await docShot('data-status', page);
   });

@@ -16,7 +16,7 @@ import { ScheduleForm } from './schedule-form';
 type Params = Record<string, string | string[] | undefined>;
 
 const KIND: Record<NotificationRecord['kind'], Bilingual> = {
-  proposal: { en: 'Proposal', zh: '提案' },
+  proposal: { en: 'Rule warning', zh: '規則警示' },
   weekly: { en: 'Weekly review', zh: '每週檢視' },
   data_failure: { en: 'Data failure', zh: '資料異常' },
   test: { en: 'Test', zh: '測試' },
@@ -64,8 +64,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         </h1>
         <Info>
           <Bi
-            en="The app pushes only when a decision is due: a new proposal from the rules, the weekly review with its three lines, or a data failure. Never a price move. Pushes wait out the quiet hours."
-            zh="App 只在需要你做決定時推播：規則產生的新提案、三行的每週檢視摘要，或資料異常；不推播價格波動。安靜時段內的推播會等到時段結束後才送出。"
+            en="The app pushes only when a decision is due: a new warning from the rules, the weekly review with its three lines, or a data failure. Never a price move. Pushes wait out the quiet hours."
+            zh="App 只在需要你做決定時推播：規則產生的新警示、三行的每週檢視摘要，或資料異常；不推播價格波動。安靜時段內的推播會等到時段結束後才送出。"
           />
         </Info>
         {saved && (

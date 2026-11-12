@@ -5,16 +5,16 @@
  *
  * A banner shows when:
  * - dividend: a dividend's payment day has come and no cash flow records it (lib/models/dividends);
- * - proposals: a proposal is approved and waits for its trade, or is open and waits for a decision;
+ * - proposals: a rule warning stands (an open proposal), until Hugo dismisses it or the rule clears;
  * - windfall_balance: the windfall arrived (a cash flow) but the windfall pool holds no TWD balance
  *   and nothing was bought from it, so the planner has no cash to split;
  * - windfall_plan: the windfall pool holds cash and no plan has been started;
  * - stale_balance: a TWD balance was last updated more than balance_stale_days ago;
  * - first_trade: nothing is recorded yet;
- * - push: no device has push turned on, so no proposal or dividend would reach Hugo.
+ * - push: no device has push turned on, so no warning or dividend would reach Hugo.
  *
  * ✕ hides a banner for snooze_days (banner_dismissals); its key changes when its subject does (a
- * new proposal, another dividend), so the next one shows at once. A banner never shows on the page
+ * new warning, another dividend), so the next one shows at once. A banner never shows on the page
  * it leads to.
  */
 import { daysBetween } from '../dates';
@@ -70,8 +70,8 @@ export interface Banner {
 export interface BannerInput {
   /** The dividends to ask about, the newest first. */
   dividends: readonly DividendDue[];
-  /** Proposals waiting: approved ones wait for their trade, open ones for a decision. */
-  proposals: ReadonlyArray<{ id: number; status: string }>;
+  /** The standing rule warnings (open proposals). */
+  proposals: ReadonlyArray<{ id: number }>;
   windfall: {
     /** What the windfall cash flows add up to, and the newest one's date. */
     arrivedTwd: number;
@@ -119,28 +119,14 @@ export function guideBanners(input: BannerInput, settings: BannerSettings, today
     });
   }
 
-  const approved = input.proposals.filter((proposal) => proposal.status === 'approved');
-  const open = input.proposals.filter((proposal) => proposal.status === 'open');
-  const newest = (list: ReadonlyArray<{ id: number }>) => Math.max(...list.map((proposal) => proposal.id));
-  if (approved.length > 0) {
+  const open = input.proposals;
+  if (open.length > 0) {
     out.push({
-      key: `proposals:approved:${newest(approved)}`,
+      key: `proposals:open:${Math.max(...open.map((proposal) => proposal.id))}`,
       kind: 'proposals',
       tone: 'act',
-      text:
-        approved.length === 1
-          ? { en: `Proposal #${approved[0]?.id} is approved: record its trade once filled.`, zh: `提案 #${approved[0]?.id} 已核准：成交後記錄交易。` }
-          : { en: `${approved.length} approved proposals wait for their trades.`, zh: `${approved.length} 份已核准提案待下單。` },
-      action: { label: { en: 'Open', zh: '前往' }, href: `/?p=approved${approved.length === 1 ? `#proposal-${approved[0]?.id}` : '#proposals'}` },
-      hideOn: ['/', '/holdings', '/proposals'],
-    });
-  } else if (open.length > 0) {
-    out.push({
-      key: `proposals:open:${newest(open)}`,
-      kind: 'proposals',
-      tone: 'act',
-      text: { en: `${open.length} proposal${open.length === 1 ? '' : 's'} to decide.`, zh: `${open.length} 份提案待決定。` },
-      action: { label: { en: 'Decide', zh: '去決定' }, href: open.length === 1 ? `/#proposal-${open[0]?.id}` : '/#proposals' },
+      text: { en: `${open.length} rule warning${open.length === 1 ? '' : 's'}.`, zh: `${open.length} 則規則警示。` },
+      action: { label: { en: 'See', zh: '查看' }, href: open.length === 1 ? `/#proposal-${open[0]?.id}` : '/#proposals' },
       hideOn: ['/', '/holdings', '/proposals'],
     });
   }
@@ -196,7 +182,7 @@ export function guideBanners(input: BannerInput, settings: BannerSettings, today
       key: 'push',
       kind: 'push',
       tone: 'info',
-      text: { en: 'Push is off: proposals and dividends will not reach you.', zh: '尚未開啟推播：提案與配息不會通知你。' },
+      text: { en: 'Push is off: warnings and dividends will not reach you.', zh: '尚未開啟推播：警示與配息不會通知你。' },
       action: { label: { en: 'Turn on', zh: '去開啟' }, href: '/notifications' },
       hideOn: ['/notifications'],
     });
