@@ -1,9 +1,10 @@
 import Link from 'next/link';
 
 import { AllocationDonut } from '@/components/allocation-charts';
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Facts } from '@/components/facts';
+import { Info } from '@/components/info';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { WarningsPanel } from '@/components/warnings-panel';
 import { RefreshData } from '@/components/refresh-data';
@@ -21,7 +22,6 @@ import {
   loadRedFlagData,
   loadRiskData,
   loadRules,
-  loadValueWeek,
   loadWindfallPlan,
   loadWorkbench,
   orDataError,
@@ -36,13 +36,14 @@ import {
 } from '@/lib/data';
 import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
-import { DRIFT_ICON, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
-import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
-import { comingWeek, readWeeklyReview, summaryLines, weeklySummary } from '@/lib/models/notify';
-import { buildSeries } from '@/lib/models/performance';
+import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
+import { allocation, sleeveTargets } from '@/lib/models/allocation';
+import { comingWeek, readWeeklyReview } from '@/lib/models/notify';
+import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
+import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/value-line';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
 import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
@@ -50,11 +51,11 @@ import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 type Params = Record<string, string | string[] | undefined>;
 
 /**
- * The weekly dashboard, the home screen (PRD Section 5): the week's three lines with the portfolio's
- * value on a band at the top, then the Value at Risk (its distribution and make-up folded under
- * it), the watchlist, the coming week, the allocation, the windfall and the plan, and the
- * proposals last, with a jump to them from the band whenever one waits. Each part reads its own
- * data, so one that fails to load leaves the others in place.
+ * The weekly dashboard, the home screen (PRD Section 5): the poster with the portfolio's value and
+ * the line of its rise and fall at the top, then the Value at Risk (its distribution and make-up
+ * folded under it), the watchlist, the coming week, the allocation, the windfall and the plan, and
+ * the rule warnings last, or second while one stands. Each part reads its own data, so one that
+ * fails to load leaves the others in place.
  */
 export default async function Dashboard({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
@@ -67,10 +68,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents] = await Promise.all([
+  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
-    orDataError(loadValueWeek(supabase, today)),
     orDataError(loadPlanData(supabase, today)),
     orDataError(
       (async () => {
@@ -88,32 +88,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
-  const summary = weeklySummary({
-    statuses: list.map((proposal) => proposal.status),
-    classes: portfolio.classes,
-    poolTwd: portfolio.pool.totalTwd,
-    ...(value instanceof DataError ? { valueTwd: null, weekAgoTwd: null } : value),
-  });
+  // The whole portfolio day by day (F18): the poster's line, and the regular pool's month ends against the plan.
+  const days = plan instanceof DataError ? null : buildSeries(plan.input);
 
   // A standing warning comes second on the page; with none, the warnings section closes it.
-  const waitingFirst = summary.openProposals > 0;
+  const waitingFirst = list.some((proposal) => proposal.status === 'open');
   const panel =
     proposals instanceof DataError ? (
       <Unavailable what={{ en: 'rule warnings', zh: '規則警示' }} error={proposals} />
     ) : (
       <WarningsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
     );
-  const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
   const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
 
   return (
     <>
       <Hero
         today={today}
-        summary={summary}
         regularTwd={portfolio.pool.totalTwd}
         windfallTwd={windfallTwd}
-        driftStatus={drifts.find((row) => summary.largestDrift && row.assetClass.nameEn === summary.largestDrift.name.en)?.status}
+        line={days ? valueLine(days) : null}
         dataDate={portfolio.holdings.reduce<string | null>((newest, holding) => (holding.ticker && holding.priceDate && (newest === null || holding.priceDate > newest) ? holding.priceDate : newest), null)}
       />
       {waitingFirst && panel}
@@ -142,7 +136,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </div>
         <div className="dash-side">
           <Windfall portfolio={portfolio} plan={windfall} today={today} />
-          {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
+          {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} days={days ?? []} />}
         </div>
       </div>
       {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
@@ -161,89 +155,105 @@ function longDate(date: string): string {
   return `${year} 年 ${month} 月 ${day} 日 · 週${WEEKDAYS[weekday]}`;
 }
 
+/** The line's drawing box; it stretches to the poster's width, the stroke keeping its weight. */
+const LINE = { width: 390, height: 132, pad: 16 };
+
+/** A gain as a chip: the TWD net of the money moved and the return, each in the colour of its own direction. */
+function GainChip({ label, gain }: { label: Bilingual; gain: Gain }) {
+  const tone = (value: number | null) => (value === null || value === 0 ? undefined : value > 0 ? 'up' : 'down');
+  const amount = Math.round(gain.gain);
+  return (
+    <span className="hero-gain">
+      <span className="hero-gain-label">
+        <Bi {...label} />
+      </span>
+      <span className={tone(amount)}>
+        {amount > 0 ? '▲ ' : amount < 0 ? '▼ ' : ''}
+        {signedTwd(amount)}
+      </span>
+      {gain.change !== null && <span className={tone(gain.change)}>{signedPercent(gain.change, 2)}</span>}
+    </span>
+  );
+}
+
 /**
- * The band at the top: the portfolio's value (both pools), the weekly review's three lines, each
- * with its status icon, and a jump to the proposals at the foot of the page when one waits.
+ * The poster at the top (Hugo, 2026-11-13): the date and the refresh button, the portfolio's value
+ * (both pools) and each pool's, the gain since the start and over seven days as chips, and the
+ * line of the portfolio's rise and fall edge to edge along the foot, which opens Performance.
  */
 function Hero({
   today,
-  summary,
   regularTwd,
   windfallTwd,
-  driftStatus,
   dataDate,
+  line,
 }: {
   today: string;
   /** The newest close among the listed holdings; null when none is priced. */
   dataDate: string | null;
-  summary: ReturnType<typeof weeklySummary>;
   regularTwd: number;
   windfallTwd: number;
-  driftStatus: string | undefined;
+  /** Null until two closes hold a value, or when the history could not be read. */
+  line: ValueLine | null;
 }) {
-  const [rulesLine, driftLine, valueLine] = summaryLines(summary);
-  const waiting = summary.openProposals;
-  const drift = driftStatus === 'watch' || driftStatus === 'rebalance' ? driftStatus : 'ok';
-  const lines: Array<{ line: Bilingual | undefined; icon: string; tone: string; href?: string; link?: Bilingual }> = [
-    { line: rulesLine, icon: waiting > 0 ? '!' : '✓', tone: waiting > 0 ? 'watch' : 'ok' },
-    { line: driftLine, icon: summary.largestDrift ? DRIFT_ICON[drift] : '…', tone: summary.largestDrift ? drift : 'idle', href: '/allocation', link: LABELS.allocation },
-    { line: valueLine, icon: summary.valueTwd === null ? '…' : '✓', tone: summary.valueTwd === null ? 'idle' : 'ok' },
-  ];
+  const drawn = line ? linePath(line.points.map((point) => point.change), LINE.width, LINE.height, LINE.pad) : null;
+  const since = line?.points[0]?.date;
   return (
     <section className="hero" id="this-week">
-      <div className="hero-figure">
-        <span className="muted small">{longDate(today)}</span>
-        <h1>本週</h1>
-        <strong className="hero-value">{twd(regularTwd + windfallTwd)}</strong>
-        <span className="muted small">
-          <Bi en="Portfolio value, both pools" zh="總市值（兩個資金池）" />
-        </span>
-        <span className="muted small">
-          <Bi en={`Regular ${twd(regularTwd)} · windfall ${twd(windfallTwd)}`} zh={`一般 ${twd(regularTwd)} · 大額 ${twd(windfallTwd)}`} />
-        </span>
-      </div>
-      <div className="hero-lines">
-        <ul className="summary-lines">
-          {lines.map(({ line, icon, tone, href, link }) =>
-            line ? (
-              <li key={line.en}>
-                <span className={`hero-icon ${tone}`} aria-hidden="true">
-                  {icon}
-                </span>
-                <span>
-                  <Bi {...line} />
-                  {href && link && (
-                    <>
-                      {' · '}
-                      <Link href={href}>
-                        <Bi {...link} />
-                      </Link>
-                    </>
-                  )}
-                </span>
-              </li>
-            ) : null,
-          )}
-        </ul>
-        <div className="row">
-          {waiting > 0 && (
-            <Link href="/#proposals" className="button primary pill">
-              <Bi en={`${waiting} warning${waiting === 1 ? '' : 's'}`} zh={`${waiting} 則警示`} /> ↓
-            </Link>
-          )}
-          <Link href="/notifications" className="small">
-            <Bi en="Notifications" zh="推播設定" />
-          </Link>
-        </div>
-        <div className="hero-data">
-          {dataDate && (
-            <span className="muted small">
-              <Bi en={`Closes to ${dataDate}`} zh={`收盤價至 ${dataDate}`} />
-            </span>
-          )}
+      <div className="hero-body">
+        <div className="hero-head">
+          <span className="hero-date">
+            <span>{longDate(today)}</span>
+            {dataDate && <Bi en={`Closes to ${dataDate}`} zh={`收盤價至 ${dataDate}`} />}
+          </span>
           <RefreshData quiet />
         </div>
+        <h1>
+          <Zh en="Portfolio value" zh="總市值" />
+        </h1>
+        <strong className="hero-value">{twd(regularTwd + windfallTwd)}</strong>
+        <span className="hero-note">
+          <Bi en={`Regular ${twd(regularTwd)} · windfall ${twd(windfallTwd)}`} zh={`一般 ${twd(regularTwd)} · 大額 ${twd(windfallTwd)}`} />
+        </span>
+        {line && (
+          <div className="hero-gains">
+            <GainChip label={{ en: 'All time', zh: '累計' }} gain={line.total} />
+            {line.week && <GainChip label={{ en: '7 days', zh: '近 7 天' }} gain={line.week} />}
+          </div>
+        )}
+        {drawn && (
+          <div className="hero-legend">
+            <span>
+              <span aria-hidden="true">● </span>
+              <Bi en="Rise and fall, both pools" zh="兩個資金池的漲跌幅" />
+            </span>
+            <Info>
+              <Bi
+                en={`The line is the time-weighted return of both pools together since ${since} (F18): money put in or taken out does not move it. The amounts are the gain in TWD net of the money moved. Performance has the full chart and the benchmark.`}
+                zh={`線為兩個資金池合計自 ${since} 起的時間加權報酬（F18），投入與提領不影響線形；金額為扣除投入後的台幣損益。完整圖表與基準在「績效」頁。`}
+              />
+            </Info>
+          </div>
+        )}
       </div>
+      {drawn && line && (
+        <div className="hero-chart">
+          <svg
+            viewBox={`0 0 ${LINE.width} ${LINE.height}`}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label={`Rise and fall of both pools since ${since}, now ${signedPercent(line.total.change, 2)} 兩個資金池自 ${since} 起的漲跌幅，目前 ${signedPercent(line.total.change, 2)}`}
+          >
+            <line className="hero-zero" x1="0" x2={LINE.width} y1={drawn.zero.toFixed(1)} y2={drawn.zero.toFixed(1)} />
+            <path className="hero-line" d={drawn.path} />
+          </svg>
+          <Link href="/performance" className="hero-expand" aria-label="績效 Performance">
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 8 V4 H8 M12 16 H16 V12" />
+            </svg>
+          </Link>
+        </div>
+      )}
     </section>
   );
 }
@@ -529,9 +539,9 @@ function ComingWeek({
 }
 
 /** 8. Actual vs projected (F2), against the plan saved on the calculator. */
-function AgainstPlan({ plan: data }: { plan: PlanData }) {
+function AgainstPlan({ plan: data, days }: { plan: PlanData; days: readonly DayPoint[] }) {
   const plan = data.settings ? savedPlan(data.settings) : null;
-  const rows = plan ? againstPlan(monthEnds(buildSeries(data.input), 'regular'), plan.start, plan) : [];
+  const rows = plan ? againstPlan(monthEnds(days, 'regular'), plan.start, plan) : [];
   const latest = rows[rows.length - 1];
   return (
     <section className="card form">

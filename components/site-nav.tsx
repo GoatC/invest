@@ -12,7 +12,8 @@ import { RefreshData } from './refresh-data';
  * The main navigation: four pages as pills, each answering one question and taking in the analysis
  * pages that answer it too (PRD Section 5, "Phone redesign", step 5), and three groups that open a
  * short list below their button for what is used less often. Labels show in Chinese only; each
- * link's accessible name adds the English. On a phone the pills become a bottom tab bar whose
+ * link's accessible name adds the English. On a phone the pills become a bottom tab bar, the
+ * dashboard in the middle as a raised round button in the accent colour (Hugo, 2026-11-13), whose
  * "More" opens the groups as a sheet. The settings group also holds the button that refreshes the
  * data now (components/refresh-data.tsx). `SubNav` is the row of sub-tabs under the header on a
  * page that belongs to a tab with several pages.
@@ -97,9 +98,11 @@ const GROUPS: readonly Group[] = [
   },
 ];
 
-/** The tab bar's short labels; the fifth tab opens the groups. */
-const TABS: ReadonlyArray<{ page: Page; short: string; icon: ReactNode }> = [
-  { page: MAIN[0]!, short: '儀表板', icon: <path d="M3 10 L11 3.5 L19 10 V18.5 H13.5 V13.5 H8.5 V18.5 H3 Z" /> },
+/**
+ * The tab bar's short labels, left to right: the dashboard, the home screen, sits in the middle as
+ * the raised button; the fifth tab opens the groups.
+ */
+const TABS: ReadonlyArray<{ page: Page; short: string; icon: ReactNode; home?: boolean }> = [
   {
     page: MAIN[1]!,
     short: '持倉',
@@ -111,6 +114,7 @@ const TABS: ReadonlyArray<{ page: Page; short: string; icon: ReactNode }> = [
     ),
   },
   { page: MAIN[2]!, short: '績效', icon: <path d="M3 16 L9 10 L12.5 13.5 L19 7 M14.5 7 H19 V11.5" /> },
+  { page: MAIN[0]!, short: '儀表板', home: true, icon: <path d="M3 10 L11 3.5 L19 10 V18.5 H13.5 V13.5 H8.5 V18.5 H3 Z" /> },
   {
     page: MAIN[3]!,
     short: '配置',
@@ -262,12 +266,12 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
       <div className="nav-signout">{signOut}</div>
 
       <nav className="tab-bar" aria-label="Tabs 分頁">
-        {TABS.map(({ page, short, icon }) => {
+        {TABS.map(({ page, short, icon, home }) => {
           const current = matches(page, path) && !sheet;
           return (
-            <Link key={page.href} href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={current ? 'page' : undefined} className={current ? 'current' : undefined}>
+            <Link key={page.href} href={page.href} lang="zh-Hant" aria-label={name(page.label)} aria-current={current ? 'page' : undefined} className={[home ? 'tab-home' : '', current ? 'current' : ''].filter(Boolean).join(' ') || undefined}>
               <span className="tab-icon">
-                <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <svg width={home ? 26 : 22} height={home ? 26 : 22} viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                   {icon}
                 </svg>
               </span>

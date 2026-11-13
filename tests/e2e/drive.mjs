@@ -107,7 +107,7 @@ await step('the owner signs in and lands on the weekly dashboard', async () => {
   await page.fill('input[name=password]', OWNER_PASSWORD);
   await page.click('main button[type=submit]');
   await page.waitForURL(`${BASE}/`);
-  await page.getByRole('heading', { level: 1, name: '本週' }).waitFor();
+  await page.getByRole('heading', { level: 1, name: '總市值' }).waitFor();
   await page.goto(`${BASE}/holdings`);
   await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
 });
@@ -127,7 +127,7 @@ await step('the nightly job status slides in when the app loads, stays about thr
   // Moving to another page in the app does not bring it back; the data status page shows the line in full instead.
   await page.getByRole('navigation', { name: /Main/ }).getByRole('link', { name: /Dashboard/ }).click();
   await page.waitForURL(`${BASE}/`);
-  await page.getByRole('heading', { level: 1, name: '本週' }).waitFor();
+  await page.getByRole('heading', { level: 1, name: '總市值' }).waitFor();
   await page.waitForTimeout(500);
   check((await toast.count()) === 0, 'not again on the next page');
   await page.goto(`${BASE}/data`);
@@ -1714,18 +1714,28 @@ await step('push job: plans the weekly review and the standing warning, sends ea
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
-await step('dashboard: the band with the value and the three lines, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
+await step('dashboard: the poster with the value of both pools, the gains and the line of its rise and fall, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();
   const text = await body();
-  check(text.includes('規則：1 則警示。'), 'the rules line, in Chinese');
-  check(/配置：最大偏離為[^\n]+ [+−][\d.]+ pp。/.test(text), 'the largest drift');
-  check(text.includes('市值：尚無淨值快照。'), 'no snapshot before the nightly job');
-  const band = await page.locator('#this-week').innerText();
-  check(band.includes('本週') && /NT\$[\d,]+/.test(band) && band.includes('both pools'), `the band with the value of both pools, got ${band}`);
-  // A warning stands, so the warnings come second on the page and the band jumps to them; the band also dates the closes and offers the refresh.
-  check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await page.locator('#this-week').getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the band, got ${band}`);
-  await page.locator('#this-week').getByRole('link', { name: /1 warning/ }).waitFor();
+  const poster = page.locator('#this-week');
+  const band = (await poster.innerText()).replace(/\s+/g, ' ');
+  check(band.includes('總市值') && /一般 NT\$[\d,]+ · 大額 NT\$[\d,]+/.test(band), `the poster with the value of both pools and each pool's, got ${band}`);
+  check(new RegExp(`${taipeiToday.slice(0, 4)} 年 \\d+ 月 \\d+ 日 · 週`).test(band), `today's date, got ${band}`);
+  // The gain since the start and over seven days, each with its amount net of the money put in and its return.
+  check(/累計 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band) && /近 7 天 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band), `the gains as chips, got ${band}`);
+  // The poster carries no rule or drift line any more (Hugo, 2026-11-13): the warnings sit right under it, the drift on Allocation.
+  check(!/規則：|最大偏離|推播設定/.test(band) && (await poster.getByRole('link', { name: /warning/ }).count()) === 0, `no rules or drift line on the poster, got ${band}`);
+  // It dates the closes, offers the refresh, and draws the line of both pools' rise and fall, which opens Performance.
+  check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the poster, got ${band}`);
+  check(!(await poster.locator('.refresh-data p').isVisible()), 'the refresh note waits until a run is asked for');
+  const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
+  check(lineName && band.includes(`累計`) && band.includes(/now ([+−]?\d+\.\d{2}%)/.exec(lineName)?.[1] ?? 'none'), `the line ends at the return the chip shows, got ${lineName}`);
+  check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
+  check((await poster.getByRole('link', { name: /Performance/ }).getAttribute('href')) === '/performance', 'the line opens Performance');
+  await poster.locator('details.info summary').click();
+  check((await poster.locator('details.info').innerText()).includes('時間加權報酬'), 'how the line is worked out, behind ⓘ');
+  await poster.locator('details.info summary').click();
   const headings = await page.locator('main h2').allInnerTexts();
   const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
@@ -1743,7 +1753,7 @@ await step('dashboard: the band with the value and the three lines, the standing
   const id = await page.locator('#proposals .alert-tile').first().getAttribute('id');
   await page.locator('#proposals').getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
-  check((await page.locator(`#${id}`).count()) === 1 && (await body()).includes('規則：1 則警示。'), 'the warning still stands');
+  check((await page.locator(`#${id}`).count()) === 1, 'the warning still stands');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
   await page.locator('.chart-donut svg').waitFor();
@@ -2364,7 +2374,11 @@ await step('navigation: four pages as pills with their sub-tabs, three groups th
 async function phoneTabs() {
   await page.goto(`${BASE}/`);
   const tabs = page.getByRole('navigation', { name: /Tabs/ });
-  check((await tabs.getByRole('link').allInnerTexts()).join(' ') === '儀表板 持倉 績效 配置', `four tabs, got ${await tabs.innerText()}`);
+  check((await tabs.getByRole('link').allInnerTexts()).join(' ') === '持倉 績效 儀表板 配置', `four tabs, the dashboard in the middle, got ${await tabs.innerText()}`);
+  // The dashboard is the raised round button: wider than tall no more, standing up out of the bar, and no smaller than 44px.
+  const home = await tabs.getByRole('link', { name: /Dashboard/ }).locator('.tab-icon').boundingBox();
+  const bar = await tabs.boundingBox();
+  check(home && bar && Math.round(home.width) === Math.round(home.height) && home.width >= 44 && home.y < bar.y && Math.abs(home.x + home.width / 2 - 195) <= 1, `the dashboard button, round, raised and centred, got ${JSON.stringify(home)} in ${JSON.stringify(bar)}`);
   await tabs.getByRole('button', { name: /More/ }).click();
   const sheet = page.getByRole('dialog', { name: /More/ });
   await sheet.getByRole('link', { name: /Data status/ }).waitFor();
