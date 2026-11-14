@@ -56,7 +56,7 @@ export function PhoneTabs({ tabs, parts, initial, label }: { tabs: ReadonlyArray
   return (
     <>
       <div ref={top} className="phone-tabs-top" />
-      <div className="phone-tabs" role="tablist" aria-label={label}>
+      <div className="phone-tabs" role="tablist" aria-label={label} data-shell-segments>
         {tabs.map((tab) => (
           <button key={tab.key} type="button" role="tab" lang="zh-Hant" aria-label={`${tab.label.zh} ${tab.label.en}`} aria-selected={tab.key === active} className={tab.key === active ? 'selected' : undefined} onClick={() => choose(tab.key)}>
             {tab.label.zh}

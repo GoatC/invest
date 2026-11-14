@@ -56,6 +56,12 @@ export interface ShellTop {
   statusBar: 'light' | 'dark';
   back: boolean;
   actions: readonly ShellAction[];
+  /**
+   * The page's row of sub-tabs (`data-shell-segments`: the tab's pages, or Holdings' views), which
+   * the shell draws as iOS's segmented control under the large title (proposal G03, Hugo
+   * 2026-11-15: every row as one control, Allocation's five included, no menu); null for none.
+   */
+  segments: { labels: readonly string[]; current: number } | null;
 }
 
 /**
@@ -111,6 +117,8 @@ export function sameTop(a: ShellTop | null, b: ShellTop | null): boolean {
     a.title === b.title &&
     a.statusBar === b.statusBar &&
     a.back === b.back &&
+    a.segments?.current === b.segments?.current &&
+    (a.segments?.labels ?? []).join('\n') === (b.segments?.labels ?? []).join('\n') &&
     a.actions.length === b.actions.length &&
     a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label)
   );

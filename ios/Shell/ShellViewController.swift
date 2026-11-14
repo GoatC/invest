@@ -15,6 +15,10 @@ final class TabHost: UIViewController {
     private var drawn: ShellTop?
     /// White text over the poster's colour (and the launch colour before the page has spoken); the system's own otherwise.
     private var lightStatusBar = true
+    /// The page's row of sub-tabs (proposal G03), kept while the row stays the same so a choice slides its lens.
+    private var segmented: UISegmentedControl?
+    /// Called with the index of the sub-tab chosen in the segmented control.
+    var onSegment: ((Int) -> Void)?
 
     init(tab: ShellTab) {
         self.place = tab
@@ -47,6 +51,7 @@ final class TabHost: UIViewController {
         } else {
             navigationItem.leftBarButtonItem = nil
         }
+        drawSegments(top)
         let light = top?.lightStatusBar ?? true
         if light != lightStatusBar {
             lightStatusBar = light
@@ -66,6 +71,38 @@ final class TabHost: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = TabHost.ground
+    }
+
+    /// The row of sub-tabs as iOS's segmented control: under the large title, or in the middle of the
+    /// bar on the dashboard, whose poster has none; every sub-tab in one control, Allocation's five too.
+    private func drawSegments(_ top: ShellTop?) {
+        guard let top = top, top.segments.count > 1 else {
+            segmented = nil
+            navigationItem.largeSubtitleView = nil
+            navigationItem.titleView = nil
+            return
+        }
+        let labels = (0..<(segmented?.numberOfSegments ?? 0)).map { segmented?.titleForSegment(at: $0) ?? "" }
+        let control: UISegmentedControl
+        if let kept = segmented, labels == top.segments {
+            control = kept
+        } else {
+            control = UISegmentedControl(items: top.segments)
+            control.apportionsSegmentWidthsByContent = true
+            control.addAction(UIAction { [weak self, weak control] _ in
+                guard let index = control?.selectedSegmentIndex, index >= 0 else { return }
+                self?.onSegment?(index)
+            }, for: .valueChanged)
+            segmented = control
+        }
+        if control.selectedSegmentIndex != top.segment { control.selectedSegmentIndex = top.segment }
+        if top.title == nil {
+            navigationItem.largeSubtitleView = nil
+            navigationItem.titleView = control
+        } else {
+            navigationItem.titleView = nil
+            navigationItem.largeSubtitleView = control
+        }
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -134,8 +171,9 @@ final class ShellViewController: UITabBarController {
         let content = WKUserContentController()
         // The mark the page's style sheet reads (globals.css `html[data-shell]`), set before the page is read.
         // `data-shell-top`: this shell draws the top of the page itself (proposal G02), so the page draws no header of its own;
-        // `data-shell-next`: it shows what waits above the tab bar (G04), so the page shows no banner.
-        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // `data-shell-next`: it shows what waits above the tab bar (G04), so the page shows no banner;
+        // `data-shell-segmented`: it draws the page's row of sub-tabs as a segmented control (G03).
+        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');document.documentElement.setAttribute('data-shell-segmented','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         configuration.userContentController = content
@@ -239,6 +277,7 @@ final class ShellViewController: UITabBarController {
             let kept = key ?? selectedHost?.place.key
             hosts = tabs.map { tab in
                 let host = TabHost(tab: tab)
+                host.onSegment = { [weak self] index in self?.web.evaluateJavaScript("window.longview&&window.longview.segment(\(index))", completionHandler: nil) }
                 host.onInsets = { [weak self] in
                     self?.sayBottom()
                     self?.sayTop()

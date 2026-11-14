@@ -45,7 +45,7 @@ export function SubNav() {
   const tab = MAIN.find((page) => page.sub && matches(page, path));
   if (!tab?.sub) return null;
   return (
-    <nav className="sub-nav" aria-label={`${tab.label.en} ${tab.label.zh}`}>
+    <nav className="sub-nav" aria-label={`${tab.label.en} ${tab.label.zh}`} data-shell-segments>
       {tab.sub.map((page) => {
         const here = matches(page, path);
         return (
