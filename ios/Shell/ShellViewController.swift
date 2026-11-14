@@ -4,12 +4,13 @@ import WebKit
 /// One place in the tab bar. It has no page of its own: the one web view moves into whichever is
 /// chosen, so a tab opens from what the page already holds (components/preload.tsx on the web side).
 final class TabHost: UIViewController {
-    let tab: ShellTab
+    /// Not `tab`: UIKit has a property of that name on every view controller.
+    let place: ShellTab
     /// Called when the room the bars take from this place changes.
     var onInsets: (() -> Void)?
 
     init(tab: ShellTab) {
-        self.tab = tab
+        self.place = tab
         super.init(nibName: nil, bundle: nil)
         tabBarItem = UITabBarItem(title: tab.title, image: UIImage(systemName: tab.symbol), selectedImage: nil)
     }
@@ -139,16 +140,16 @@ final class ShellViewController: UITabBarController {
 
     /// Shows `tabs` in the bar (built again only when the list itself changes) and chooses `key`, if it is one of them.
     private func show(tabs: [ShellTab], choose key: String?) {
-        if hosts.map(\.tab) != tabs {
-            let kept = key ?? (selectedViewController as? TabHost)?.tab.key
+        if hosts.map(\.place) != tabs {
+            let kept = key ?? (selectedViewController as? TabHost)?.place.key
             hosts = tabs.map { tab in
                 let host = TabHost(tab: tab)
                 host.onInsets = { [weak self] in self?.sayBottom() }
                 return host
             }
             setViewControllers(hosts, animated: false)
-            if let kept = kept, let index = hosts.firstIndex(where: { $0.tab.key == kept }) { selectedIndex = index }
-        } else if let key = key, let index = hosts.firstIndex(where: { $0.tab.key == key }), selectedIndex != index {
+            if let kept = kept, let index = hosts.firstIndex(where: { $0.place.key == kept }) { selectedIndex = index }
+        } else if let key = key, let index = hosts.firstIndex(where: { $0.place.key == key }), selectedIndex != index {
             selectedIndex = index
         }
         if let host = selectedViewController as? TabHost { attach(to: host) }
@@ -216,7 +217,7 @@ extension ShellViewController: UITabBarControllerDelegate {
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
         guard let host = viewController as? TabHost else { return }
         attach(to: host)
-        let key = host.tab.key
+        let key = host.place.key
         guard let argument = try? JSONSerialization.data(withJSONObject: [key]), let list = String(data: argument, encoding: .utf8) else { return }
         // The page opens the tab from what it holds. A page that is not there to ask (still loading,
         // an error page) is passed over: the tab's page is fetched whole, and "More" goes back.
@@ -226,7 +227,7 @@ extension ShellViewController: UITabBarControllerDelegate {
             if key != ShellTab.more, let url = Site.page(key) {
                 self.load(url)
             } else {
-                self.show(tabs: self.hosts.map(\.tab), choose: self.state?.tab)
+                self.show(tabs: self.hosts.map(\.place), choose: self.state?.tab)
             }
         }
     }
