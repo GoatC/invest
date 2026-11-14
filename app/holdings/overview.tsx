@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Bi } from '@/components/bi';
 import { Facts } from '@/components/facts';
 import { Info } from '@/components/info';
+import { TickerMark } from '@/components/ticker-mark';
 import type { requireSession } from '@/lib/auth';
 import { DataError, loadHoldingCloses, loadRedFlagData, loadSectorSettings, loadWorkbench, orDataError, type AllocationData, type Proposal, type RuleRecord } from '@/lib/data';
 import { addDays } from '@/lib/dates';
@@ -307,6 +308,7 @@ function Cards({ rows, nameOf, today, marginCallShare }: { rows: readonly Row[];
         <li key={row.holding.key} className="hold-card">
           <div className="hold-top">
             <Link href={`/holdings/chart/${encodeURIComponent(row.ticker)}`} className="hold-name">
+              <TickerMark ticker={row.holding.ticker} market={row.holding.market} label={row.holding.label} classId={row.holding.assetClassId} />
               <b>{row.ticker}</b>
               <span>{nameOf(row.ticker)}</span>
             </Link>
