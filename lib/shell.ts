@@ -1,4 +1,4 @@
-import { GROUPS, MAIN, matches } from '@/components/nav-pages';
+import { GROUPS, MAIN, matches, NAV_PATHS } from '@/components/nav-pages';
 
 /**
  * What the web app and its iOS shell tell each other (ios/, docs/ios-app.md; PRD Section 5, "Native
@@ -35,6 +35,29 @@ export function shellTab(path: string, sheet: boolean): string | null {
   return MAIN.find((page) => matches(page, path))?.href ?? null;
 }
 
+/** A control of the page lent to the shell's navigation bar: `data-shell-action` on the control itself. */
+export interface ShellAction {
+  key: string;
+  /** An SF Symbol's name (`data-shell-symbol`). */
+  symbol: string;
+  /** What VoiceOver says: the control's accessible name. */
+  label: string;
+}
+
+/**
+ * The top of the page, which the shell's own navigation bar draws (Liquid Glass proposal G02, with
+ * C01; Hugo 2026-11-15): the page's title as iOS's large title, the page's own controls as glass
+ * buttons, a back button on a page reached from inside another, and the status bar's colour.
+ */
+export interface ShellTop {
+  /** The page's title (its h1); null on the dashboard, whose poster is the top of the screen. */
+  title: string | null;
+  /** White text over the poster's colour, dark over the grey ground. */
+  statusBar: 'light' | 'dark';
+  back: boolean;
+  actions: readonly ShellAction[];
+}
+
 /** One message from the page to the shell, sent whenever any of it changes. */
 export interface ShellState {
   /** The version of this message; the shell ignores what it does not know. */
@@ -43,10 +66,29 @@ export interface ShellState {
   path: string;
   tab: string | null;
   tabs: readonly ShellTab[];
+  /** Left out by a page from before the shell drew the top; the shell then keeps its bar empty. */
+  top?: ShellTop;
 }
 
-export function shellState(path: string, sheet: boolean, signedIn: boolean): ShellState {
-  return { v: 1, signedIn, path, tab: signedIn ? shellTab(path, sheet) : null, tabs: SHELL_TABS };
+export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop): ShellState {
+  return { v: 1, signedIn, path, tab: signedIn ? shellTab(path, sheet) : null, tabs: SHELL_TABS, ...(top ? { top } : {}) };
+}
+
+/** Whether the page at `path` is reached from inside another (a holding's chart, a form): not a page of the navigation. */
+export function shellBack(path: string): boolean {
+  return !NAV_PATHS.includes(path);
+}
+
+/** Two tops the same, so the page tells the shell only of a change. */
+export function sameTop(a: ShellTop | null, b: ShellTop | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.title === b.title &&
+    a.statusBar === b.statusBar &&
+    a.back === b.back &&
+    a.actions.length === b.actions.length &&
+    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label)
+  );
 }
 
 /**

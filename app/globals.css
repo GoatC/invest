@@ -3554,6 +3554,60 @@ html[data-shell] .hero-value {
   font-weight: 700;
 }
 
+/* The top of the page drawn by the shell itself (Liquid Glass proposal G02 with C01, Hugo
+   2026-11-15). A shell that draws the navigation bar marks the page `data-shell-top` and says how
+   much of the screen its bar takes: with the large title (--shell-top) and drawn in to one line
+   (--shell-top-inline). The page then draws no header, title or band of the poster's colour behind
+   the status bar of its own, lends its marked controls to the bar (`data-shell-action`,
+   components/shell-bridge.tsx) and starts below it. An older shell sets no such mark, and the page
+   keeps all of these. The title stays for VoiceOver, out of sight. */
+html[data-shell-top] body::before {
+  display: none;
+}
+
+html[data-shell-top] .site-header {
+  height: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+html[data-shell-top] .site-header .brand,
+html[data-shell-top] .site-nav,
+html[data-shell-top] .nav-signout {
+  display: none;
+}
+
+html[data-shell-top] main h1:not(.hero h1) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+html[data-shell-top] main [data-shell-action] {
+  display: none;
+}
+
+html[data-shell-top] body.signed-in {
+  padding-top: var(--shell-top, var(--safe-top));
+}
+
+html[data-shell-top] body.signed-in:has(.page > .hero) {
+  padding-top: 0;
+}
+
+html[data-shell-top] .phone-tabs {
+  top: calc(var(--shell-top-inline, var(--safe-top)) + 4px);
+}
+
+html[data-shell-top] .sheet-backdrop,
+html[data-shell-top] .sheet {
+  top: var(--shell-top, var(--safe-top));
+}
+
 /* The shell's content in iOS's own colours (Liquid Glass proposal C03, Hugo 2026-11-15): the
    grouped grey ground with white groups on it, iOS's label and separator colours, no shadows, the
    rounder corners of iOS 26, and true black with dark groups in dark mode. The glass belongs to the

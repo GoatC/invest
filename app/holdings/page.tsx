@@ -212,7 +212,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           { tab: 'overview', content: !empty && <Footnotes /> },
         ]}
       />
-      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade">
+      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade" data-shell-action="add" data-shell-symbol="plus">
         ＋
       </a>
     </>

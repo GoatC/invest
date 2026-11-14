@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MORE, SHELL_TABS, reminderPrefs, remindersMessage, shellMove, shellOpenUrl, shellState, shellTab, sitePath } from './shell';
+import { MORE, SHELL_TABS, reminderPrefs, remindersMessage, sameTop, shellBack, shellMove, shellOpenUrl, shellState, shellTab, sitePath, type ShellTop } from './shell';
 
 describe('the iOS shell: what the page tells it and does for it', () => {
   it('lists the tabs as the web tab bar does, the dashboard in the middle and More last', () => {
@@ -82,5 +82,28 @@ describe('the iOS shell: reminders on the phone and the way in from a push', () 
     assert.equal(shellOpenUrl('/cash-flows?new=dividend&event=7'), 'longview://open?path=%2Fcash-flows%3Fnew%3Ddividend%26event%3D7');
     for (const bad of ['https://evil.example/', '//evil.example', 'volatility', '/\\evil', '']) assert.equal(shellOpenUrl(bad), null, bad);
     assert.equal(sitePath(null), null);
+  });
+});
+
+describe('the top of the page, drawn by the shell (proposal G02)', () => {
+  const TOP: ShellTop = { title: '持倉', statusBar: 'dark', back: false, actions: [{ key: 'add', symbol: 'plus', label: '新增交易 Add trade' }] };
+
+  it('adds the top to the message only when the page gives one', () => {
+    assert.equal('top' in shellState('/holdings', false, true), false);
+    assert.deepEqual(shellState('/holdings', false, true, TOP).top, TOP);
+  });
+
+  it('shows a back button on a page reached from inside another, not on a page of the navigation', () => {
+    for (const path of ['/', '/holdings', '/volatility', '/attribution', '/plan', '/rules']) assert.equal(shellBack(path), false, path);
+    for (const path of ['/holdings/chart/NVDA', '/valuation/AAPL', '/securities/new', '/assets/new']) assert.equal(shellBack(path), true, path);
+  });
+
+  it('tells a change of title, status bar, back button or controls apart from the same top', () => {
+    assert.equal(sameTop(TOP, { ...TOP, actions: [{ ...TOP.actions[0]! }] }), true);
+    assert.equal(sameTop(TOP, { ...TOP, title: '績效' }), false);
+    assert.equal(sameTop(TOP, { ...TOP, statusBar: 'light' }), false);
+    assert.equal(sameTop(TOP, { ...TOP, actions: [] }), false);
+    assert.equal(sameTop(null, null), true);
+    assert.equal(sameTop(TOP, null), false);
   });
 });

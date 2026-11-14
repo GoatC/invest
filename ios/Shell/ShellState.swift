@@ -32,6 +32,34 @@ struct ShellTab: Equatable {
     }
 }
 
+/// A control of the page lent to the navigation bar (lib/shell.ts `ShellAction`).
+struct ShellAction: Equatable {
+    let key: String
+    /// An SF Symbol's name.
+    let symbol: String
+    let label: String
+}
+
+/// The top of the page, which the navigation bar draws (lib/shell.ts `ShellTop`; proposal G02).
+struct ShellTop: Equatable {
+    /// The large title; nil on the dashboard, whose poster is the top of the screen.
+    let title: String?
+    let lightStatusBar: Bool
+    let back: Bool
+    let actions: [ShellAction]
+
+    init?(_ body: Any?) {
+        guard let fields = body as? [String: Any] else { return nil }
+        title = (fields["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        lightStatusBar = (fields["statusBar"] as? String) == "light"
+        back = fields["back"] as? Bool ?? false
+        actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap { action in
+            guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
+            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key)
+        }
+    }
+}
+
 /// What the page tells the shell each time it changes (lib/shell.ts `ShellState`, version 1).
 struct ShellState: Equatable {
     let signedIn: Bool
@@ -39,6 +67,8 @@ struct ShellState: Equatable {
     /// The tab the page belongs to; nil on a page of none (the bar keeps its choice).
     let tab: String?
     let tabs: [ShellTab]
+    /// Nil from a page that does not send it yet: the navigation bar stays empty.
+    let top: ShellTop?
 
     /// Reads the body of a script message; nil for anything that is not a version 1 state.
     init?(message body: Any) {
@@ -55,6 +85,7 @@ struct ShellState: Equatable {
             return ShellTab(key: key, title: title)
         }
         self.tabs = listed.isEmpty ? ShellTab.fallback : listed
+        self.top = ShellTop(fields["top"])
     }
 }
 
