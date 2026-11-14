@@ -3497,3 +3497,40 @@ table.book tr.uncounted .num {
     min-height: var(--tap-min);
   }
 }
+
+/* Inside the iOS shell (ios/, docs/ios-app.md; lib/shell.ts): the system's tab bar, of Apple's own
+   glass, stands where the web tab bar would, so that one is not drawn. The shell marks the page
+   (`data-shell` on <html>, set before the page is read) and says how much of the foot of the
+   screen its bar takes (--shell-bottom); a browser and the installed web app carry no mark and
+   read none of this. */
+html[data-shell] {
+  --tabbar-height: 0px;
+  --tabbar-gap: var(--shell-bottom, 90px);
+  --tabbar-space: var(--shell-bottom, 90px);
+}
+
+html[data-shell] .tab-bar {
+  display: none;
+}
+
+/* "More" is a tab of the shell's bar: its list is that tab's page, not a card over another page. */
+html[data-shell] .sheet-backdrop {
+  top: var(--safe-top);
+  background: var(--bg);
+}
+
+html[data-shell] .sheet {
+  inset: var(--safe-top) 0 0;
+  max-width: none;
+  max-height: none;
+  align-content: start;
+  padding: 1rem 1rem calc(var(--tabbar-space) + 1rem);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg);
+}
+
+/* Left by tapping another tab, or More again. */
+html[data-shell] .sheet-close {
+  display: none;
+}
