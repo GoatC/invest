@@ -3554,6 +3554,119 @@ html[data-shell] .hero-value {
   font-weight: 700;
 }
 
+/* The shell's content in iOS's own colours (Liquid Glass proposal C03, Hugo 2026-11-15): the
+   grouped grey ground with white groups on it, iOS's label and separator colours, no shadows, the
+   rounder corners of iOS 26, and true black with dark groups in dark mode. The glass belongs to the
+   native bars only; the content under them stays solid. The forget-me-not blue stays the one tint. */
+html[data-shell] {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --text: #000000;
+  --muted: #6c6c70;
+  --border: #c6c6c8;
+  --border-strong: #8e8e93;
+  --radius: 12px;
+  --radius-lg: 22px;
+  --shadow-soft: none;
+  --card-border: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-shell] {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --text: #ffffff;
+    --muted: #98989f;
+    --border: #38383a;
+    --border-strong: #545458;
+  }
+}
+
+/* The holdings as one group of rows split by hairlines, as an iOS list, in place of a card each. */
+html[data-shell] .hold-cards {
+  gap: 0;
+}
+
+html[data-shell] .hold-card {
+  padding: 0.75rem 0;
+  background: none;
+  border-radius: 0;
+}
+
+html[data-shell] .hold-card + .hold-card {
+  border-top: 0.5px solid var(--border);
+}
+
+html[data-shell] .hold-name {
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* A holding's mark (components/ticker-mark.tsx): the ticker on its class's line colour, the logo
+   over it where one loads. Outside the shell none is drawn. The line colours keep clear of red and
+   green, which stay with gains and losses. */
+.tick-mark {
+  display: none;
+}
+
+html[data-shell] .tick-mark {
+  --c: #5f6d7c;
+  --c-ink: #ffffff;
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  overflow: hidden;
+  border-radius: 0.65rem;
+  background: var(--c);
+  color: var(--c-ink);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+html[data-shell] .tick-mark img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0.3rem;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+html[data-shell] .tick-mark[data-line='us_global_equity'] {
+  --c: #2563c9;
+}
+
+html[data-shell] .tick-mark[data-line='tw_market_cap'] {
+  --c: #0f7896;
+}
+
+html[data-shell] .tick-mark[data-line='global_bonds'] {
+  --c: #6a4bb8;
+}
+
+html[data-shell] .tick-mark[data-line='real_assets'] {
+  --c: #c0900f;
+  --c-ink: #1a1300;
+}
+
+html[data-shell] .tick-mark[data-line='us_stocks'] {
+  --c: #b4560b;
+}
+
+html[data-shell] .tick-mark[data-line='tw_stocks'] {
+  --c: #8e5a2f;
+}
+
+html[data-shell] .tick-mark[data-line='tactical_themes'] {
+  --c: #b0337c;
+}
+
 /* A choice that is a checkbox and its name, a finger's height (the iOS shell's reminders, a push opening the app). */
 .check-list {
   display: grid;
