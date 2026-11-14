@@ -2523,6 +2523,108 @@ await step('opening the app: the mark while every tab is fetched, then each tab 
   }
 });
 
+// The iOS shell (ios/, lib/shell.ts), stood in for by what it adds to a page before the page is read: the mark on
+// <html>, the room its tab bar takes, and the message handler the page reports to.
+await step('inside the iOS shell: no web tab bar, the native one told where the page is, a native tab opening its page from memory', async () => {
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: 'Asia/Taipei', storageState: { cookies: await context.cookies(), origins: [] } });
+  try {
+    await phone.addInitScript(() => {
+      // The shell marks <html> as soon as there is one; here that is a moment after this script runs.
+      const mark = () => {
+        if (!document.documentElement) return false;
+        document.documentElement.setAttribute('data-shell', 'ios');
+        document.documentElement.style.setProperty('--shell-bottom', '83px');
+        return true;
+      };
+      if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true });
+      window.shellSaid = [];
+      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) } } };
+    });
+    const app = await phone.newPage();
+    app.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (inside the shell, on ${app.url().replace(BASE, '')})`));
+    const asked = [];
+    app.on('request', (request) => {
+      const url = new URL(request.url());
+      if (!url.searchParams.has('_rsc') || request.headers()['next-router-prefetch']) return;
+      url.searchParams.delete('_rsc');
+      asked.push(`${url.pathname}${url.search}`);
+    });
+    const said = async () => (await app.evaluate(() => window.shellSaid)).at(-1);
+    const says = (want) => app.waitForFunction(([path, tab]) => window.shellSaid.at(-1)?.path === path && window.shellSaid.at(-1)?.tab === tab, want);
+    await app.goto(`${BASE}/`);
+    await app.waitForFunction(() => document.documentElement.hasAttribute('data-opened'), null, { timeout: 30_000 });
+    await app.waitForLoadState('networkidle');
+    // The page keeps the shell's mark through hydration, draws no tab bar of its own and reports where it is.
+    check((await app.locator('html').getAttribute('data-shell')) === 'ios', 'the mark stays on the page');
+    check(!(await app.locator('.tab-bar').isVisible()), 'no web tab bar');
+    await says(['/', '/']);
+    const first = await said();
+    check(first.v === 1 && first.signedIn === true, `signed in, version 1, got ${JSON.stringify(first)}`);
+    check(first.tabs.map((tab) => `${tab.key} ${tab.title}`).join('|') === '/holdings 持倉|/performance 績效|/ 儀表板|/allocation 配置|more 更多', `the five tabs, got ${JSON.stringify(first.tabs)}`);
+    const foot = await app.evaluate(() => getComputedStyle(document.body).paddingBottom);
+    check(foot === '99px', `the page keeps clear of the native bar, got ${foot}`);
+    // A tap on a native tab: the page opens from what was fetched ahead, and the shell hears of it.
+    const select = async (key, path, title) => {
+      const before = asked.length;
+      await app.evaluate((tab) => window.longview.select(tab), key);
+      await app.waitForURL(`**${path}`);
+      await app.getByRole('heading', { level: 1, name: title }).waitFor();
+      check(!asked.slice(before).includes(path), `${path} opens without asking the server, asked ${asked.slice(before).join(', ')}`);
+    };
+    await select('/holdings', '/holdings', '持倉');
+    await says(['/holdings', '/holdings']);
+    // The "+" floats over the native bar, not under it.
+    const fab = await app.locator('.fab').boundingBox();
+    check(fab && fab.y + fab.height <= 844 - 83, `the + clears the native bar, got ${JSON.stringify(fab)}`);
+    await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
+    // A sub-tab is the page's own: the native tab stays, the path follows.
+    await select('/performance', '/performance', '績效');
+    await app.getByRole('navigation', { name: /Performance/ }).getByRole('link', { name: /Attribution/ }).tap();
+    await says(['/attribution', '/performance']);
+    // More: its list fills the screen as that tab's page; a page under it keeps More chosen.
+    await app.evaluate(() => window.longview.select('more'));
+    await says(['/attribution', 'more']);
+    const sheet = app.getByRole('dialog', { name: /More/ });
+    const box = await sheet.boundingBox();
+    check(box && box.x === 0 && box.width === 390 && box.y + box.height === 844, `the list fills the screen, got ${JSON.stringify(box)}`);
+    check(!(await sheet.getByRole('button', { name: /Close/ }).isVisible()), 'no close button: another tab leaves it');
+    await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-more.png` });
+    await sheet.getByRole('link', { name: /Rules/ }).tap();
+    await says(['/rules', 'more']);
+    check(!(await sheet.isVisible()), 'the list closes on its page');
+    // More again opens the list over that page; the tab under the list closes it and opens its own page.
+    await app.evaluate(() => window.longview.select('more'));
+    await sheet.waitFor();
+    await select('/', '/', '總市值');
+    await says(['/', '/']);
+    check(!(await sheet.isVisible()), 'a tab closes the list');
+    // A second tap on the tab of the page on screen goes back to its top.
+    await app.evaluate(() => window.scrollTo(0, 600));
+    await app.evaluate(() => window.longview.select('/'));
+    await app.waitForFunction(() => window.scrollY === 0);
+    // The push page says where pushes arrive instead of offering a switch that cannot work here.
+    await app.goto(`${BASE}/notifications`);
+    await app.locator('#push-status').filter({ hasText: '主畫面的網頁版' }).waitFor();
+  } finally {
+    await phone.close();
+  }
+  // Signed out, the shell is told so (it hides its tab bar on the login page).
+  const visitor = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  try {
+    await visitor.addInitScript(() => {
+      new MutationObserver((_, watch) => document.documentElement && (document.documentElement.setAttribute('data-shell', 'ios'), watch.disconnect())).observe(document, { childList: true });
+      window.shellSaid = [];
+      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) } } };
+    });
+    const login = await visitor.newPage();
+    await login.goto(`${BASE}/`);
+    await login.waitForURL('**/login');
+    await login.waitForFunction(() => window.shellSaid.at(-1)?.signedIn === false && window.shellSaid.at(-1)?.tab === null);
+  } finally {
+    await visitor.close();
+  }
+});
+
 // The real nightly job, against the stand-in, with live feeds: what GitHub Actions runs each night.
 const nightly = (extra = {}) =>
   promisify(execFile)(`${REPO}/node_modules/.bin/tsx`, ['scripts/nightly.ts'], {

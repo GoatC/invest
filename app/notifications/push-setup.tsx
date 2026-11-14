@@ -8,11 +8,13 @@ import type { Bilingual } from '@/lib/i18n';
 
 import { removeDevice, saveSubscription, sendTest, type TestState } from './actions';
 
-type Status = 'checking' | 'unsupported' | 'home-screen' | 'not-configured' | 'denied' | 'off' | 'on' | 'working';
+type Status = 'checking' | 'unsupported' | 'shell' | 'home-screen' | 'not-configured' | 'denied' | 'off' | 'on' | 'working';
 
 const STATUS: Record<Status, Bilingual> = {
   checking: { en: 'Checking this device…', zh: '正在檢查這台裝置…' },
   unsupported: { en: 'This browser cannot receive Web Push.', zh: '這個瀏覽器無法接收網頁推播。' },
+  // The iOS shell (docs/ios-app.md): a web view is given no Web Push, and a free-signed app no push of its own.
+  shell: { en: 'This app cannot receive pushes: keep the Home Screen web app for them.', zh: '這個 App 收不到推播：請保留主畫面的網頁版來收。' },
   'home-screen': {
     en: 'On an iPhone or iPad, pushes reach the app only once it is on the Home Screen: in Safari, Share → Add to Home Screen, then open it from its icon and come back here.',
     zh: 'iPhone 或 iPad 需要先把 App 加入主畫面才能收到推播：在 Safari 按「分享」→「加入主畫面」，再從主畫面的圖示打開 App，回到這一頁。',
@@ -75,7 +77,8 @@ export function PushSetup({ publicKey, devices }: { publicKey: string | null; de
     (async () => {
       const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
       let next: Status;
-      if (!supported) next = isAppleMobile() && !standalone() ? 'home-screen' : 'unsupported';
+      if (document.documentElement.hasAttribute('data-shell')) next = 'shell';
+      else if (!supported) next = isAppleMobile() && !standalone() ? 'home-screen' : 'unsupported';
       else if (!publicKey) next = 'not-configured';
       else {
         const registration = await navigator.serviceWorker.register('/sw.js');

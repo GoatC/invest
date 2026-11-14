@@ -18,3 +18,10 @@ out/
 next-env.d.ts
 *.tsbuildinfo
 .vercel
+
+# The iOS shell (ios/): what is Hugo's own (the site's host, his Apple team, the app's identifier)
+# stays on his Mac, with what Xcode builds and remembers.
+ios/Local.xcconfig
+ios/build/
+xcuserdata/
+*.xcuserstate

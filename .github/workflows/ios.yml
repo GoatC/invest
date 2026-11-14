@@ -1,0 +1,44 @@
+# Builds the iOS shell (ios/) with a real Xcode whenever it changes, unsigned and for the simulator:
+# the shell is written where there is no Xcode (docs/ios-app.md), so this is where a mistake in the
+# Swift or the project file shows before Hugo meets it on his Mac. Both the Xcode that first knew
+# iOS 26 (the system the app asks for) and the current one. No secrets: nothing is signed or sent.
+name: iOS shell build
+
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for the simulator, unsigned
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/LongView.xcodeproj -scheme LongView -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/build" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "warning:|error:|BUILD|^\*\*" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+      - name: A delegate method the system would never call
+        # A method of an optional protocol that is spelled almost right compiles, and is then never
+        # called; the compiler says "nearly matches". That is a failure here.
+        run: |
+          if grep -n "nearly matches" "$RUNNER_TEMP/build.log"; then exit 1; fi
+      - name: What was built
+        run: |
+          app="$RUNNER_TEMP/build/Build/Products/Debug-iphonesimulator/LongView.app"
+          ls "$app"
+          plutil -p "$app/Info.plist" | grep -E "CFBundleDisplayName|CFBundleIdentifier|UILaunchScreen|SiteHost|MinimumOSVersion"
+          test -f "$app/Assets.car"

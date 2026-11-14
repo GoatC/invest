@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { GROUPS, MAIN, matches, name } from './nav-pages';
 import { RefreshData } from './refresh-data';
+import { ShellBridge } from './shell-bridge';
 import { TabBar } from './tab-bar';
 
 /**
@@ -147,6 +148,8 @@ export function SiteNav({ signOut }: { signOut: ReactNode }) {
       <div className="nav-signout">{signOut}</div>
 
       <TabBar path={path} sheet={sheet} inGroup={groupOf !== undefined} onMore={() => setSheet((was) => !was)} />
+      {/* Inside the iOS shell the native tab bar stands in for the one above (lib/shell.ts). */}
+      <ShellBridge path={path} sheet={sheet} onMore={() => setSheet((was) => !was)} closeSheet={() => setSheet(false)} />
 
       {sheet && (
         <div className="sheet-backdrop" onClick={() => setSheet(false)}>
