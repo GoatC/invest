@@ -44,6 +44,8 @@ final class ShellViewController: UITabBarController {
     private var saidBottom: CGFloat = -1
     private let cover = CoverView()
     private let notice = NoticeView()
+    /// Scheduling the reminders, one list after another, so an older list never lands over a newer one.
+    private var scheduling: Task<Void, Never>?
     private weak var popup: UIViewController?
     private weak var popupWeb: WKWebView?
 
@@ -57,6 +59,7 @@ final class ShellViewController: UITabBarController {
         // The mark the page's style sheet reads (globals.css `html[data-shell]`), set before the page is read.
         content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
+        content.add(self, name: "reminders")
         configuration.userContentController = content
 
         let web = WKWebView(frame: .zero, configuration: configuration)
@@ -95,6 +98,7 @@ final class ShellViewController: UITabBarController {
             view.addSubview(layer)
         }
         notice.isHidden = true
+        Router.shell = self
         open()
     }
 
@@ -115,7 +119,10 @@ final class ShellViewController: UITabBarController {
             cover.lift()
             return
         }
-        load(root)
+        // A page asked for before the app was open (a tapped reminder, a `longview://` address), or the dashboard.
+        let first = Router.pending.flatMap(Site.page) ?? root
+        Router.pending = nil
+        load(first)
         // Whatever happens, the launch screen does not stay for good.
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.cover.lift() }
     }
@@ -197,6 +204,37 @@ final class ShellViewController: UITabBarController {
         sayBottom()
     }
 
+    /// Opens a page of the site: through the page itself when it is there (from what it holds), else fetched whole.
+    func open(path: String) {
+        guard let url = Site.page(path) else { return }
+        closePopup()
+        guard state != nil, let argument = try? JSONSerialization.data(withJSONObject: [path]), let list = String(data: argument, encoding: .utf8) else {
+            load(url)
+            return
+        }
+        let script = "(function(p){if(window.longview&&window.longview.open){window.longview.open(p);return true}return false})(\(list)[0])"
+        web.evaluateJavaScript(script) { [weak self] result, _ in
+            if (result as? Bool) != true { self?.load(url) }
+        }
+    }
+
+    /// Schedules the list the page handed over, then tells the page how it went (components/shell-reminders.tsx shows it).
+    private func schedule(_ items: [Reminder], expiryWanted: Bool) {
+        let previous = scheduling
+        scheduling = Task { [weak self] in
+            _ = await previous?.value
+            let status = await Reminders.schedule(items, expiryWanted: expiryWanted)
+            self?.tell(status)
+        }
+    }
+
+    private func tell(_ status: Reminders.Status) {
+        var detail: [String: Any] = ["allowed": status.allowed, "scheduled": status.scheduled]
+        detail["expires"] = status.expires.map { ISO8601DateFormatter().string(from: $0) } ?? NSNull()
+        guard let data = try? JSONSerialization.data(withJSONObject: detail), let json = String(data: data, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.longview&&window.longview.remindersStatus(\(json))", completionHandler: nil)
+    }
+
     private func closePopup() {
         popup?.dismiss(animated: true)
         popup = nil
@@ -238,10 +276,12 @@ extension ShellViewController: UITabBarControllerDelegate {
 extension ShellViewController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         // Only the site's own page in the main web view is listened to.
-        guard message.webView === web, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Site.root?.host,
-              let new = ShellState(message: message.body)
-        else { return }
-        heard(new)
+        guard message.webView === web, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Site.root?.host else { return }
+        if message.name == "reminders" {
+            if let list = Reminder.message(message.body) { schedule(list.items, expiryWanted: list.expiry) }
+        } else if let new = ShellState(message: message.body) {
+            heard(new)
+        }
     }
 }
 

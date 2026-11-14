@@ -10,6 +10,17 @@
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>長期投資</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.longview.open</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>longview</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -47,6 +47,7 @@ import { readStressSettings, type ClassValue, type StressSettings } from './mode
 import { readTimelineSettings } from './models/timeline';
 import { readMcSettings, readRunSummary, runMonteCarlo, runSummary, type McData } from './models/monte-carlo';
 import { readPlanSettings, savedPlan, type PlanSettings } from './models/projection';
+import { LOCAL_REMINDER_DAYS, localReminders, type LocalReminder } from './models/local-reminders';
 import { readQuietHours, readWeeklyReview, weeklySummary, type Message, type PlanInput, type ProposalForPush, type WeeklySummary } from './models/notify';
 import { proposalTitle } from './proposal-text';
 import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type Vapid } from './push';
@@ -3292,6 +3293,33 @@ async function loadDividendViewUncached(supabase: SupabaseClient, today: string)
   const [holdings, flows, events, securities] = await Promise.all([loadHoldingsData(supabase), loadCashFlows(supabase), loadDividendEvents(supabase, eventsSince(settings, today)), loadDividendSecurities(supabase)]);
   const fx = new Map([...latestFx(holdings.fx, holdings.trades)].map(([currency, quote]) => [currency, quote.value]));
   return { settings, securities, ...dividendsDue({ events, trades: holdings.trades, splits: holdings.splits, securities, flows, fx }, settings, today) };
+}
+
+/**
+ * What the iOS shell schedules on the phone (lib/models/local-reminders.ts, app/shell/reminders):
+ * the reminders of the next 14 days, and how many devices get the web app's pushes, which the
+ * shell's settings read to leave on only what would not come twice.
+ */
+export async function loadLocalReminders(supabase: SupabaseClient, now: Date, today: string): Promise<{ reminders: LocalReminder[]; pushDevices: number }> {
+  const [config, volatility, dividendView, devices] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
+    loadVolatilitySettings(supabase),
+    loadDividendView(supabase, today),
+    rows<{ id: number }>('push_subscriptions', supabase.from('push_subscriptions').select('id')),
+  ]);
+  const events = volatility ? await loadMarketEvents(supabase, today, addDays(today, LOCAL_REMINDER_DAYS + volatility.events.leadDays)) : null;
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const reminders = localReminders({
+    now,
+    today,
+    quiet: readQuietHours(value('quiet_hours')),
+    weekly: readWeeklyReview(value('weekly_review')),
+    events,
+    eventSettings: volatility?.events ?? null,
+    dividends: dividendView ? [...dividendView.due, ...dividendView.upcoming] : null,
+    dividendSettings: dividendView?.settings ?? null,
+  });
+  return { reminders, pushDevices: devices.length };
 }
 
 /** What the nightly job's dividend step looks up; undefined before config dividends exists. */

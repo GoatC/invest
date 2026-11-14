@@ -6,6 +6,7 @@ import { Bi } from '@/components/bi';
 import { DataHealthBanner, hasNotice } from '@/components/data-status';
 import { DataToast } from '@/components/data-toast';
 import { Preload } from '@/components/preload';
+import { PushHandoff } from '@/components/push-handoff';
 import { ShellSignedOut } from '@/components/shell-bridge';
 import { SiteNav, SubNav } from '@/components/site-nav';
 import { Splash } from '@/components/splash';
@@ -120,6 +121,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <main className="page">{children}</main>
         {signedIn && <TableCards />}
         {signedIn && <Preload />}
+        {signedIn && <PushHandoff />}
         {!signedIn && <ShellSignedOut />}
         <footer className="site-footer">
           <Bi en="This app supports Hugo's own decisions; it is not financial advice." zh="本 App 用於輔助 Hugo 自己的決策，不構成投資建議。" />
