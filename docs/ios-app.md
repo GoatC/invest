@@ -78,15 +78,22 @@ cd invest
 
 ## 6. 建置並安裝
 
-這一步由 Xcode 把程式編譯成 App、用你的 Apple ID 簽署、裝進手機。
+這一步把程式編譯成 App、用你的 Apple ID 簽署、裝進手機。一個指令做完，不必打開 Xcode。
 
-1. 在 Finder 打開 `invest/ios`，雙擊 **LongView.xcodeproj**。
-2. Xcode 視窗上方中間有一個裝置選單，點它，選你的 **iPhone**（在最上面的實體裝置區，不是 Simulator）。
-3. 按左上角的 **▶**。
-4. 第一次會比較久。過程中 Mac 可能要求輸入登入密碼以使用「鑰匙圈」裡的簽署憑證：輸入後按**永遠允許**。
-5. 手機要保持解鎖。
+1. iPhone 用傳輸線接上 Mac，並解鎖。
+2. 在終端機（`invest` 資料夾內）執行：
 
-Xcode 若問要不要「Update to recommended settings」，請按**取消**，不需要。
+   ```bash
+   ./ios/install.sh
+   ```
+
+   也可以在 Finder 打開 `invest/ios`，**雙擊「重新安裝.command」**，效果相同。
+3. 第一次大約 1–3 分鐘。過程中 Mac 可能要求輸入登入密碼以使用「鑰匙圈」裡的簽署憑證：輸入後按**永遠允許**，之後就不會再問。
+4. 看到「✓ 完成。這一版可用到 …」就裝好了，日期是這一版到期的時間。
+
+出現錯誤時，指令會用中文說明該怎麼做；看不懂的話，把「錯誤訊息」那一段整段貼給 Claude。
+
+**也可以用 Xcode 安裝**：雙擊 `ios/LongView.xcodeproj`，上方裝置選單選你的 iPhone，按 ▶。Xcode 若問要不要「Update to recommended settings」，請按**取消**。
 
 ## 7. 第一次開啟：信任開發者
 
@@ -101,13 +108,26 @@ Xcode 若問要不要「Update to recommended settings」，請按**取消**，�
 
 ## 8. 每週重裝
 
-App 到期（裝好後第 7 天）就打不開。做法與第 6 節相同：
+App 到期（裝好後第 7 天）就打不開，資料與登入不會消失。重裝一次就好：
 
-1. iPhone 接上 Mac。
-2. 終端機執行 `git pull`（有新版外殼時才會有變化）。
-3. 打開 `ios/LongView.xcodeproj`，選 iPhone，按 **▶**。
+1. iPhone 接上 Mac（或設定好下面的 Wi‑Fi 重裝），解鎖。
+2. 雙擊 `ios/重新安裝.command`（或在終端機執行 `./ios/install.sh`）。
+3. 等它顯示「✓ 完成」。
 
-不必等到過期：任何時候重按 ▶ 都會重新起算 7 天。之後會把這三步做成一行指令。
+它會順便取得最新程式（`git pull`），再建置、簽署、安裝並打開 App，最後告訴你下次的到期日。不必等到過期：任何時候執行都會重新起算 7 天。
+
+**放進 Dock，以後點一下就好**：把 Finder 裡的「重新安裝.command」拖到 Dock 右側（垃圾桶旁邊）。
+
+### 不接線，用 Wi‑Fi 重裝（選用）
+
+設定一次之後，Mac 和 iPhone 在同一個 Wi‑Fi、手機解鎖，就能直接執行，不必接線：
+
+1. 先用傳輸線接上。
+2. 打開 Xcode，選單列 **Window** 底下打開裝置視窗（名稱是 **Devices and Simulators** 或 **Device Hub**，依 Xcode 版本而定）。
+3. 左側點你的 iPhone，勾選 **Connect via network**。
+4. 拔掉傳輸線。之後執行重裝指令時，畫面會顯示「找到：你的 iPhone（Wi-Fi）」。
+
+Wi‑Fi 比傳輸線慢，偶爾會找不到手機；找不到時接上傳輸線即可。
 
 ## 9. 請在手機上確認
 
@@ -138,11 +158,14 @@ App 到期（裝好後第 7 天）就打不開。做法與第 6 節相同：
 |---|---|
 | App 顯示「尚未設定網站」 | 沒有 `ios/Local.xcconfig`：做第 4 節，再按 ▶。 |
 | App 顯示「連不上網站」 | 手機沒有網路，或網址打錯：按重試；網址錯就重做第 4 節。 |
+| Build input file cannot be found: '…/Provisioning Profiles/….mobileprovision'（在 Xcode 按 ▶ 時） | Xcode 記著一個已經不在的簽署檔：改用 `./ios/install.sh`，它用自己的建置資料夾，遇到這個錯誤會清掉重試。仍要用 Xcode 的話，先按 Product → Clean Build Folder。 |
+| 找不到 iPhone | 接上傳輸線、解鎖；手機問「信任這部電腦？」時按信任。用 Wi‑Fi 時，確認兩邊在同一個網路。 |
+| Xcode 沒有登入 Apple ID，或登入已過期 | Xcode → Settings → Accounts，重新登入 Apple ID。 |
 | Signing for "LongView" requires a development team | 第 4 節沒有找到團隊代號：重新執行 `./ios/setup.sh`。 |
 | Failed to register bundle identifier | 識別碼與別人的重複：打開 `ios/Local.xcconfig`，在 `BUNDLE_ID` 最後加幾個字母，存檔再按 ▶。 |
 | Developer Mode disabled | 做第 5 節的開發者模式。 |
 | 未受信任的開發者 | 做第 7 節。 |
-| 「長期投資」已無法使用 | 7 天到期：做第 8 節。 |
+| 「長期投資」已無法使用 | 7 天到期：執行重裝指令（第 8 節）。 |
 | 已達 App 數量上限 | 手機上已有 3 個自簽 App：刪掉一個不用的。 |
 
 ## 不想用了
@@ -153,5 +176,6 @@ App 到期（裝好後第 7 天）就打不開。做法與第 6 節相同：
 
 - 外殼與網頁之間的約定在 `lib/shell.ts`；網頁那一側是 `components/shell-bridge.tsx` 與 `app/globals.css` 的 `html[data-shell]`，原生那一側是 `ios/Shell/`。分頁的名稱、順序與歸屬由網頁決定並傳給外殼。
 - `ios/LongView.xcodeproj` 由 `ruby ios/project.rb` 產生（需要 `gem install xcodeproj`）；新增或移除 Swift 檔後重跑。圖示與啟動標誌由 `npm run ios-images` 產生。
-- `.github/workflows/ios.yml` 在 `ios/` 有變動時，用 Xcode 26 與 Xcode 27 各編譯一次（模擬器、不簽署）。
+- `.github/workflows/ios.yml` 在 `ios/` 有變動時，用 Xcode 26 與 Xcode 27 各編譯一次（模擬器、不簽署），並以 Mac 內建的 bash 3.2 跑 `ios/tests/scripts.sh`：檢查兩支腳本的語法、變數名稱沒有緊接中文字、`setup.sh` 寫出的設定、`install.sh` 從 `ios/tests/devices.json` 選出正確的 iPhone，以及沒有手機時的訊息。
+- `ios/install.sh` 用 `xcodebuild -allowProvisioningUpdates -allowProvisioningDeviceRegistration` 簽署（用 Xcode 裡登入的 Apple ID，7 天到期的裝置註冊也會重做），`xcrun devicectl` 安裝與開啟，建置資料夾是 `ios/build`（不進 git）。
 - 不使用任何需要付費帳號的能力（推播、關聯網域、App 群組等），免費簽署才簽得過。
