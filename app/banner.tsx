@@ -8,11 +8,12 @@ import { dismissBanner, skipDividend } from './dividends/actions';
 /**
  * The in-app banner under the header, on every page: what waits on Hugo, worked out from what is
  * saved (lib/models/banners). Streamed after the page, so it never holds a page back; a failed
- * read shows nothing rather than an error on every page.
+ * read shows nothing rather than an error on every page. The layout's stays off the dashboard,
+ * which shows its own under the poster (slot "page").
  */
-export async function Banners() {
+export async function Banners({ slot }: { slot: 'layout' | 'page' }) {
   const { supabase } = await requireSession();
   const banners = await orDataError(loadBanners(supabase, taipeiToday()));
   if (banners instanceof DataError || banners.length === 0) return null;
-  return <GuideBanner banners={banners} dismiss={dismissBanner} skip={skipDividend} />;
+  return <GuideBanner banners={banners} dismiss={dismissBanner} skip={skipDividend} slot={slot} />;
 }

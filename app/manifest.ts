@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+import { SPLASH_GROUND } from '@/lib/splash';
+
 /**
  * The web app manifest, so a phone can add the app to its home screen and open it full screen
  * (PRD Section 6: a PWA). The icons are app/icon.svg drawn at the sizes phones ask for. It opens
@@ -14,9 +16,10 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    // The page and header colours of globals.css (light).
-    background_color: '#f5f7fb',
-    theme_color: '#fbfcfe',
+    // The poster's colour (--hero-bg in globals.css, light): the ground of the opening screen, so
+    // the screen a phone shows while the app starts runs into it (lib/splash.ts).
+    background_color: SPLASH_GROUND.light,
+    theme_color: SPLASH_GROUND.light,
     icons: [
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

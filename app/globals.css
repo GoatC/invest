@@ -29,6 +29,10 @@
   /* The dashboard's poster: the accent as a ground, and the text and line that read on it. */
   --hero-bg: var(--accent);
   --hero-text: #ffffff;
+  /* The screen's edges an installed app must keep clear of (the notch, the home indicator): zero in
+     a browser tab. The page reaches every edge (app/layout.tsx viewportFit). */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
   /* Chart series: the design system's eight categorical slots for mist, each at least 3:1 on
      --surface; every chart still has its table and labels. --chart-context is the de-emphasis gray;
@@ -125,8 +129,24 @@ h2 {
 .site-header {
   position: relative;
   z-index: 20;
+  /* Installed on a phone, the page runs up under the status bar: the header starts below it. */
+  padding-top: var(--safe-top);
   background: var(--surface);
   box-shadow: 0 1px 0 var(--border);
+}
+
+/* The status bar of an installed app has white text and no ground of its own: a band of the
+   poster's colour stays behind it on every page, whatever scrolls under. Nothing in a browser tab,
+   where the inset is zero. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: var(--safe-top);
+  background: var(--hero-bg);
 }
 
 .site-header-inner {
@@ -286,77 +306,302 @@ h2 {
     justify-content: space-between;
   }
 
-  body.signed-in {
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  /* The tab bar and the "More" sheet live inside the header: it stands over the page's own
+     floating parts (a row of sub-tabs that sticks, the "+"), so the sheet covers them. */
+  .site-header {
+    z-index: 45;
   }
 
+  /* The tab bar floats over the foot of the page; the page keeps clear of it. */
+  :root {
+    --tabbar-height: 64px;
+    /* Over the home indicator on an iPhone, a finger's width from the edge elsewhere. */
+    --tabbar-gap: max(10px, calc(var(--safe-bottom) - 14px));
+    --tabbar-space: calc(var(--tabbar-height) + var(--tabbar-gap));
+  }
+
+  body.signed-in {
+    padding-bottom: calc(var(--tabbar-space) + 16px);
+  }
+
+  /* The tab bar (components/tab-bar.tsx): a capsule of glass floating over the page, after iOS's
+     Liquid Glass. The page behind shows through, blurred live by the browser; the selection is a
+     lens the component moves on springs. */
   .tab-bar {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: var(--tabbar-gap);
+    z-index: 40;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    max-width: 30rem;
+    height: var(--tabbar-height);
+    margin: 0 auto;
+    padding: 0 4px;
+    border-radius: 999px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    transition:
+      height 420ms var(--spring),
+      left 420ms var(--spring),
+      right 420ms var(--spring);
+    --spring: linear(0, 0.35 8%, 0.72 16%, 0.95 24%, 1.06 32%, 1.09 40%, 1.07 49%, 1.03 59%, 1 70%, 0.995 82%, 1);
+    --glass-tint: color-mix(in srgb, var(--surface) 46%, transparent);
+    --glass-rim: rgba(255, 255, 255, 0.85);
+    --glass-rim-low: rgba(255, 255, 255, 0.3);
+    --glass-shadow: 0 10px 30px rgba(31, 42, 58, 0.16), 0 2px 6px rgba(31, 42, 58, 0.08);
+  }
+
+  /* What scrolls under the bar thins out towards the foot of the screen, so the glass has
+     something soft to sit on. */
+  .tab-bar::before {
+    content: '';
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 40;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding: 6px 4px calc(10px + env(safe-area-inset-bottom));
-    background: var(--surface);
-    box-shadow: 0 -1px 0 var(--border);
+    z-index: -3;
+    height: calc(var(--tabbar-space) + 28px);
+    background: linear-gradient(to top, color-mix(in srgb, var(--bg) 88%, transparent), color-mix(in srgb, var(--bg) 55%, transparent) 55%, transparent);
+    pointer-events: none;
+  }
+
+  /* The glass itself, a layer of its own so the lens and the tabs sit on it, not in it. */
+  .tab-glass {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    border-radius: inherit;
+    background: var(--glass-tint);
+    -webkit-backdrop-filter: blur(16px) saturate(190%);
+    backdrop-filter: blur(16px) saturate(190%);
+    box-shadow: var(--glass-shadow);
+  }
+
+  /* Its rim: light caught along the upper left and the lower right edge. */
+  .tab-glass::after,
+  .tab-lens::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-rim), var(--glass-rim-low) 28%, transparent 52%, var(--glass-rim-low) 78%, var(--glass-rim));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+
+  /* The lens: at rest a faint pool under the current tab; under a finger it lifts, clears and
+     brightens what is beneath it. The component sets its size and place. */
+  .tab-lens {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    width: 0;
+    height: 0;
+    border-radius: 999px;
+    opacity: 0;
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+    transform-origin: center;
+    will-change: transform, width, height;
+    pointer-events: none;
+    transition:
+      opacity 200ms,
+      background-color 220ms,
+      box-shadow 220ms;
+  }
+
+  .tab-lens::after {
+    opacity: 0.55;
+    transition: opacity 220ms;
+  }
+
+  .tab-bar[data-ready] .tab-lens {
+    opacity: 1;
+  }
+
+  .tab-bar[data-lens='none'] .tab-lens {
+    opacity: 0;
+  }
+
+  /* Round the raised button it is a ring in the accent's own colour. */
+  .tab-bar[data-lens='home'] .tab-lens {
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+
+  .tab-bar[data-lifted] .tab-lens {
+    background: color-mix(in srgb, #fff 26%, transparent);
+    -webkit-backdrop-filter: blur(1.5px) saturate(230%) brightness(1.1);
+    backdrop-filter: blur(1.5px) saturate(230%) brightness(1.1);
+    box-shadow:
+      inset 0 0 14px rgba(255, 255, 255, 0.32),
+      0 8px 22px rgba(31, 42, 58, 0.2);
+  }
+
+  .tab-bar[data-lifted] .tab-lens::after {
+    opacity: 1;
   }
 
   .tab-bar a,
   .tab-bar button {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    min-height: 56px;
+    gap: 3px;
+    min-width: 0;
     padding: 0;
     border: none;
+    border-radius: 999px;
     background: none;
-    color: var(--muted);
-    font-size: 0.75rem;
-    font-weight: 600;
+    color: color-mix(in srgb, var(--text) 78%, var(--muted));
     text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 180ms,
+      transform 260ms var(--spring);
   }
 
   .tab-bar .tab-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 52px;
-    height: 30px;
-    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 26px;
   }
 
-  .tab-bar .current {
+  /* Every name on one baseline, in one size and weight: the current tab differs by colour alone. */
+  .tab-bar .tab-name {
+    overflow: hidden;
+    max-height: 14px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 14px;
+    white-space: nowrap;
+    transition:
+      max-height 320ms var(--spring),
+      opacity 200ms;
+  }
+
+  /* The tab under the lens wears the accent; until the lens is placed, the current one does. */
+  .tab-bar:not([data-ready]) .current,
+  .tab-bar [data-lit] {
     color: var(--accent);
-    font-weight: 700;
   }
 
-  .tab-bar .current .tab-icon {
-    background: var(--accent-soft);
+  .tab-bar[data-lifted] [data-lit] {
+    transform: scale(1.08);
   }
 
   /* The dashboard, in the middle: a round button in the accent colour that stands up out of the
-     bar, ringed in the bar's own ground. */
+     glass. Its name sits at the foot of its place, on the line of the other names. */
   .tab-bar .tab-home {
     justify-content: flex-end;
-    padding-bottom: 4px;
+    padding-bottom: calc((var(--tabbar-height) - 43px) / 2);
   }
 
-  .tab-bar .tab-home .tab-icon,
-  .tab-bar .tab-home.current .tab-icon {
-    width: 58px;
-    height: 58px;
-    margin-top: -28px;
+  .tab-bar .tab-home .tab-icon {
+    position: absolute;
+    left: 50%;
+    bottom: calc((var(--tabbar-height) - 43px) / 2 + 18px);
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    background: var(--accent);
-    color: var(--accent-text);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--hero-bg) 80%, #fff), var(--hero-bg) 64%);
+    color: var(--hero-text);
     box-shadow:
-      0 0 0 5px var(--surface),
-      0 -1px 0 5px var(--border),
-      0 6px 14px rgba(31, 42, 58, 0.22);
+      inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+      0 6px 16px rgba(31, 42, 58, 0.26);
+    transform: translateX(-50%);
+    transition:
+      width 420ms var(--spring),
+      height 420ms var(--spring),
+      bottom 420ms var(--spring);
+  }
+
+  /* Scrolled down: the bar draws in to its icons and lets more of the page show. */
+  .tab-bar[data-mini] {
+    --tabbar-height: 50px;
+    left: 44px;
+    right: 44px;
+  }
+
+  .tab-bar[data-mini] .tab-name {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .tab-bar[data-mini] a,
+  .tab-bar[data-mini] button {
+    gap: 0;
+  }
+
+  .tab-bar[data-mini] .tab-home {
+    padding-bottom: 0;
+  }
+
+  .tab-bar[data-mini] .tab-home .tab-icon {
+    bottom: 7px;
+    width: 46px;
+    height: 46px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tab-bar {
+      --glass-tint: color-mix(in srgb, var(--surface) 62%, transparent);
+      --glass-rim: rgba(255, 255, 255, 0.34);
+      --glass-rim-low: rgba(255, 255, 255, 0.1);
+      --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+
+    .tab-lens {
+      background: color-mix(in srgb, #fff 12%, transparent);
+    }
+
+    .tab-bar[data-lifted] .tab-lens {
+      background: color-mix(in srgb, #fff 16%, transparent);
+    }
+  }
+
+  /* Where the system grants a page its own glass material, the bar takes that in place of the
+     blur above. Today WebKit keeps it for native apps; a page asking for it is simply not heard. */
+  @supports (-apple-visual-effect: -apple-system-glass-material) {
+    .tab-glass {
+      background: none;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      -apple-visual-effect: -apple-system-glass-material;
+    }
+  }
+
+  /* No live blur to be had: the bar is the header's own ground, nearly solid. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tab-bar {
+      --glass-tint: color-mix(in srgb, var(--surface) 94%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab-bar,
+    .tab-bar a,
+    .tab-bar button,
+    .tab-bar .tab-name,
+    .tab-lens,
+    .tab-bar .tab-home .tab-icon {
+      transition: none;
+    }
   }
 
   .sheet-backdrop {
@@ -368,18 +613,20 @@ h2 {
 
   .sheet {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(76px + env(safe-area-inset-bottom));
-    max-height: calc(100vh - 140px);
+    left: 14px;
+    right: 14px;
+    bottom: calc(var(--tabbar-space) + 10px);
+    max-width: 30rem;
+    max-height: calc(100vh - 160px);
+    margin: 0 auto;
     overflow-y: auto;
     display: grid;
     gap: 0.75rem;
     /* The foot clears the raised dashboard button. */
-    padding: 0.75rem 1rem 2.25rem;
+    padding: 0.75rem 1rem 2rem;
     background: var(--surface);
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -8px 32px rgba(31, 42, 58, 0.18);
+    border-radius: 28px;
+    box-shadow: 0 12px 40px rgba(31, 42, 58, 0.24);
   }
 
   .sheet h2 {
@@ -1338,6 +1585,84 @@ tr.selected td {
   background: color-mix(in srgb, #0b1a2b 42%, transparent);
 }
 
+/* On a phone the poster is the top of the screen (Hugo, 2026-11-13): edge to edge, up under the
+   status bar, with no header over it; the dashboard's sub-tabs ride on it, and the banner comes
+   under it (app/page.tsx). Other pages keep their header. */
+@media (max-width: 759px) {
+  /* The header gives up its band but stays: the tab bar and the "More" sheet live inside it. */
+  body:has(.page > .hero) .site-header {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  body:has(.page > .hero) .site-header-inner {
+    padding: 0;
+  }
+
+  body:has(.page > .hero) .brand {
+    display: none;
+  }
+
+  body:has(.page > .hero) .page {
+    padding-top: 0;
+  }
+
+  .page > .hero {
+    overflow: visible;
+    margin: 0 -1rem;
+    border-radius: 0;
+    /* Clear of the status bar and of the sub-tabs laid over its top. */
+    padding-top: calc(var(--safe-top) + var(--tap-min) + 1.4rem);
+  }
+
+  /* Its colour runs on above the screen, so a pull down at the top of the page shows more poster,
+     not the page's ground. */
+  .page > .hero::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 60vh;
+    background: var(--hero-bg);
+  }
+
+  body:has(.page > .hero) .sub-nav {
+    position: absolute;
+    top: var(--safe-top);
+    left: 0;
+    right: 0;
+    z-index: 5;
+    padding-top: 0.6rem;
+  }
+
+  body:has(.page > .hero) .sub-nav a {
+    border: none;
+    background: color-mix(in srgb, var(--hero-text) 16%, transparent);
+    box-shadow: none;
+    color: var(--hero-text);
+  }
+
+  body:has(.page > .hero) .sub-nav a.current {
+    background: var(--hero-text);
+    color: var(--hero-bg);
+  }
+
+  .hero-body {
+    padding: 0 1rem 0.4rem;
+  }
+
+  .hero-chart {
+    height: 148px;
+  }
+
+  /* The banner under the poster, in the page's own column. */
+  .guide.in-page {
+    margin-top: -0.35rem;
+  }
+}
+
 @media (min-width: 760px) {
   .hero-body {
     padding: 1.1rem 1.75rem 0.4rem;
@@ -1686,11 +2011,106 @@ details.ticker-menu a:hover {
   background: var(--accent-soft);
 }
 
+/* The opening screen (components/splash.tsx): the mark and the name on the poster's colour, over
+   everything, while the app fetches its pages (components/preload.tsx fills the bar and adds
+   .leaving). Hidden at once on a reload within a visit (data-opened, set before the first paint).
+   Should no script ever run, it fades by itself after twelve seconds. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+  animation: splash-failsafe 400ms 12s both;
+}
+
+html[data-opened] .splash {
+  display: none;
+}
+
+/* The mark dead centre, as on the launch image (scripts/splash_images.ts draws the same), so it
+   does not move when the page takes over; the name comes in under it. */
+.splash-mark {
+  position: relative;
+  display: grid;
+}
+
+.splash-mark span {
+  position: absolute;
+  top: calc(100% + 0.9rem);
+  left: 50%;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.splash-mark svg {
+  border-radius: 21px;
+  box-shadow: 0 10px 30px rgba(11, 26, 43, 0.28);
+}
+
+.splash-progress {
+  position: absolute;
+  left: 50%;
+  bottom: calc(15% + var(--safe-bottom));
+  width: 8.5rem;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hero-text) 24%, transparent);
+  transform: translateX(-50%);
+}
+
+.splash-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--hero-text);
+  transform: scaleX(max(0.06, var(--progress, 0)));
+  transform-origin: left;
+  transition: transform 260ms ease-out;
+}
+
+/* Lifted: the mark comes forward and the ground clears, onto the poster of the same colour. */
+.splash.leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 360ms ease-out;
+}
+
+.splash.leaving .splash-mark {
+  transform: scale(1.12);
+  transition: transform 360ms ease-out;
+}
+
+@keyframes splash-failsafe {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash.leaving,
+  .splash.leaving .splash-mark,
+  .splash-progress > span {
+    transition: none;
+  }
+
+  .splash.leaving .splash-mark {
+    transform: none;
+  }
+}
+
 /* The nightly job's status (components/data-toast.tsx): slides down from the top when the app
    loads, stays three seconds, slides away. */
 .data-toast {
   position: fixed;
-  top: calc(12px + env(safe-area-inset-top));
+  top: calc(12px + var(--safe-top));
   left: 50%;
   z-index: 60;
   width: min(44rem, calc(100% - 32px));
@@ -1829,7 +2249,7 @@ details.ticker-menu a:hover {
 /* A tapped link while its page loads (components/site-nav.tsx): a bar along the top of the screen. */
 .link-pending {
   position: fixed;
-  top: 0;
+  top: var(--safe-top);
   left: 0;
   right: 0;
   z-index: 60;
@@ -2213,6 +2633,7 @@ details.ticker-menu a:hover {
    cost scale, the map and the signal matrix. Price moves take --up and --down from the colour
    convention (config sectors: Taiwan's red up by default), always beside ▲ or ▼; a status keeps
    its own icon. */
+body,
 .red-up {
   --up: var(--status-critical);
   --down: var(--status-good);
@@ -2220,6 +2641,8 @@ details.ticker-menu a:hover {
   --down-text: var(--ok-text);
 }
 
+/* Green up, chosen on the Sectors page: the layout leaves a mark once the setting is read. */
+body:has(#green-up),
 .green-up {
   --up: var(--status-good);
   --down: var(--status-critical);
@@ -2587,7 +3010,7 @@ details.ticker-menu a:hover {
 @media (max-width: 759px) {
   .phone-tabs {
     position: sticky;
-    top: 0;
+    top: calc(var(--safe-top) + 4px);
     z-index: 20;
     display: flex;
     gap: 4px;
@@ -2632,7 +3055,7 @@ details.ticker-menu a:hover {
   .fab {
     position: fixed;
     right: 16px;
-    bottom: calc(76px + 16px + env(safe-area-inset-bottom));
+    bottom: calc(var(--tabbar-space) + 14px);
     z-index: 30;
     display: grid;
     place-items: center;
@@ -2852,6 +3275,13 @@ details.ticker-menu a:hover {
 
 .guide + .page {
   padding-top: 0.9rem;
+}
+
+/* Inside a page (the dashboard, under its poster) it takes the page's own width. */
+.guide.in-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .guide-banner {

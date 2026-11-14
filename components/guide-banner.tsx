@@ -11,16 +11,18 @@ const ICON: Record<Banner['tone'], string> = { act: '!', info: 'i' };
 /**
  * The in-app banner (lib/models/banners): one line under the header that says what waits and takes
  * Hugo there. The most pressing one shows; "＋n" opens the rest. A banner stays off the page it
- * leads to. ✕ hides it for a while on every device; a dividend also offers "skip", for good.
+ * leads to. ✕ hides it for a while on every device; a dividend also offers "skip", for good. On the
+ * dashboard it sits under the poster, drawn by the page itself (slot "page"); the layout's own
+ * (slot "layout") stays away there.
  */
-export function GuideBanner({ banners, dismiss, skip }: { banners: readonly Banner[]; dismiss: (formData: FormData) => Promise<void>; skip: (formData: FormData) => Promise<void> }) {
+export function GuideBanner({ banners, dismiss, skip, slot }: { banners: readonly Banner[]; dismiss: (formData: FormData) => Promise<void>; skip: (formData: FormData) => Promise<void>; slot: 'layout' | 'page' }) {
   const path = usePathname();
   const [all, setAll] = useState(false);
   const here = banners.filter((banner) => !hiddenOn(banner, path));
-  if (here.length === 0) return null;
+  if (here.length === 0 || (slot === 'layout' && path === '/')) return null;
   const shown = all ? here : here.slice(0, 1);
   return (
-    <aside className="guide" aria-label="提醒 Reminders">
+    <aside className={slot === 'page' ? 'guide in-page' : 'guide'} aria-label="提醒 Reminders">
       {shown.map((banner, index) => (
         <div key={banner.key} className={`guide-banner ${banner.tone}`} role="status" data-kind={banner.kind}>
           <span className="guide-icon" aria-hidden="true">

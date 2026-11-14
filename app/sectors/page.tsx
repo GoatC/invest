@@ -62,7 +62,7 @@ function Segmented<T extends string>({ label, value, options, labels, href }: { 
         <Bi {...label} />
       </span>
       {options.map((option) => (
-        <Link key={option} href={href(option)} aria-current={option === value ? 'true' : undefined}>
+        <Link prefetch key={option} href={href(option)} aria-current={option === value ? 'true' : undefined}>
           <Bi {...labels[option]} />
         </Link>
       ))}

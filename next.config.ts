@@ -28,10 +28,12 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     // A page seen in the last five minutes opens again from the phone's memory, without asking the
-    // server: the market data changes once a night, and every server action that saves something
-    // clears these pages (lib/action-redirect.ts), as does the refresh button
-    // (components/refresh-data.tsx).
-    staleTimes: { dynamic: 300 },
+    // server (dynamic), and a page of the navigation fetched ahead when the app opens is kept for
+    // thirty minutes (static; components/preload.tsx fetches the set again when that is up, after a
+    // save, and when the app comes back from the background): the market data changes once a
+    // night, and every server action that saves something clears these pages
+    // (lib/action-redirect.ts), as does the refresh button (components/refresh-data.tsx).
+    staleTimes: { dynamic: 300, static: 1800 },
     // A CSV import sends the whole statement to the server, which checks it again. Vercel caps a
     // request at 4.5 MB; the import page refuses larger files first (lib/csv/limits.ts).
     serverActions: { bodySizeLimit: '4mb' },

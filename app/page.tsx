@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
@@ -47,6 +48,8 @@ import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/val
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
 import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
+
+import { Banners } from './banner';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -110,6 +113,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         line={days ? valueLine(days) : null}
         dataDate={portfolio.holdings.reduce<string | null>((newest, holding) => (holding.ticker && holding.priceDate && (newest === null || holding.priceDate > newest) ? holding.priceDate : newest), null)}
       />
+      <Suspense fallback={null}>
+        <Banners slot="page" />
+      </Suspense>
       {waitingFirst && panel}
       <div className="dash-row">
         <div className="dash-main">

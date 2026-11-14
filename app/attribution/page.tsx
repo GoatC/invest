@@ -83,10 +83,10 @@ export default async function AttributionPage({ searchParams }: { searchParams: 
             <span className="label">
               <Bi en="Level" zh="層級" />
             </span>
-            <Link href={`/attribution?range=${range}`} aria-current={level === 1 ? 'true' : undefined}>
+            <Link prefetch href={`/attribution?range=${range}`} aria-current={level === 1 ? 'true' : undefined}>
               <Bi en="1 · Asset classes" zh="1・資產類別" />
             </Link>
-            <Link href={`/attribution?range=${range}&level=2`} aria-current={level === 2 ? 'true' : undefined}>
+            <Link prefetch href={`/attribution?range=${range}&level=2`} aria-current={level === 2 ? 'true' : undefined}>
               <Bi en="2 · Satellite by sector" zh="2・衛星依產業" />
             </Link>
           </div>
@@ -95,7 +95,7 @@ export default async function AttributionPage({ searchParams }: { searchParams: 
               <Bi en="Period" zh="期間" />
             </span>
             {RANGES.map((option) => (
-              <Link key={option} href={`/attribution?range=${option}${level === 2 ? '&level=2' : ''}`} aria-current={option === range ? 'true' : undefined}>
+              <Link prefetch key={option} href={`/attribution?range=${option}${level === 2 ? '&level=2' : ''}`} aria-current={option === range ? 'true' : undefined}>
                 <Bi {...RANGE[option]} />
               </Link>
             ))}

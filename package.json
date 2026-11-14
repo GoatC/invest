@@ -20,7 +20,8 @@
     "notify": "tsx scripts/notify.ts",
     "volatility": "tsx scripts/volatility.ts",
     "news": "tsx scripts/news.ts",
-    "vapid-keys": "tsx scripts/vapid_keys.ts"
+    "vapid-keys": "tsx scripts/vapid_keys.ts",
+    "splash-images": "tsx scripts/splash_images.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
