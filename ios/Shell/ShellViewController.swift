@@ -17,6 +17,8 @@ final class TabHost: UIViewController {
     private var lightStatusBar = true
     /// The page's row of sub-tabs (proposal G03), kept while the row stays the same so a choice slides its lens.
     private var segmented: UISegmentedControl?
+    /// The control under the large title, with room above it (`SegmentsHolder`); kept with the control.
+    private var segmentsHolder: SegmentsHolder?
     /// Called with the index of the sub-tab chosen in the segmented control.
     var onSegment: ((Int) -> Void)?
 
@@ -78,6 +80,7 @@ final class TabHost: UIViewController {
     private func drawSegments(_ top: ShellTop?) {
         guard let top = top, top.segments.count > 1 else {
             segmented = nil
+            segmentsHolder = nil
             navigationItem.largeSubtitleView = nil
             navigationItem.titleView = nil
             return
@@ -94,20 +97,57 @@ final class TabHost: UIViewController {
                 self?.onSegment?(index)
             }, for: .valueChanged)
             segmented = control
+            segmentsHolder = nil
         }
         if control.selectedSegmentIndex != top.segment { control.selectedSegmentIndex = top.segment }
         if top.title == nil {
             navigationItem.largeSubtitleView = nil
+            // The control leaves any holder it was in; one is made again should it go back under a title.
+            segmentsHolder = nil
             navigationItem.titleView = control
         } else {
             navigationItem.titleView = nil
-            navigationItem.largeSubtitleView = control
+            let holder = segmentsHolder ?? SegmentsHolder(control: control)
+            segmentsHolder = holder
+            navigationItem.largeSubtitleView = holder
         }
     }
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         onInsets?()
+    }
+}
+
+/// The segmented control under the large title, with room above it, so it does not sit on the
+/// title's letters, and a little below it, before the page.
+final class SegmentsHolder: UIView {
+    private let control: UISegmentedControl
+    private static let above: CGFloat = 10
+    private static let below: CGFloat = 4
+
+    init(control: UISegmentedControl) {
+        self.control = control
+        super.init(frame: .zero)
+        control.removeFromSuperview()
+        control.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(control)
+        NSLayoutConstraint.activate([
+            control.topAnchor.constraint(equalTo: topAnchor, constant: SegmentsHolder.above),
+            control.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SegmentsHolder.below),
+            control.leadingAnchor.constraint(equalTo: leadingAnchor),
+            control.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let size = control.intrinsicContentSize
+        return CGSize(width: size.width, height: size.height + SegmentsHolder.above + SegmentsHolder.below)
     }
 }
 
@@ -335,7 +375,7 @@ final class ShellViewController: UITabBarController {
     /// Tells the page how much of the top of the screen the navigation bar takes (--shell-top, where a
     /// page starts below its large title) and how much once drawn in to one line (--shell-top-inline,
     /// where a row of the page sticks). Measured only while the page is at its top, with the large
-    /// title out; the largest is kept, so the page does not jump as the title draws in.
+    /// title out; the largest on the page is kept, so it does not jump as the title draws in (a new page is measured afresh).
     private func sayTop() {
         guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, web.scrollView.contentOffset.y <= 0 else { return }
         let top = max(bar.convert(bar.bounds, to: view).maxY.rounded(), saidTop)
@@ -407,6 +447,9 @@ final class ShellViewController: UITabBarController {
         titleWaits = false
         bar.sizeToFit()
         view.layoutIfNeeded()
+        // A new page is measured afresh: one with no row of sub-tabs under its title starts higher
+        // than one with, rather than below the tallest bar any page has had.
+        saidTop = -1
         sayTop()
     }
 

@@ -239,6 +239,12 @@ function Hero({
                 zh={`線為兩個資金池合計自 ${since} 起的時間加權報酬（F18），投入與提領不影響線形；金額為扣除投入後的台幣損益。完整圖表與基準在「績效」頁。`}
               />
             </Info>
+            {/* Beside the legend, not over the line: the line's newest point is always at the right edge. */}
+            <Link href="/performance" className="hero-expand" aria-label="績效 Performance">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 8 V4 H8 M12 16 H16 V12" />
+              </svg>
+            </Link>
           </div>
         )}
       </div>
@@ -253,11 +259,6 @@ function Hero({
             <line className="hero-zero" x1="0" x2={LINE.width} y1={drawn.zero.toFixed(1)} y2={drawn.zero.toFixed(1)} />
             <path className="hero-line" d={drawn.path} />
           </svg>
-          <Link href="/performance" className="hero-expand" aria-label="績效 Performance">
-            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 8 V4 H8 M12 16 H16 V12" />
-            </svg>
-          </Link>
         </div>
       )}
     </section>

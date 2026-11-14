@@ -199,15 +199,14 @@ function BandRow({ label, line, weight, target, band, status, top, gapTwd }: { l
     <li className="band-row" data-line={line}>
       <div className="band-top">
         <span>
-          {BAND_ICON[status] && (
-            <span className={`status-icon ${status}`} aria-hidden="true">
-              {BAND_ICON[status]}
-            </span>
-          )}
+          {/* Kept, empty, for a class with no status (a satellite's): every row's name starts at the same place. */}
+          <span className={`status-icon ${status}`} aria-hidden="true">
+            {BAND_ICON[status]}
+          </span>
           <Bi {...label} label />
         </span>
         <span className="band-figures">
-          <b>{percent(weight)}</b> ／ {percent(target, 0)}
+          <b>{percent(weight)}</b> ／ <span className="band-target">{percent(target, 0)}</span>
         </span>
       </div>
       <div className="band-track" role="img" aria-label={`${label.zh} 實際 ${percent(weight)}，目標 ${percent(target, 0)}`}>
