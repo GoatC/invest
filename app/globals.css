@@ -3615,6 +3615,125 @@ html[data-shell-next] .guide {
   display: none;
 }
 
+/* The shell's content in iOS's own colours (Liquid Glass proposal C03, Hugo 2026-11-15): the
+   grouped grey ground with white groups on it, iOS's label and separator colours, no shadows, the
+   rounder corners of iOS 26, and true black with dark groups in dark mode. The glass belongs to the
+   native bars only; the content under them stays solid. The forget-me-not blue stays the one tint. */
+html[data-shell] {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --text: #000000;
+  --muted: #6c6c70;
+  --border: #c6c6c8;
+  --border-strong: #8e8e93;
+  --radius: 12px;
+  --radius-lg: 22px;
+  --shadow-soft: none;
+  --card-border: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-shell] {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --text: #ffffff;
+    --muted: #98989f;
+    --border: #38383a;
+    --border-strong: #545458;
+  }
+}
+
+/* The holdings as one group of rows split by hairlines, as an iOS list, in place of a card each. */
+html[data-shell] .hold-cards {
+  gap: 0;
+}
+
+html[data-shell] .hold-card {
+  padding: 0.75rem 0;
+  background: none;
+  border-radius: 0;
+}
+
+html[data-shell] .hold-card + .hold-card {
+  border-top: 0.5px solid var(--border);
+}
+
+html[data-shell] .hold-name {
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* A holding's mark (components/ticker-mark.tsx): the ticker on its class's line colour, the logo
+   over it where one loads. Outside the shell none is drawn. The line colours keep clear of red and
+   green, which stay with gains and losses. */
+.tick-mark {
+  display: none;
+}
+
+html[data-shell] .tick-mark {
+  --c: var(--line, #5f6d7c);
+  --c-ink: var(--line-ink, #ffffff);
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  overflow: hidden;
+  border-radius: 0.65rem;
+  background: var(--c);
+  color: var(--c-ink);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+html[data-shell] .tick-mark img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0.3rem;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+/* Each class's line colour, as a metro line's (proposal C05): the holdings' marks, the allocation's
+   rows. Kept clear of red and green, which stay with gains and losses. */
+html[data-shell] [data-line='us_global_equity'] {
+  --line: #2563c9;
+}
+
+html[data-shell] [data-line='tw_market_cap'] {
+  --line: #0f7896;
+}
+
+html[data-shell] [data-line='global_bonds'] {
+  --line: #6a4bb8;
+}
+
+html[data-shell] [data-line='real_assets'] {
+  --line: #c0900f;
+  --line-ink: #1a1300;
+}
+
+html[data-shell] [data-line='strategic_cash'] {
+  --line: #5f6d7c;
+}
+
+html[data-shell] [data-line='us_stocks'] {
+  --line: #b4560b;
+}
+
+html[data-shell] [data-line='tw_stocks'] {
+  --line: #8e5a2f;
+}
+
+html[data-shell] [data-line='tactical_themes'] {
+  --line: #b0337c;
+}
+
 /* A choice that is a checkbox and its name, a finger's height (the iOS shell's reminders, a push opening the app). */
 .check-list {
   display: grid;
@@ -3631,4 +3750,134 @@ html[data-shell-next] .guide {
   width: 1.25rem;
   height: 1.25rem;
   margin: 0;
+}
+
+/* Under the glass, the content borrows Taipei Metro's signage (Liquid Glass proposal C05, Hugo
+   2026-11-15: the design, with every word as it is). The rule warnings read as a line's service
+   board: one group of rows, the status icon first and the rule's code as a station number in the
+   status's colour, in place of tiles with a coloured edge. */
+html[data-shell] .alert-group {
+  padding: 0;
+  background: none;
+  color: var(--text);
+}
+
+html[data-shell] .alert-heading {
+  padding: 0 0.25rem;
+}
+
+html[data-shell] .alert-group.alert .alert-heading {
+  color: var(--danger-text);
+}
+
+html[data-shell] .alert-group.watch .alert-heading {
+  color: var(--warn-text);
+}
+
+html[data-shell] .alert-tiles {
+  grid-template-columns: 1fr;
+  gap: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+
+html[data-shell] .alert-tile {
+  padding: 0.75rem 1rem;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+html[data-shell] .alert-tile + .alert-tile {
+  border-top: 0.5px solid var(--border);
+}
+
+html[data-shell] .alert-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.8rem;
+}
+
+html[data-shell] .alert-code {
+  --status: var(--accent);
+  padding: 0 0.35rem;
+  border: 2px solid var(--status);
+  border-radius: 6px;
+  background: none;
+  color: var(--status);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+html[data-shell] .alert-tile.alert .alert-code {
+  --status: var(--danger-text);
+}
+
+html[data-shell] .alert-tile.watch .alert-code {
+  --status: var(--warn-text);
+}
+
+html[data-shell] .alert-tile.ok .alert-code {
+  --status: var(--ok-text);
+}
+
+/* The coming week as the stations ahead on a line: a dot for each, joined by the line. */
+html[data-shell] .coming-week {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+html[data-shell] .coming-week li {
+  position: relative;
+  padding: 0.55rem 0 0.55rem 2rem;
+}
+
+html[data-shell] .coming-week li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.6rem;
+  width: 4px;
+  background: var(--accent);
+}
+
+html[data-shell] .coming-week li:first-child::before {
+  top: 50%;
+}
+
+html[data-shell] .coming-week li:last-child::before {
+  bottom: 50%;
+}
+
+html[data-shell] .coming-week li::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.22rem;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.5rem;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 4px var(--accent);
+}
+
+html[data-shell] .coming-week .nowrap {
+  font-weight: 650;
+}
+
+/* An allocation row names its class after a dot of the class's line colour. */
+html[data-shell] .band-row[data-line] .band-top > span:first-child::before {
+  content: '';
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--line);
+  vertical-align: 0.05em;
 }
