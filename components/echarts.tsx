@@ -9,6 +9,7 @@ import type { BarSeriesOption, CustomSeriesOption, LineSeriesOption, PieSeriesOp
 import type { GridComponentOption, MarkAreaComponentOption, MarkLineComponentOption, TooltipComponentOption } from 'echarts/components';
 import type { ComposeOption, ECharts } from 'echarts/core';
 
+import { swiftCharts } from '@/lib/chart-shell';
 import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
@@ -51,6 +52,11 @@ function readColors(element: HTMLElement): Colors {
 
 /** Below this width a chart lays out for a phone. */
 export const NARROW = 520;
+
+/** Inside the iOS shell (globals.css `html[data-shell]`) charts are drawn after Swift Charts (lib/chart-shell.ts). */
+function inShell(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.hasAttribute('data-shell');
+}
 
 /** How long a chart takes to draw or to move to new data: short, so motion only marks a change. */
 const MOTION_MS = 300;
@@ -124,7 +130,9 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     let narrow = element.clientWidth < NARROW;
     const draw = () => {
       narrowNow = element.clientWidth < NARROW;
-      chart.setOption({ animation: !motion.matches, animationDuration: MOTION_MS, animationDurationUpdate: MOTION_MS, animationEasing: 'cubicOut', ...build(readColors(element), element.clientWidth) }, true);
+      const colors = readColors(element);
+      const option: Option = { animation: !motion.matches, animationDuration: MOTION_MS, animationDurationUpdate: MOTION_MS, animationEasing: 'cubicOut', ...build(colors, element.clientWidth) };
+      chart.setOption(inShell() ? swiftCharts(option, { ink: colors.ink, muted: colors.muted, grid: colors.grid }) : option, true);
     };
     draw();
     ready?.(chart);
@@ -205,10 +213,11 @@ export function tooltipStyle(colors: Colors, trigger: 'axis-line' | 'axis-shadow
         }),
     backgroundColor: colors.surface,
     borderColor: colors.grid,
-    borderWidth: 1,
+    borderWidth: inShell() ? 0 : 1,
     padding: [8, 10],
     textStyle: { color: colors.ink, fontFamily: colors.font, fontSize: 13 },
-    extraCssText: 'box-shadow: none; border-radius: 8px;',
+    // In the shell the read-out floats as iOS draws one: rounder, lifted by a soft shadow instead of a border.
+    extraCssText: inShell() ? 'box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); border-radius: 12px;' : 'box-shadow: none; border-radius: 8px;',
   };
 }
 
