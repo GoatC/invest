@@ -16,7 +16,11 @@ import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameNext, sameTop,
  * - `action(key)`, a tap on a glass button of the shell's navigation bar: it presses the page's own
  *   control that lent it (`data-shell-action`);
  * - `later()`, 稍後再說 on the thing waiting above the tab bar: it presses the banner's own button;
- * - `segment(index)`, a choice in the shell's segmented control: it presses that sub-tab of the page's row.
+ * - `segment(index)`, a choice in the shell's segmented control: it presses that sub-tab of the page's row;
+ * - `refresh()`, a pull down at the top of the page (proposal G06): the page is read again from the
+ *   server, as after a save; it resolves when the new page is on screen.
+ * Inside the shell it also asks the phone for a haptic (G06): success when a save is confirmed
+ * (`.banner.ok`), a warning when something is refused (`.banner[role="alert"]`), once each.
  * With the state it also sends the top of the page (proposal G02): the title the shell's large title
  * shows, the controls lent to its bar, whether a back button belongs there and the status bar's
  * colour, read from the page as drawn and sent again when any of it changes; and what waits on
@@ -32,8 +36,8 @@ interface Handler<T> {
 }
 
 interface ShellWindow {
-  webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage> } };
-  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void; segment(index: number): void };
+  webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage>; haptic?: Handler<'success' | 'warning'> } };
+  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void; segment(index: number): void; refresh(): Promise<void> };
   longviewReminders?: { status?: RemindersStatus; pushDevices?: number };
 }
 
@@ -119,6 +123,41 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
   const [pending, start] = useTransition();
   const live = useRef({ path, sheet, onMore, closeSheet });
   live.current = { path, sheet, onMore, closeSheet };
+  /** Pulls to refresh waiting for the page read again to be on screen. */
+  const refreshing = useRef<Array<() => void>>([]);
+
+  useEffect(() => {
+    if (!pending) refreshing.current.splice(0).forEach((done) => done());
+  }, [pending]);
+
+  // A haptic for what just happened on the page: a save confirmed, or something refused.
+  useEffect(() => {
+    const haptic = shellWindow().webkit?.messageHandlers?.haptic;
+    if (!haptic) return undefined;
+    const felt = new Set<string>();
+    let frame = 0;
+    const feel = () => {
+      frame = 0;
+      for (const banner of document.querySelectorAll<HTMLElement>('main .banner.ok[role="status"], main .banner[role="alert"]')) {
+        const kind = banner.matches('.ok') ? 'success' : 'warning';
+        const key = `${kind}:${banner.textContent ?? ''}`;
+        if (felt.has(key)) continue;
+        felt.add(key);
+        haptic.postMessage(kind);
+      }
+    };
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(feel);
+    };
+    feel();
+    const changes = new MutationObserver(soon);
+    const main = document.querySelector('main');
+    if (main) changes.observe(main, { childList: true, subtree: true });
+    return () => {
+      changes.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [path]);
 
   // The state, and inside the shell the top of the page with it: told at once, then again whenever
   // the page changes under the same address (its parts arriving) or the poster scrolls under the bar.
@@ -183,6 +222,14 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       },
       segment(index) {
         segmentItems()[index]?.click();
+      },
+      refresh() {
+        return new Promise<void>((done) => {
+          refreshing.current.push(done);
+          // Answered at the latest after this long, should the page never say it is done.
+          setTimeout(done, 10_000);
+          start(() => router.refresh());
+        });
       },
     };
     return () => {

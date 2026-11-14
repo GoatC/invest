@@ -176,6 +176,7 @@ final class ShellViewController: UITabBarController {
         content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');document.documentElement.setAttribute('data-shell-segmented','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
+        content.add(self, name: "haptic")
         configuration.userContentController = content
 
         let web = WKWebView(frame: .zero, configuration: configuration)
@@ -220,6 +221,10 @@ final class ShellViewController: UITabBarController {
         }
         notice.isHidden = true
         Router.shell = self
+        // A pull down at the top of the page reads it again (proposal G06); the page says when it is on screen.
+        let refresh = UIRefreshControl()
+        refresh.addAction(UIAction { [weak self] _ in self?.pullToRefresh() }, for: .valueChanged)
+        web.scrollView.refreshControl = refresh
         scrollWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
             let y = scroll.contentOffset.y
             MainActor.assumeIsolated { self?.scrolled(to: y) }
@@ -277,7 +282,10 @@ final class ShellViewController: UITabBarController {
             let kept = key ?? selectedHost?.place.key
             hosts = tabs.map { tab in
                 let host = TabHost(tab: tab)
-                host.onSegment = { [weak self] index in self?.web.evaluateJavaScript("window.longview&&window.longview.segment(\(index))", completionHandler: nil) }
+                host.onSegment = { [weak self] index in
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    self?.web.evaluateJavaScript("window.longview&&window.longview.segment(\(index))", completionHandler: nil)
+                }
                 host.onInsets = { [weak self] in
                     self?.sayBottom()
                     self?.sayTop()
@@ -335,11 +343,27 @@ final class ShellViewController: UITabBarController {
         web.evaluateJavaScript("document.documentElement.style.setProperty('--shell-top','\(Int(top))px');document.documentElement.style.setProperty('--shell-top-inline','\(Int(inline))px')", completionHandler: nil)
     }
 
+    /// A pull down at the top: the page reads itself again from the server (not the nightly job, which
+    /// the refresh button runs); a page that cannot is loaded again whole.
+    private func pullToRefresh() {
+        let refresh = web.scrollView.refreshControl
+        web.callAsyncJavaScript("if (window.longview && window.longview.refresh) { await window.longview.refresh(); return true } return false", arguments: [:], in: nil, in: .page) { [weak self] result in
+            if case .success(let done) = result, (done as? Bool) == true {
+                refresh?.endRefreshing()
+            } else {
+                refresh?.endRefreshing()
+                self?.web.reload()
+            }
+        }
+    }
+
     /// Draws the top the page sent in the place on screen: its title, its controls, a back button.
     /// A new page at its top shows its large title again, though the page before had drawn it in.
     private func drawTop(_ top: ShellTop?) {
         guard let host = selectedHost else { return }
         let newPage = host.draw(top, run: { [weak self] key in self?.press(key) }, back: { [weak self] in self?.goBack() })
+        // The spinner in white over the poster, in the system's colour over the grey ground.
+        web.scrollView.refreshControl?.tintColor = top?.lightStatusBar ?? true ? .white : nil
         if newPage {
             titleWaits = true
             scrolled(to: web.scrollView.contentOffset.y)
@@ -472,6 +496,7 @@ final class ShellViewController: UITabBarController {
 extension ShellViewController: UITabBarControllerDelegate {
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
         guard let host = (viewController as? UINavigationController)?.viewControllers.first as? TabHost else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
         attach(to: host)
         let key = host.place.key
         guard let argument = try? JSONSerialization.data(withJSONObject: [key]), let list = String(data: argument, encoding: .utf8) else { return }
@@ -497,6 +522,13 @@ extension ShellViewController: WKScriptMessageHandler {
         guard message.webView === web, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Site.root?.host else { return }
         if message.name == "reminders" {
             if let list = Reminder.message(message.body) { schedule(list.items, expiryWanted: list.expiry) }
+        } else if message.name == "haptic" {
+            // A save confirmed, or something refused (components/shell-bridge.tsx).
+            switch message.body as? String {
+            case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
+            case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            default: break
+            }
         } else if let new = ShellState(message: message.body) {
             heard(new)
         }
