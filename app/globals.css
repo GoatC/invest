@@ -3615,6 +3615,13 @@ html[data-shell-next] .guide {
   display: none;
 }
 
+/* The page's row of sub-tabs as iOS's segmented control under the large title (Liquid Glass
+   proposal G03, Hugo 2026-11-15): a shell that draws it marks the page `data-shell-segmented`, and
+   the row (`data-shell-segments`) leaves the page. */
+html[data-shell-segmented] [data-shell-segments] {
+  display: none;
+}
+
 /* A choice that is a checkbox and its name, a finger's height (the iOS shell's reminders, a push opening the app). */
 .check-list {
   display: grid;

@@ -47,6 +47,9 @@ struct ShellTop: Equatable {
     let lightStatusBar: Bool
     let back: Bool
     let actions: [ShellAction]
+    /// The page's row of sub-tabs, drawn as a segmented control (proposal G03); empty for none.
+    let segments: [String]
+    let segment: Int
 
     init?(_ body: Any?) {
         guard let fields = body as? [String: Any] else { return nil }
@@ -57,6 +60,9 @@ struct ShellTop: Equatable {
             guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
             return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key)
         }
+        let row = fields["segments"] as? [String: Any]
+        segments = row?["labels"] as? [String] ?? []
+        segment = row?["current"] as? Int ?? 0
     }
 }
 

@@ -15,7 +15,8 @@ import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameNext, sameTop,
  * - `remindersStatus(status)`, the shell's answer once it has scheduled the reminders;
  * - `action(key)`, a tap on a glass button of the shell's navigation bar: it presses the page's own
  *   control that lent it (`data-shell-action`);
- * - `later()`, 稍後再說 on the thing waiting above the tab bar: it presses the banner's own button.
+ * - `later()`, 稍後再說 on the thing waiting above the tab bar: it presses the banner's own button;
+ * - `segment(index)`, a choice in the shell's segmented control: it presses that sub-tab of the page's row.
  * With the state it also sends the top of the page (proposal G02): the title the shell's large title
  * shows, the controls lent to its bar, whether a back button belongs there and the status bar's
  * colour, read from the page as drawn and sent again when any of it changes; and what waits on
@@ -32,7 +33,7 @@ interface Handler<T> {
 
 interface ShellWindow {
   webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage> } };
-  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void };
+  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void; segment(index: number): void };
   longviewReminders?: { status?: RemindersStatus; pushDevices?: number };
 }
 
@@ -67,9 +68,22 @@ function lentActions(): ShellAction[] {
   return actions;
 }
 
+/** The sub-tabs of the page's row (`data-shell-segments`): its links or tab buttons. */
+function segmentItems(): HTMLElement[] {
+  const row = document.querySelector<HTMLElement>('[data-shell-segments]');
+  return row ? [...row.querySelectorAll<HTMLElement>(':scope > a, :scope > button')] : [];
+}
+
+function readSegments(): ShellTop['segments'] {
+  const items = segmentItems();
+  if (items.length < 2) return null;
+  const current = items.findIndex((item) => item.getAttribute('aria-current') === 'page' || item.getAttribute('aria-selected') === 'true');
+  return { labels: items.map((item) => item.textContent?.trim() ?? ''), current: Math.max(0, current) };
+}
+
 /** The top of the page as it is drawn now: the More list over it, the dashboard's poster, or a page with its h1. */
 function readTop(path: string, sheet: boolean): ShellTop {
-  if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [] };
+  if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [], segments: null };
   const poster = document.querySelector<HTMLElement>('.page > .hero');
   const heading = document.querySelector<HTMLElement>('main h1:not(.hero h1)');
   return {
@@ -77,6 +91,7 @@ function readTop(path: string, sheet: boolean): ShellTop {
     statusBar: poster && poster.getBoundingClientRect().bottom > UNDER_BAR_PX ? 'light' : 'dark',
     back: shellBack(path),
     actions: lentActions(),
+    segments: readSegments(),
   };
 }
 
@@ -165,6 +180,9 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       },
       later() {
         document.querySelector<HTMLElement>('.guide-banner .guide-close')?.click();
+      },
+      segment(index) {
+        segmentItems()[index]?.click();
       },
     };
     return () => {

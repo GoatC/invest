@@ -86,7 +86,7 @@ describe('the iOS shell: reminders on the phone and the way in from a push', () 
 });
 
 describe('the top of the page, drawn by the shell (proposal G02)', () => {
-  const TOP: ShellTop = { title: '持倉', statusBar: 'dark', back: false, actions: [{ key: 'add', symbol: 'plus', label: '新增交易 Add trade' }] };
+  const TOP: ShellTop = { title: '持倉', statusBar: 'dark', back: false, actions: [{ key: 'add', symbol: 'plus', label: '新增交易 Add trade' }], segments: { labels: ['總覽', '交易', '現金流', '觀察清單'], current: 0 } };
 
   it('adds the top to the message only when the page gives one', () => {
     assert.equal('top' in shellState('/holdings', false, true), false);
@@ -103,6 +103,8 @@ describe('the top of the page, drawn by the shell (proposal G02)', () => {
     assert.equal(sameTop(TOP, { ...TOP, title: '績效' }), false);
     assert.equal(sameTop(TOP, { ...TOP, statusBar: 'light' }), false);
     assert.equal(sameTop(TOP, { ...TOP, actions: [] }), false);
+    assert.equal(sameTop(TOP, { ...TOP, segments: { labels: TOP.segments!.labels, current: 1 } }), false);
+    assert.equal(sameTop(TOP, { ...TOP, segments: null }), false);
     assert.equal(sameTop(null, null), true);
     assert.equal(sameTop(TOP, null), false);
   });
