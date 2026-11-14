@@ -520,7 +520,7 @@ function ComingWeek({
           <Bi en="Nothing scheduled in the next seven days." zh="未來七天沒有排定的事件。" />
         </p>
       ) : (
-        <ul className="compact-list">
+        <ul className="compact-list coming-week">
           {events.map((event) => (
             <li key={`${event.date}${event.what.en}`}>
               <span className="nowrap">

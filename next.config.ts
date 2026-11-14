@@ -2,7 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // The app talks to Supabase only; no remote images or external fonts are loaded.
+  // The app talks to Supabase only; no external fonts are loaded. Inside the iOS shell a holding may
+  // show its logo from Financial Modeling Prep (lib/ticker-mark.ts); the referrer stays same-origin.
   poweredByHeader: false,
   // Once online (Vercel), no other site may frame the app, and the browser asks for nothing it does not use.
   async headers() {
