@@ -36,6 +36,8 @@ jobs:
         # called; the compiler says "nearly matches". That is a failure here.
         run: |
           if grep -n "nearly matches" "$RUNNER_TEMP/build.log"; then exit 1; fi
+      - name: The setup and install scripts, with the bash a Mac has
+        run: /bin/bash ios/tests/scripts.sh
       - name: What was built
         run: |
           app="$RUNNER_TEMP/build/Build/Products/Debug-iphonesimulator/LongView.app"
