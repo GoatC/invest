@@ -60,6 +60,25 @@ struct ShellTop: Equatable {
     }
 }
 
+/// What waits on Hugo (lib/shell.ts `ShellNext`; proposal G04): the first in-app banner.
+struct ShellNext: Equatable {
+    let text: String
+    let href: String
+    let more: Int
+    let later: Bool
+    /// Something to act on, rather than something to know.
+    let act: Bool
+
+    init?(_ body: Any?) {
+        guard let fields = body as? [String: Any], let text = fields["text"] as? String, let href = fields["href"] as? String else { return nil }
+        self.text = text
+        self.href = href
+        more = fields["more"] as? Int ?? 0
+        later = fields["later"] as? Bool ?? false
+        act = (fields["tone"] as? String) == "act"
+    }
+}
+
 /// What the page tells the shell each time it changes (lib/shell.ts `ShellState`, version 1).
 struct ShellState: Equatable {
     let signedIn: Bool
@@ -69,6 +88,8 @@ struct ShellState: Equatable {
     let tabs: [ShellTab]
     /// Nil from a page that does not send it yet: the navigation bar stays empty.
     let top: ShellTop?
+    /// Nil when nothing waits, or from a page that does not send it yet.
+    let next: ShellNext?
 
     /// Reads the body of a script message; nil for anything that is not a version 1 state.
     init?(message body: Any) {
@@ -86,6 +107,7 @@ struct ShellState: Equatable {
         }
         self.tabs = listed.isEmpty ? ShellTab.fallback : listed
         self.top = ShellTop(fields["top"])
+        self.next = ShellNext(fields["next"])
     }
 }
 

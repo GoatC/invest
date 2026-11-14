@@ -58,6 +58,23 @@ export interface ShellTop {
   actions: readonly ShellAction[];
 }
 
+/**
+ * What waits on Hugo, which the shell shows above its tab bar (Liquid Glass proposal G04, Hugo
+ * 2026-11-15): the first of the in-app banners (lib/models/banners.ts, components/guide-banner.tsx),
+ * where it is done, and how many more wait behind it.
+ */
+export interface ShellNext {
+  text: string;
+  href: string;
+  /** The name of the banner's button, e.g. 去規劃. */
+  label: string;
+  more: number;
+  /** Whether it can be put off (the banner's 稍後再說). */
+  later: boolean;
+  /** Something to act on, or something to know (the banner's tone). */
+  tone: 'act' | 'info';
+}
+
 /** One message from the page to the shell, sent whenever any of it changes. */
 export interface ShellState {
   /** The version of this message; the shell ignores what it does not know. */
@@ -68,15 +85,23 @@ export interface ShellState {
   tabs: readonly ShellTab[];
   /** Left out by a page from before the shell drew the top; the shell then keeps its bar empty. */
   top?: ShellTop;
+  /** Null when nothing waits; left out by a page from before the shell showed it. */
+  next?: ShellNext | null;
 }
 
-export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop): ShellState {
-  return { v: 1, signedIn, path, tab: signedIn ? shellTab(path, sheet) : null, tabs: SHELL_TABS, ...(top ? { top } : {}) };
+export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop, next?: ShellNext | null): ShellState {
+  return { v: 1, signedIn, path, tab: signedIn ? shellTab(path, sheet) : null, tabs: SHELL_TABS, ...(top ? { top } : {}), ...(next !== undefined ? { next } : {}) };
 }
 
 /** Whether the page at `path` is reached from inside another (a holding's chart, a form): not a page of the navigation. */
 export function shellBack(path: string): boolean {
   return !NAV_PATHS.includes(path);
+}
+
+/** The same thing waiting, so the page tells the shell only of a change. */
+export function sameNext(a: ShellNext | null, b: ShellNext | null): boolean {
+  if (!a || !b) return a === b;
+  return a.text === b.text && a.href === b.href && a.label === b.label && a.more === b.more && a.later === b.later && a.tone === b.tone;
 }
 
 /** Two tops the same, so the page tells the shell only of a change. */

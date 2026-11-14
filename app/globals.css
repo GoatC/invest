@@ -3608,6 +3608,13 @@ html[data-shell-top] .sheet {
   top: var(--shell-top, var(--safe-top));
 }
 
+/* What waits on Hugo, above the shell's tab bar (Liquid Glass proposal G04, Hugo 2026-11-15): a
+   shell that shows the first in-app banner there marks the page `data-shell-next`, and the banners
+   leave the page. An older shell sets no mark, and they stay. */
+html[data-shell-next] .guide {
+  display: none;
+}
+
 /* A choice that is a checkbox and its name, a finger's height (the iOS shell's reminders, a push opening the app). */
 .check-list {
   display: grid;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MORE, SHELL_TABS, reminderPrefs, remindersMessage, sameTop, shellBack, shellMove, shellOpenUrl, shellState, shellTab, sitePath, type ShellTop } from './shell';
+import { MORE, SHELL_TABS, reminderPrefs, remindersMessage, sameNext, sameTop, shellBack, shellMove, shellOpenUrl, shellState, shellTab, sitePath, type ShellTop } from './shell';
 
 describe('the iOS shell: what the page tells it and does for it', () => {
   it('lists the tabs as the web tab bar does, the dashboard in the middle and More last', () => {
@@ -105,5 +105,22 @@ describe('the top of the page, drawn by the shell (proposal G02)', () => {
     assert.equal(sameTop(TOP, { ...TOP, actions: [] }), false);
     assert.equal(sameTop(null, null), true);
     assert.equal(sameTop(TOP, null), false);
+  });
+});
+
+describe('what waits on Hugo, above the shell’s tab bar (proposal G04)', () => {
+  const NEXT = { text: '大額資金 NT$50,000 尚未排分批計畫。', href: '/windfall', label: '去規劃', more: 1, later: true, tone: 'info' as const };
+
+  it('says nothing waits with null, and leaves the field out for a page that does not read it', () => {
+    assert.equal(shellState('/', false, true, undefined, null).next, null);
+    assert.equal('next' in shellState('/', false, true), false);
+    assert.deepEqual(shellState('/', false, true, undefined, NEXT).next, NEXT);
+  });
+
+  it('tells a new thing waiting apart from the same one', () => {
+    assert.equal(sameNext(NEXT, { ...NEXT }), true);
+    assert.equal(sameNext(NEXT, { ...NEXT, more: 0 }), false);
+    assert.equal(sameNext(NEXT, null), false);
+    assert.equal(sameNext(null, null), true);
   });
 });
