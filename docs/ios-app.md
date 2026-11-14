@@ -58,7 +58,13 @@ cd invest
 
 看到「已寫入 ios/Local.xcconfig」就完成了。
 
-如果它說找不到團隊代號：確認第 3 步做完，再執行一次。還是不行的話，把畫面上的文字貼給 Claude。
+如果它說找不到團隊代號：加入 Apple ID 後，Xcode 要選過一次 Team 才會記下代號。請這樣做，再執行一次 `./ios/setup.sh`：
+
+1. 用 Xcode 打開 `ios/LongView.xcodeproj`。
+2. 點左側最上方藍色圖示的 **LongView**，再點中間 **TARGETS** 底下的 **LongView**。
+3. 點上方的 **Signing & Capabilities**，在 **Team** 選單選你的名字（後面寫著 Personal Team）。下方出現紅色錯誤訊息沒關係。
+
+腳本會從專案檔讀出代號、寫進 `ios/Local.xcconfig`，並把專案檔還原。還是不行的話，把畫面上的文字貼給 Claude。
 
 ## 5. 準備 iPhone
 

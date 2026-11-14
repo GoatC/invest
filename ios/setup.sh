@@ -31,8 +31,15 @@ fi
 if [[ "$team" =~ ^[A-Z0-9]{10}$ ]]; then
   echo "找到 Apple 團隊代號（Team ID）：${team}"
 else
-  echo "找不到 Apple 團隊代號。請先在 Xcode 的 Settings > Accounts 加入 Apple ID（docs/ios-app.md 第 3 步），"
-  read -r -p "或在這裡直接輸入 10 碼的 Team ID： " team
+  echo "Xcode 還沒有記下你的團隊代號（加入 Apple ID 後，要選過一次 Team 才會有）。請這樣做："
+  echo "  1. 用 Xcode 打開 ios/LongView.xcodeproj。"
+  echo "  2. 點左側最上方藍色圖示的 LongView，再點中間 TARGETS 底下的 LongView。"
+  echo "  3. 點上方的 Signing & Capabilities，在 Team 選單選你的名字（Personal Team）。"
+  echo "     下方出現紅色錯誤訊息沒關係。"
+  echo "  4. 回到這裡，再執行一次 ./ios/setup.sh。"
+  echo
+  read -r -p "已經知道 10 碼的 Team ID 可以直接輸入；否則按 Enter 結束： " team
+  if [ -z "$team" ]; then exit 1; fi
   if ! [[ "$team" =~ ^[A-Z0-9]{10}$ ]]; then echo "Team ID 應為 10 碼英數字，已停止。"; exit 1; fi
 fi
 
