@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MORE, SHELL_TABS, shellMove, shellState, shellTab } from './shell';
+import { MORE, SHELL_TABS, reminderPrefs, remindersMessage, shellMove, shellOpenUrl, shellState, shellTab, sitePath } from './shell';
 
 describe('the iOS shell: what the page tells it and does for it', () => {
   it('lists the tabs as the web tab bar does, the dashboard in the middle and More last', () => {
@@ -51,5 +51,36 @@ describe('the iOS shell: what the page tells it and does for it', () => {
     assert.deepEqual(shellMove('/holdings', '/holdings', true), { do: 'none' });
     assert.deepEqual(shellMove(MORE, '/holdings', false), { do: 'more' });
     assert.deepEqual(shellMove('/nowhere', '/', false), { do: 'none' });
+  });
+});
+
+describe('the iOS shell: reminders on the phone and the way in from a push', () => {
+  const reminders = [
+    { id: 'weekly:2026-11-15', kind: 'weekly' as const, at: '2026-11-15T12:00:00.000Z', title: '每週檢視', body: '…', url: '/' },
+    { id: 'event:cpi', kind: 'event' as const, at: '2026-11-18T00:00:00.000Z', title: '2 天後：美國 CPI', body: '…', url: '/volatility#events' },
+    { id: 'dividend:7:regular', kind: 'dividend' as const, at: '2026-11-20T00:00:00.000Z', title: 'VT 配息', body: '…', url: '/cash-flows' },
+  ];
+
+  it('leaves the three the web app pushes off while a device gets its pushes, and the expiry reminder on', () => {
+    assert.deepEqual(reminderPrefs(null, 1), { weekly: false, event: false, dividend: false, expiry: true });
+    assert.deepEqual(reminderPrefs(undefined, 0), { weekly: true, event: true, dividend: true, expiry: true });
+  });
+
+  it('keeps what was chosen, and fills only what is missing or malformed', () => {
+    assert.deepEqual(reminderPrefs({ weekly: true, expiry: false, event: 'yes' }, 2), { weekly: true, event: false, dividend: false, expiry: false });
+  });
+
+  it('hands the shell only the kinds chosen', () => {
+    const message = remindersMessage(reminders, { weekly: true, event: false, dividend: true, expiry: false });
+    assert.deepEqual(message.items.map((reminder) => reminder.id), ['weekly:2026-11-15', 'dividend:7:regular']);
+    assert.equal(message.v, 1);
+    assert.equal(message.expiry, false);
+  });
+
+  it('opens a page of the site in the shell, and refuses anything that is not one', () => {
+    assert.equal(shellOpenUrl('/volatility#events'), 'longview://open?path=%2Fvolatility%23events');
+    assert.equal(shellOpenUrl('/cash-flows?new=dividend&event=7'), 'longview://open?path=%2Fcash-flows%3Fnew%3Ddividend%26event%3D7');
+    for (const bad of ['https://evil.example/', '//evil.example', 'volatility', '/\\evil', '']) assert.equal(shellOpenUrl(bad), null, bad);
+    assert.equal(sitePath(null), null);
   });
 });

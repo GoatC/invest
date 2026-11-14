@@ -1,6 +1,8 @@
 import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
+import { PushHandoffSetting } from '@/components/push-handoff';
+import { ShellReminders } from '@/components/shell-reminders';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadDevices, loadNotifications, type DeviceRecord, type NotificationRecord } from '@/lib/data';
@@ -82,7 +84,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           </p>
         )}
         <PushSetup publicKey={publicKey} devices={devices.map((device) => ({ id: device.id, endpoint: device.endpoint }))} />
+        <PushHandoffSetting />
       </section>
+
+      <ShellReminders />
 
       <section className="card form">
         <h2>
