@@ -6,7 +6,7 @@ import { useEffect } from 'react';
  * On a phone a table of more than three columns shows each row as a small card (globals.css,
  * "Row cards"): the first cell as its title, every other cell under its column's name. The names
  * come from here: each cell is given its column header's Chinese text as `data-label`, which the
- * style sheet prints above the value. Mounted once, in the layout; it names the cells of whatever
+ * style sheet prints above the value (a column with no header, empty). Mounted once, in the layout; it names the cells of whatever
  * table is on the page, also after a page fills in new rows.
  */
 export function TableCards() {
@@ -22,8 +22,9 @@ export function TableCards() {
         const names = heads.map((head) => (head.querySelector('[lang="zh-Hant"]')?.textContent ?? head.textContent ?? '').trim());
         for (const row of table.querySelectorAll('tbody > tr, tfoot > tr')) {
           Array.from(row.children).forEach((cell, index) => {
-            const name = names[index];
-            if (index > 0 && name && cell.getAttribute('data-label') !== name) cell.setAttribute('data-label', name);
+            // A column with no name (a row's Edit link, with an empty header or none) is named empty: its cell keeps no line for a name.
+            const name = names[index] ?? '';
+            if (index > 0 && cell.getAttribute('data-label') !== name) cell.setAttribute('data-label', name);
           });
         }
       }
