@@ -3535,6 +3535,25 @@ html[data-shell] .sheet-close {
   display: none;
 }
 
+/* Figures as iOS sets them (Liquid Glass proposal C02, Hugo 2026-11-15): every digit in the shell
+   takes the same width, so a column of figures lines up and a figure that changes does not shift
+   its neighbours, and the large figures (the poster's value, a tile's, a fact's) are in SF Rounded,
+   as Apple's own apps set theirs. The text keeps its size: it does not follow the phone's text-size
+   setting. */
+html[data-shell] body {
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-shell] .hero-value,
+html[data-shell] .stat .value,
+html[data-shell] .fact-value {
+  font-family: ui-rounded, 'SF Pro Rounded', var(--font);
+}
+
+html[data-shell] .hero-value {
+  font-weight: 700;
+}
+
 /* A choice that is a checkbox and its name, a finger's height (the iOS shell's reminders, a push opening the app). */
 .check-list {
   display: grid;
