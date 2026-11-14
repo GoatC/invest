@@ -3,16 +3,56 @@ import WebKit
 
 /// One place in the tab bar. It has no page of its own: the one web view moves into whichever is
 /// chosen, so a tab opens from what the page already holds (components/preload.tsx on the web side).
+/// Its navigation bar draws the top of the page on screen (proposal G02): the page's title as the
+/// large title, which draws in to one line as the page scrolls, the controls the page lends as glass
+/// buttons, and a back button on a page reached from inside another.
 final class TabHost: UIViewController {
     /// Not `tab`: UIKit has a property of that name on every view controller.
     let place: ShellTab
     /// Called when the room the bars take from this place changes.
     var onInsets: (() -> Void)?
+    /// The top last drawn, so the bar is built again only when it changes.
+    private var drawn: ShellTop?
+    /// White text over the poster's colour (and the launch colour before the page has spoken); the system's own otherwise.
+    private var lightStatusBar = true
 
     init(tab: ShellTab) {
         self.place = tab
         super.init(nibName: nil, bundle: nil)
         tabBarItem = UITabBarItem(title: tab.title, image: UIImage(systemName: tab.symbol), selectedImage: nil)
+        navigationItem.largeTitleDisplayMode = .never
+    }
+
+    override var preferredStatusBarStyle: UIStatusBarStyle { lightStatusBar ? .lightContent : .default }
+
+    /// Draws `top` in the navigation bar; `run` presses the page's control behind a button, `back` goes
+    /// back a page. True when the title changed: a new page.
+    @discardableResult
+    func draw(_ top: ShellTop?, run: @escaping (String) -> Void, back: @escaping () -> Void) -> Bool {
+        guard top != drawn else { return false }
+        let newTitle = top?.title != drawn?.title
+        drawn = top
+        navigationItem.title = top?.title
+        navigationItem.largeTitleDisplayMode = top?.title == nil ? .never : .always
+        // The page lists its controls left to right; the bar fills from the right edge in.
+        navigationItem.rightBarButtonItems = (top?.actions ?? []).reversed().map { action in
+            let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action.key) })
+            item.accessibilityLabel = action.label
+            return item
+        }
+        if top?.back == true {
+            let item = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), primaryAction: UIAction { _ in back() })
+            item.accessibilityLabel = "返回 Back"
+            navigationItem.leftBarButtonItem = item
+        } else {
+            navigationItem.leftBarButtonItem = nil
+        }
+        let light = top?.lightStatusBar ?? true
+        if light != lightStatusBar {
+            lightStatusBar = light
+            setNeedsStatusBarAppearanceUpdate()
+        }
+        return newTitle
     }
 
     @available(*, unavailable)
@@ -20,15 +60,35 @@ final class TabHost: UIViewController {
         fatalError("not used")
     }
 
+    /// Behind the page: the launch colour until the page has drawn, then the grouped grey of the page's own ground.
+    static var ground: UIColor = launchGround
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = launchGround
+        view.backgroundColor = TabHost.ground
     }
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         onInsets?()
     }
+}
+
+/// A place's navigation stack: one page deep, its bar drawing the top of the page with large titles.
+/// The status bar's colour is the place's own (white over the poster, the system's elsewhere).
+final class PlaceNavigation: UINavigationController {
+    init(host: TabHost) {
+        super.init(rootViewController: host)
+        navigationBar.prefersLargeTitles = true
+        tabBarItem = host.tabBarItem
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override var childForStatusBarStyle: UIViewController? { topViewController }
 }
 
 /// The whole app: the system's tab bar (Liquid Glass, drawn by iOS) over one web view showing the
@@ -42,6 +102,11 @@ final class ShellViewController: UITabBarController {
     private var asked: URL?
     /// The room at the foot last told to the page, in points; -1 when a new page has not been told.
     private var saidBottom: CGFloat = -1
+    /// The room the navigation bar takes with its large title, last told to the page (--shell-top); -1 when not yet told.
+    private var saidTop: CGFloat = -1
+    /// A new page whose large title waits for the page to be back at its top (the page scrolls there just after it says it is new).
+    private var titleWaits = false
+    private var scrollWatch: NSKeyValueObservation?
     private let cover = CoverView()
     private let notice = NoticeView()
     /// Scheduling the reminders, one list after another, so an older list never lands over a newer one.
@@ -57,7 +122,8 @@ final class ShellViewController: UITabBarController {
         configuration.defaultWebpagePreferences.preferredContentMode = .mobile
         let content = WKUserContentController()
         // The mark the page's style sheet reads (globals.css `html[data-shell]`), set before the page is read.
-        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // `data-shell-top`: this shell draws the top of the page itself (proposal G02), so the page draws no header of its own.
+        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         configuration.userContentController = content
@@ -65,7 +131,7 @@ final class ShellViewController: UITabBarController {
         let web = WKWebView(frame: .zero, configuration: configuration)
         web.navigationDelegate = self
         web.uiDelegate = self
-        // The page runs to every edge and keeps clear of the bars itself (--safe-top, --shell-bottom).
+        // The page runs to every edge and keeps clear of the bars itself (--shell-top, --shell-bottom).
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.allowsBackForwardNavigationGestures = true
         web.allowsLinkPreview = false
@@ -79,8 +145,13 @@ final class ShellViewController: UITabBarController {
         return web
     }()
 
-    /// White text in the status bar: the page keeps a band of the poster's colour behind it.
+    /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+
+    override var childForStatusBarStyle: UIViewController? { selectedViewController }
+
+    /// The place on screen.
+    private var selectedHost: TabHost? { (selectedViewController as? UINavigationController)?.viewControllers.first as? TabHost }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -99,6 +170,10 @@ final class ShellViewController: UITabBarController {
         }
         notice.isHidden = true
         Router.shell = self
+        scrollWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+            let y = scroll.contentOffset.y
+            MainActor.assumeIsolated { self?.scrolled(to: y) }
+        }
         open()
     }
 
@@ -108,6 +183,7 @@ final class ShellViewController: UITabBarController {
         if !notice.isHidden { view.bringSubviewToFront(notice) }
         if cover.superview != nil { view.bringSubviewToFront(cover) }
         sayBottom()
+        sayTop()
     }
 
     // MARK: Opening the site
@@ -148,18 +224,21 @@ final class ShellViewController: UITabBarController {
     /// Shows `tabs` in the bar (built again only when the list itself changes) and chooses `key`, if it is one of them.
     private func show(tabs: [ShellTab], choose key: String?) {
         if hosts.map(\.place) != tabs {
-            let kept = key ?? (selectedViewController as? TabHost)?.place.key
+            let kept = key ?? selectedHost?.place.key
             hosts = tabs.map { tab in
                 let host = TabHost(tab: tab)
-                host.onInsets = { [weak self] in self?.sayBottom() }
+                host.onInsets = { [weak self] in
+                    self?.sayBottom()
+                    self?.sayTop()
+                }
                 return host
             }
-            setViewControllers(hosts, animated: false)
+            setViewControllers(hosts.map { PlaceNavigation(host: $0) }, animated: false)
             if let kept = kept, let index = hosts.firstIndex(where: { $0.place.key == kept }) { selectedIndex = index }
         } else if let key = key, let index = hosts.firstIndex(where: { $0.place.key == key }), selectedIndex != index {
             selectedIndex = index
         }
-        if let host = selectedViewController as? TabHost { attach(to: host) }
+        if let host = selectedHost { attach(to: host) }
     }
 
     /// Moves the web view into the chosen tab's place; the bar follows its scrolling from there.
@@ -181,7 +260,7 @@ final class ShellViewController: UITabBarController {
         let device = view.safeAreaInsets.bottom
         var bottom = device
         if !isTabBarHidden {
-            let host = (selectedViewController as? TabHost)?.view.safeAreaInsets.bottom ?? 0
+            let host = selectedHost?.view.safeAreaInsets.bottom ?? 0
             // The place's own safe area covers the bar; should a system version not say so, a usual bar's height.
             bottom = host >= device + 30 ? host : device + 62
             bottom = max(bottom, saidBottom)
@@ -192,9 +271,72 @@ final class ShellViewController: UITabBarController {
         web.evaluateJavaScript("document.documentElement.style.setProperty('--shell-bottom','\(Int(bottom))px')", completionHandler: nil)
     }
 
+    /// Tells the page how much of the top of the screen the navigation bar takes (--shell-top, where a
+    /// page starts below its large title) and how much once drawn in to one line (--shell-top-inline,
+    /// where a row of the page sticks). Measured only while the page is at its top, with the large
+    /// title out; the largest is kept, so the page does not jump as the title draws in.
+    private func sayTop() {
+        guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, web.scrollView.contentOffset.y <= 0 else { return }
+        let top = max(bar.convert(bar.bounds, to: view).maxY.rounded(), saidTop)
+        guard top != saidTop else { return }
+        saidTop = top
+        let inline = (view.safeAreaInsets.top + 44).rounded()
+        web.evaluateJavaScript("document.documentElement.style.setProperty('--shell-top','\(Int(top))px');document.documentElement.style.setProperty('--shell-top-inline','\(Int(inline))px')", completionHandler: nil)
+    }
+
+    /// Draws the top the page sent in the place on screen: its title, its controls, a back button.
+    /// A new page at its top shows its large title again, though the page before had drawn it in.
+    private func drawTop(_ top: ShellTop?) {
+        guard let host = selectedHost else { return }
+        let newPage = host.draw(top, run: { [weak self] key in self?.press(key) }, back: { [weak self] in self?.goBack() })
+        if newPage {
+            titleWaits = true
+            scrolled(to: web.scrollView.contentOffset.y)
+        }
+        sayTop()
+        // The bar may settle its height after this pass; measure it again then.
+        DispatchQueue.main.async { [weak self] in self?.sayTop() }
+    }
+
+    /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
+    private func scrolled(to y: CGFloat) {
+        guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
+        titleWaits = false
+        bar.sizeToFit()
+        view.layoutIfNeeded()
+        sayTop()
+    }
+
+    /// Once the page has drawn, the grey of its ground shows behind and around it (and through the
+    /// bars' glass), not the launch colour.
+    private func settleGround() {
+        guard TabHost.ground != .systemGroupedBackground else { return }
+        TabHost.ground = .systemGroupedBackground
+        web.backgroundColor = .systemGroupedBackground
+        web.scrollView.backgroundColor = .systemGroupedBackground
+        for host in hosts where host.isViewLoaded { host.view.backgroundColor = .systemGroupedBackground }
+    }
+
+    /// A tap on a glass button: the page presses its own control that lent it (components/shell-bridge.tsx).
+    private func press(_ key: String) {
+        guard let argument = try? JSONSerialization.data(withJSONObject: [key]), let list = String(data: argument, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.longview&&window.longview.action(\(list)[0])", completionHandler: nil)
+    }
+
+    /// Back a page, as the edge swipe does; with nothing behind, the place's own page.
+    private func goBack() {
+        if web.canGoBack {
+            web.goBack()
+        } else if let key = state?.tab, let url = Site.page(key) {
+            load(url)
+        }
+    }
+
     private func heard(_ new: ShellState) {
         state = new
+        settleGround()
         show(tabs: new.tabs, choose: new.tab)
+        drawTop(new.top)
         if isTabBarHidden == new.signedIn {
             saidBottom = -1
             setTabBarHidden(!new.signedIn, animated: true)
@@ -253,7 +395,7 @@ final class ShellViewController: UITabBarController {
 
 extension ShellViewController: UITabBarControllerDelegate {
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-        guard let host = viewController as? TabHost else { return }
+        guard let host = (viewController as? UINavigationController)?.viewControllers.first as? TabHost else { return }
         attach(to: host)
         let key = host.place.key
         guard let argument = try? JSONSerialization.data(withJSONObject: [key]), let list = String(data: argument, encoding: .utf8) else { return }
@@ -305,9 +447,11 @@ extension ShellViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard webView === web else { return }
-        // A new page has not been told the room at its foot.
+        // A new page has not been told the room at its foot, nor at its top.
         saidBottom = -1
+        saidTop = -1
         sayBottom()
+        sayTop()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

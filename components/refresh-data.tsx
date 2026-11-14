@@ -86,7 +86,8 @@ const MESSAGES: Record<View['phase'], { en: string; zh: string }> = {
   unset: { en: 'The page was reloaded. To run the job from here, set GITHUB_DISPATCH_TOKEN on Vercel (docs/nightly-job.md).', zh: '已重新整理畫面。若要從這裡執行排程，請在 Vercel 設定 GITHUB_DISPATCH_TOKEN（見 docs/nightly-job.md）。' },
 };
 
-export function RefreshData({ quiet = false }: { quiet?: boolean } = {}) {
+/** `shellAction`: inside the iOS shell this button is lent to the navigation bar as a glass button (proposal G02), and hidden on the page. */
+export function RefreshData({ quiet = false, shellAction = false }: { quiet?: boolean; shellAction?: boolean } = {}) {
   const router = useRouter();
   const noteId = useId();
   const state = useSyncExternalStore(subscribe, () => view, () => view);
@@ -112,7 +113,14 @@ export function RefreshData({ quiet = false }: { quiet?: boolean } = {}) {
   const url = 'url' in state ? state.url : undefined;
   return (
     <div className="refresh-data" data-phase={state.phase}>
-      <button type="button" className={quiet ? 'button' : 'primary'} onClick={() => void start()} disabled={busy} aria-describedby={noteId}>
+      <button
+        type="button"
+        className={quiet ? 'button' : 'primary'}
+        onClick={() => void start()}
+        disabled={busy}
+        aria-describedby={noteId}
+        {...(shellAction ? { 'data-shell-action': 'refresh', 'data-shell-symbol': 'arrow.clockwise', 'aria-label': '更新最新資料 Refresh the latest data' } : {})}
+      >
         {busy && <span className="refresh-spinner" aria-hidden="true" />}
         <Bi en={busy ? 'Refreshing…' : state.phase === 'done' ? 'Refresh again' : 'Refresh the latest data'} zh={busy ? '更新中…' : state.phase === 'done' ? '再更新一次' : '更新最新資料'} />
       </button>

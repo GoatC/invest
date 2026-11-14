@@ -212,7 +212,7 @@ function Hero({
             <span>{longDate(today)}</span>
             {dataDate && <Bi en={`Closes to ${dataDate}`} zh={`收盤價至 ${dataDate}`} />}
           </span>
-          <RefreshData quiet />
+          <RefreshData quiet shellAction />
         </div>
         <h1>
           <Zh en="Portfolio value" zh="總市值" />

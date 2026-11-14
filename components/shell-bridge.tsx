@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useTransition } from 'react';
 
-import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellReminder, type ShellState } from '@/lib/shell';
+import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameTop, shellBack, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellAction, type ShellReminder, type ShellState, type ShellTop } from '@/lib/shell';
 
 /**
  * The page's side of the iOS shell (lib/shell.ts; ios/Shell/ShellViewController.swift is the other).
@@ -12,7 +12,12 @@ import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, shellMove, shellSt
  * - `select(key)`, which a tap on a native tab calls: the page opens from what the preloader keeps
  *   (components/preload.tsx), as it does under a tap on the web tab bar;
  * - `open(path)`, for a tapped reminder or a `longview://open` address: any page of the site;
- * - `remindersStatus(status)`, the shell's answer once it has scheduled the reminders.
+ * - `remindersStatus(status)`, the shell's answer once it has scheduled the reminders;
+ * - `action(key)`, a tap on a glass button of the shell's navigation bar: it presses the page's own
+ *   control that lent it (`data-shell-action`).
+ * With the state it also sends the top of the page (proposal G02): the title the shell's large title
+ * shows, the controls lent to its bar, whether a back button belongs there and the status bar's
+ * colour, read from the page as drawn and sent again when any of it changes.
  * When the app opens, and when it comes back after an hour, it fetches the reminders of the next
  * 14 days (app/shell/reminders) and hands the shell those chosen on this phone
  * (components/shell-reminders.tsx). In a browser or the installed web app there is no shell to
@@ -25,7 +30,7 @@ interface Handler<T> {
 
 interface ShellWindow {
   webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage> } };
-  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void };
+  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void };
   longviewReminders?: { status?: RemindersStatus; pushDevices?: number };
 }
 
@@ -44,6 +49,35 @@ function post(state: ShellState) {
   shellWindow().webkit?.messageHandlers?.shell?.postMessage(state);
 }
 
+/** Below this many pixels from the top the poster has gone under the shell's bar, and the status bar turns dark. */
+const UNDER_BAR_PX = 100;
+
+/** The page's controls lent to the shell's bar, once each, in the page's order. */
+function lentActions(): ShellAction[] {
+  const seen = new Set<string>();
+  const actions: ShellAction[] = [];
+  for (const control of document.querySelectorAll<HTMLElement>('main [data-shell-action]')) {
+    const key = control.dataset.shellAction;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key });
+  }
+  return actions;
+}
+
+/** The top of the page as it is drawn now: the More list over it, the dashboard's poster, or a page with its h1. */
+function readTop(path: string, sheet: boolean): ShellTop {
+  if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [] };
+  const poster = document.querySelector<HTMLElement>('.page > .hero');
+  const heading = document.querySelector<HTMLElement>('main h1:not(.hero h1)');
+  return {
+    title: poster ? null : heading?.textContent?.trim() || null,
+    statusBar: poster && poster.getBoundingClientRect().bottom > UNDER_BAR_PX ? 'light' : 'dark',
+    back: shellBack(path),
+    actions: lentActions(),
+  };
+}
+
 function readPrefs(): unknown {
   try {
     return JSON.parse(localStorage.getItem(REMINDER_PREFS_KEY) ?? 'null');
@@ -59,7 +93,34 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
   const live = useRef({ path, sheet, onMore, closeSheet });
   live.current = { path, sheet, onMore, closeSheet };
 
-  useEffect(() => post(shellState(path, sheet, true)), [path, sheet]);
+  // The state, and inside the shell the top of the page with it: told at once, then again whenever
+  // the page changes under the same address (its parts arriving) or the poster scrolls under the bar.
+  useEffect(() => {
+    const inShell = document.documentElement.hasAttribute('data-shell');
+    let told: ShellTop | null = inShell ? readTop(path, sheet) : null;
+    post(shellState(path, sheet, true, told ?? undefined));
+    if (!inShell) return undefined;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const now = readTop(path, sheet);
+      if (sameTop(told, now)) return;
+      told = now;
+      post(shellState(path, sheet, true, now));
+    };
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    const changes = new MutationObserver(soon);
+    const main = document.querySelector('main');
+    if (main) changes.observe(main, { childList: true, subtree: true, characterData: true });
+    window.addEventListener('scroll', soon, { passive: true });
+    return () => {
+      changes.disconnect();
+      window.removeEventListener('scroll', soon);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [path, sheet]);
 
   useEffect(() => {
     const shell = shellWindow();
@@ -83,6 +144,9 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       remindersStatus(status) {
         shell.longviewReminders = { ...shell.longviewReminders, status };
         window.dispatchEvent(new CustomEvent(REMINDERS_STATUS, { detail: status }));
+      },
+      action(key) {
+        document.querySelector<HTMLElement>(`main [data-shell-action="${CSS.escape(key)}"]`)?.click();
       },
     };
     return () => {
