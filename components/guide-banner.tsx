@@ -22,7 +22,7 @@ export function GuideBanner({ banners, dismiss, skip, slot }: { banners: readonl
   if (here.length === 0 || (slot === 'layout' && path === '/')) return null;
   const shown = all ? here : here.slice(0, 1);
   return (
-    <aside className={slot === 'page' ? 'guide in-page' : 'guide'} aria-label="提醒 Reminders">
+    <aside className={slot === 'page' ? 'guide in-page' : 'guide'} aria-label="提醒 Reminders" data-count={here.length}>
       {shown.map((banner, index) => (
         <div key={banner.key} className={`guide-banner ${banner.tone}`} role="status" data-kind={banner.kind}>
           <span className="guide-icon" aria-hidden="true">

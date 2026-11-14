@@ -3608,6 +3608,13 @@ html[data-shell-top] .sheet {
   top: var(--shell-top, var(--safe-top));
 }
 
+/* What waits on Hugo, above the shell's tab bar (Liquid Glass proposal G04, Hugo 2026-11-15): a
+   shell that shows the first in-app banner there marks the page `data-shell-next`, and the banners
+   leave the page. An older shell sets no mark, and they stay. */
+html[data-shell-next] .guide {
+  display: none;
+}
+
 /* The shell's content in iOS's own colours (Liquid Glass proposal C03, Hugo 2026-11-15): the
    grouped grey ground with white groups on it, iOS's label and separator colours, no shadows, the
    rounder corners of iOS 26, and true black with dark groups in dark mode. The glass belongs to the

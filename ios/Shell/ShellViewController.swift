@@ -104,6 +104,17 @@ final class ShellViewController: UITabBarController {
     private var saidBottom: CGFloat = -1
     /// The room the navigation bar takes with its large title, last told to the page (--shell-top); -1 when not yet told.
     private var saidTop: CGFloat = -1
+    /// Where the thing waiting above the tab bar is done (a path of the site); nil while nothing waits there to be tapped.
+    private var nextPath: String?
+    private lazy var nextView: NextView = {
+        let next = NextView()
+        next.onTap = { [weak self] in
+            guard let self = self, let path = self.nextPath else { return }
+            self.open(path: path)
+        }
+        next.onLater = { [weak self] in self?.web.evaluateJavaScript("window.longview&&window.longview.later()", completionHandler: nil) }
+        return next
+    }()
     /// A new page whose large title waits for the page to be back at its top (the page scrolls there just after it says it is new).
     private var titleWaits = false
     private var scrollWatch: NSKeyValueObservation?
@@ -122,8 +133,9 @@ final class ShellViewController: UITabBarController {
         configuration.defaultWebpagePreferences.preferredContentMode = .mobile
         let content = WKUserContentController()
         // The mark the page's style sheet reads (globals.css `html[data-shell]`), set before the page is read.
-        // `data-shell-top`: this shell draws the top of the page itself (proposal G02), so the page draws no header of its own.
-        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // `data-shell-top`: this shell draws the top of the page itself (proposal G02), so the page draws no header of its own;
+        // `data-shell-next`: it shows what waits above the tab bar (G04), so the page shows no banner.
+        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         configuration.userContentController = content
@@ -298,6 +310,30 @@ final class ShellViewController: UITabBarController {
         DispatchQueue.main.async { [weak self] in self?.sayTop() }
     }
 
+    /// What waits on Hugo, in the tab bar's accessory (proposal G04); with nothing waiting, the day
+    /// before this build runs out, the reminder to install it again; else no accessory at all.
+    private func showNext(_ next: ShellNext?, signedIn: Bool) {
+        var content: NextView.Content?
+        if let next = next {
+            nextPath = next.href
+            content = NextView.Content(text: next.text, more: next.more, symbol: next.act ? "exclamationmark.circle.fill" : "info.circle.fill", tint: next.act ? .systemOrange : .tintColor, tappable: true, later: next.later)
+        } else {
+            nextPath = nil
+            if signedIn, let expiry = Reminders.expiry, expiry > Date(), expiry.timeIntervalSinceNow < 24 * 60 * 60 {
+                let format = DateFormatter()
+                format.locale = Locale(identifier: "zh_Hant_TW")
+                format.dateFormat = "M 月 d 日 HH:mm"
+                content = NextView.Content(text: "這版 App 將於 \(format.string(from: expiry)) 到期，記得重裝", more: 0, symbol: "clock.badge.exclamationmark", tint: .systemOrange, tappable: false, later: false)
+            }
+        }
+        guard let content = content else {
+            if bottomAccessory != nil { bottomAccessory = nil }
+            return
+        }
+        nextView.show(content)
+        if bottomAccessory == nil { bottomAccessory = UITabAccessory(contentView: nextView) }
+    }
+
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
         guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
@@ -337,6 +373,7 @@ final class ShellViewController: UITabBarController {
         settleGround()
         show(tabs: new.tabs, choose: new.tab)
         drawTop(new.top)
+        showNext(new.signedIn ? new.next : nil, signedIn: new.signedIn)
         if isTabBarHidden == new.signedIn {
             saidBottom = -1
             setTabBarHidden(!new.signedIn, animated: true)

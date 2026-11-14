@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useTransition } from 'react';
 
-import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameTop, shellBack, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellAction, type ShellReminder, type ShellState, type ShellTop } from '@/lib/shell';
+import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameNext, sameTop, shellBack, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellAction, type ShellNext, type ShellReminder, type ShellState, type ShellTop } from '@/lib/shell';
 
 /**
  * The page's side of the iOS shell (lib/shell.ts; ios/Shell/ShellViewController.swift is the other).
@@ -14,10 +14,12 @@ import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameTop, shellBack
  * - `open(path)`, for a tapped reminder or a `longview://open` address: any page of the site;
  * - `remindersStatus(status)`, the shell's answer once it has scheduled the reminders;
  * - `action(key)`, a tap on a glass button of the shell's navigation bar: it presses the page's own
- *   control that lent it (`data-shell-action`).
+ *   control that lent it (`data-shell-action`);
+ * - `later()`, 稍後再說 on the thing waiting above the tab bar: it presses the banner's own button.
  * With the state it also sends the top of the page (proposal G02): the title the shell's large title
  * shows, the controls lent to its bar, whether a back button belongs there and the status bar's
- * colour, read from the page as drawn and sent again when any of it changes.
+ * colour, read from the page as drawn and sent again when any of it changes; and what waits on
+ * Hugo (proposal G04), the first in-app banner, which the shell shows above its tab bar.
  * When the app opens, and when it comes back after an hour, it fetches the reminders of the next
  * 14 days (app/shell/reminders) and hands the shell those chosen on this phone
  * (components/shell-reminders.tsx). In a browser or the installed web app there is no shell to
@@ -30,7 +32,7 @@ interface Handler<T> {
 
 interface ShellWindow {
   webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage> } };
-  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void };
+  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void };
   longviewReminders?: { status?: RemindersStatus; pushDevices?: number };
 }
 
@@ -78,6 +80,16 @@ function readTop(path: string, sheet: boolean): ShellTop {
   };
 }
 
+/** The first in-app banner, as the shell shows it above its tab bar; null when nothing waits. */
+function readNext(): ShellNext | null {
+  const first = document.querySelector<HTMLElement>('.guide-banner');
+  const go = first?.querySelector<HTMLAnchorElement>('.guide-go');
+  const text = first?.querySelector('.guide-text')?.textContent?.trim();
+  if (!first || !go || !text) return null;
+  const count = Number(first.closest<HTMLElement>('.guide')?.dataset.count ?? '1');
+  return { text, href: go.getAttribute('href') ?? '/', label: go.textContent?.trim() ?? '', more: Math.max(0, count - 1), later: first.querySelector('.guide-close') !== null, tone: first.classList.contains('act') ? 'act' : 'info' };
+}
+
 function readPrefs(): unknown {
   try {
     return JSON.parse(localStorage.getItem(REMINDER_PREFS_KEY) ?? 'null');
@@ -98,22 +110,25 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
   useEffect(() => {
     const inShell = document.documentElement.hasAttribute('data-shell');
     let told: ShellTop | null = inShell ? readTop(path, sheet) : null;
-    post(shellState(path, sheet, true, told ?? undefined));
+    let waiting: ShellNext | null = inShell ? readNext() : null;
+    post(inShell ? shellState(path, sheet, true, told ?? undefined, waiting) : shellState(path, sheet, true));
     if (!inShell) return undefined;
     let frame = 0;
     const check = () => {
       frame = 0;
-      const now = readTop(path, sheet);
-      if (sameTop(told, now)) return;
-      told = now;
-      post(shellState(path, sheet, true, now));
+      const top = readTop(path, sheet);
+      const next = readNext();
+      if (sameTop(told, top) && sameNext(waiting, next)) return;
+      told = top;
+      waiting = next;
+      post(shellState(path, sheet, true, top, next));
     };
     const soon = () => {
       if (!frame) frame = requestAnimationFrame(check);
     };
+    // The whole body: the layout's banner streams in beside the page, not inside it.
     const changes = new MutationObserver(soon);
-    const main = document.querySelector('main');
-    if (main) changes.observe(main, { childList: true, subtree: true, characterData: true });
+    changes.observe(document.body, { childList: true, subtree: true, characterData: true });
     window.addEventListener('scroll', soon, { passive: true });
     return () => {
       changes.disconnect();
@@ -147,6 +162,9 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       },
       action(key) {
         document.querySelector<HTMLElement>(`main [data-shell-action="${CSS.escape(key)}"]`)?.click();
+      },
+      later() {
+        document.querySelector<HTMLElement>('.guide-banner .guide-close')?.click();
       },
     };
     return () => {
