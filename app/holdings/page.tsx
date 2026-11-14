@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { AlertTiles } from '@/components/alert-tiles';
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
@@ -128,6 +128,19 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
     pool: param(params, 'pool'),
   });
 
+  // The new trade alone, for the iOS shell's sheet (proposal G05): the + of its navigation bar opens
+  // this page in a sheet over Holdings; once saved, the shell closes it and shows Holdings.
+  if (param(params, 'sheet') === 'trade') {
+    return (
+      <section className="card form" id="add-trade">
+        <h1>
+          <Zh {...LABELS.addTrade} />
+        </h1>
+        <TradeForm key={JSON.stringify(initial)} data={data} rates={rates} today={today} initial={initial} compact sheet />
+      </section>
+    );
+  }
+
   return (
     <>
       {saved && (
@@ -212,7 +225,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           { tab: 'overview', content: !empty && <Footnotes /> },
         ]}
       />
-      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade" data-shell-action="add" data-shell-symbol="plus">
+      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade" data-shell-action="add" data-shell-symbol="plus" data-shell-sheet="/holdings?sheet=trade">
         ＋
       </a>
     </>

@@ -67,7 +67,8 @@ function lentActions(): ShellAction[] {
     const key = control.dataset.shellAction;
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key });
+    const sheet = control.dataset.shellSheet;
+    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}) });
   }
   return actions;
 }
