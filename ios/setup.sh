@@ -5,8 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 OUT=Local.xcconfig
+# A name next to Chinese text is always written ${so}: the bash on a Mac (3.2) otherwise reads the
+# first bytes of the next character as part of the name.
 
-echo "長期投資 iOS App：寫入簽署設定（$OUT，不會進 git）"
+echo "長期投資 iOS App：寫入簽署設定（${OUT}，不會進 git）"
 echo
 
 # 1. The site.
@@ -27,7 +29,7 @@ if ! [[ "$team" =~ ^[A-Z0-9]{10}$ ]]; then
   if [[ "$team" =~ ^[A-Z0-9]{10}$ ]]; then git checkout -- LongView.xcodeproj/project.pbxproj 2>/dev/null || true; fi
 fi
 if [[ "$team" =~ ^[A-Z0-9]{10}$ ]]; then
-  echo "找到 Apple 團隊代號（Team ID）：$team"
+  echo "找到 Apple 團隊代號（Team ID）：${team}"
 else
   echo "找不到 Apple 團隊代號。請先在 Xcode 的 Settings > Accounts 加入 Apple ID（docs/ios-app.md 第 3 步），"
   read -r -p "或在這裡直接輸入 10 碼的 Team ID： " team
@@ -45,7 +47,7 @@ BUNDLE_ID = $bundle
 CONFIG
 
 echo
-echo "已寫入 ios/$OUT："
+echo "已寫入 ios/${OUT}："
 cat "$OUT"
 echo
 echo "下一步：用 Xcode 打開 ios/LongView.xcodeproj，接上 iPhone，按 ▶（docs/ios-app.md 第 5 步）。"
