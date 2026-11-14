@@ -2538,7 +2538,8 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
       };
       if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true });
       window.shellSaid = [];
-      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) } } };
+      window.remindersSaid = [];
+      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) }, reminders: { postMessage: (message) => window.remindersSaid.push(message) } } };
     });
     const app = await phone.newPage();
     app.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (inside the shell, on ${app.url().replace(BASE, '')})`));
@@ -2602,9 +2603,53 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     await app.evaluate(() => window.scrollTo(0, 600));
     await app.evaluate(() => window.longview.select('/'));
     await app.waitForFunction(() => window.scrollY === 0);
+    // A tapped reminder or a longview:// address opens any page of the site, from memory.
+    {
+      const before = asked.length;
+      await app.evaluate(() => window.longview.open('/rules'));
+      await app.waitForURL('**/rules');
+      await app.getByRole('heading', { level: 1, name: '規則' }).waitFor();
+      check(!asked.slice(before).includes('/rules'), `/rules opens without asking the server, asked ${asked.slice(before).join(', ')}`);
+      await app.evaluate(() => window.longview.open('https://example.com/'));
+      check(new URL(app.url()).pathname === '/rules', 'an address off the site is refused');
+    }
+    // The reminders of the next 14 days, fetched once as the app opened and handed over as chosen on this phone.
+    const served = await app.evaluate(async () => (await fetch('/shell/reminders', { cache: 'no-store' })).json());
+    check(served.v === 1 && Array.isArray(served.reminders) && typeof served.pushDevices === 'number', `the reminders served, got ${JSON.stringify(served).slice(0, 200)}`);
+    check(served.reminders.every((reminder) => ['weekly', 'event', 'dividend'].includes(reminder.kind) && Date.parse(reminder.at) > Date.now() && reminder.url.startsWith('/') && reminder.title), 'each reminder has a kind, a time ahead, a title and a page');
+    check(served.reminders.some((reminder) => reminder.kind === 'weekly'), `the weekly review among them, got ${served.reminders.map((reminder) => reminder.id).join(', ')}`);
+    const handed = await app.evaluate(() => window.remindersSaid);
+    check(handed.length === 1, `handed over once as the app opened, got ${handed.length}`);
+    const alone = served.pushDevices === 0;
+    check(handed[0].v === 1 && handed[0].expiry === true, `the reinstall reminder on, got ${JSON.stringify(handed[0]).slice(0, 120)}`);
+    check(handed[0].items.length === (alone ? served.reminders.length : 0), `the three kinds ${alone ? 'on with no push device' : 'off while a device gets pushes'}: ${handed[0].items.length} of ${served.reminders.length}`);
     // The push page says where pushes arrive instead of offering a switch that cannot work here.
     await app.goto(`${BASE}/notifications`);
     await app.locator('#push-status').filter({ hasText: '主畫面的網頁版' }).waitFor();
+    check((await app.locator('#push-handoff').count()) === 0, 'no "open pushes in the app" choice inside the app');
+    // Its reminders: what the shell answers, and a choice handed over at once.
+    const reminders = app.locator('#shell-reminders');
+    await reminders.waitFor();
+    // A full load of the page: the reminders are fetched and handed over again.
+    await app.waitForFunction(() => window.remindersSaid.length >= 1);
+    await app.evaluate(() => window.longview.remindersStatus({ allowed: true, scheduled: 3, expires: '2026-11-21T02:00:00.000Z' }));
+    await app.locator('#shell-reminders-status').filter({ hasText: '已排 3 則' }).waitFor();
+    check((await app.locator('#shell-reminders-status').innerText()).includes('到期'), 'the day this build runs out');
+    const weekly = reminders.getByRole('checkbox', { name: /每週檢視/ });
+    check((await weekly.isChecked()) === alone, 'the weekly review starts as the default says');
+    const row = await reminders.locator('.check-row').first().boundingBox();
+    check(row && row.height >= 44, `each choice a finger's height, got ${JSON.stringify(row)}`);
+    const count = await app.evaluate(() => window.remindersSaid.length);
+    await weekly.tap();
+    await app.waitForFunction((n) => window.remindersSaid.length > n, count);
+    const last = await app.evaluate(() => window.remindersSaid.at(-1));
+    const weeklies = served.reminders.filter((reminder) => reminder.kind === 'weekly').length;
+    check(last.items.filter((reminder) => reminder.kind === 'weekly').length === (alone ? 0 : weeklies), `the weekly reviews ${alone ? 'taken out' : 'put in'} at once`);
+    const kept = await app.evaluate(() => JSON.parse(localStorage.getItem('shell.reminders')));
+    check(kept.weekly === !alone, `the choice kept on the phone, got ${JSON.stringify(kept)}`);
+    await app.evaluate(() => window.longview.remindersStatus({ allowed: false, scheduled: 0, expires: null }));
+    await app.locator('#shell-reminders-status').filter({ hasText: '通知未允許' }).waitFor();
+    await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-reminders.png`, fullPage: true });
   } finally {
     await phone.close();
   }
@@ -2623,6 +2668,26 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
   } finally {
     await visitor.close();
   }
+});
+
+await step('a push of the web app into the iOS app: the choice on the push page, the mark of a tapped push taken out of the address', async () => {
+  await page.goto(`${BASE}/notifications`);
+  const choice = page.locator('#push-handoff').getByRole('checkbox', { name: /iOS App/ });
+  await choice.waitFor();
+  check(!(await choice.isChecked()), 'off until chosen');
+  check((await page.locator('#shell-reminders').count()) === 0, "no shell reminders outside the shell");
+  // Off: a page opened by a push stays here, without the mark.
+  await page.goto(`${BASE}/holdings?via=push`);
+  await page.waitForFunction(() => window.location.search === '');
+  check(new URL(page.url()).pathname === '/holdings', `stays on its page, got ${page.url()}`);
+  await page.goto(`${BASE}/notifications`);
+  await choice.check();
+  check((await page.evaluate(() => localStorage.getItem('push.openApp'))) === '1', 'the choice kept on this device');
+  await choice.uncheck();
+  check((await page.evaluate(() => localStorage.getItem('push.openApp'))) === null, 'and cleared');
+  // The service worker marks the page a tapped push opens.
+  const sw = await (await fetch(`${BASE}/sw.js`)).text();
+  check(sw.includes("searchParams.set('via', 'push')"), 'the service worker marks a tapped push');
 });
 
 // The real nightly job, against the stand-in, with live feeds: what GitHub Actions runs each night.
