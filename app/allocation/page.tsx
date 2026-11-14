@@ -389,7 +389,7 @@ function ScopeFilter({ scope }: { scope: Scope }) {
         <Bi en="Donut for" zh="圓餅圖資金池" />
       </span>
       {SCOPES.map((option) => (
-        <Link key={option} href={option === 'regular' ? '/allocation' : `/allocation?scope=${option}`} aria-current={option === scope ? 'true' : undefined} scroll={false}>
+        <Link prefetch key={option} href={option === 'regular' ? '/allocation' : `/allocation?scope=${option}`} aria-current={option === scope ? 'true' : undefined} scroll={false}>
           <Bi {...SCOPE[option]} />
         </Link>
       ))}

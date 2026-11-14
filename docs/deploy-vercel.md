@@ -59,6 +59,10 @@ App 用 email 和密碼登入，不改這個也能登入；改了之後，Supaba
 
 On an iPhone, use Safari's Share → Add to Home Screen; on Android, Chrome's menu → Install app.
 
+**啟動圖（2026-11-13 起）**：iPhone 在「加入主畫面」的當下就把啟動圖（點圖示後第一眼看到的畫面，主色底加上 App 標誌）存起來。在這之前就加入主畫面的話，圖示打開時仍是空白畫面一閃而過，之後才出現含標誌的啟動畫面；想要從第一眼就有標誌，要把主畫面的圖示刪掉再加入一次。**刪除圖示會一併清掉登入狀態與推播設定**，重新加入後要再登入一次，並到「推播」頁重新按「開啟推播」（見 [推播通知](web-push.md)）。不重新加入也可以，其他功能不受影響。
+
+An iPhone saves the launch image (the mark on the accent colour) on the day the app is added to the home screen. An icon added before 2026-11-13 opens on a blank screen for a moment; to get the launch image, delete the icon and add it again, which also signs you out and turns push off on that phone (sign in and turn push on again).
+
 ## 之後 Later updates
 
 - 合併 PR 之後，網站會自動更新，你不用在 Vercel 做任何事。

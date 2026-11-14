@@ -134,7 +134,7 @@ function Header({ scope, range, view }: { scope: Scope; range: Period; view: Vie
       <div className="filters">
         <div className="segmented" role="group" aria-label="View 檢視">
           {VIEWS.map((option) => (
-            <Link key={option} href={href({ view: option })} aria-current={option === view ? 'true' : undefined}>
+            <Link prefetch key={option} href={href({ view: option })} aria-current={option === view ? 'true' : undefined}>
               <Bi {...VIEW[option]} />
             </Link>
           ))}
@@ -144,7 +144,7 @@ function Header({ scope, range, view }: { scope: Scope; range: Period; view: Vie
             <Bi {...LABELS.pool} />
           </span>
           {SCOPES.map((option) => (
-            <Link key={option} href={href({ scope: option })} aria-current={option === scope ? 'true' : undefined}>
+            <Link prefetch key={option} href={href({ scope: option })} aria-current={option === scope ? 'true' : undefined}>
               <Bi {...SCOPE[option]} />
             </Link>
           ))}
@@ -154,7 +154,7 @@ function Header({ scope, range, view }: { scope: Scope; range: Period; view: Vie
             <Bi en="Period" zh="期間" />
           </span>
           {RANGES.map((option) => (
-            <Link key={option} href={href({ range: option })} aria-current={option === range ? 'true' : undefined}>
+            <Link prefetch key={option} href={href({ range: option })} aria-current={option === range ? 'true' : undefined}>
               <Bi {...PERIOD[option]} />
             </Link>
           ))}

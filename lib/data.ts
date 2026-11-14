@@ -3342,7 +3342,7 @@ export async function loadBannerSnooze(supabase: SupabaseClient): Promise<number
 }
 
 /** The in-app banners needed now (lib/models/banners), the most pressing first; none before config banners exists. */
-export async function loadBanners(supabase: SupabaseClient, today: string): Promise<Banner[]> {
+async function loadBannersUncached(supabase: SupabaseClient, today: string): Promise<Banner[]> {
   const settings = await loadBannerSettings(supabase);
   if (!settings?.enabled) return [];
   const [holdings, flows, dividends, plan, proposals, devices, dismissals] = await Promise.all([
@@ -3417,3 +3417,4 @@ export const loadAssetClassSettings = cache(loadAssetClassSettingsUncached);
 export const loadAssumptions = cache(loadAssumptionsUncached);
 export const loadCaps = cache(loadCapsUncached);
 export const loadJobRuns = cache(loadJobRunsUncached);
+export const loadBanners = cache(loadBannersUncached);

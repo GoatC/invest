@@ -17,10 +17,20 @@ const BASE = `http://127.0.0.1:${APP_PORT}`;
 
 const browser = await chromium.launch(CHROMIUM && existsSync(CHROMIUM) ? { executablePath: CHROMIUM } : {});
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: 'Asia/Taipei' });
+// The walk-through goes page by page with the preloading off (components/preload.tsx), so each step
+// meets a server that is not busy fetching twenty other pages; the opening-screen step turns it on.
+await context.addInitScript(() => {
+  try {
+    localStorage.setItem('preload', 'off');
+  } catch {
+    // No storage on this page (about:blank): nothing to set.
+  }
+});
 const page = await context.newPage();
 const problems = [];
-page.on('console', (msg) => msg.type() === 'error' && problems.push(`console: ${msg.text()}`));
-page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`));
+// A resource that failed to load is named, so a stray 404 can be found.
+page.on('console', (msg) => msg.type() === 'error' && problems.push(`console: ${msg.text()}${msg.location()?.url ? ` (${msg.location().url.replace(BASE, '')} on ${page.url().replace(BASE, '')})` : ''}`));
+page.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (on ${page.url().replace(BASE, '')})`));
 page.on('dialog', (dialog) => dialog.accept());
 
 const results = [];
@@ -85,6 +95,14 @@ await step('installable: manifest, icons and robots.txt load without a session; 
   check(/<link rel="manifest" href="\/manifest.webmanifest"/.test(html), 'manifest linked');
   check(html.includes('name="mobile-web-app-capable"') || html.includes('name="apple-mobile-web-app-capable"'), 'home-screen app meta');
   check(html.includes('rel="apple-touch-icon"') && /name="robots" content="noindex, nofollow"/.test(html), 'apple icon and noindex');
+  // An iPhone's launch image with the mark, one per screen size, loads without a session; the page reaches every edge.
+  const launch = /<link[^>]*rel="apple-touch-startup-image"[^>]*>/g.exec(html)?.[0] ?? '';
+  const launchHref = /href="([^"]+)"/.exec(launch)?.[1];
+  check(launchHref && /media="[^"]*device-width: \d+px[^"]*prefers-color-scheme/.test(launch), `a launch image per screen, got ${launch}`);
+  const image = await page.request.get(`${BASE}${launchHref}`, { maxRedirects: 0 });
+  check(image.status() === 200 && image.headers()['content-type'] === 'image/png', `${launchHref} HTTP ${image.status()}`);
+  check(/name="viewport" content="[^"]*viewport-fit=cover/.test(html) && html.includes('content="black-translucent"'), 'the page runs edge to edge under the status bar');
+  check(!html.includes('id="splash"'), 'no opening screen on the sign-in page');
 });
 
 await step('an unsigned visit goes to sign-in', async () => {
@@ -475,6 +493,14 @@ await step('dividends: one paid is asked about with its amount worked out, recor
       await page.locator('.guide-banner').first().waitFor();
       check((await fits()) && (await small('.guide-banner a, .guide-banner button')) === 0, 'the banner fits a phone');
       await snap('banner-phone', page, false);
+      // On the dashboard the banner comes under the poster, not over it.
+      await page.goto(`${BASE}/`);
+      const under = page.locator('main .guide.in-page .guide-banner').first();
+      await under.waitFor();
+      const posterBox = await page.locator('#this-week').boundingBox();
+      const underBox = await under.boundingBox();
+      check(posterBox && underBox && underBox.y >= posterBox.y + posterBox.height && (await page.locator('.guide:not(.in-page)').count()) === 0, `the banner under the poster, got ${JSON.stringify(underBox)} under ${JSON.stringify(posterBox)}`);
+      await snap('banner-dashboard-phone', page, false);
     } finally {
       await page.setViewportSize({ width: 1280, height: 900 });
     }
@@ -2379,6 +2405,52 @@ async function phoneTabs() {
   const home = await tabs.getByRole('link', { name: /Dashboard/ }).locator('.tab-icon').boundingBox();
   const bar = await tabs.boundingBox();
   check(home && bar && Math.round(home.width) === Math.round(home.height) && home.width >= 44 && home.y < bar.y && Math.abs(home.x + home.width / 2 - 195) <= 1, `the dashboard button, round, raised and centred, got ${JSON.stringify(home)} in ${JSON.stringify(bar)}`);
+  // The bar floats: clear of the screen's edges, the page showing through its glass.
+  check(bar.x >= 8 && bar.x + bar.width <= 382 && bar.y + bar.height < 844, `the bar floats clear of the edges, got ${JSON.stringify(bar)}`);
+  const glass = await tabs.locator('.tab-glass').evaluate((el) => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter);
+  check(/blur\(/.test(glass), `the glass blurs the page behind it, got ${glass}`);
+  // Every name sits on one line, in one size and weight: the current tab differs by colour alone.
+  const names = await tabs.locator('.tab-name').evaluateAll((els) => els.map((el) => ({ foot: Math.round(el.getBoundingClientRect().bottom * 2) / 2, font: `${getComputedStyle(el).fontSize} ${getComputedStyle(el).fontWeight}` })));
+  check(names.length === 5 && new Set(names.map((name) => name.foot)).size === 1 && new Set(names.map((name) => name.font)).size === 1, `the names on one line in one face, got ${JSON.stringify(names)}`);
+  // The lens rests on the current tab, which wears the accent.
+  await page.waitForFunction(() => document.querySelector('.tab-bar')?.hasAttribute('data-ready'));
+  const lit = () => tabs.locator('[data-lit]').innerText();
+  check((await lit()) === '儀表板' && (await tabs.getAttribute('data-lens')) === 'home', `the lens rings the dashboard button, got ${await lit()}`);
+  // On the dashboard a phone has no header: the poster is the top of the screen, edge to edge, its sub-tabs on it.
+  const poster = await page.locator('#this-week').boundingBox();
+  check(poster && poster.x === 0 && poster.y === 0 && poster.width === 390 && !(await page.locator('.brand').isVisible()), `the poster fills the top of the screen, got ${JSON.stringify(poster)}`);
+  const sub = await page.getByRole('navigation', { name: /Dashboard/ }).boundingBox();
+  check(sub && sub.y >= 0 && sub.y + sub.height <= poster.y + poster.height, `the sub-tabs ride on the poster, got ${JSON.stringify(sub)}`);
+  await snap('phone-dashboard-top', page, false);
+  // A finger laid on a tab lifts the lens; dragged along the bar it follows, and let go it opens the tab under it.
+  const place = async (name) => {
+    const box = await tabs.getByRole('link', { name }).boundingBox();
+    return { x: box.x + box.width / 2, y: bar.y + bar.height / 2 };
+  };
+  const from = await place(/Holdings/);
+  const to = await place(/Allocation/);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.waitForFunction(() => document.querySelector('.tab-bar')?.hasAttribute('data-lifted'));
+  for (let i = 1; i <= 12; i++) await page.mouse.move(from.x + ((to.x - from.x) * i) / 12, from.y);
+  await page.waitForFunction(() => document.querySelector('.tab-bar [data-lit]')?.textContent === '配置');
+  await snap('phone-tab-lens', page, false);
+  await page.mouse.up();
+  await page.waitForURL('**/allocation');
+  check((await tabs.getByRole('link', { name: /Allocation/ }).getAttribute('aria-current')) === 'page' && !(await tabs.evaluate((el) => el.hasAttribute('data-lifted'))), 'let go over Allocation, it opens and the lens settles');
+  // Another page keeps its header.
+  check(await page.locator('.brand').isVisible(), 'the header stays on the other tabs');
+  // Scrolling down draws the bar in to its icons; scrolling up brings the names back. Nothing to tap falls under 44px.
+  await page.mouse.wheel(0, 600);
+  await page.waitForFunction(() => document.querySelector('.tab-bar')?.hasAttribute('data-mini'));
+  await page.waitForTimeout(600);
+  const drawnIn = await tabs.boundingBox();
+  const slots = await tabs.locator('a, button').evaluateAll((els) => els.map((el) => Math.min(el.getBoundingClientRect().width, el.getBoundingClientRect().height)));
+  check(drawnIn.height < bar.height && drawnIn.width < bar.width && slots.every((size) => size >= 44), `the bar drawn in, got ${JSON.stringify(drawnIn)} with ${slots.join(', ')}`);
+  await snap('phone-tab-mini', page, false);
+  await page.mouse.wheel(0, -300);
+  await page.waitForFunction(() => !document.querySelector('.tab-bar')?.hasAttribute('data-mini'));
+  await page.goto(`${BASE}/`);
   await tabs.getByRole('button', { name: /More/ }).click();
   const sheet = page.getByRole('dialog', { name: /More/ });
   await sheet.getByRole('link', { name: /Data status/ }).waitFor();
@@ -2392,6 +2464,64 @@ async function phoneTabs() {
   // The sheet closes once the new page renders.
   await page.getByRole('dialog').waitFor({ state: 'detached' });
 }
+
+await step('opening the app: the mark while every tab is fetched, then each tab opens without asking the server', async () => {
+  // A phone that is signed in opens the app afresh: a new browser context with the session's cookies alone, so the preloading is on.
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: 'Asia/Taipei', storageState: { cookies: await context.cookies(), origins: [] } });
+  try {
+    const app = await phone.newPage();
+    app.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (opening the app, on ${app.url().replace(BASE, '')})`));
+    // The requests for a page itself: the router's first request for a page's outline is marked as a prefetch, and
+    // a page's own choices (a view, a pool), fetched once it shows, carry a query of their own.
+    const asked = [];
+    app.on('request', (request) => {
+      const url = new URL(request.url());
+      if (!url.searchParams.has('_rsc') || request.headers()['next-router-prefetch']) return;
+      url.searchParams.delete('_rsc');
+      asked.push(`${url.pathname}${url.search}`);
+    });
+    await app.goto(`${BASE}/`, { waitUntil: 'commit' });
+    // The opening screen comes with the first bytes: the mark on the poster's colour, over everything.
+    const splash = app.locator('#splash');
+    await splash.waitFor();
+    check((await splash.locator('svg').count()) === 1 && (await splash.innerText()).includes('長期投資'), 'the mark and the name');
+    const cover = await splash.boundingBox();
+    check(cover && cover.width === 390 && cover.height === 844, `it covers the screen, got ${JSON.stringify(cover)}`);
+    await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-opening.png` });
+    // It lifts once the pages one tap away have arrived: the tab bar's and the dashboard's sub-tab.
+    await app.waitForFunction(() => document.documentElement.hasAttribute('data-opened'), null, { timeout: 30_000 });
+    check(!(await splash.isVisible()), 'the opening screen lifts');
+    const near = ['/holdings', '/performance', '/allocation', '/volatility'].filter((path) => !asked.includes(path));
+    check(near.length === 0, `the pages one tap away fetched before the opening screen lifts, missing ${near.join(', ')}`);
+    // The rest follow behind the page: every other page of the navigation (the one on screen is already in hand).
+    await app.waitForLoadState('networkidle');
+    const pages = ['/holdings', '/performance', '/allocation', '/volatility', '/attribution', '/costs', '/look-through', '/sectors', '/stress', '/frontier', '/plan', '/timeline', '/monte-carlo', '/windfall', '/regression', '/capm', '/rules', '/notifications', '/data', '/import'];
+    const missing = pages.filter((path) => !asked.includes(path));
+    check(missing.length === 0, `every page fetched ahead, missing ${missing.join(', ')}`);
+    // From here a tab, a sub-tab and a page of the More sheet open from memory: no request for a page leaves the phone.
+    const tabs = app.getByRole('navigation', { name: /Tabs/ });
+    const open = async (link, path, title) => {
+      const before = asked.length;
+      await link.tap();
+      await app.waitForURL(`**${path}`);
+      await app.getByRole('heading', { level: 1, name: title }).waitFor();
+      // Once it shows, the page fetches its own choices (/holdings?view=rank): those are not the page.
+      check(!asked.slice(before).includes(path), `${path} opens without asking the server, asked ${asked.slice(before).join(', ')}`);
+    };
+    await open(tabs.getByRole('link', { name: /Holdings/ }), '/holdings', '持倉');
+    await open(tabs.getByRole('link', { name: /Performance/ }), '/performance', '績效');
+    await open(app.getByRole('navigation', { name: /Performance/ }).getByRole('link', { name: /Attribution/ }), '/attribution', '績效歸因');
+    await tabs.getByRole('button', { name: /More/ }).tap();
+    await open(app.getByRole('dialog', { name: /More/ }).getByRole('link', { name: /Rules/ }), '/rules', '規則');
+    await open(tabs.getByRole('link', { name: /Dashboard/ }), '/', '總市值');
+    // A reload within the same visit goes straight to the page: the opening screen shows once per opening.
+    await app.reload({ waitUntil: 'commit' });
+    await app.getByRole('heading', { level: 1, name: '總市值' }).waitFor();
+    check(!(await app.locator('#splash').isVisible()), 'no opening screen on a reload');
+  } finally {
+    await phone.close();
+  }
+});
 
 // The real nightly job, against the stand-in, with live feeds: what GitHub Actions runs each night.
 const nightly = (extra = {}) =>

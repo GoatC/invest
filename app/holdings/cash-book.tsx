@@ -178,7 +178,7 @@ export function CashBook({
           <Facts facts={facts} />
           <div className="segmented slide" role="group" aria-label="Show 顯示">
             {LEDGER_FILTERS.filter((option) => option !== 'windfall' || hasWindfall).map((option) => (
-              <Link key={option} href={filterHref(option, false)} aria-current={option === filter ? 'true' : undefined} scroll={false}>
+              <Link prefetch key={option} href={filterHref(option, false)} aria-current={option === filter ? 'true' : undefined} scroll={false}>
                 <Bi {...FILTER[option]} />
               </Link>
             ))}

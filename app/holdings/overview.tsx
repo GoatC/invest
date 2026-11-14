@@ -167,7 +167,7 @@ export async function HoldingsOverview({ supabase, data, portfolio, today, view,
         </h2>
         <div className="segmented" role="group" aria-label="View 檢視">
           {VIEWS.map((option) => (
-            <Link key={option} href={option === 'cards' ? '/holdings#glance' : `/holdings?view=${option}#glance`} aria-current={option === view ? 'true' : undefined} scroll={false}>
+            <Link prefetch key={option} href={option === 'cards' ? '/holdings#glance' : `/holdings?view=${option}#glance`} aria-current={option === view ? 'true' : undefined} scroll={false}>
               <Bi {...VIEW[option]} />
             </Link>
           ))}
