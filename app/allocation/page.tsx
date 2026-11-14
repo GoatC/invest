@@ -193,10 +193,10 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
 const BAND_ICON: Record<DriftStatus, string> = { ok: '✓', watch: '!', rebalance: '✕', unchecked: '' };
 
 /** One class on the scale: its weight filled, its target a tick, its F8 band a paler stripe, the TWD over or under. */
-function BandRow({ label, weight, target, band, status, top, gapTwd }: { label: Bilingual; weight: number; target: number; band: number | null; status: DriftStatus; top: number; gapTwd: number | null }) {
+function BandRow({ label, line, weight, target, band, status, top, gapTwd }: { label: Bilingual; line: string; weight: number; target: number; band: number | null; status: DriftStatus; top: number; gapTwd: number | null }) {
   const at = (value: number) => `${Math.max(0, Math.min(100, (value / top) * 100)).toFixed(1)}%`;
   return (
-    <li className="band-row">
+    <li className="band-row" data-line={line}>
       <div className="band-top">
         <span>
           {BAND_ICON[status] && (
@@ -238,6 +238,7 @@ function BandBars({ drifts, satellite, total }: { drifts: readonly ClassDrift[];
     <BandRow
       key={drift.assetClass.id}
       label={{ en: drift.assetClass.nameEn, zh: drift.assetClass.nameZh }}
+      line={drift.assetClass.id}
       weight={drift.weight}
       target={drift.assetClass.targetWeight}
       band={drift.band}
