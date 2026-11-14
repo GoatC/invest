@@ -42,6 +42,8 @@ export interface ShellAction {
   symbol: string;
   /** What VoiceOver says: the control's accessible name. */
   label: string;
+  /** A page of the site the shell opens in a sheet instead of pressing the control (`data-shell-sheet`, proposal G05). */
+  sheet?: string;
 }
 
 /**
@@ -120,7 +122,7 @@ export function sameTop(a: ShellTop | null, b: ShellTop | null): boolean {
     a.segments?.current === b.segments?.current &&
     (a.segments?.labels ?? []).join('\n') === (b.segments?.labels ?? []).join('\n') &&
     a.actions.length === b.actions.length &&
-    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label)
+    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label && action.sheet === b.actions[index]!.sheet)
   );
 }
 

@@ -42,6 +42,8 @@ export interface DeleteState {
 export function afterSecurityAdded(next: string | undefined, ticker: string): string {
   if (next && /^\/holdings\/\d+$/.test(next)) return next;
   if (next === 'tab') return `/securities/new?added=${encodeURIComponent(ticker)}`;
+  // Added from the new trade in the iOS shell's sheet: back to that sheet, the ticker filled in.
+  if (next === 'sheet') return `/holdings?sheet=trade&ticker=${encodeURIComponent(ticker)}`;
   return `/holdings?ticker=${encodeURIComponent(ticker)}#add-trade`;
 }
 

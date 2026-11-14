@@ -31,10 +31,11 @@ const INITIAL_STATE: TradeFormState = { errors: {}, message: null };
 const MORE_FIELDS: readonly TradeField[] = ['currency', 'fee', 'tax', 'fxRate', 'pool', 'note'];
 
 /** The add-security page, with the ticker typed so far; an edit comes back to its trade afterwards. */
-function addSecurityHref(ticker: string, id: number | undefined): string {
+function addSecurityHref(ticker: string, id: number | undefined, sheet: boolean): string {
   const query = new URLSearchParams();
   if (ticker.trim()) query.set('ticker', ticker.trim().toUpperCase());
   if (id !== undefined) query.set('next', `/holdings/${id}`);
+  else if (sheet) query.set('next', 'sheet');
   const text = query.toString();
   return text ? `/securities/new?${text}` : '/securities/new';
 }
@@ -46,6 +47,7 @@ export function TradeForm({
   id,
   initial,
   compact = false,
+  sheet = false,
 }: {
   data: HoldingsData;
   rates: FxQuote[];
@@ -54,6 +56,8 @@ export function TradeForm({
   initial: TradeValues;
   /** A quick entry at the top of the holdings page: date, ticker, side, quantity and price in a row, the rest folded. */
   compact?: boolean;
+  /** In the iOS shell's sheet (proposal G05): adding a missing security comes back to it. */
+  sheet?: boolean;
 }) {
   const [values, setValues] = useState(initial);
   // Fields changed since the last submit: their server errors are stale, their live errors are fresh.
@@ -118,7 +122,7 @@ export function TradeForm({
         security ? (
           security.name
         ) : (
-          <Link href={addSecurityHref(values.ticker, id)}>
+          <Link href={addSecurityHref(values.ticker, id, sheet)}>
             <Bi en="Not listed? Add a security" zh="找不到？新增證券" />
           </Link>
         )

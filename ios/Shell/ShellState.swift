@@ -38,6 +38,8 @@ struct ShellAction: Equatable {
     /// An SF Symbol's name.
     let symbol: String
     let label: String
+    /// A page of the site to open in a sheet instead of pressing the page's control (proposal G05).
+    let sheet: String?
 }
 
 /// The top of the page, which the navigation bar draws (lib/shell.ts `ShellTop`; proposal G02).
@@ -58,7 +60,7 @@ struct ShellTop: Equatable {
         back = fields["back"] as? Bool ?? false
         actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap { action in
             guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
-            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key)
+            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String)
         }
         let row = fields["segments"] as? [String: Any]
         segments = row?["labels"] as? [String] ?? []

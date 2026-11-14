@@ -29,10 +29,10 @@ final class TabHost: UIViewController {
 
     override var preferredStatusBarStyle: UIStatusBarStyle { lightStatusBar ? .lightContent : .default }
 
-    /// Draws `top` in the navigation bar; `run` presses the page's control behind a button, `back` goes
-    /// back a page. True when the title changed: a new page.
+    /// Draws `top` in the navigation bar; `run` answers a button (the page's control, or a sheet), `back`
+    /// goes back a page. True when the title changed: a new page.
     @discardableResult
-    func draw(_ top: ShellTop?, run: @escaping (String) -> Void, back: @escaping () -> Void) -> Bool {
+    func draw(_ top: ShellTop?, run: @escaping (ShellAction) -> Void, back: @escaping () -> Void) -> Bool {
         guard top != drawn else { return false }
         let newTitle = top?.title != drawn?.title
         drawn = top
@@ -40,7 +40,7 @@ final class TabHost: UIViewController {
         navigationItem.largeTitleDisplayMode = top?.title == nil ? .never : .always
         // The page lists its controls left to right; the bar fills from the right edge in.
         navigationItem.rightBarButtonItems = (top?.actions ?? []).reversed().map { action in
-            let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action.key) })
+            let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action) })
             item.accessibilityLabel = action.label
             return item
         }
@@ -161,6 +161,8 @@ final class ShellViewController: UITabBarController {
     private var scheduling: Task<Void, Never>?
     private weak var popup: UIViewController?
     private weak var popupWeb: WKWebView?
+    /// The page a glass button opened in a sheet (proposal G05); it stays there until it is done.
+    private weak var sheetWeb: WKWebView?
 
     private lazy var web: WKWebView = {
         let configuration = WKWebViewConfiguration()
@@ -361,7 +363,9 @@ final class ShellViewController: UITabBarController {
     /// A new page at its top shows its large title again, though the page before had drawn it in.
     private func drawTop(_ top: ShellTop?) {
         guard let host = selectedHost else { return }
-        let newPage = host.draw(top, run: { [weak self] key in self?.press(key) }, back: { [weak self] in self?.goBack() })
+        let newPage = host.draw(top, run: { [weak self] action in
+            if let path = action.sheet { self?.presentSheet(path, title: action.label) } else { self?.press(action.key) }
+        }, back: { [weak self] in self?.goBack() })
         // The spinner in white over the poster, in the system's colour over the grey ground.
         web.scrollView.refreshControl?.tintColor = top?.lightStatusBar ?? true ? .white : nil
         if newPage {
@@ -414,6 +418,52 @@ final class ShellViewController: UITabBarController {
         web.backgroundColor = .systemGroupedBackground
         web.scrollView.backgroundColor = .systemGroupedBackground
         for host in hosts where host.isViewLoaded { host.view.backgroundColor = .systemGroupedBackground }
+    }
+
+    /// A page of the site in a sheet over the page on screen (proposal G05): half the screen, pulled up
+    /// to all of it, swiped down or cancelled to leave. Its page draws no header of its own; the sheet's
+    /// bar carries the name of the button that opened it.
+    private func presentSheet(_ path: String, title: String) {
+        guard let url = Site.page(path), presentedViewController == nil else { return }
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        configuration.defaultWebpagePreferences.preferredContentMode = .mobile
+        let content = WKUserContentController()
+        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController = content
+        let page = WKWebView(frame: .zero, configuration: configuration)
+        page.navigationDelegate = self
+        page.uiDelegate = self
+        page.isOpaque = false
+        page.backgroundColor = .systemGroupedBackground
+        page.scrollView.backgroundColor = .systemGroupedBackground
+        let holder = UIViewController()
+        holder.view = page
+        // The button's name says what it opens, e.g. 新增交易 (the label is Chinese first, then English).
+        holder.navigationItem.title = title.split(separator: " ").first.map(String.init) ?? title
+        let cancel = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.closeSheet() })
+        cancel.accessibilityLabel = "取消 Cancel"
+        holder.navigationItem.leftBarButtonItem = cancel
+        let sheet = UINavigationController(rootViewController: holder)
+        if let presentation = sheet.sheetPresentationController {
+            presentation.detents = [.medium(), .large()]
+            presentation.prefersGrabberVisible = true
+        }
+        sheetWeb = page
+        page.load(URLRequest(url: url))
+        present(sheet, animated: true)
+    }
+
+    private func closeSheet() {
+        guard sheetWeb != nil else { return }
+        sheetWeb = nil
+        dismiss(animated: true)
+    }
+
+    /// Whether a page belongs in the sheet: the sheet's own page (`sheet=` in its address), or adding a
+    /// security on the way. Anything else (Holdings after a save) closes the sheet and opens behind it.
+    private static func staysInSheet(_ url: URL) -> Bool {
+        (url.query ?? "").contains("sheet=") || url.path.hasPrefix("/securities/")
     }
 
     /// A tap on a glass button: the page presses its own control that lent it (components/shell-bridge.tsx).
@@ -543,6 +593,15 @@ extension ShellViewController: WKNavigationDelegate {
         let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
         if !mainFrame || url.scheme == "about" { return .allow }
         if Site.holds(url) {
+            if webView === sheetWeb, sheetWeb != nil, !Self.staysInSheet(url) {
+                // Done in the sheet (a trade saved): close it and show where the form sent Hugo behind it.
+                var path = url.path
+                if let query = url.query { path += "?\(query)" }
+                if let fragment = url.fragment { path += "#\(fragment)" }
+                closeSheet()
+                open(path: path)
+                return .cancel
+            }
             if webView === web { asked = url }
             return .allow
         }
