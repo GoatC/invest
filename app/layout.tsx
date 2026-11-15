@@ -11,11 +11,13 @@ import { ShellSignedOut } from '@/components/shell-bridge';
 import { SiteNav, SubNav } from '@/components/site-nav';
 import { Splash } from '@/components/splash';
 import { TableCards } from '@/components/table-cards';
+import { VersionWatch } from '@/components/version-watch';
 import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, loadSectorSettings, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
 import { LAUNCH_IMAGES, SPLASH_GROUND } from '@/lib/splash';
+import { siteVersion } from '@/lib/version';
 
 import { signOut } from './actions';
 import { Banners } from './banner';
@@ -122,6 +124,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {signedIn && <TableCards />}
         {signedIn && <Preload />}
         {signedIn && <PushHandoff />}
+        <VersionWatch version={siteVersion()} />
         {!signedIn && <ShellSignedOut />}
         <footer className="site-footer">
           <Bi en="This app supports Hugo's own decisions; it is not financial advice." zh="本 App 用於輔助 Hugo 自己的決策，不構成投資建議。" />
