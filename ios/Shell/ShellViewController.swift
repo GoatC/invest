@@ -568,6 +568,19 @@ extension ShellViewController: UITabBarControllerDelegate {
     }
 }
 
+#if DEBUG
+extension ShellViewController {
+    /// A tap on the tab `key`, as a finger gives it (the bar chooses it, then tells its delegate): for ios/tests/look.sh.
+    func debugTap(_ key: String) {
+        guard let controllers = viewControllers,
+              let index = controllers.firstIndex(where: { (($0 as? UINavigationController)?.viewControllers.first as? TabHost)?.place.key == key })
+        else { return }
+        selectedIndex = index
+        tabBarController(self, didSelect: controllers[index])
+    }
+}
+#endif
+
 // MARK: - What the page says
 
 extension ShellViewController: WKScriptMessageHandler {
