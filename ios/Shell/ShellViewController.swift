@@ -312,12 +312,19 @@ final class ShellViewController: UITabBarController {
     }
 
     /// Moves the web view into the chosen tab's place; the bar follows its scrolling from there.
+    /// The other places let go of it first: a bar still holding the one scroll view keeps tracking it,
+    /// and the bar of the place on screen then never learns where it is, so its large title and the
+    /// row under it stay out of sight (seen in the simulator, ios/tests/look.sh).
     private func attach(to host: TabHost) {
         host.loadViewIfNeeded()
+        for other in hosts where other !== host && other.isViewLoaded {
+            other.setContentScrollView(nil)
+        }
         if web.superview !== host.view {
             web.frame = host.view.bounds
             web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             host.view.addSubview(web)
+            host.setContentScrollView(nil)
         }
         host.setContentScrollView(web.scrollView)
     }
@@ -412,9 +419,8 @@ final class ShellViewController: UITabBarController {
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
-        guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
+        guard titleWaits, y <= 0, selectedHost?.navigationController?.navigationBar != nil else { return }
         titleWaits = false
-        bar.sizeToFit()
         view.layoutIfNeeded()
         // A new page is measured afresh: one with no row of sub-tabs under its title starts higher
         // than one with, rather than below the tallest bar any page has had.
