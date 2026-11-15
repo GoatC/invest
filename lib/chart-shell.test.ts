@@ -32,9 +32,18 @@ describe('charts in the iOS shell, after Swift Charts (proposal C04)', () => {
     assert.equal(out.grid.right, 4);
   });
 
+  it('also moves it when the grid says nothing of labels: ECharts 6 keeps them inside by default', () => {
+    const out = swiftCharts({ grid: { left: 4, right: 12, top: 12, bottom: 4 }, yAxis: { type: 'value' } }, INK) as Record<string, any>;
+    assert.equal(out.yAxis.position, 'right');
+    assert.equal(out.grid.left, 12);
+    assert.equal(out.grid.right, 4);
+  });
+
   it('leaves the axis where it is when the grid does not fit labels, the right holds labels, or there are two axes', () => {
-    const bare = swiftCharts({ grid: { left: 4, right: 12, top: 12, bottom: 4 }, yAxis: { type: 'value' } }, INK) as Record<string, any>;
+    const bare = swiftCharts({ grid: { left: 4, right: 12, top: 12, bottom: 4, containLabel: false }, yAxis: { type: 'value' } }, INK) as Record<string, any>;
     assert.equal(bare.yAxis.position, undefined);
+    const unbounded = swiftCharts({ grid: { left: 4, right: 12, outerBoundsMode: 'none' }, yAxis: { type: 'value' } }, INK) as Record<string, any>;
+    assert.equal(unbounded.yAxis.position, undefined);
     const wide = swiftCharts({ grid: { left: 4, right: 96, containLabel: true }, yAxis: { type: 'value' } }, INK) as Record<string, any>;
     assert.equal(wide.yAxis.position, undefined);
     const two = swiftCharts({ grid: { left: 4, right: 12, containLabel: true }, yAxis: [{ type: 'value' }, { type: 'value' }] }, INK) as Record<string, any>;
@@ -47,6 +56,35 @@ describe('charts in the iOS shell, after Swift Charts (proposal C04)', () => {
     assert.equal(out.series[0]!.lineStyle.cap, 'round');
     assert.equal(out.series[1]!.showSymbol, undefined);
     assert.deepEqual(out.series[0]!.data, [1, 2], 'the data stays');
+  });
+
+  it('draws lines 2pt wide, keeping a thinner one', () => {
+    const out = swiftCharts({ series: [{ type: 'line', lineStyle: { width: 3.5 } }, { type: 'line', lineStyle: { width: 1 } }, { type: 'line' }] }, INK) as { series: Array<Record<string, any>> };
+    assert.deepEqual(out.series.map((series) => series.lineStyle.width), [2, 1, 2]);
+  });
+
+  it('puts a lone line over a wash of its own colour fading down, from #rgb or #rrggbb', () => {
+    const one = swiftCharts({ series: [{ type: 'line', lineStyle: { color: '#4a86c5' } }] }, INK) as { series: Array<Record<string, any>> };
+    const stops = one.series[0]!.areaStyle.color.colorStops;
+    assert.deepEqual(stops, [
+      { offset: 0, color: 'rgba(74, 134, 197, 0.22)' },
+      { offset: 1, color: 'rgba(74, 134, 197, 0)' },
+    ]);
+    const short = swiftCharts({ color: ['#fff'], series: { type: 'line' } }, INK) as { series: Record<string, any> };
+    assert.equal(short.series.areaStyle.color.colorStops[0].color, 'rgba(255, 255, 255, 0.22)');
+  });
+
+  it('adds no wash under several lines, a line with a bar, a stacked line, a filled one, or a colour that is not hex', () => {
+    const two = swiftCharts({ series: [{ type: 'line', lineStyle: { color: '#4a86c5' } }, { type: 'line', lineStyle: { color: '#d9693a' } }] }, INK) as { series: Array<Record<string, any>> };
+    assert.equal(two.series[0]!.areaStyle, undefined);
+    const mixed = swiftCharts({ series: [{ type: 'line', lineStyle: { color: '#4a86c5' } }, { type: 'bar' }] }, INK) as { series: Array<Record<string, any>> };
+    assert.equal(mixed.series[0]!.areaStyle, undefined);
+    const stacked = swiftCharts({ series: [{ type: 'line', stack: 'a', lineStyle: { color: '#4a86c5' } }] }, INK) as { series: Array<Record<string, any>> };
+    assert.equal(stacked.series[0]!.areaStyle, undefined);
+    const filled = swiftCharts({ series: [{ type: 'line', areaStyle: { opacity: 0.1 }, lineStyle: { color: '#4a86c5' } }] }, INK) as { series: Array<Record<string, any>> };
+    assert.deepEqual(filled.series[0]!.areaStyle, { opacity: 0.1 });
+    const named = swiftCharts({ series: [{ type: 'line', lineStyle: { color: 'rgb(1, 2, 3)' } }] }, INK) as { series: Array<Record<string, any>> };
+    assert.equal(named.series[0]!.areaStyle, undefined);
   });
 
   it('rounds the corners of a bar, but not of a stacked one or one with its own corners', () => {

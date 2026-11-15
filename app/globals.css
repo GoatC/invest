@@ -1531,6 +1531,8 @@ tr.selected td {
 }
 
 .hero-legend {
+  /* The whole width, so the expand button ends the line at the poster's right edge. */
+  justify-self: stretch;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3637,9 +3639,25 @@ html[data-shell-top] .phone-tabs {
   top: calc(var(--shell-top-inline, var(--safe-top)) + 4px);
 }
 
+/* The More list is that tab's whole page: from the top of the screen, its first line under the
+   shell's bar, which stays on one line there (ios/Shell: More shows no large title). The bar
+   carries its name, so the list's own heading row is kept for VoiceOver only. */
 html[data-shell-top] .sheet-backdrop,
 html[data-shell-top] .sheet {
-  top: var(--shell-top, var(--safe-top));
+  top: 0;
+}
+
+html[data-shell-top] .sheet {
+  padding-top: calc(var(--shell-top-inline, var(--safe-top)) + 0.75rem);
+}
+
+html[data-shell-top] .sheet > .row.spread {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* What waits on Hugo, above the shell's tab bar (Liquid Glass proposal G04, Hugo 2026-11-15): a
@@ -4031,3 +4049,21 @@ html[data-shell] .card .alert-tile {
   padding-inline: 0;
 }
 
+/* The poster's expand button as a glass button of the shell, at the end of the legend's line. */
+html[data-shell] .hero-expand {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.6), 0 6px 18px rgba(0, 20, 50, 0.18);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+}
+
+
+/* The poster's line as the proposal draws it in the shell (C04): 3pt, round, over a dashed zero line. */
+html[data-shell] .hero-line {
+  stroke-width: 3;
+}
+
+/* The nightly job's notice slides down under the shell's bar, not under its glass. */
+html[data-shell-top] .data-toast {
+  top: calc(var(--shell-top-inline, var(--safe-top)) + 8px);
+}
