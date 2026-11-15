@@ -419,8 +419,11 @@ final class ShellViewController: UITabBarController {
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
-        guard titleWaits, y <= 0, selectedHost?.navigationController?.navigationBar != nil else { return }
+        guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
         titleWaits = false
+        // The bar grows to its large title only when asked: a place whose page has just gained a title
+        // (it was the dashboard's, with none) keeps its one-line bar otherwise (seen in the simulator).
+        bar.sizeToFit()
         view.layoutIfNeeded()
         // A new page is measured afresh: one with no row of sub-tabs under its title starts higher
         // than one with, rather than below the tallest bar any page has had.
