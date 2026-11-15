@@ -2582,10 +2582,11 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     check(fab && fab.y + fab.height <= 844 - 83, `the + clears the native bar, got ${JSON.stringify(fab)}`);
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
     // A sub-tab is the page's own: the native tab stays, the path follows.
+    const before = await app.evaluate(() => window.chartSaid.length);
     await select('/performance', '/performance', '績效');
     // Performance's line and bar charts go to Swift Charts, each with its x values, its series, the axis labels and the tooltip's words; leaving the page takes them away.
-    await app.waitForFunction(() => window.chartSaid.filter((message) => message.op === 'set' && !message.spec?.spark && location.pathname === '/performance').length >= 2, null, { timeout: 15_000 });
-    const charts = await app.evaluate(() => window.chartSaid.filter((message) => message.op === 'set' && !message.spec?.spark));
+    await app.waitForFunction((from) => window.chartSaid.slice(from).filter((message) => message.op === 'set' && !message.spec?.spark).length >= 2, before, { timeout: 15_000 });
+    const charts = await app.evaluate((from) => window.chartSaid.slice(from).filter((message) => message.op === 'set' && !message.spec?.spark), before);
     const cumulative = charts.find((message) => message.spec.x.kind === 'date');
     const monthly = charts.find((message) => message.spec.series.some((series) => series.mark === 'bar'));
     check(cumulative && cumulative.spec.series.length >= 1 && cumulative.spec.y.ticks.length > 1 && cumulative.spec.readouts.length === cumulative.spec.x.values.length && cumulative.spec.readouts[0].includes('\n'), `the cumulative return handed over with its ticks and read-outs, got ${JSON.stringify(cumulative?.spec.y.ticks)}`);
