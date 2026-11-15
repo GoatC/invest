@@ -37,8 +37,8 @@ final class TabHost: UIViewController {
         let newTitle = top?.title != drawn?.title
         drawn = top
         navigationItem.title = top?.title
-        // More's list is that tab's page and starts under a bar of one line (globals.css `.sheet`): no large title there.
-        navigationItem.largeTitleDisplayMode = top?.title == nil || place.key == ShellTab.more ? .never : .always
+        // One line, centred, on every page (Hugo, 2026-11-16): no large title under the buttons' row.
+        navigationItem.largeTitleDisplayMode = .never
         // The page lists its controls left to right; the bar fills from the right edge in.
         navigationItem.rightBarButtonItems = (top?.actions ?? []).reversed().map { action in
             let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action) })
@@ -74,8 +74,9 @@ final class TabHost: UIViewController {
         view.backgroundColor = TabHost.ground
     }
 
-    /// The row of sub-tabs as iOS's segmented control: under the large title, or in the middle of the
-    /// bar on the dashboard, whose poster has none; every sub-tab in one control, Allocation's five too.
+    /// The row of sub-tabs as iOS's segmented control in the middle of the one-line bar, in place of
+    /// the title (as the Phone app's Recents); every sub-tab in one control, Allocation's five too. A
+    /// page without sub-tabs shows its title there.
     private func drawSegments(_ top: ShellTop?) {
         guard let top = top, top.segments.count > 1 else {
             segmented = nil
@@ -97,13 +98,8 @@ final class TabHost: UIViewController {
             segmented = control
         }
         if control.selectedSegmentIndex != top.segment { control.selectedSegmentIndex = top.segment }
-        if top.title == nil {
-            navigationItem.largeSubtitleView = nil
-            navigationItem.titleView = control
-        } else {
-            navigationItem.titleView = nil
-            navigationItem.largeSubtitleView = control
-        }
+        navigationItem.largeSubtitleView = nil
+        navigationItem.titleView = control
     }
 
     override func viewSafeAreaInsetsDidChange() {
@@ -112,12 +108,12 @@ final class TabHost: UIViewController {
     }
 }
 
-/// A place's navigation stack: one page deep, its bar drawing the top of the page with large titles.
+/// A place's navigation stack: one page deep, its bar of one line drawing the top of the page.
 /// The status bar's colour is the place's own (white over the poster, the system's elsewhere).
 final class PlaceNavigation: UINavigationController {
     init(host: TabHost) {
         super.init(rootViewController: host)
-        navigationBar.prefersLargeTitles = true
+        navigationBar.prefersLargeTitles = false
         tabBarItem = host.tabBarItem
     }
 
