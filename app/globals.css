@@ -4055,7 +4055,7 @@ html[data-shell] .splash {
 /* The page starts just under the shell's bar and the row of sub-tabs under its large title, not a
    card's height below it (Hugo, 2026-11-15). */
 html[data-shell-top] body.signed-in .page:not(:has(> .hero)) {
-  padding-top: 0.5rem;
+  padding-top: 0.15rem;
 }
 
 /* The poster's date right under the shell's 本週 / 波動警報, not a band below it. */
