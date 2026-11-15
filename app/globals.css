@@ -3967,8 +3967,15 @@ html[data-shell] .table-wrap > table :is(th, td):last-child {
 /* A page's own title card holds nothing else once the shell draws the title (and its row of
    sub-tabs): the card is not drawn, the title stays for VoiceOver. */
 html[data-shell-top] main .card:has(> h1):not(:has(> :not(h1))),
-html[data-shell-segmented] main .card:has(> h1):not(:has(> :not(h1, [data-shell-segments]))) {
+html[data-shell-segmented] main .card:has(> h1):not(:has(> :not(h1, [data-shell-segments]))),
+html[data-shell-info] main .card:has(> h1):not(:has(> :not(h1, details.info, [data-shell-segments]))) {
   display: contents;
+}
+
+/* The ⓘ beside the page's title is the shell's glass ⓘ, which opens its text in a sheet (proposals
+   G02 and G05; components/shell-bridge.tsx `pageInfo`), so it is not drawn in the page. */
+html[data-shell-info] main .card:has(> h1) > details.info {
+  display: none;
 }
 
 /* What the page offers to do beside its title (Holdings: import, add an asset, add a cash flow), as
@@ -4036,5 +4043,80 @@ html[data-shell] .card.rule-board .alert-tile {
    with nothing of its own drawn in it. */
 html[data-shell] .native-drawn > * {
   visibility: hidden;
+}
+
+/* The opening (Hugo, 2026-11-15): the shell's own launch cover stays over everything, bars and tab
+   bar included, until the page has opened (lib/shell.ts `opened`); the page's opening screen is not
+   drawn under it. */
+html[data-shell] .splash {
+  display: none;
+}
+
+/* The page starts just under the shell's bar and the row of sub-tabs under its large title, not a
+   card's height below it (Hugo, 2026-11-15). */
+html[data-shell-top] body.signed-in .page:not(:has(> .hero)) {
+  padding-top: 0.5rem;
+}
+
+/* The poster's date right under the shell's 本週 / 波動警報, not a band below it. */
+html[data-shell-top] .page > .hero {
+  padding-top: calc(var(--shell-top-inline, var(--safe-top)) + 0.4rem);
+}
+
+html[data-shell-top] .hero-head {
+  min-height: 0;
+}
+
+/* The More list as an iOS grouped list (proposal C03): each group's name over one white group of
+   rows split by hairlines, a chevron at the end of each row. */
+html[data-shell] .sheet-group h3 {
+  margin: 0 0 0.35rem;
+  padding: 0 1rem;
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+html[data-shell] .sheet-group ul {
+  display: block;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+
+html[data-shell] .sheet-group li {
+  position: relative;
+}
+
+html[data-shell] .sheet-group li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 0;
+  border-top: 0.5px solid var(--border);
+}
+
+html[data-shell] .sheet-group a {
+  justify-content: space-between;
+  min-height: var(--tap-min);
+  padding: 0 1rem;
+  background: none;
+  border-radius: 0;
+  font-weight: 400;
+}
+
+html[data-shell] .sheet-group a::after {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-right: 0.2rem;
+  border-top: 2px solid var(--border-strong);
+  border-right: 2px solid var(--border-strong);
+  transform: rotate(45deg);
+}
+
+html[data-shell] .sheet-group a.current {
+  background: var(--accent-soft);
 }
 

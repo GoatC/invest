@@ -115,6 +115,8 @@ describe('what waits on Hugo, above the shell’s tab bar (proposal G04)', () =>
 
   it('says nothing waits with null, and leaves the field out for a page that does not read it', () => {
     assert.equal(shellState('/', false, true, undefined, null).next, null);
+    assert.equal(shellState('/', false, true, undefined, null, false).opened, false, 'still opening: the shell keeps its cover');
+    assert.equal('opened' in shellState('/', false, true), false);
     assert.equal('next' in shellState('/', false, true), false);
     assert.deepEqual(shellState('/', false, true, undefined, NEXT).next, NEXT);
   });

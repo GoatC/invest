@@ -177,8 +177,9 @@ final class ShellViewController: UITabBarController {
         // The mark the page's style sheet reads (globals.css `html[data-shell]`), set before the page is read.
         // `data-shell-top`: this shell draws the top of the page itself (proposal G02), so the page draws no header of its own;
         // `data-shell-next`: it shows what waits above the tab bar (G04), so the page shows no banner;
-        // `data-shell-segmented`: it draws the page's row of sub-tabs as a segmented control (G03).
-        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');document.documentElement.setAttribute('data-shell-segmented','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // `data-shell-segmented`: it draws the page's row of sub-tabs as a segmented control (G03);
+        // `data-shell-info`: it shows the ⓘ beside the page's title as a glass button and its text in a sheet (G02, G05).
+        content.addUserScript(WKUserScript(source: "document.documentElement.setAttribute('data-shell','ios');document.documentElement.setAttribute('data-shell-top','1');document.documentElement.setAttribute('data-shell-next','1');document.documentElement.setAttribute('data-shell-segmented','1');document.documentElement.setAttribute('data-shell-info','1');", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         content.add(self, name: "haptic")
@@ -268,7 +269,8 @@ final class ShellViewController: UITabBarController {
         Router.pending = nil
         load(first)
         // Whatever happens, the launch screen does not stay for good.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.cover.lift() }
+        // The page's opening waits 8 s at most for the pages one tap away (components/preload.tsx).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in self?.cover.lift() }
     }
 
     private func load(_ url: URL) {
@@ -382,7 +384,13 @@ final class ShellViewController: UITabBarController {
     private func drawTop(_ top: ShellTop?) {
         guard let host = selectedHost else { return }
         let newPage = host.draw(top, run: { [weak self] action in
-            if let path = action.sheet { self?.presentSheet(path, title: action.label) } else { self?.press(action.key) }
+            if let text = action.info {
+                self?.presentInfo(text)
+            } else if let path = action.sheet {
+                self?.presentSheet(path, title: action.label)
+            } else {
+                self?.press(action.key)
+            }
         }, back: { [weak self] in self?.goBack() })
         // The spinner in white over the poster, in the system's colour over the grey ground.
         web.scrollView.refreshControl?.tintColor = top?.lightStatusBar ?? true ? .white : nil
@@ -499,6 +507,32 @@ final class ShellViewController: UITabBarController {
         present(sheet, animated: true)
     }
 
+    /// The ⓘ beside the page's title, in a sheet over the page (proposals G02 and G05): its text at the
+    /// phone's text size, half the screen, pulled up to all of it, swiped down to leave.
+    private func presentInfo(_ text: String) {
+        guard presentedViewController == nil else { return }
+        let reader = UITextView()
+        reader.text = text
+        reader.isEditable = false
+        reader.font = .preferredFont(forTextStyle: .body)
+        reader.adjustsFontForContentSizeCategory = true
+        reader.textColor = .label
+        reader.backgroundColor = .systemGroupedBackground
+        reader.textContainerInset = UIEdgeInsets(top: 12, left: 16, bottom: 24, right: 16)
+        let holder = UIViewController()
+        holder.view = reader
+        holder.navigationItem.title = "說明"
+        let close = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+        close.accessibilityLabel = "關閉 Close"
+        holder.navigationItem.rightBarButtonItem = close
+        let sheet = UINavigationController(rootViewController: holder)
+        if let presentation = sheet.sheetPresentationController {
+            presentation.detents = [.medium(), .large()]
+            presentation.prefersGrabberVisible = true
+        }
+        present(sheet, animated: true)
+    }
+
     private func closeSheet() {
         guard sheetWeb != nil else { return }
         sheetWeb = nil
@@ -537,7 +571,8 @@ final class ShellViewController: UITabBarController {
             setTabBarHidden(!new.signedIn, animated: true)
         }
         notice.isHidden = true
-        cover.lift()
+        // Nothing shows, nor scrolls, until the app has opened: the cover stays over the bars too (Hugo, 2026-11-15).
+        if new.opened != false { cover.lift() }
         sayBottom()
     }
 
@@ -622,7 +657,7 @@ extension ShellViewController {
         let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("look")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(for: .seconds(12))
             for (index, step) in steps.enumerated() {
                 let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
                 if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
@@ -711,7 +746,9 @@ extension ShellViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard webView === web else { return }
         // A page that never reports (a server's error page) still gets shown.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.cover.lift() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            if self?.state == nil { self?.cover.lift() }
+        }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

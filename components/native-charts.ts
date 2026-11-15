@@ -51,6 +51,9 @@ let watching = false;
 /** Where the element is in the page, in CSS pixels from the page's top-left; null while it shows nothing. */
 function boxOf(element: HTMLElement): Box | null {
   if (covered || !element.isConnected) return null;
+  // Folded away (a closed <details>, a hidden sub-tab): its box can still read as the place it last had.
+  if (element.closest('details:not([open])') !== null) return null;
+  if (typeof element.checkVisibility === 'function' && !element.checkVisibility({ contentVisibilityAuto: true })) return null;
   const rect = element.getBoundingClientRect();
   if (rect.width < 1 || rect.height < 1) return null;
   return { x: Math.round(rect.left + window.scrollX), y: Math.round(rect.top + window.scrollY), w: Math.round(rect.width), h: Math.round(rect.height) };
@@ -86,6 +89,11 @@ function watch(): void {
   document.addEventListener('toggle', soon, true);
   window.addEventListener('resize', soon);
   window.addEventListener('load', soon);
+  window.addEventListener('scroll', soon, { passive: true });
+  // A move nothing above announces (a font, an image arriving): looked at again every second.
+  window.setInterval(() => {
+    if (live.size > 0) soon();
+  }, 1000);
 }
 
 /** Each chart's own size watcher, by id. */

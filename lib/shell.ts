@@ -44,6 +44,8 @@ export interface ShellAction {
   label: string;
   /** A page of the site the shell opens in a sheet instead of pressing the control (`data-shell-sheet`, proposal G05). */
   sheet?: string;
+  /** The page's ⓘ text, which the shell shows in a sheet of its own (proposals G02 and G05: ⓘ as a glass button). */
+  info?: string;
 }
 
 /**
@@ -95,10 +97,25 @@ export interface ShellState {
   top?: ShellTop;
   /** Null when nothing waits; left out by a page from before the shell showed it. */
   next?: ShellNext | null;
+  /**
+   * Whether the app has finished opening (components/preload.tsx: every page one tap away fetched).
+   * Until then the shell keeps its launch cover over everything, bars and tab bar included (Hugo,
+   * 2026-11-15). Left out by a page from before, and the shell lifts the cover when the page speaks.
+   */
+  opened?: boolean;
 }
 
-export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop, next?: ShellNext | null): ShellState {
-  return { v: 1, signedIn, path, tab: signedIn ? shellTab(path, sheet) : null, tabs: SHELL_TABS, ...(top ? { top } : {}), ...(next !== undefined ? { next } : {}) };
+export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop, next?: ShellNext | null, opened?: boolean): ShellState {
+  return {
+    v: 1,
+    signedIn,
+    path,
+    tab: signedIn ? shellTab(path, sheet) : null,
+    tabs: SHELL_TABS,
+    ...(top ? { top } : {}),
+    ...(next !== undefined ? { next } : {}),
+    ...(opened !== undefined ? { opened } : {}),
+  };
 }
 
 /** Whether the page at `path` is reached from inside another (a holding's chart, a form): not a page of the navigation. */
@@ -122,7 +139,7 @@ export function sameTop(a: ShellTop | null, b: ShellTop | null): boolean {
     a.segments?.current === b.segments?.current &&
     (a.segments?.labels ?? []).join('\n') === (b.segments?.labels ?? []).join('\n') &&
     a.actions.length === b.actions.length &&
-    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label && action.sheet === b.actions[index]!.sheet)
+    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label && action.sheet === b.actions[index]!.sheet && action.info === b.actions[index]!.info)
   );
 }
 

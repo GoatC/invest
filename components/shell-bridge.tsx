@@ -71,7 +71,24 @@ function lentActions(): ShellAction[] {
     const sheet = control.dataset.shellSheet;
     actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}) });
   }
+  // The page's own ⓘ (in its title's card) goes to the bar as a glass ⓘ, which opens its text in a sheet (proposals G02, G05).
+  const info = pageInfo();
+  if (info) actions.unshift({ key: 'info', symbol: 'info.circle', label: '說明 How it works', info });
   return actions;
+}
+
+/** The text of the ⓘ beside the page's title (components/info.tsx), when the shell shows it in a sheet. */
+function pageInfo(): string | null {
+  if (!document.documentElement.hasAttribute('data-shell-info')) return null;
+  const card = document.querySelector<HTMLElement>('main h1:not(.hero h1)')?.closest('.card');
+  const body = card?.querySelector(':scope > details.info .info-body');
+  const text = body?.textContent?.replace(/\s+\n/g, '\n').trim();
+  return text ? text : null;
+}
+
+/** Whether the app has finished opening: the opening screen lifted (components/preload.tsx), or none shown. */
+function opened(): boolean {
+  return document.documentElement.hasAttribute('data-opened') || document.getElementById('splash') === null;
 }
 
 /** The sub-tabs of the page's row (`data-shell-segments`): its links or tab buttons. */
@@ -170,17 +187,20 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
     const inShell = document.documentElement.hasAttribute('data-shell');
     let told: ShellTop | null = inShell ? readTop(path, sheet) : null;
     let waiting: ShellNext | null = inShell ? readNext() : null;
-    post(inShell ? shellState(path, sheet, true, told ?? undefined, waiting) : shellState(path, sheet, true));
+    let ready = opened();
+    post(inShell ? shellState(path, sheet, true, told ?? undefined, waiting, ready) : shellState(path, sheet, true));
     if (!inShell) return undefined;
     let frame = 0;
     const check = () => {
       frame = 0;
       const top = readTop(path, sheet);
       const next = readNext();
-      if (sameTop(told, top) && sameNext(waiting, next)) return;
+      const now = opened();
+      if (sameTop(told, top) && sameNext(waiting, next) && now === ready) return;
       told = top;
       waiting = next;
-      post(shellState(path, sheet, true, top, next));
+      ready = now;
+      post(shellState(path, sheet, true, top, next, now));
     };
     const soon = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -188,6 +208,8 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
     // The whole body: the layout's banner streams in beside the page, not inside it.
     const changes = new MutationObserver(soon);
     changes.observe(document.body, { childList: true, subtree: true, characterData: true });
+    // The opening screen lifting marks <html> (components/preload.tsx).
+    changes.observe(document.documentElement, { attributes: true, attributeFilter: ['data-opened'] });
     window.addEventListener('scroll', soon, { passive: true });
     return () => {
       changes.disconnect();

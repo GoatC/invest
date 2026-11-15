@@ -35,7 +35,7 @@
   ];
   const PAGES = {
     '/': { title: null, poster: true, segments: ['本週', '波動警報'], actions: [{ key: 'refresh', symbol: 'arrow.clockwise', label: '更新最新資料 Refresh' }] },
-    '/holdings': { title: '持倉', segments: ['總覽', '交易', '現金流', '觀察清單'], actions: [{ key: 'add', symbol: 'plus', label: '新增交易 Add trade', sheet: '/holdings?sheet=trade' }] },
+    '/holdings': { title: '持倉', segments: ['總覽', '交易', '現金流', '觀察清單'], actions: [{ key: 'info', symbol: 'info.circle', label: '說明 How it works', info: '最近交易日＝最新收盤對前一個收盤。' }, { key: 'add', symbol: 'plus', label: '新增交易 Add trade', sheet: '/holdings?sheet=trade' }] },
     '/performance': { title: '績效', segments: ['報酬', '歸因', '費用與稅'], actions: [] },
     '/allocation': { title: '資產配置', segments: ['目標', '合併透視', '產業熱圖', '壓力測試', '效率前緣'], actions: [] },
   };
@@ -44,6 +44,9 @@
   let segment = 0;
   let said = '';
   let posts = 0;
+  // Opening, as the site's preloading does (9 s here): the shell keeps its cover until this turns true.
+  let opened = false;
+  setTimeout(() => { opened = true; said = ''; post(); }, 9000);
 
   function readTop() {
     if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [], segments: null };
@@ -51,7 +54,7 @@
     return { title: page.title, statusBar: page.poster && scrollY < 200 ? 'light' : 'dark', back: false, actions: page.actions, segments: { labels: page.segments, current: segment } };
   }
   function post() {
-    const state = { v: 1, signedIn: true, path, tab: sheet ? 'more' : path, tabs: TABS, top: readTop(), next: null };
+    const state = { v: 1, signedIn: true, path, tab: sheet ? 'more' : path, tabs: TABS, top: readTop(), next: null, opened };
     const text = JSON.stringify(state);
     if (text === said) return;
     said = text;

@@ -40,6 +40,14 @@ SCRIPT="tap /holdings; tap /performance; tap /holdings; js scrollTo(0,500); js s
 SIMCTL_CHILD_LOOK_SCRIPT="$SCRIPT" xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
 LOOK="$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)/Documents/look"
 
+# While the page is still opening (its first 9 s): the launch cover over everything.
+sleep 2.5
+xcrun simctl io "$UDID" screenshot --type=png "$OUT/00-opening.png" >/dev/null 2>&1
+sips -Z 640 -s format jpeg -s formatOptions 50 "$OUT/00-opening.png" --out "$OUT/00-opening.jpg" >/dev/null
+echo "==LOOK 00-opening BEGIN=="
+base64 -i "$OUT/00-opening.jpg" | fold -w 120
+echo "==LOOK 00-opening END=="
+
 # Each step's screenshot, once the app says the step has settled, printed small as base64 between markers.
 for i in "${!NAMES[@]}"; do
   name="${NAMES[$i]}"

@@ -40,6 +40,8 @@ struct ShellAction: Equatable {
     let label: String
     /// A page of the site to open in a sheet instead of pressing the page's control (proposal G05).
     let sheet: String?
+    /// The page's ⓘ text, shown in a sheet of the shell's own (proposals G02 and G05).
+    let info: String?
 }
 
 /// The top of the page, which the navigation bar draws (lib/shell.ts `ShellTop`; proposal G02).
@@ -60,7 +62,7 @@ struct ShellTop: Equatable {
         back = fields["back"] as? Bool ?? false
         actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap { action in
             guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
-            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String)
+            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String, info: action["info"] as? String)
         }
         let row = fields["segments"] as? [String: Any]
         segments = row?["labels"] as? [String] ?? []
@@ -98,6 +100,9 @@ struct ShellState: Equatable {
     let top: ShellTop?
     /// Nil when nothing waits, or from a page that does not send it yet.
     let next: ShellNext?
+    /// False while the app is still opening (every page one tap away being fetched): the launch cover
+    /// stays over everything until then. Nil from a page that does not say.
+    let opened: Bool?
 
     /// Reads the body of a script message; nil for anything that is not a version 1 state.
     init?(message body: Any) {
@@ -116,6 +121,7 @@ struct ShellState: Equatable {
         self.tabs = listed.isEmpty ? ShellTab.fallback : listed
         self.top = ShellTop(fields["top"])
         self.next = ShellNext(fields["next"])
+        self.opened = fields["opened"] as? Bool
     }
 }
 
