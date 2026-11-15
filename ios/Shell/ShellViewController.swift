@@ -155,6 +155,8 @@ final class ShellViewController: UITabBarController {
     }()
     /// A new page whose large title waits for the page to be back at its top (the page scrolls there just after it says it is new).
     private var titleWaits = false
+    /// While the page is pulled a point to bring the large title out (expandIfDrawnIn).
+    private var expanding = false
     private var scrollWatch: NSKeyValueObservation?
     private let cover = CoverView()
     private let notice = NoticeView()
@@ -419,6 +421,7 @@ final class ShellViewController: UITabBarController {
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
+        expandIfDrawnIn(y)
         guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
         titleWaits = false
         // The bar grows to its large title only when asked: a place whose page has just gained a title
@@ -429,6 +432,27 @@ final class ShellViewController: UITabBarController {
         // than one with, rather than below the tallest bar any page has had.
         saidTop = -1
         sayTop()
+    }
+
+    /// A page with a large title back at its top while its bar is still drawn in to one line (it was
+    /// scrolled down, or another page left it so): iOS brings the large title out again only on a
+    /// pull past the top, so the page is pulled one point and let go. Seen in the simulator: without
+    /// it, the bar stayed on one line at the top, the row of sub-tabs out of sight.
+    private func expandIfDrawnIn(_ y: CGFloat) {
+        guard !expanding, y <= 0, !web.scrollView.isDragging, let host = selectedHost, host.navigationItem.title != nil,
+              host.navigationItem.largeTitleDisplayMode == .always, let bar = host.navigationController?.navigationBar,
+              bar.frame.height < 60
+        else { return }
+        expanding = true
+        web.scrollView.setContentOffset(CGPoint(x: 0, y: -1), animated: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.web.scrollView.setContentOffset(.zero, animated: false)
+            bar.sizeToFit()
+            self.view.layoutIfNeeded()
+            self.expanding = false
+            self.sayTop()
+        }
     }
 
     /// Once the page has drawn, the grey of its ground shows behind and around it (and through the
