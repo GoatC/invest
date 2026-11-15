@@ -354,11 +354,17 @@ final class ShellViewController: UITabBarController {
 
     /// Tells the page how much of the top of the screen the navigation bar takes (--shell-top, where a
     /// page starts below its large title) and how much once drawn in to one line (--shell-top-inline,
-    /// where a row of the page sticks). Measured only while the page is at its top, with the large
-    /// title out; the largest on the page is kept, so it does not jump as the title draws in (a new page is measured afresh).
+    /// where a row of the page sticks). Measured only while the page rests at its very top, with the
+    /// large title out, so the bar drawing in on scrolling or stretching on a pull never moves the page.
     private func sayTop() {
-        guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, web.scrollView.contentOffset.y <= 0 else { return }
-        let top = max(bar.convert(bar.bounds, to: view).maxY.rounded(), saidTop)
+        // Only with the page resting at its very top: pulled down past it (the rubber band, a pull to
+        // refresh) the large title's bar stretches, and that height once kept left the page a band
+        // lower than the bar for good (Hugo's phone, 2026-11-16).
+        let scroll = web.scrollView
+        guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, abs(scroll.contentOffset.y) < 0.5,
+              !scroll.isDragging, !scroll.isDecelerating, scroll.refreshControl?.isRefreshing != true
+        else { return }
+        let top = bar.convert(bar.bounds, to: view).maxY.rounded()
         guard top != saidTop else { return }
         saidTop = top
         let inline = (view.safeAreaInsets.top + 44).rounded()
@@ -662,6 +668,13 @@ extension ShellViewController {
                 let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
                 if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
                 if parts.count == 2, parts[0] == "js" { self?.web.evaluateJavaScript(parts[1], completionHandler: nil) }
+                // A pull down past the top and let go, as a finger gives it (the rubber band).
+                if parts.count == 2, parts[0] == "pull", let depth = Double(parts[1]), let scroll = self?.web.scrollView {
+                    scroll.setContentOffset(CGPoint(x: 0, y: -depth), animated: false)
+                    self?.view.layoutIfNeeded()
+                    try? await Task.sleep(for: .milliseconds(400))
+                    scroll.setContentOffset(.zero, animated: true)
+                }
                 try? await Task.sleep(for: .seconds(3))
                 FileManager.default.createFile(atPath: folder.appendingPathComponent("ready-\(index)").path, contents: nil)
                 let shot = folder.appendingPathComponent("shot-\(index)").path
