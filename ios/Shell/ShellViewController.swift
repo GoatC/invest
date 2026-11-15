@@ -17,8 +17,6 @@ final class TabHost: UIViewController {
     private var lightStatusBar = true
     /// The page's row of sub-tabs (proposal G03), kept while the row stays the same so a choice slides its lens.
     private var segmented: UISegmentedControl?
-    /// The control under the large title, with room above it (`SegmentsHolder`); kept with the control.
-    private var segmentsHolder: SegmentsHolder?
     /// Called with the index of the sub-tab chosen in the segmented control.
     var onSegment: ((Int) -> Void)?
 
@@ -39,7 +37,8 @@ final class TabHost: UIViewController {
         let newTitle = top?.title != drawn?.title
         drawn = top
         navigationItem.title = top?.title
-        navigationItem.largeTitleDisplayMode = top?.title == nil ? .never : .always
+        // More's list is that tab's page and starts under a bar of one line (globals.css `.sheet`): no large title there.
+        navigationItem.largeTitleDisplayMode = top?.title == nil || place.key == ShellTab.more ? .never : .always
         // The page lists its controls left to right; the bar fills from the right edge in.
         navigationItem.rightBarButtonItems = (top?.actions ?? []).reversed().map { action in
             let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action) })
@@ -80,7 +79,6 @@ final class TabHost: UIViewController {
     private func drawSegments(_ top: ShellTop?) {
         guard let top = top, top.segments.count > 1 else {
             segmented = nil
-            segmentsHolder = nil
             navigationItem.largeSubtitleView = nil
             navigationItem.titleView = nil
             return
@@ -97,57 +95,20 @@ final class TabHost: UIViewController {
                 self?.onSegment?(index)
             }, for: .valueChanged)
             segmented = control
-            segmentsHolder = nil
         }
         if control.selectedSegmentIndex != top.segment { control.selectedSegmentIndex = top.segment }
         if top.title == nil {
             navigationItem.largeSubtitleView = nil
-            // The control leaves any holder it was in; one is made again should it go back under a title.
-            segmentsHolder = nil
             navigationItem.titleView = control
         } else {
             navigationItem.titleView = nil
-            let holder = segmentsHolder ?? SegmentsHolder(control: control)
-            segmentsHolder = holder
-            navigationItem.largeSubtitleView = holder
+            navigationItem.largeSubtitleView = control
         }
     }
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         onInsets?()
-    }
-}
-
-/// The segmented control under the large title, with room above it, so it does not sit on the
-/// title's letters, and a little below it, before the page.
-final class SegmentsHolder: UIView {
-    private let control: UISegmentedControl
-    private static let above: CGFloat = 10
-    private static let below: CGFloat = 4
-
-    init(control: UISegmentedControl) {
-        self.control = control
-        super.init(frame: .zero)
-        control.removeFromSuperview()
-        control.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(control)
-        NSLayoutConstraint.activate([
-            control.topAnchor.constraint(equalTo: topAnchor, constant: SegmentsHolder.above),
-            control.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SegmentsHolder.below),
-            control.leadingAnchor.constraint(equalTo: leadingAnchor),
-            control.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    override var intrinsicContentSize: CGSize {
-        let size = control.intrinsicContentSize
-        return CGSize(width: size.width, height: size.height + SegmentsHolder.above + SegmentsHolder.below)
     }
 }
 
