@@ -44,9 +44,9 @@
   let segment = 0;
   let said = '';
   let posts = 0;
-  // Opening, as the site's preloading does: the shell keeps its cover until this turns true.
+  // Opening, as the site's preloading does (9 s here): the shell keeps its cover until this turns true.
   let opened = false;
-  setTimeout(() => { opened = true; said = ''; post(); }, 4000);
+  setTimeout(() => { opened = true; said = ''; post(); }, 9000);
 
   function readTop() {
     if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [], segments: null };

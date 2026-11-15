@@ -657,7 +657,7 @@ extension ShellViewController {
         let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("look")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(for: .seconds(12))
             for (index, step) in steps.enumerated() {
                 let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
                 if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
