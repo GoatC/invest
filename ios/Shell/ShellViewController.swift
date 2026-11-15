@@ -353,9 +353,8 @@ final class ShellViewController: UITabBarController {
     /// where a row of the page sticks). Measured only while the page is at its top, with the large
     /// title out; the largest on the page is kept, so it does not jump as the title draws in (a new page is measured afresh).
     private func sayTop() {
-        guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, atTop else { return }
-        // A page under a large title is kept clear of the bar by iOS itself (its content inset): it pads nothing.
-        let top = web.scrollView.contentInsetAdjustmentBehavior == .never ? max(bar.convert(bar.bounds, to: view).maxY.rounded(), saidTop) : 0
+        guard isViewLoaded, let bar = selectedHost?.navigationController?.navigationBar, web.scrollView.contentOffset.y <= 0 else { return }
+        let top = max(bar.convert(bar.bounds, to: view).maxY.rounded(), saidTop)
         guard top != saidTop else { return }
         saidTop = top
         let inline = (view.safeAreaInsets.top + 44).rounded()
@@ -376,27 +375,10 @@ final class ShellViewController: UITabBarController {
         }
     }
 
-    /// Whether the page is scrolled to its top: its first line just under whatever iOS keeps it clear of.
-    private var atTop: Bool {
-        web.scrollView.contentOffset.y <= -web.scrollView.adjustedContentInset.top + 0.5
-    }
-
-    /// A page with a title runs under the bar as a native list does: iOS insets its content below the
-    /// bar, so the large title draws in as the page scrolls and comes out again back at the top (it
-    /// tracks the inset; with none, a page back at its top kept the one-line bar, seen in the simulator).
-    /// The dashboard, whose poster runs up under the status bar, keeps no inset and pads itself.
-    private func setInset(for top: ShellTop?) {
-        let behavior: UIScrollView.ContentInsetAdjustmentBehavior = top?.title != nil ? .always : .never
-        guard web.scrollView.contentInsetAdjustmentBehavior != behavior else { return }
-        web.scrollView.contentInsetAdjustmentBehavior = behavior
-        saidTop = -1
-    }
-
     /// Draws the top the page sent in the place on screen: its title, its controls, a back button.
     /// A new page at its top shows its large title again, though the page before had drawn it in.
     private func drawTop(_ top: ShellTop?) {
         guard let host = selectedHost else { return }
-        setInset(for: top)
         let newPage = host.draw(top, run: { [weak self] action in
             if let path = action.sheet { self?.presentSheet(path, title: action.label) } else { self?.press(action.key) }
         }, back: { [weak self] in self?.goBack() })
@@ -437,7 +419,7 @@ final class ShellViewController: UITabBarController {
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
-        guard titleWaits, atTop, let bar = selectedHost?.navigationController?.navigationBar else { return }
+        guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
         titleWaits = false
         // The bar grows to its large title only when asked: a place whose page has just gained a title
         // (it was the dashboard's, with none) keeps its one-line bar otherwise (seen in the simulator).
