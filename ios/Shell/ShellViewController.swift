@@ -585,15 +585,27 @@ extension ShellViewController: UITabBarControllerDelegate {
 #if DEBUG
 extension ShellViewController {
     /// For ios/tests/look.sh in the simulator (debug builds only): `LOOK_SCRIPT`, steps such as
-    /// `8 tap /holdings; 14 js scrollTo(0,500)`, each that many seconds after the app opens: a tap on
-    /// a tab, as a finger gives it, or a line of script run in the page.
+    /// `tap /holdings; js scrollTo(0,500)`: a tap on a tab, as a finger gives it, or a line of script
+    /// run in the page. Before the first step and after each, the app waits for the page to settle,
+    /// leaves `look/ready-N` in its Documents folder, and goes on once the script has taken its
+    /// screenshot and left `look/shot-N`, so each screenshot shows exactly that step.
     func runLookScript() {
         guard let script = ProcessInfo.processInfo.environment["LOOK_SCRIPT"] else { return }
-        for step in script.split(separator: ";") {
-            let parts = step.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 2).map(String.init)
-            guard parts.count == 3, let seconds = Double(parts[0]) else { continue }
-            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-                if parts[1] == "tap" { self?.debugTap(parts[2]) } else { self?.web.evaluateJavaScript(parts[2], completionHandler: nil) }
+        let steps = [""] + script.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("look")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            for (index, step) in steps.enumerated() {
+                let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
+                if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
+                if parts.count == 2, parts[0] == "js" { self?.web.evaluateJavaScript(parts[1], completionHandler: nil) }
+                try? await Task.sleep(for: .seconds(3))
+                FileManager.default.createFile(atPath: folder.appendingPathComponent("ready-\(index)").path, contents: nil)
+                let shot = folder.appendingPathComponent("shot-\(index)").path
+                for _ in 0..<300 where !FileManager.default.fileExists(atPath: shot) {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
             }
         }
     }

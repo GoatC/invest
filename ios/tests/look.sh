@@ -33,32 +33,22 @@ APP="$BUILD/Build/Products/Debug-iphonesimulator/LongView.app"
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")"
 xcrun simctl install "$UDID" "$APP"
-# What the app does by itself, seconds after it opens (ShellViewController.runLookScript, debug
-# builds only): taps on tabs as a finger gives them, and lines run in the page.
-SCRIPT="8 tap /holdings; 14 tap /performance; 20 tap /holdings; 26 js scrollTo(0,500); 31 js scrollTo(0,0); 36 tap more; 42 tap /allocation; 48 tap /; 54 js window.longview.open('/performance'); 60 tap /holdings; 66 js window.longview.segment(2)"
+# What the app does by itself (ShellViewController.runLookScript, debug builds only): taps on tabs
+# as a finger gives them, and lines run in the page. It waits for each screenshot before the next step.
+NAMES=(01-dashboard 02-holdings 03-performance 04-holdings-again 05-holdings-scrolled 06-holdings-top-again 07-more 08-allocation 09-dashboard-again 10-performance-by-link 11-holdings-third 12-holdings-segment)
+SCRIPT="tap /holdings; tap /performance; tap /holdings; js scrollTo(0,500); js scrollTo(0,0); tap more; tap /allocation; tap /; js window.longview.open('/performance'); tap /holdings; js window.longview.segment(2)"
 SIMCTL_CHILD_LOOK_SCRIPT="$SCRIPT" xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
-START=$(date +%s)
+LOOK="$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)/Documents/look"
 
-# A screenshot `$2` seconds after the app opened, printed small as base64 between markers.
-shot() {
-  local wait=$(( $2 - ($(date +%s) - START) ))
-  [ "$wait" -gt 0 ] && sleep "$wait"
-  xcrun simctl io "$UDID" screenshot --type=png "$OUT/$1.png" >/dev/null 2>&1
-  sips -Z 640 -s format jpeg -s formatOptions 50 "$OUT/$1.png" --out "$OUT/$1.jpg" >/dev/null
-  echo "==LOOK $1 BEGIN=="
-  base64 -i "$OUT/$1.jpg" | fold -w 120
-  echo "==LOOK $1 END=="
-}
-
-shot 01-dashboard 6
-shot 02-holdings 12
-shot 03-performance 18
-shot 04-holdings-again 24
-shot 05-holdings-scrolled 29
-shot 06-holdings-top-again 34
-shot 07-more 40
-shot 08-allocation 46
-shot 09-dashboard-again 52
-shot 10-performance-by-link 58
-shot 11-holdings-third 64
-shot 12-holdings-segment 70
+# Each step's screenshot, once the app says the step has settled, printed small as base64 between markers.
+for i in "${!NAMES[@]}"; do
+  name="${NAMES[$i]}"
+  for _ in $(seq 1 300); do [ -f "$LOOK/ready-$i" ] && break; sleep 0.5; done
+  [ -f "$LOOK/ready-$i" ] || { echo "step $i never settled"; exit 1; }
+  xcrun simctl io "$UDID" screenshot --type=png "$OUT/$name.png" >/dev/null 2>&1
+  touch "$LOOK/shot-$i"
+  sips -Z 640 -s format jpeg -s formatOptions 50 "$OUT/$name.png" --out "$OUT/$name.jpg" >/dev/null
+  echo "==LOOK $name BEGIN=="
+  base64 -i "$OUT/$name.jpg" | fold -w 120
+  echo "==LOOK $name END=="
+done
