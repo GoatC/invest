@@ -2536,7 +2536,8 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
       if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true });
       window.shellSaid = [];
       window.remindersSaid = [];
-      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) }, reminders: { postMessage: (message) => window.remindersSaid.push(message) } } };
+      window.chartSaid = [];
+      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) }, reminders: { postMessage: (message) => window.remindersSaid.push(message) }, chart: { postMessage: (message) => window.chartSaid.push(message) } } };
     });
     const app = await phone.newPage();
     app.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (inside the shell, on ${app.url().replace(BASE, '')})`));
@@ -2555,6 +2556,11 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     // The page keeps the shell's mark through hydration, draws no tab bar of its own and reports where it is.
     check((await app.locator('html').getAttribute('data-shell')) === 'ios', 'the mark stays on the page');
     check(!(await app.locator('.tab-bar').isVisible()), 'no web tab bar');
+    // The poster's line handed to the shell to draw with Swift Charts (components/native-charts.ts), the page's own out of sight.
+    await app.waitForFunction(() => window.chartSaid.some((message) => message.op === 'set' && message.spec?.spark), null, { timeout: 15_000 });
+    const poster = await app.evaluate(() => window.chartSaid.find((message) => message.op === 'set' && message.spec?.spark));
+    check(poster.spec.lineWidth === 3 && poster.spec.series[0]?.values.length > 1 && poster.box?.w > 300, `the poster's line handed over with its place, got ${JSON.stringify(poster.box)}`);
+    check((await app.locator('.hero-chart.native-drawn svg').evaluate((svg) => getComputedStyle(svg).visibility)) === 'hidden', 'the page draws no line of its own under it');
     await says(['/', '/']);
     const first = await said();
     check(first.v === 1 && first.signedIn === true, `signed in, version 1, got ${JSON.stringify(first)}`);
@@ -2577,8 +2583,17 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
     // A sub-tab is the page's own: the native tab stays, the path follows.
     await select('/performance', '/performance', '績效');
+    // Performance's line and bar charts go to Swift Charts, each with its x values, its series, the axis labels and the tooltip's words; leaving the page takes them away.
+    await app.waitForFunction(() => window.chartSaid.filter((message) => message.op === 'set' && !message.spec?.spark && location.pathname === '/performance').length >= 2, null, { timeout: 15_000 });
+    const charts = await app.evaluate(() => window.chartSaid.filter((message) => message.op === 'set' && !message.spec?.spark));
+    const cumulative = charts.find((message) => message.spec.x.kind === 'date');
+    const monthly = charts.find((message) => message.spec.series.some((series) => series.mark === 'bar'));
+    check(cumulative && cumulative.spec.series.length >= 1 && cumulative.spec.y.ticks.length > 1 && cumulative.spec.readouts.length === cumulative.spec.x.values.length && cumulative.spec.readouts[0].includes('\n'), `the cumulative return handed over with its ticks and read-outs, got ${JSON.stringify(cumulative?.spec.y.ticks)}`);
+    check(monthly && monthly.spec.series.filter((series) => series.stack === 'split').length === 3, 'the monthly split handed over as three stacked bars');
+    check((await app.locator('.chart.native-drawn').count()) >= 2, 'the page keeps the charts’ places, drawing nothing in them');
     await app.getByRole('navigation', { name: /Performance/ }).getByRole('link', { name: /Attribution/ }).tap();
     await says(['/attribution', '/performance']);
+    check(await app.evaluate((ids) => ids.every((id) => window.chartSaid.some((message) => message.op === 'remove' && message.id === id)), charts.map((message) => message.id)), 'leaving Performance takes its native charts away');
     // More: its list fills the screen as that tab's page; a page under it keeps More chosen.
     await app.evaluate(() => window.longview.select('more'));
     await says(['/attribution', 'more']);
