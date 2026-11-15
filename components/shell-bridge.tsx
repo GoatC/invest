@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useTransition } from 'react';
 
 import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameNext, sameTop, shellBack, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellAction, type ShellNext, type ShellReminder, type ShellState, type ShellTop } from '@/lib/shell';
+import { coverNative } from './native-charts';
 
 /**
  * The page's side of the iOS shell (lib/shell.ts; ios/Shell/ShellViewController.swift is the other).
@@ -130,6 +131,9 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
   useEffect(() => {
     if (!pending) refreshing.current.splice(0).forEach((done) => done());
   }, [pending]);
+
+  // The More list over the page: the shell's native charts leave it clear (components/native-charts.ts).
+  useEffect(() => coverNative(sheet), [sheet]);
 
   // A haptic for what just happened on the page: a save confirmed, or something refused.
   useEffect(() => {

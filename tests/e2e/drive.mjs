@@ -1752,16 +1752,13 @@ await step('dashboard: the poster with the value of both pools, the gains and th
   check(/累計 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band) && /近 7 天 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band), `the gains as chips, got ${band}`);
   // The poster carries no rule or drift line any more (Hugo, 2026-11-13): the warnings sit right under it, the drift on Allocation.
   check(!/規則：|最大偏離|推播設定/.test(band) && (await poster.getByRole('link', { name: /warning/ }).count()) === 0, `no rules or drift line on the poster, got ${band}`);
-  // It dates the closes, offers the refresh, and draws the line of both pools' rise and fall, which opens Performance.
-  check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the poster, got ${band}`);
+  // It offers the refresh and draws the line of both pools' rise and fall; no closes' date, legend, ⓘ or expand button (Hugo, 2026-11-15).
+  check(!/收盤價至|兩個資金池的漲跌幅/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the refresh button and no closes' date or legend on the poster, got ${band}`);
+  check((await poster.locator('details.info, .hero-expand').count()) === 0, 'no ⓘ or expand button on the poster');
   check(!(await poster.locator('.refresh-data p').isVisible()), 'the refresh note waits until a run is asked for');
   const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
   check(lineName && band.includes(`累計`) && band.includes(/now ([+−]?\d+\.\d{2}%)/.exec(lineName)?.[1] ?? 'none'), `the line ends at the return the chip shows, got ${lineName}`);
   check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
-  check((await poster.getByRole('link', { name: /Performance/ }).getAttribute('href')) === '/performance', 'the line opens Performance');
-  await poster.locator('details.info summary').click();
-  check((await poster.locator('details.info').innerText()).includes('時間加權報酬'), 'how the line is worked out, behind ⓘ');
-  await poster.locator('details.info summary').click();
   const headings = await page.locator('main h2').allInnerTexts();
   const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));

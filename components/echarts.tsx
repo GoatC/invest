@@ -10,9 +10,11 @@ import type { GridComponentOption, MarkAreaComponentOption, MarkLineComponentOpt
 import type { ComposeOption, ECharts } from 'echarts/core';
 
 import { swiftCharts } from '@/lib/chart-shell';
+import { nativeShape, readouts, type NativeShape, type NativeSpec } from '@/lib/native-chart';
 import { bi, type Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
+import { nativeCharts, showNative } from './native-charts';
 
 export type Option = ComposeOption<
   BarSeriesOption | CustomSeriesOption | LineSeriesOption | PieSeriesOption | ScatterSeriesOption | TreemapSeriesOption | GridComponentOption | MarkAreaComponentOption | MarkLineComponentOption | TooltipComponentOption
@@ -128,11 +130,25 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const dark = window.matchMedia('(prefers-color-scheme: dark)');
     let narrow = element.clientWidth < NARROW;
+    // Inside a shell that draws charts, on the main tabs, a chart Swift Charts can draw is handed to
+    // it (components/native-charts.ts); ECharts still lays it out, out of sight, for its axis labels.
+    // A chart that answers taps of its own (`ready`) stays an ECharts chart.
+    const native = !ready && nativeCharts();
+    let unNative: (() => void) | undefined;
     const draw = () => {
       narrowNow = element.clientWidth < NARROW;
       const colors = readColors(element);
       const option: Option = { animation: !motion.matches, animationDuration: MOTION_MS, animationDurationUpdate: MOTION_MS, animationEasing: 'cubicOut', ...build(colors, element.clientWidth) };
       chart.setOption(inShell() ? swiftCharts(option, { ink: colors.ink, muted: colors.muted, grid: colors.grid }) : option, true);
+      const spec = native ? nativeSpec(chart, option, colors) : null;
+      if (spec) {
+        element.classList.add('native-drawn');
+        unNative = showNative(element, spec);
+      } else if (unNative) {
+        unNative();
+        unNative = undefined;
+        element.classList.remove('native-drawn');
+      }
     };
     draw();
     ready?.(chart);
@@ -148,6 +164,7 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     stop = () => {
       dark.removeEventListener('change', draw);
       resize.disconnect();
+      unNative?.();
       chart.dispose();
     };
   };
@@ -157,6 +174,57 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     gone = true;
     stop?.();
   };
+}
+
+interface AxisView {
+  scale: { getExtent(): [number, number] };
+  getViewLabels(): Array<{ formattedLabel: string; tickValue: number }>;
+}
+
+/** Where an x tick ECharts labels falls on the native chart's x: an index for categories and dates, the value itself on a value axis. */
+function tickAt(shape: NativeShape, tick: number): number | null {
+  if (shape.x.kind === 'category') return Number.isInteger(tick) && tick >= 0 && tick < shape.x.values.length ? tick : null;
+  if (shape.x.kind === 'value') return tick;
+  let best: number | null = null;
+  let gap = Infinity;
+  shape.x.values.forEach((value, index) => {
+    const away = Math.abs(Date.parse(String(value)) - tick);
+    if (away < gap) {
+      gap = away;
+      best = index;
+    }
+  });
+  return best;
+}
+
+/**
+ * The chart as the shell draws it (lib/native-chart.ts), with the axis labels ECharts chose and
+ * formatted for it (so the figures read as the page's), and the tooltip's words at each x.
+ */
+function nativeSpec(chart: Chart, option: Option, colors: Colors): NativeSpec | null {
+  const raw = option as Record<string, unknown>;
+  const shape = nativeShape(raw, colors.slots);
+  if (!shape) return null;
+  let y: NativeSpec['y'] = { min: null, max: null, ticks: [] };
+  let xTicks: NativeSpec['xTicks'] = [];
+  try {
+    const model = (chart as unknown as { getModel(): { getComponent(type: string, index: number): { axis?: AxisView } | undefined } }).getModel();
+    const yAxis = model.getComponent('yAxis', 0)?.axis;
+    const xAxis = model.getComponent('xAxis', 0)?.axis;
+    if (yAxis) {
+      const [min, max] = yAxis.scale.getExtent();
+      y = { min, max, ticks: yAxis.getViewLabels().map((label) => ({ value: Number(label.tickValue), label: label.formattedLabel })) };
+    }
+    if (xAxis) {
+      xTicks = xAxis.getViewLabels().flatMap((label) => {
+        const at = tickAt(shape, Number(label.tickValue));
+        return at === null ? [] : [{ at, label: label.formattedLabel }];
+      });
+    }
+  } catch {
+    // An ECharts without these views: the shell picks its own axis labels.
+  }
+  return { v: 1, ...shape, xTicks, y, readouts: readouts(raw, shape, (index) => String(shape.x.values[index] ?? '')) };
 }
 
 /** Axis ticks: whole percentages where the range allows, e.g. "−5%", "12.5%". */

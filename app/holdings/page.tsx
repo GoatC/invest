@@ -370,7 +370,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
   const breaches: CapBreach[] = capBreaches(portfolio.holdings, data.caps);
   const unpriced = portfolio.pool.unpriced;
   return (
-    <section className="card form">
+    <section className="card form" id="rules-status">
       <h2>
         <Bi en="Rules R1 and R2" zh="規則 R1 與 R2" />
       </h2>

@@ -1442,13 +1442,12 @@ tr.selected td {
 }
 
 .hero-date,
-.hero-note,
-.hero-legend {
+.hero-note {
   font-size: 0.85rem;
   color: var(--hero-quiet);
 }
 
-/* Today's date over the date of the newest close, beside the button that refreshes it. */
+/* Today's date, beside the button that refreshes it. */
 .hero-date {
   display: grid;
   gap: 0.1rem;
@@ -1530,34 +1529,6 @@ tr.selected td {
   font-weight: 600;
 }
 
-.hero-legend {
-  /* The whole width, so the expand button ends the line at the poster's right edge. */
-  justify-self: stretch;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.1rem 0.9rem;
-  margin-top: 0.5rem;
-}
-
-.hero-legend details.info {
-  display: contents;
-}
-
-.hero-legend details.info > summary {
-  color: inherit;
-  min-height: var(--tap-min);
-  display: inline-flex;
-  align-items: center;
-}
-
-.hero-legend details.info > .info-body {
-  order: 2;
-  flex-basis: 100%;
-  margin: 0 0 0.4rem;
-  color: var(--hero-text);
-}
-
 .hero-chart {
   position: relative;
   height: 132px;
@@ -1584,23 +1555,6 @@ tr.selected td {
   stroke-dasharray: 2 6;
   opacity: 0.4;
   vector-effect: non-scaling-stroke;
-}
-
-/* Opens the full chart on Performance: at the end of the legend's line, before its ⓘ text when open. */
-.hero-expand {
-  order: 1;
-  margin-left: auto;
-  display: grid;
-  place-items: center;
-  width: var(--tap-min);
-  height: var(--tap-min);
-  border-radius: 50%;
-  background: color-mix(in srgb, #0b1a2b 28%, transparent);
-  color: var(--hero-text);
-}
-
-.hero-expand:hover {
-  background: color-mix(in srgb, #0b1a2b 42%, transparent);
 }
 
 /* On a phone the poster is the top of the screen (Hugo, 2026-11-13): edge to edge, up under the
@@ -4049,14 +4003,6 @@ html[data-shell] .card .alert-tile {
   padding-inline: 0;
 }
 
-/* The poster's expand button as a glass button of the shell, at the end of the legend's line. */
-html[data-shell] .hero-expand {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.6), 0 6px 18px rgba(0, 20, 50, 0.18);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  backdrop-filter: blur(12px) saturate(180%);
-}
-
 
 /* The poster's line as the proposal draws it in the shell (C04): 3pt, round, over a dashed zero line. */
 html[data-shell] .hero-line {
@@ -4067,3 +4013,28 @@ html[data-shell] .hero-line {
 html[data-shell-top] .data-toast {
   top: calc(var(--shell-top-inline, var(--safe-top)) + 8px);
 }
+
+/* The dashboard's rule board in the shell as the proposal draws it (C05): its name on the grey
+   ground over one white group of rows, not a card around them. */
+html[data-shell] .rule-board {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  border: 0;
+  gap: 0.5rem;
+}
+
+html[data-shell] .rule-board > h2 {
+  padding: 0 0.25rem;
+}
+
+html[data-shell] .card.rule-board .alert-tile {
+  padding-inline: 1rem;
+}
+
+/* A chart the shell draws with Swift Charts (components/native-charts.ts): the page keeps its place,
+   with nothing of its own drawn in it. */
+html[data-shell] .native-drawn > * {
+  visibility: hidden;
+}
+

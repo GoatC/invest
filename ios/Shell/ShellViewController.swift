@@ -180,6 +180,8 @@ final class ShellViewController: UITabBarController {
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         content.add(self, name: "haptic")
+        // Charts the page hands over to be drawn with Swift Charts (NativeCharts.swift, components/native-charts.ts).
+        content.add(self, name: "chart")
         configuration.userContentController = content
 
         let web = WKWebView(frame: .zero, configuration: configuration)
@@ -198,6 +200,9 @@ final class ShellViewController: UITabBarController {
         #endif
         return web
     }()
+
+    /// The charts the page handed over, drawn natively in its scrolling content.
+    private lazy var charts = NativeCharts(scroll: web.scrollView)
 
     /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
@@ -604,7 +609,9 @@ extension ShellViewController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         // Only the site's own page in the main web view is listened to.
         guard message.webView === web, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Site.root?.host else { return }
-        if message.name == "reminders" {
+        if message.name == "chart" {
+            charts.handle(message.body)
+        } else if message.name == "reminders" {
             if let list = Reminder.message(message.body) { schedule(list.items, expiryWanted: list.expiry) }
         } else if message.name == "haptic" {
             // A save confirmed, or something refused (components/shell-bridge.tsx).
@@ -648,7 +655,8 @@ extension ShellViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard webView === web else { return }
-        // A new page has not been told the room at its foot, nor at its top.
+        // A new page has not been told the room at its foot, nor at its top, and has handed over no chart yet.
+        charts.clear()
         saidBottom = -1
         saidTop = -1
         sayBottom()

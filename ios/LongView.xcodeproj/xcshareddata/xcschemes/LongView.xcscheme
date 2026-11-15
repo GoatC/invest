@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BBBF0BABBE85DE679F697783"
+               BlueprintIdentifier = "52A5647C2131E0BADFBE3C5C"
                BuildableName = "LongView.app"
                BlueprintName = "LongView"
                ReferencedContainer = "container:LongView.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "BBBF0BABBE85DE679F697783"
+            BlueprintIdentifier = "52A5647C2131E0BADFBE3C5C"
             BuildableName = "LongView.app"
             BlueprintName = "LongView"
             ReferencedContainer = "container:LongView.xcodeproj">
@@ -53,7 +53,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "BBBF0BABBE85DE679F697783"
+            BlueprintIdentifier = "52A5647C2131E0BADFBE3C5C"
             BuildableName = "LongView.app"
             BlueprintName = "LongView"
             ReferencedContainer = "container:LongView.xcodeproj">
@@ -70,7 +70,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "BBBF0BABBE85DE679F697783"
+            BlueprintIdentifier = "52A5647C2131E0BADFBE3C5C"
             BuildableName = "LongView.app"
             BlueprintName = "LongView"
             ReferencedContainer = "container:LongView.xcodeproj">
