@@ -45,13 +45,13 @@
   let said = '';
   let posts = 0;
 
-  function top() {
+  function readTop() {
     if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [], segments: null };
     const page = PAGES[path];
     return { title: page.title, statusBar: page.poster && scrollY < 200 ? 'light' : 'dark', back: false, actions: page.actions, segments: { labels: page.segments, current: segment } };
   }
   function post() {
-    const state = { v: 1, signedIn: true, path, tab: sheet ? 'more' : path, tabs: TABS, top: top(), next: null };
+    const state = { v: 1, signedIn: true, path, tab: sheet ? 'more' : path, tabs: TABS, top: readTop(), next: null };
     const text = JSON.stringify(state);
     if (text === said) return;
     said = text;

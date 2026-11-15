@@ -33,27 +33,32 @@ APP="$BUILD/Build/Products/Debug-iphonesimulator/LongView.app"
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")"
 xcrun simctl install "$UDID" "$APP"
-xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
+# What the app does by itself, seconds after it opens (ShellViewController.runLookScript, debug
+# builds only): taps on tabs as a finger gives them, and lines run in the page.
+SCRIPT="8 tap /holdings; 14 tap /performance; 20 tap /holdings; 26 js scrollTo(0,500); 31 js scrollTo(0,0); 36 tap more; 42 tap /allocation; 48 tap /; 54 js window.longview.open('/performance'); 60 tap /holdings; 66 js window.longview.segment(2)"
+SIMCTL_CHILD_LOOK_SCRIPT="$SCRIPT" xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
+START=$(date +%s)
 
+# A screenshot `$2` seconds after the app opened, printed small as base64 between markers.
 shot() {
-  sleep "$2"
+  local wait=$(( $2 - ($(date +%s) - START) ))
+  [ "$wait" -gt 0 ] && sleep "$wait"
   xcrun simctl io "$UDID" screenshot --type=png "$OUT/$1.png" >/dev/null 2>&1
   sips -Z 640 -s format jpeg -s formatOptions 50 "$OUT/$1.png" --out "$OUT/$1.jpg" >/dev/null
   echo "==LOOK $1 BEGIN=="
   base64 -i "$OUT/$1.jpg" | fold -w 120
   echo "==LOOK $1 END=="
 }
-tap() { xcrun simctl openurl "$UDID" "longview://tap?key=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1")"; }
-page() { xcrun simctl openurl "$UDID" "longview://open?path=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1")"; }
 
-shot 01-dashboard 8
-tap /holdings;    shot 02-holdings 3
-tap /performance; shot 03-performance 3
-tap /holdings;    shot 04-holdings-again 3
-page /__scroll/500; shot 05-holdings-scrolled 2
-page /__scroll/0;   shot 06-holdings-top-again 2
-tap more;         shot 07-more 3
-tap /allocation;  shot 08-allocation 3
-tap /;            shot 09-dashboard-again 3
-page /performance; shot 10-performance-by-link 3
-tap /holdings;    shot 11-holdings-third 3
+shot 01-dashboard 6
+shot 02-holdings 12
+shot 03-performance 18
+shot 04-holdings-again 24
+shot 05-holdings-scrolled 29
+shot 06-holdings-top-again 34
+shot 07-more 40
+shot 08-allocation 46
+shot 09-dashboard-again 52
+shot 10-performance-by-link 58
+shot 11-holdings-third 64
+shot 12-holdings-segment 70

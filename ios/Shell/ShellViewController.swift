@@ -233,6 +233,9 @@ final class ShellViewController: UITabBarController {
             MainActor.assumeIsolated { self?.scrolled(to: y) }
         }
         open()
+        #if DEBUG
+        runLookScript()
+        #endif
     }
 
     override func viewDidLayoutSubviews() {
@@ -570,7 +573,21 @@ extension ShellViewController: UITabBarControllerDelegate {
 
 #if DEBUG
 extension ShellViewController {
-    /// A tap on the tab `key`, as a finger gives it (the bar chooses it, then tells its delegate): for ios/tests/look.sh.
+    /// For ios/tests/look.sh in the simulator (debug builds only): `LOOK_SCRIPT`, steps such as
+    /// `8 tap /holdings; 14 js scrollTo(0,500)`, each that many seconds after the app opens: a tap on
+    /// a tab, as a finger gives it, or a line of script run in the page.
+    func runLookScript() {
+        guard let script = ProcessInfo.processInfo.environment["LOOK_SCRIPT"] else { return }
+        for step in script.split(separator: ";") {
+            let parts = step.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 2).map(String.init)
+            guard parts.count == 3, let seconds = Double(parts[0]) else { continue }
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                if parts[1] == "tap" { self?.debugTap(parts[2]) } else { self?.web.evaluateJavaScript(parts[2], completionHandler: nil) }
+            }
+        }
+    }
+
+    /// A tap on the tab `key`, as a finger gives it (the bar chooses it, then tells its delegate).
     func debugTap(_ key: String) {
         guard let controllers = viewControllers,
               let index = controllers.firstIndex(where: { (($0 as? UINavigationController)?.viewControllers.first as? TabHost)?.place.key == key })

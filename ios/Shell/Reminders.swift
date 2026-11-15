@@ -128,14 +128,6 @@ enum Router {
 
     /// `longview://open?path=%2Fvolatility` (lib/shell.ts `shellOpenUrl`); any other address is ignored.
     static func handle(_ url: URL) {
-        #if DEBUG
-        // `longview://tap?key=%2Fholdings` taps that tab, for ios/tests/look.sh in the simulator (debug builds only).
-        if url.scheme == "longview", url.host == "tap",
-           let key = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "key" })?.value {
-            shell?.debugTap(key)
-            return
-        }
-        #endif
         guard url.scheme == "longview", url.host == "open",
               let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "path" })?.value
         else { return }
