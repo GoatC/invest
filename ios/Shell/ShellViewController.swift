@@ -155,6 +155,8 @@ final class ShellViewController: UITabBarController {
     }()
     /// A new page whose large title waits for the page to be back at its top (the page scrolls there just after it says it is new).
     private var titleWaits = false
+    /// While the page is pulled a point to bring the large title out (expandIfDrawnIn).
+    private var expanding = false
     private var scrollWatch: NSKeyValueObservation?
     private let cover = CoverView()
     private let notice = NoticeView()
@@ -180,6 +182,8 @@ final class ShellViewController: UITabBarController {
         content.add(self, name: "shell")
         content.add(self, name: "reminders")
         content.add(self, name: "haptic")
+        // Charts the page hands over to be drawn with Swift Charts (NativeCharts.swift, components/native-charts.ts).
+        content.add(self, name: "chart")
         configuration.userContentController = content
 
         let web = WKWebView(frame: .zero, configuration: configuration)
@@ -198,6 +202,9 @@ final class ShellViewController: UITabBarController {
         #endif
         return web
     }()
+
+    /// The charts the page handed over, drawn natively in its scrolling content.
+    private lazy var charts = NativeCharts(scroll: web.scrollView)
 
     /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
@@ -233,6 +240,9 @@ final class ShellViewController: UITabBarController {
             MainActor.assumeIsolated { self?.scrolled(to: y) }
         }
         open()
+        #if DEBUG
+        runLookScript()
+        #endif
     }
 
     override func viewDidLayoutSubviews() {
@@ -304,12 +314,19 @@ final class ShellViewController: UITabBarController {
     }
 
     /// Moves the web view into the chosen tab's place; the bar follows its scrolling from there.
+    /// The other places let go of it first: a bar still holding the one scroll view keeps tracking it,
+    /// and the bar of the place on screen then never learns where it is, so its large title and the
+    /// row under it stay out of sight (seen in the simulator, ios/tests/look.sh).
     private func attach(to host: TabHost) {
         host.loadViewIfNeeded()
+        for other in hosts where other !== host && other.isViewLoaded {
+            other.setContentScrollView(nil)
+        }
         if web.superview !== host.view {
             web.frame = host.view.bounds
             web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             host.view.addSubview(web)
+            host.setContentScrollView(nil)
         }
         host.setContentScrollView(web.scrollView)
     }
@@ -404,14 +421,38 @@ final class ShellViewController: UITabBarController {
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {
+        expandIfDrawnIn(y)
         guard titleWaits, y <= 0, let bar = selectedHost?.navigationController?.navigationBar else { return }
         titleWaits = false
+        // The bar grows to its large title only when asked: a place whose page has just gained a title
+        // (it was the dashboard's, with none) keeps its one-line bar otherwise (seen in the simulator).
         bar.sizeToFit()
         view.layoutIfNeeded()
         // A new page is measured afresh: one with no row of sub-tabs under its title starts higher
         // than one with, rather than below the tallest bar any page has had.
         saidTop = -1
         sayTop()
+    }
+
+    /// A page with a large title back at its top while its bar is still drawn in to one line (it was
+    /// scrolled down, or another page left it so): iOS brings the large title out again only on a
+    /// pull past the top, so the page is pulled one point and let go. Seen in the simulator: without
+    /// it, the bar stayed on one line at the top, the row of sub-tabs out of sight.
+    private func expandIfDrawnIn(_ y: CGFloat) {
+        guard !expanding, y <= 0, !web.scrollView.isDragging, let host = selectedHost, host.navigationItem.title != nil,
+              host.navigationItem.largeTitleDisplayMode == .always, let bar = host.navigationController?.navigationBar,
+              bar.frame.height < 60
+        else { return }
+        expanding = true
+        web.scrollView.setContentOffset(CGPoint(x: 0, y: -1), animated: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.web.scrollView.setContentOffset(.zero, animated: false)
+            bar.sizeToFit()
+            self.view.layoutIfNeeded()
+            self.expanding = false
+            self.sayTop()
+        }
     }
 
     /// Once the page has drawn, the grey of its ground shows behind and around it (and through the
@@ -568,13 +609,54 @@ extension ShellViewController: UITabBarControllerDelegate {
     }
 }
 
+#if DEBUG
+extension ShellViewController {
+    /// For ios/tests/look.sh in the simulator (debug builds only): `LOOK_SCRIPT`, steps such as
+    /// `tap /holdings; js scrollTo(0,500)`: a tap on a tab, as a finger gives it, or a line of script
+    /// run in the page. Before the first step and after each, the app waits for the page to settle,
+    /// leaves `look/ready-N` in its Documents folder, and goes on once the script has taken its
+    /// screenshot and left `look/shot-N`, so each screenshot shows exactly that step.
+    func runLookScript() {
+        guard let script = ProcessInfo.processInfo.environment["LOOK_SCRIPT"] else { return }
+        let steps = [""] + script.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("look")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            for (index, step) in steps.enumerated() {
+                let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
+                if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
+                if parts.count == 2, parts[0] == "js" { self?.web.evaluateJavaScript(parts[1], completionHandler: nil) }
+                try? await Task.sleep(for: .seconds(3))
+                FileManager.default.createFile(atPath: folder.appendingPathComponent("ready-\(index)").path, contents: nil)
+                let shot = folder.appendingPathComponent("shot-\(index)").path
+                for _ in 0..<300 where !FileManager.default.fileExists(atPath: shot) {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+            }
+        }
+    }
+
+    /// A tap on the tab `key`, as a finger gives it (the bar chooses it, then tells its delegate).
+    func debugTap(_ key: String) {
+        guard let controllers = viewControllers,
+              let index = controllers.firstIndex(where: { (($0 as? UINavigationController)?.viewControllers.first as? TabHost)?.place.key == key })
+        else { return }
+        selectedIndex = index
+        tabBarController(self, didSelect: controllers[index])
+    }
+}
+#endif
+
 // MARK: - What the page says
 
 extension ShellViewController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         // Only the site's own page in the main web view is listened to.
         guard message.webView === web, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Site.root?.host else { return }
-        if message.name == "reminders" {
+        if message.name == "chart" {
+            charts.handle(message.body)
+        } else if message.name == "reminders" {
             if let list = Reminder.message(message.body) { schedule(list.items, expiryWanted: list.expiry) }
         } else if message.name == "haptic" {
             // A save confirmed, or something refused (components/shell-bridge.tsx).
@@ -618,7 +700,8 @@ extension ShellViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard webView === web else { return }
-        // A new page has not been told the room at its foot, nor at its top.
+        // A new page has not been told the room at its foot, nor at its top, and has handed over no chart yet.
+        charts.clear()
         saidBottom = -1
         saidTop = -1
         sayBottom()

@@ -44,3 +44,21 @@ jobs:
           ls "$app"
           plutil -p "$app/Info.plist" | grep -E "CFBundleDisplayName|CFBundleIdentifier|UILaunchScreen|SiteHost|MinimumOSVersion"
           test -f "$app/Assets.car"
+
+  # The shell running, in an iPhone 17 Pro simulator, against a stand-in for the site that talks to it
+  # as the site does (ios/tests/look.sh): screenshots of the native bars at each step, in the log and
+  # as an artifact, so what used to need Hugo's phone can be looked at before a pull request.
+  look:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the shell and screenshot it
+        run: bash ios/tests/look.sh
+        env:
+          LOOK_OUT: ${{ runner.temp }}/look
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: look
+          path: ${{ runner.temp }}/look/*.png

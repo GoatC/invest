@@ -1752,16 +1752,13 @@ await step('dashboard: the poster with the value of both pools, the gains and th
   check(/累計 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band) && /近 7 天 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band), `the gains as chips, got ${band}`);
   // The poster carries no rule or drift line any more (Hugo, 2026-11-13): the warnings sit right under it, the drift on Allocation.
   check(!/規則：|最大偏離|推播設定/.test(band) && (await poster.getByRole('link', { name: /warning/ }).count()) === 0, `no rules or drift line on the poster, got ${band}`);
-  // It dates the closes, offers the refresh, and draws the line of both pools' rise and fall, which opens Performance.
-  check(/收盤價至 \d{4}-\d{2}-\d{2}/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the closes' date and the refresh button on the poster, got ${band}`);
+  // It offers the refresh and draws the line of both pools' rise and fall; no closes' date, legend, ⓘ or expand button (Hugo, 2026-11-15).
+  check(!/收盤價至|兩個資金池的漲跌幅/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the refresh button and no closes' date or legend on the poster, got ${band}`);
+  check((await poster.locator('details.info, .hero-expand').count()) === 0, 'no ⓘ or expand button on the poster');
   check(!(await poster.locator('.refresh-data p').isVisible()), 'the refresh note waits until a run is asked for');
   const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
   check(lineName && band.includes(`累計`) && band.includes(/now ([+−]?\d+\.\d{2}%)/.exec(lineName)?.[1] ?? 'none'), `the line ends at the return the chip shows, got ${lineName}`);
   check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
-  check((await poster.getByRole('link', { name: /Performance/ }).getAttribute('href')) === '/performance', 'the line opens Performance');
-  await poster.locator('details.info summary').click();
-  check((await poster.locator('details.info').innerText()).includes('時間加權報酬'), 'how the line is worked out, behind ⓘ');
-  await poster.locator('details.info summary').click();
   const headings = await page.locator('main h2').allInnerTexts();
   const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
@@ -2539,7 +2536,8 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
       if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true });
       window.shellSaid = [];
       window.remindersSaid = [];
-      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) }, reminders: { postMessage: (message) => window.remindersSaid.push(message) } } };
+      window.chartSaid = [];
+      window.webkit = { messageHandlers: { shell: { postMessage: (message) => window.shellSaid.push(message) }, reminders: { postMessage: (message) => window.remindersSaid.push(message) }, chart: { postMessage: (message) => window.chartSaid.push(message) } } };
     });
     const app = await phone.newPage();
     app.on('pageerror', (err) => problems.push(`pageerror: ${err.message} (inside the shell, on ${app.url().replace(BASE, '')})`));
@@ -2558,6 +2556,11 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     // The page keeps the shell's mark through hydration, draws no tab bar of its own and reports where it is.
     check((await app.locator('html').getAttribute('data-shell')) === 'ios', 'the mark stays on the page');
     check(!(await app.locator('.tab-bar').isVisible()), 'no web tab bar');
+    // The poster's line handed to the shell to draw with Swift Charts (components/native-charts.ts), the page's own out of sight.
+    await app.waitForFunction(() => window.chartSaid.some((message) => message.op === 'set' && message.spec?.spark), null, { timeout: 15_000 });
+    const poster = await app.evaluate(() => window.chartSaid.find((message) => message.op === 'set' && message.spec?.spark));
+    check(poster.spec.lineWidth === 3 && poster.spec.series[0]?.values.length > 1 && poster.box?.w > 300, `the poster's line handed over with its place, got ${JSON.stringify(poster.box)}`);
+    check((await app.locator('.hero-chart.native-drawn svg').evaluate((svg) => getComputedStyle(svg).visibility)) === 'hidden', 'the page draws no line of its own under it');
     await says(['/', '/']);
     const first = await said();
     check(first.v === 1 && first.signedIn === true, `signed in, version 1, got ${JSON.stringify(first)}`);
@@ -2579,9 +2582,19 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     check(fab && fab.y + fab.height <= 844 - 83, `the + clears the native bar, got ${JSON.stringify(fab)}`);
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
     // A sub-tab is the page's own: the native tab stays, the path follows.
+    const before = await app.evaluate(() => window.chartSaid.length);
     await select('/performance', '/performance', '績效');
+    // Performance's line and bar charts go to Swift Charts, each with its x values, its series, the axis labels and the tooltip's words; leaving the page takes them away.
+    await app.waitForFunction((from) => window.chartSaid.slice(from).filter((message) => message.op === 'set' && !message.spec?.spark).length >= 2, before, { timeout: 15_000 });
+    const charts = await app.evaluate((from) => window.chartSaid.slice(from).filter((message) => message.op === 'set' && !message.spec?.spark), before);
+    const cumulative = charts.find((message) => message.spec.x.kind === 'date');
+    const monthly = charts.find((message) => message.spec.series.some((series) => series.mark === 'bar'));
+    check(cumulative && cumulative.spec.series.length >= 1 && cumulative.spec.y.ticks.length > 1 && cumulative.spec.readouts.length === cumulative.spec.x.values.length && cumulative.spec.readouts[0].includes('\n'), `the cumulative return handed over with its ticks and read-outs, got ${JSON.stringify(cumulative?.spec.y.ticks)}`);
+    check(monthly && monthly.spec.series.filter((series) => series.stack === 'split').length === 3, 'the monthly split handed over as three stacked bars');
+    check((await app.locator('.chart.native-drawn').count()) >= 2, 'the page keeps the charts’ places, drawing nothing in them');
     await app.getByRole('navigation', { name: /Performance/ }).getByRole('link', { name: /Attribution/ }).tap();
     await says(['/attribution', '/performance']);
+    check(await app.evaluate((ids) => ids.every((id) => window.chartSaid.some((message) => message.op === 'remove' && message.id === id)), charts.map((message) => message.id)), 'leaving Performance takes its native charts away');
     // More: its list fills the screen as that tab's page; a page under it keeps More chosen.
     await app.evaluate(() => window.longview.select('more'));
     await says(['/attribution', 'more']);

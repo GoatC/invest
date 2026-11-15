@@ -77,14 +77,31 @@ export interface CapBreach {
  * weight is its gross exposure, long and short lines of it added as absolute values, over the pool's
  * own money: a 2× long or a short of a stock counts for what it moves with, not the margin behind it.
  */
-export function singleStockBreaches(pool: PoolView, cap: NonNullable<Caps['singleStock']>): CapBreach[] {
-  if (pool.totalTwd <= 0) return [];
+/** Each single stock's gross exposure in the regular pool, in TWD, by ticker (or label). */
+function stockExposures(pool: PoolView): Map<string, number> {
   const gross = new Map<string, number>();
   for (const holding of pool.holdings) {
     if (holding.productType !== 'stock') continue;
     const subject = holding.ticker ?? holding.label;
     gross.set(subject, (gross.get(subject) ?? 0) + Math.abs(exposureOf(holding)));
   }
+  return gross;
+}
+
+/** The single stock that weighs most in the regular pool (R1's nearest to its cap); undefined with none held. */
+export function largestStock(pool: PoolView): { subject: string; weight: number } | undefined {
+  if (pool.totalTwd <= 0) return undefined;
+  let top: { subject: string; weight: number } | undefined;
+  for (const [subject, valueTwd] of stockExposures(pool)) {
+    const weight = valueTwd / pool.totalTwd;
+    if (!top || weight > top.weight) top = { subject, weight };
+  }
+  return top;
+}
+
+export function singleStockBreaches(pool: PoolView, cap: NonNullable<Caps['singleStock']>): CapBreach[] {
+  if (pool.totalTwd <= 0) return [];
+  const gross = stockExposures(pool);
   return [...gross]
     .map(([subject, valueTwd]) => ({
       rule: 'R1' as const,

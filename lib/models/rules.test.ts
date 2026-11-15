@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { capBreaches, capsFromRules, classWeights, regularPool } from './rules';
+import { capBreaches, capsFromRules, classWeights, largestStock, regularPool } from './rules';
 import { ASSET_CLASSES, CAPS, holding } from './test-helpers';
 
 /** A regular pool of `total` TWD: one core ETF holds whatever the other holdings leave. */
@@ -28,6 +28,18 @@ describe('R1 single-stock cap (PRD Section 11 acceptance)', () => {
     assert.deepEqual(capBreaches(poolOf(200_000, stock('AAPL', 10_000)), CAPS), []);
     const etfHeavy = [holding({ valueTwd: 190_000 }), holding({ key: 'regular:0050', ticker: '0050', valueTwd: 10_000 })];
     assert.deepEqual(capBreaches(etfHeavy, CAPS), []);
+  });
+});
+
+describe('largestStock', () => {
+  it('names the stock nearest R1\'s cap: AAPL at 5.5% of the NT$200,000 acceptance pool, over a smaller one', () => {
+    const top = largestStock(regularPool(poolOf(200_000, stock('AAPL', 11_000), stock('MSFT', 4_000))));
+    assert.equal(top?.subject, 'AAPL');
+    assert.ok(Math.abs((top?.weight ?? 0) - 0.055) < 1e-12);
+  });
+
+  it('is undefined with no stock in the regular pool (an ETF, or a stock in the windfall pool, does not count)', () => {
+    assert.equal(largestStock(regularPool(poolOf(200_000, stock('AAPL', 11_000, 'windfall')))), undefined);
   });
 });
 

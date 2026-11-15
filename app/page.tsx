@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
+import { NativePosterLine } from '@/components/native-poster-line';
 import { Facts } from '@/components/facts';
-import { Info } from '@/components/info';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { WarningsPanel } from '@/components/warnings-panel';
 import { RefreshData } from '@/components/refresh-data';
@@ -38,7 +39,8 @@ import {
 import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
 import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
-import { allocation, sleeveTargets } from '@/lib/models/allocation';
+import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
+import { ruleBoard } from '@/lib/rule-text';
 import { comingWeek, readWeeklyReview } from '@/lib/models/notify';
 import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
@@ -111,11 +113,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         regularTwd={portfolio.pool.totalTwd}
         windfallTwd={windfallTwd}
         line={days ? valueLine(days) : null}
-        dataDate={portfolio.holdings.reduce<string | null>((newest, holding) => (holding.ticker && holding.priceDate && (newest === null || holding.priceDate > newest) ? holding.priceDate : newest), null)}
       />
       <Suspense fallback={null}>
         <Banners slot="page" />
       </Suspense>
+      <RuleBoard data={data} portfolio={portfolio} />
       {waitingFirst && panel}
       <div className="dash-row">
         <div className="dash-main">
@@ -185,18 +187,16 @@ function GainChip({ label, gain }: { label: Bilingual; gain: Gain }) {
 /**
  * The poster at the top (Hugo, 2026-11-13): the date and the refresh button, the portfolio's value
  * (both pools) and each pool's, the gain since the start and over seven days as chips, and the
- * line of the portfolio's rise and fall edge to edge along the foot, which opens Performance.
+ * line of the portfolio's rise and fall edge to edge along the foot. No closes' date, legend, ⓘ or
+ * expand button on it (Hugo, 2026-11-15).
  */
 function Hero({
   today,
   regularTwd,
   windfallTwd,
-  dataDate,
   line,
 }: {
   today: string;
-  /** The newest close among the listed holdings; null when none is priced. */
-  dataDate: string | null;
   regularTwd: number;
   windfallTwd: number;
   /** Null until two closes hold a value, or when the history could not be read. */
@@ -210,7 +210,6 @@ function Hero({
         <div className="hero-head">
           <span className="hero-date">
             <span>{longDate(today)}</span>
-            {dataDate && <Bi en={`Closes to ${dataDate}`} zh={`收盤價至 ${dataDate}`} />}
           </span>
           <RefreshData quiet shellAction />
         </div>
@@ -227,26 +226,6 @@ function Hero({
             {line.week && <GainChip label={{ en: '7 days', zh: '近 7 天' }} gain={line.week} />}
           </div>
         )}
-        {drawn && (
-          <div className="hero-legend">
-            <span>
-              <span aria-hidden="true">● </span>
-              <Bi en="Rise and fall, both pools" zh="兩個資金池的漲跌幅" />
-            </span>
-            <Info>
-              <Bi
-                en={`The line is the time-weighted return of both pools together since ${since} (F18): money put in or taken out does not move it. The amounts are the gain in TWD net of the money moved. Performance has the full chart and the benchmark.`}
-                zh={`線為兩個資金池合計自 ${since} 起的時間加權報酬（F18），投入與提領不影響線形；金額為扣除投入後的台幣損益。完整圖表與基準在「績效」頁。`}
-              />
-            </Info>
-            {/* Beside the legend, not over the line: the line's newest point is always at the right edge. */}
-            <Link href="/performance" className="hero-expand" aria-label="績效 Performance">
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 8 V4 H8 M12 16 H16 V12" />
-              </svg>
-            </Link>
-          </div>
-        )}
       </div>
       {drawn && line && (
         <div className="hero-chart">
@@ -259,6 +238,7 @@ function Hero({
             <line className="hero-zero" x1="0" x2={LINE.width} y1={drawn.zero.toFixed(1)} y2={drawn.zero.toFixed(1)} />
             <path className="hero-line" d={drawn.path} />
           </svg>
+          <NativePosterLine changes={line.points.map((point) => point.change)} />
         </div>
       )}
     </section>
@@ -267,6 +247,24 @@ function Hero({
 
 /** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12), and its red-flag light (N3). */
 /** F5's monthly re-run, in the week it updates only (PRD Section 5): the median at the last mark and the chance of the goal. */
+/**
+ * The rules at a glance under the poster (Liquid Glass proposal C05, Hugo 2026-11-15): R1, R2 and
+ * F8's drift as a line's service board, always there with their standing (lib/rule-text.ts).
+ */
+function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portfolio }) {
+  const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
+  if (items.length === 0) return null;
+  const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
+  return (
+    <section className="card form rule-board" id="rule-board">
+      <h2>
+        <Bi en="Rules" zh="規則" />
+      </h2>
+      <AlertTiles items={items} tone={tone} />
+    </section>
+  );
+}
+
 function MonteCarloUpdate({ run, today }: { run: NonNullable<Awaited<ReturnType<typeof loadLastRun>>>; today: string }) {
   if (run.runDate <= addDays(today, -7)) return null;
   const mark = run.marks[run.marks.length - 1];
