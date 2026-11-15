@@ -232,7 +232,8 @@ struct NativeChartView: View {
                 }
                 .chartXAxis {
                     AxisMarks(values: spec.xTicks.map { $0.at }) { value in
-                        AxisValueLabel {
+                        // Labels that would run into each other give way, as Swift Charts' own do.
+                        AxisValueLabel(collisionResolution: .greedy) {
                             Text(label(x: value.as(Double.self)))
                         }
                     }
