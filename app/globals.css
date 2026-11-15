@@ -4120,3 +4120,11 @@ html[data-shell] .sheet-group a.current {
   background: var(--accent-soft);
 }
 
+
+/* The sub-tab row's marker (components/phone-tabs.tsx) has no use once the shell draws the row, and
+   an empty part of the page is no part at all: neither takes a slot in the page's grid, which
+   doubled the gap under Holdings' first row (Hugo's phone, 2026-11-16). */
+html[data-shell-segmented] .phone-tabs-top,
+html[data-shell] .page > :empty {
+  display: none;
+}
