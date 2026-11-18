@@ -2536,6 +2536,7 @@ html[data-opened] .splash {
 .rule-fold > summary {
   display: flex;
   align-items: center;
+  color: var(--text);
   gap: 0.75rem;
   min-height: var(--tap-min);
   cursor: pointer;
