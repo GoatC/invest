@@ -38,11 +38,12 @@ private struct FiguresBody: View {
     let offline: Bool
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("總市值")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.86))
+                Spacer(minLength: 0)
                 Text(money(figures.totalTwd))
                     .font(.system(size: 26, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.white)
@@ -59,7 +60,7 @@ private struct FiguresBody: View {
                 }
                 .padding(.top, 4)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 6) {
                 Text(closeLabel)
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
@@ -78,7 +79,7 @@ private struct FiguresBody: View {
                 .privacySensitive()
                 .widgetAccentable()
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
