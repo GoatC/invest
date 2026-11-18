@@ -1766,16 +1766,17 @@ tr.selected td {
     padding-top: 0.6rem;
   }
 
+  /* On the poster's own surface (Ink design): quiet chips, the current one in the selection colours. */
   body:has(.page > .hero) .sub-nav a {
     border: none;
-    background: color-mix(in srgb, var(--hero-text) 16%, transparent);
+    background: color-mix(in srgb, var(--text) 7%, transparent);
     box-shadow: none;
-    color: var(--hero-text);
+    color: var(--text);
   }
 
   body:has(.page > .hero) .sub-nav a.current {
-    background: var(--hero-text);
-    color: var(--hero-bg);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
   .hero-body {
