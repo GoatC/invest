@@ -44,6 +44,9 @@ jobs:
           ls "$app"
           plutil -p "$app/Info.plist" | grep -E "CFBundleDisplayName|CFBundleIdentifier|UILaunchScreen|SiteHost|MinimumOSVersion"
           test -f "$app/Assets.car"
+          # The home-screen widget, embedded in the app.
+          test -d "$app/PlugIns/LongViewWidget.appex"
+          plutil -p "$app/PlugIns/LongViewWidget.appex/Info.plist" | grep -E "CFBundleIdentifier|NSExtensionPointIdentifier|SiteHost"
 
   # The shell running, in an iPhone 17 Pro simulator, against a stand-in for the site that talks to it
   # as the site does (ios/tests/look.sh): screenshots of the native bars at each step, in the log and

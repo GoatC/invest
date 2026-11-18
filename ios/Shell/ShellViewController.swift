@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 import WebKit
 
@@ -663,6 +664,7 @@ extension ShellViewController {
             for (index, step) in steps.enumerated() {
                 let parts = step.split(separator: " ", maxSplits: 1).map(String.init)
                 if parts.count == 2, parts[0] == "tap" { self?.debugTap(parts[1]) }
+                if step == "widget" { self?.showWidgetLook() }
                 if parts.count == 2, parts[0] == "js" { self?.web.evaluateJavaScript(parts[1], completionHandler: nil) }
                 // A pull down past the top and let go, as a finger gives it (the rubber band).
                 if parts.count == 2, parts[0] == "pull", let depth = Double(parts[1]), let scroll = self?.web.scrollView {
@@ -679,6 +681,26 @@ extension ShellViewController {
                 }
             }
         }
+    }
+
+    /// The home-screen widget (ios/Widget) at its medium size on a grey ground, with invented figures,
+    /// for the look test: the widget itself cannot be placed on a simulator's home screen by a script.
+    func showWidgetLook() {
+        let card = ZStack {
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            VStack(spacing: 24) {
+                ForEach([WidgetState.figures(.demo, offline: false), .noKey], id: \.self) { state in
+                    FiguresView(state: state)
+                        .padding(16)
+                        .frame(width: 364, height: 170)
+                        .background(PosterGround())
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+            }
+        }
+        let host = UIHostingController(rootView: card)
+        host.modalPresentationStyle = .fullScreen
+        present(host, animated: false)
     }
 
     /// A tap on the tab `key`, as a finger gives it (the bar chooses it, then tells its delegate).

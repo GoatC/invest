@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import WidgetKit
 
 /// The iOS shell of Long-View Invest (docs/ios-app.md): the system tab bar over one web view that
 /// shows the same site as the web app. Nothing is stored here but the web view's own cookies.
@@ -49,5 +50,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         for context in URLContexts { Router.handle(context.url) }
+    }
+
+    /// Each time the app comes up, the home-screen widget asks for its figures again (no App Group is
+    /// needed for this): after a tap on 更新最新資料, opening the app brings the widget up to date.
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
