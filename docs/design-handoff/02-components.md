@@ -12,8 +12,8 @@ names what the final screen shows on the design canvas page 「甲 定稿方向�
 - The line: unchanged geometry (132 px, 3 pt round, dashed zero line); add today's dot at its end in `--up` / `--down` / `--flat` with a 2.5 px ring in `--surface`.
 
 **Rules (`RuleBoard`)**
-- Becomes one disclosure row, closed by default: amber badge !, 「規則」, 「N 項注意」 in `--warn-text`, one muted summary line naming the rules that fire (「R1 單一個股上限 · 5/25 債券偏離」), a chevron. Use `<details>`/`<summary>` or a button with `aria-expanded`.
-- Open: the existing rows (code, name, note, gauge, value). Watch / rebalance are amber; ok is forget-me-not ✓. No red.
+- Becomes one disclosure row, closed by default: the worst item's badge (red ✕ when anything is 需處理, else amber !), 「規則」, 「N 項需處理」 in `--danger-text` (or 「N 項注意」 in `--warn-text`), one muted summary line naming the rules that fire (「R1 單一個股上限 · 5/25 債券偏離」), a chevron. Use `<details>`/`<summary>` or a button with `aria-expanded`.
+- Open: the existing rows (code, name, note, gauge, value) with the app's tones: alert = red ✕ and `--status-critical` gauge, watch = amber ! and `--status-warning`, ok = forget-me-not ✓.
 - With nothing firing: ✓ badge, 「全部正常」, still closed.
 
 **Value at Risk (`components/risk-card.tsx`)**: format unchanged (Hugo: keep the app's format). Only the tokens change.
@@ -34,10 +34,31 @@ names what the final screen shows on the design canvas page 「甲 定稿方向�
 
 ## Allocation (`app/allocation/page.tsx`)
 
-- `BandRow`: watch = amber outline !, 「留意」; rebalance = amber filled !, 「需再平衡」 (was red ✕; see open question 2). Fill colours: ok `--accent`, watch / rebalance `--status-warning`. Band stripe `--accent-soft`, target tick `--text`.
-- Page wash `.glow.page[data-tone='warn']` only while some class needs rebalancing.
+- `BandRow`: watch = amber outline !, 「留意」 in `--warn-text`; rebalance keeps the red ✕, 「需再平衡」 in `--danger-text`. Fill colours: ok `--accent`, watch `--status-warning`, rebalance `--status-critical`. Band stripe `--accent-soft`, target tick `--text`. Legend: 「超過一半為留意（!），超過容許帶需再平衡（紅色 ✕）」.
+- No page wash on Allocation (its headline has no direction).
 - 資本市場假設 becomes one row with 「MM/DD 檢視」 and a chevron to `/allocation/assumptions`.
 - Donut (`components/allocation-charts.tsx`): no change.
+
+## Account (new: `app/account/page.tsx`)
+
+Opened by the dashboard's person button, in a sheet in the shell (the G05 sheet a glass button opens), as a page in the PWA.
+
+- Head: initial avatar (84 px, `--accent-soft` / `--accent`), display name, signed-in email (from Supabase Auth, never stored in git), a chip 「擁有者 · 單人帳號」.
+- 帳號: 顯示名稱, 登入方式 (「Email 登入連結」), 這台裝置 (last sign-in time).
+- 偏好: 外觀 (自動／淺色／深色), 漲跌顏色 (紅漲綠跌／綠漲紅跌; sets `data-move` on `<html>`), 推播設定 → `/notifications`.
+- 家人共用: one dimmed row 「邀請家人」 with a chip 「尚未開放」 and the note 「目前是單人帳號。開放後每位家人有自己的帳號與資料，彼此看不到。」 No invite flow yet: sharing is a later phase that changes CLAUDE.md's single-user rule and needs per-person rows under RLS.
+- 資料: 資料狀態 (✓ last nightly run), 匯入 CSV.
+- 登出 as a full-width row in `--danger-text`.
+- Where 外觀 and 漲跌顏色 live today (More sheet), link to here instead of duplicating.
+
+## Search (new: `app/search/page.tsx`, `lib/search-index.ts`)
+
+Opened by the search button. Like pulling down on the iPhone home screen: the field is focused and the keyboard is up at once.
+
+- Field: `<input type="search" enterkeyhint="search" autofocus>` styled as the iOS search field (placeholder 「搜尋功能、持股、設定」), 「取消」 closes the sheet. In the shell the field sits where the bar is; the page draws it only in the PWA if a native field is used later.
+- Empty: 最近搜尋 (chips, kept in `localStorage`), 建議 (four common destinations), 持股 (holdings that have something to act on first).
+- Typing: results grouped 功能 / 持股 / 設定 / 說明, each row an icon, the name with the matched characters in `--accent` bold, and where it lives (「儀表板 › 本週」). Tapping opens the page, the sub-tab, or the ⓘ.
+- `lib/search-index.ts`: a pure function building the index from `components/nav-pages.ts` (pages, sub-tabs, groups), holdings (ticker and name), settings rows, and ⓘ titles; each entry has Chinese and English keywords. Unit-test the matcher (e.g. 「風險」 finds 風險值 and 壓力測試; 「VaR」 finds 風險值; 「2330」 finds 台積電).
 
 ## More sheet and navigation
 
@@ -47,6 +68,6 @@ names what the final screen shows on the design canvas page 「甲 定稿方向�
 ## Shared
 
 - Direction text everywhere (holdings rows, performance, summary): `--up` / `--down` plus ▲ ▼; never colour alone.
-- Warnings everywhere: `--warn-badge` + `--warn-badge-ink` !, never `--danger-*`.
+- Rule and data states keep the app's three icons: red ✕ `--status-critical` (需處理), amber ! `--warn-badge` + `--warn-badge-ink` (留意, data problems), forget-me-not ✓ (正常). Red here always comes with ✕ and words, so it never reads as 漲.
 - Numbers: a figure is one text node; never split digits into separate boxes (it breaks when a viewer falls back to a wider font).
 - Remove card shadows (`--shadow-soft: none`); lists are hairline-ruled, edge to edge at phone width.

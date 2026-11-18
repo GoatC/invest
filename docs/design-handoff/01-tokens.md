@@ -20,7 +20,8 @@ them up without edits; the new variables are additions.
 | `--sky` | `#8db4e2` | `#6fa3db` | decoration only |
 | `--ok-bg` / `--ok-text` | `#e5f2ea` / `#1c6a43` | `#14301f` / `#8fd6a6` | |
 | `--warn-bg` / `--warn-text` | `#fbf0d8` / `#74500a` | `#2a2111` / `#f6d58d` | |
-| `--danger-bg` / `--danger-text` | `#fbe8e6` / `#a02f27` | `#3a1a1a` / `#f5a8a0` | not used for rules any more (amber) |
+| `--danger-bg` / `--danger-text` | `#fbe8e6` / `#a02f27` | `#3a1a1a` / `#f5a8a0` | 需處理 with red ✕ (cap breach, rebalance); never for up/down |
+| `--status-critical` | `#c8453d` | `#ec7a72` | the red ✕ badge and its gauge fill (✕ in white / `#2a0f0d`) |
 | `--info-bg` / `--info-text` | `#e2edf8` / `#2c5d93` | `#1d3149` / `#a9cdf2` | |
 | `--status-warning` | `#b07600` | `#e3b341` | gauges |
 | `--shadow-soft` | `none` | `none` | Ink layers by ground step and hairline |
@@ -42,7 +43,7 @@ them up without edits; the new variables are additions.
 | `--glow-up-core` / `--glow-up-edge` | `rgba(240,140,140,.62)` / `rgba(251,224,222,.60)` | `rgba(255,86,92,.62)` / `rgba(200,16,46,.28)` | |
 | `--glow-down-core` / `--glow-down-edge` | `rgba(104,200,152,.62)` / `rgba(219,241,229,.60)` | `rgba(52,211,106,.52)` / `rgba(31,122,53,.28)` | |
 | `--glow-flat-core` / `--glow-flat-edge` | `rgba(141,180,226,.75)` / `rgba(220,233,247,.60)` | `rgba(111,163,219,.50)` / `rgba(52,104,156,.28)` | |
-| `--glow-warn-core` / `--glow-warn-edge` | `rgba(242,179,64,.50)` / `rgba(251,236,204,.55)` | `rgba(242,179,64,.40)` / `rgba(120,80,10,.26)` | rules only |
+| `--glow-warn-core` / `--glow-warn-edge` | `rgba(242,179,64,.50)` / `rgba(251,236,204,.55)` | `rgba(242,179,64,.40)` / `rgba(120,80,10,.26)` | reserved for a data-problem page head; no screen uses it today |
 | `--warn-badge` / `--warn-badge-ink` | `#f2b340` / `#2a1b00` | same | the round ! badge |
 | `--radius-capsule` | `16px` | | 32 px capsule |
 

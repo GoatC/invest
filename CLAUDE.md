@@ -11,6 +11,6 @@ Rules:
 - Keep all API keys in .env.local (git-ignored) and in each service's secret settings.
 - Store money in trade currency plus the day's FX rate; report in TWD.
 - Thresholds live in the rules / config tables, never hard-coded.
-- All UI text bilingual: English + 繁體中文.
+- UI text is shown in 繁體中文 (Hugo, 2026-11-18). English may stay in accessible names (aria-label), code and docs.
 - Every model function ships with unit tests using the acceptance values in PRD Section 11.
 - Explain each setup step to Hugo in plain Traditional Chinese before running it; he is new to deployment.

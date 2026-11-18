@@ -8,7 +8,7 @@ The shell already draws the right things natively (`ios/Shell/ShellViewControlle
 ## Navigation bar
 
 - Keep the one-line centred title; no large titles (Hugo 2026-11-16).
-- Dashboard: the page lends four controls with `data-shell-action` / `data-shell-symbol`: person (left, `person.crop.circle`), search (`magnifyingglass`), bell (`bell`, with a badge dot when something is unread), refresh (`arrow.clockwise`, exists). The shell needs a left item from the page's list (today only `back` uses the left side): add a `placement: "leading"` field to an action. What search and person open is open question 1.
+- Dashboard: the page lends four controls with `data-shell-action` / `data-shell-symbol`: person (left, `person.crop.circle`), search (`magnifyingglass`), bell (`bell`, with a badge dot when something is unread), refresh (`arrow.clockwise`, exists). The shell needs a left item from the page's list (today only `back` uses the left side): add a `placement: "leading"` field to an action. Person opens `/account` and search opens `/search`, each in the G05 sheet; the search sheet opens with the keyboard up. Bell opens `/notifications`.
 - Sub-tabs stay in the segmented control, Allocation's five included (`apportionsSegmentWidthsByContent` already set). Check the five at the largest Dynamic Type size on a device.
 
 ## 「下一步」 accessory (rule warnings)
@@ -24,7 +24,7 @@ The shell already draws the right things natively (`ios/Shell/ShellViewControlle
 | Save confirmed (exists) | success |
 | Something refused (exists) | warning |
 | Rule accessory appears | light impact (shell side) |
-| Milestone crossed (new) | success, once |
+| Milestone crossed: total value passes a NT$100,000 step (new) | success, once |
 
 ## Swift Charts (`ios/Shell/NativeCharts.swift`, `lib/native-chart.ts`)
 

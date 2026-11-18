@@ -1,8 +1,8 @@
 # Design handoff: 甲 墨綠克制 (Ink)
 
 The visual direction Hugo chose on 2026-11-18, ready for Claude Code to build. Read this file first, then the
-others in order. Everything here is a design decision already made; open questions are listed at the end and
-must go to Hugo before they are built.
+others in order. Everything here is a design decision already made; Hugo's answers to the open questions are
+at the end.
 
 | File | What it holds |
 | --- | --- |
@@ -23,7 +23,7 @@ Visual references (private to Hugo's claude.ai account):
 1. Ink-green grounds at very low chroma (`--bg` #f2f5f3 / #070b09): grounds and hairlines only, never a signal.
 2. Forget-me-not blue `--accent` is the only action colour.
 3. Colour appears only when a number has a direction: red up, green down (紅漲綠跌 setting, swapped by the setting), forget-me-not blue for flat, always with ▲ ▼ or 「持平」.
-4. One glow per screen, from the top-right corner, its strength set by the size of the 7-day move; rules use amber, never red.
+4. One glow per screen, from the top-right corner, its strength set by the size of the 7-day move. Rule states keep the app's icons: red ✕ 需處理, amber ! 留意, blue ✓ 正常.
 5. Native iOS draws the bars, segmented controls, tab bar and the 「下一步」 accessory in Liquid Glass; the page draws content only.
 
 ## Constraints that still apply (CLAUDE.md)
@@ -31,11 +31,13 @@ Visual references (private to Hugo's claude.ai account):
 - Thresholds live in the rules / config tables, never hard-coded: the flat band and glow scale below are a new `config` row.
 - Every model function ships with unit tests; the glow strength is a pure function and gets one.
 - Public repo: demo seed data only. The figures in the mockups (NT$1,234,567 etc.) are demo values.
-- UI text: Chinese only at phone width (390–402 px), bilingual on wide screens (see open question 3).
+- UI text is shown in 繁體中文 (CLAUDE.md, updated 2026-11-18); English stays in accessible names only.
 
-## Open questions for Hugo (do not build until answered)
+## Hugo's answers (2026-11-18)
 
-1. **Search and bell buttons on the dashboard bar.** Hugo kept the person, search and bell buttons. The app has a notifications page (`/notifications`) but no search and no profile page. Decide what each opens before wiring them.
-2. **The ✕ icon.** Allocation's 需再平衡 used red ✕; the direction makes it amber ! (filled). Confirm ✕ is retired from rules, or say where it stays.
-3. **CLAUDE.md bilingual rule.** It says all UI text is bilingual; the brief says Chinese only on phones. Update CLAUDE.md to match, or keep both languages on phones.
-4. **Chart colours.** Kept as they are by Hugo's decision, though cash (green) and gold (pink-red) echo the up/down colours. Revisit only if Hugo asks.
+1. **Person button** opens a short account page (帳號), in a sheet. The app may later be shared with family, so it shows 家人共用 as 尚未開放; sharing itself is a later phase (it changes the single-user rule and needs per-person data under RLS).
+2. **Search button** opens a search like pulling down on the iPhone home screen: a search field with the keyboard up, which finds any feature (page, sub-tab, setting, help), holding or setting.
+3. **Red ✕ stays red.** Wherever the app uses ✕ (alert tone: a cap breach such as R1, a class that needs rebalancing), it stays red ✕ with `--danger-*`. Amber ! is for 留意 (watch) and data problems.
+4. **CLAUDE.md** now says UI text is shown in Chinese.
+5. **Milestone** = total value crossing each NT$100,000 step.
+6. **Chart colours** stay as they are.

@@ -29,5 +29,8 @@ Web keyframes (as used on the canvas):
 
 Use `animation-fill-mode: forwards` (not `both`) on 4 and 5, so nothing shows before they start.
 
-Milestones: which thresholds count (round NT$ steps, retirement-goal progress) are settings, kept in `config`,
-not code; ask Hugo for the list before building 5.
+Milestones (Hugo, 2026-11-18): the total value crossing each NT$100,000 step. The step is a setting in `config`
+(`{"milestone_step_twd": 100000}` in the `glow` row or its own row), not code. Keep the last celebrated step on
+the server (a small state row), not in `localStorage`, so a new phone does not replay it; a fall back below a step
+and a rise past it again does not celebrate twice. Pure function with a unit test: 1,198,000 → 1,201,000 crosses
+1,200,000; 1,201,000 → 1,199,000 → 1,203,000 celebrates nothing new.
