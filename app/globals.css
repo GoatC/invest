@@ -1481,20 +1481,57 @@ tr.selected td {
 
 /* The weekly dashboard (app/page.tsx) */
 
-/* The poster at the top (Hugo, 2026-11-13): one block of the accent colour, its text and its line
-   in the colour that reads on it; the value large, the gains as chips, and the line of the
-   portfolio's rise and fall edge to edge along the foot. */
+/* The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/): the page's
+   surface with one glow from the top-right corner in the colour of the 7-day move (--glow-k, its
+   strength, from lib/models/glow.ts), the value large, the move as one capsule, and the line of the
+   portfolio's rise and fall edge to edge along the foot. --hero-bg and --hero-text are set here, for
+   the poster alone: the tab bar's raised button keeps the accent. */
 .hero {
+  --hero-bg: var(--surface);
+  --hero-text: var(--text);
+  --hero-quiet: var(--muted);
   position: relative;
   overflow: hidden;
   display: grid;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--hero-bg);
   color: var(--hero-text);
-  --hero-quiet: color-mix(in srgb, var(--hero-text) 88%, var(--hero-bg));
+}
+
+/* The one glow, from the top-right corner; a flat week glows forget-me-not, faintly. */
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--glow-k, 0);
+}
+
+.hero[data-tone='up'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-up-core) 0%, var(--glow-up-edge) 46%, transparent 100%);
+}
+
+.hero[data-tone='down'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-down-core) 0%, var(--glow-down-edge) 46%, transparent 100%);
+}
+
+.hero[data-tone='flat'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
+}
+
+/* A grain too faint to see, so the glow never bands into rings on an 8-bit screen. */
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
 }
 
 .hero-body {
+  position: relative;
   display: grid;
   justify-items: start;
   gap: 0.2rem;
@@ -1511,8 +1548,7 @@ tr.selected td {
   min-height: var(--tap-min);
 }
 
-.hero-date,
-.hero-note {
+.hero-date {
   font-size: 0.85rem;
   color: var(--hero-quiet);
 }
@@ -1529,12 +1565,29 @@ tr.selected td {
   font-weight: 600;
 }
 
+/* The value: the whole dollars large and heavy, the currency sign small and the cents faded, all one run. */
 .hero-value {
-  font-size: 2.6rem;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  margin-top: 0.35rem;
+  font-size: 2.875rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hero-currency {
+  margin-right: 0.2rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--hero-quiet);
+}
+
+.hero-decimals {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--hero-quiet);
 }
 
 /* The refresh button, quiet on the poster: an outline in the text's colour. Its note shows once a
@@ -1572,31 +1625,38 @@ tr.selected td {
   color: inherit;
 }
 
-/* A gain: a chip on the page's own ground, so the figure wears the colour of its direction. */
-.hero-gains {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-}
-
-.hero-gain {
+/* The 7-day move: one capsule in the colour of its direction, always with ▲, ▼ or 持平. */
+.hero-move {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 650;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  margin-top: 0.75rem;
+  padding: 0 0.8rem;
+  border-radius: var(--radius-capsule);
+  font-size: 0.95rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.hero-gain-label {
-  color: var(--muted);
-  font-size: 0.8rem;
+.hero-move > span:last-child {
   font-weight: 600;
+}
+
+.hero-move[data-tone='up'] {
+  background: var(--up-soft);
+  color: var(--up-on-soft);
+}
+
+.hero-move[data-tone='down'] {
+  background: var(--down-soft);
+  color: var(--down-on-soft);
+}
+
+.hero-move[data-tone='flat'] {
+  background: var(--flat-soft);
+  color: var(--flat-on-soft);
 }
 
 .hero-chart {
@@ -1627,6 +1687,30 @@ tr.selected td {
   vector-effect: non-scaling-stroke;
 }
 
+/* Today, at the line's end, in the colour of the 7-day move, ringed in the poster's ground. */
+.hero-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--flat);
+  box-shadow: 0 0 0 2.5px var(--hero-bg);
+}
+
+.hero[data-tone='up'] .hero-dot {
+  background: var(--up);
+}
+
+.hero[data-tone='down'] .hero-dot {
+  background: var(--down);
+}
+
+/* Inside the shell Swift Charts draws the line, so the page's dot steps aside with it. */
+.hero-chart.native-drawn .hero-dot {
+  display: none;
+}
+
 /* On a phone the poster is the top of the screen (Hugo, 2026-11-13): edge to edge, up under the
    status bar, with no header over it; the dashboard's sub-tabs ride on it, and the banner comes
    under it (app/page.tsx). Other pages keep their header. */
@@ -1654,6 +1738,7 @@ tr.selected td {
     overflow: visible;
     margin: 0 -1rem;
     border-radius: 0;
+    border-width: 0 0 1px;
     /* Clear of the status bar and of the sub-tabs laid over its top. */
     padding-top: calc(var(--safe-top) + var(--tap-min) + 1.4rem);
   }

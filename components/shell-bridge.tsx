@@ -57,8 +57,6 @@ function post(state: ShellState) {
   shellWindow().webkit?.messageHandlers?.shell?.postMessage(state);
 }
 
-/** Below this many pixels from the top the poster has gone under the shell's bar, and the status bar turns dark. */
-const UNDER_BAR_PX = 100;
 
 /** The page's controls lent to the shell's bar, once each, in the page's order. */
 function lentActions(): ShellAction[] {
@@ -111,7 +109,9 @@ function readTop(path: string, sheet: boolean): ShellTop {
   const heading = document.querySelector<HTMLElement>('main h1:not(.hero h1)');
   return {
     title: poster ? null : heading?.textContent?.trim() || null,
-    statusBar: poster && poster.getBoundingClientRect().bottom > UNDER_BAR_PX ? 'light' : 'dark',
+    // The poster is the page's own surface since the Ink design (2026-11-18), so the status bar follows the
+    // system's light or dark text everywhere ('dark' is iOS's default style, which adapts to dark mode).
+    statusBar: 'dark',
     back: shellBack(path),
     actions: lentActions(),
     segments: readSegments(),

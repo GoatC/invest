@@ -16,7 +16,7 @@ import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, loadSectorSettings, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
-import { LAUNCH_IMAGES, SPLASH_GROUND } from '@/lib/splash';
+import { LAUNCH_IMAGES } from '@/lib/splash';
 import { siteVersion } from '@/lib/version';
 
 import { signOut } from './actions';
@@ -40,10 +40,10 @@ export const viewport: Viewport = {
   // and the home indicator with the safe-area insets.
   viewportFit: 'cover',
   colorScheme: 'light dark',
-  // The poster's colour (--hero-bg in globals.css), light and dark, for the browser's bars.
+  // The poster's ground (--surface in globals.css since the Ink design), light and dark, for the browser's bars.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: SPLASH_GROUND.light },
-    { media: '(prefers-color-scheme: dark)', color: SPLASH_GROUND.dark },
+    { media: '(prefers-color-scheme: light)', color: '#fafbfa' },
+    { media: '(prefers-color-scheme: dark)', color: '#101613' },
   ],
 };
 
