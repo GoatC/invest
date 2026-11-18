@@ -13,6 +13,8 @@ export const NIGHTLY_JOB = 'nightly_prices';
 export const SNAPSHOT_ERROR = 'NAV snapshots';
 /** …and when the snapshots were saved without their N4 VaR. */
 export const RISK_ERROR = 'VaR';
+/** …and when the home-screen widget's figures could not be saved (2026-11-18). */
+export const WIDGET_ERROR = 'Widget figures';
 /** …and when the rules could not be evaluated after the refresh (step 9). */
 export const RULES_ERROR = 'Rules';
 /** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */

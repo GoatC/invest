@@ -2748,6 +2748,19 @@ function missingTable(table: string, message: string): boolean {
   return message.includes(table) && /(does not exist|schema cache|not find)/i.test(message);
 }
 
+/**
+ * When the home-screen widget's key was made (ISO), or null with none; the key itself is never
+ * stored. Null too before its migration is applied, so the push page keeps working.
+ */
+export async function loadWidgetKeyDate(supabase: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabase.from('widget_key').select('created_at').maybeSingle();
+  if (error) {
+    if (missingTable('widget_key', error.message)) return null;
+    throw new DataError('widget_key', error.message);
+  }
+  return (data as { created_at: string } | null)?.created_at ?? null;
+}
+
 export async function loadNewsSettings(supabase: SupabaseClient): Promise<NewsSettings | undefined> {
   const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'news'));
   return readNewsSettings(found[0]?.value);

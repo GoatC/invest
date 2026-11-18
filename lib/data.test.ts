@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, leverageSettings, orderSettings, toTransaction } from './data';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, leverageSettings, loadWidgetKeyDate, orderSettings, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -126,5 +128,24 @@ describe('orderSettings', () => {
   it('falls back to whole shares when the setting is missing or malformed', () => {
     assert.deepEqual(orderSettings(undefined), { fractionalMarkets: [], shareDecimals: 0 });
     assert.deepEqual(orderSettings({ fractional_markets: ['US', 'XX', 3], share_decimals: 9 }), { fractionalMarkets: ['US'], shareDecimals: 0 });
+  });
+});
+
+describe('loadWidgetKeyDate', () => {
+  const answering = (reply: { data: unknown; error: { message: string; code?: string } | null }) =>
+    ({ from: () => ({ select: () => ({ maybeSingle: async () => reply }) }) }) as unknown as SupabaseClient;
+
+  it("reads when the widget's key was made, or null with none", async () => {
+    assert.equal(await loadWidgetKeyDate(answering({ data: { created_at: '2026-11-18T12:00:00Z' }, error: null })), '2026-11-18T12:00:00Z');
+    assert.equal(await loadWidgetKeyDate(answering({ data: null, error: null })), null);
+  });
+
+  it('reads as no key before its migration is applied, so the push page keeps working', async () => {
+    const missing = { message: "Could not find the table 'public.widget_key' in the schema cache", code: 'PGRST205' };
+    assert.equal(await loadWidgetKeyDate(answering({ data: null, error: missing })), null);
+  });
+
+  it('still reports any other database error', async () => {
+    await assert.rejects(loadWidgetKeyDate(answering({ data: null, error: { message: 'permission denied for table widget_key' } })), /permission denied/);
   });
 });

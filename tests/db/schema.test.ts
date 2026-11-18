@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
+import { createHash } from 'node:crypto';
+
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
@@ -36,7 +38,7 @@ const KEY_MISSING = '23503';
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
 // analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
 // F6's auto-scored assumptions add cma_estimates; the dividend prompt and the in-app banner (2026-11-12)
-// add dividend_events and banner_dismissals.
+// add dividend_events and banner_dismissals; the home-screen widget (2026-11-18) widget_snapshot and widget_key.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
@@ -44,7 +46,7 @@ const EXPECTED_TABLES = [
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
   'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts', 'cma_estimates',
-  'dividend_events', 'banner_dismissals',
+  'dividend_events', 'banner_dismissals', 'widget_snapshot', 'widget_key',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -64,7 +66,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events and banner_dismissals', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events, banner_dismissals, widget_snapshot and widget_key', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1242,5 +1244,78 @@ describe('dividend prompts and the in-app banner (2026-11-12)', () => {
     await db.query(insert);
     assert.equal(await errorCode(as(db, 'service_role', (tx) => tx.query(insert))), '23505');
     await db.query(`delete from public.notifications where kind = 'dividend'`);
+  });
+});
+
+describe('widget', () => {
+  // A demo key: 43 characters, as base64url gives 32 random bytes.
+  const KEY = 'a'.repeat(43);
+  const HASH = createHash('sha256').update(KEY).digest('hex');
+  const figures = (tx: Queryable, key: string) => scalar<{ figures: Record<string, unknown> | null; stale_days: number } | null>(tx, 'select public.widget_figures($1)', [key]);
+  const saveKey = () => db.query('insert into public.widget_key (key_hash) values ($1)', [HASH]);
+  const saveSnapshot = () =>
+    db.query(`insert into public.widget_snapshot (as_of, total_twd, week_change, points, red_up) values ('2026-11-17', 1080, -0.1, '[0, 0.2, 0.08]', true)`);
+  const clear = () => db.exec('delete from public.widget_key; delete from public.widget_snapshot;');
+
+  it('hands anon the figures for the right key only', async () => {
+    await saveKey();
+    await saveSnapshot();
+    try {
+      await as(db, 'anon', async (tx) => {
+        assert.deepEqual(await figures(tx, KEY), {
+          figures: { as_of: '2026-11-17', total_twd: 1080, week_change: -0.1, points: [0, 0.2, 0.08], red_up: true },
+          stale_days: 3,
+        });
+        assert.equal(await figures(tx, 'b'.repeat(43)), null);
+        assert.equal(await figures(tx, 'short'), null);
+        assert.equal(await figures(tx, 'a'.repeat(129)), null);
+      });
+    } finally {
+      await clear();
+    }
+  });
+
+  it('returns figures null and the stale days when the key is right but nothing is saved yet', async () => {
+    await saveKey();
+    try {
+      await as(db, 'anon', async (tx) => assert.deepEqual(await figures(tx, KEY), { figures: null, stale_days: 3 }));
+    } finally {
+      await clear();
+    }
+  });
+
+  it('answers nothing before a key is made', async () => {
+    await saveSnapshot();
+    try {
+      await as(db, 'anon', async (tx) => assert.equal(await figures(tx, KEY), null));
+    } finally {
+      await clear();
+    }
+  });
+
+  it("keeps both tables out of anon's and a stranger's reach", async () => {
+    for (const table of ['widget_snapshot', 'widget_key']) {
+      assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query(`select 1 from public.${table}`))), DENIED, table);
+    }
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query('insert into public.widget_key (key_hash) values ($1)', [HASH]))), DENIED);
+  });
+
+  it('lets the owner replace the key, one row only, stored as a hash', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query('insert into public.widget_key (key_hash) values ($1) on conflict (singleton) do update set key_hash = excluded.key_hash', [HASH]);
+      await tx.query('insert into public.widget_key (key_hash) values ($1) on conflict (singleton) do update set key_hash = excluded.key_hash', ['c'.repeat(64)]);
+      assert.equal(await scalar(tx, 'select count(*)::int from public.widget_key'), 1);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`insert into public.widget_key (key_hash) values ('${KEY}')`))), CHECK_FAILED);
+  });
+
+  it('lets the nightly job write the snapshot with the service role', async () => {
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(
+        `insert into public.widget_snapshot (as_of, total_twd, week_change, points, red_up) values ('2026-11-17', 1080, null, '[0]', false)
+         on conflict (singleton) do update set as_of = excluded.as_of`,
+      );
+      assert.equal(await scalar(tx, 'select count(*)::int from public.widget_snapshot'), 1);
+    });
   });
 });

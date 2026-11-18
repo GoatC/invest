@@ -35,8 +35,8 @@ BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist
 xcrun simctl install "$UDID" "$APP"
 # What the app does by itself (ShellViewController.runLookScript, debug builds only): taps on tabs
 # as a finger gives them, and lines run in the page. It waits for each screenshot before the next step.
-NAMES=(01-dashboard 02-holdings 03-performance 04-holdings-again 05-holdings-scrolled 06-holdings-top-again 07-more 08-allocation 09-dashboard-again 10-performance-by-link 11-holdings-third 12-holdings-segment 13-holdings-after-pull)
-SCRIPT="tap /holdings; tap /performance; tap /holdings; js scrollTo(0,500); js scrollTo(0,0); tap more; tap /allocation; tap /; js window.longview.open('/performance'); tap /holdings; js window.longview.segment(2); pull 120"
+NAMES=(01-dashboard 02-holdings 03-performance 04-holdings-again 05-holdings-scrolled 06-holdings-top-again 07-more 08-allocation 09-dashboard-again 10-performance-by-link 11-holdings-third 12-holdings-segment 13-holdings-after-pull 14-widget)
+SCRIPT="tap /holdings; tap /performance; tap /holdings; js scrollTo(0,500); js scrollTo(0,0); tap more; tap /allocation; tap /; js window.longview.open('/performance'); tap /holdings; js window.longview.segment(2); pull 120; widget"
 SIMCTL_CHILD_LOOK_SCRIPT="$SCRIPT" xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
 LOOK="$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)/Documents/look"
 

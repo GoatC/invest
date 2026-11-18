@@ -1740,6 +1740,38 @@ await step('push job: plans the weekly review and the standing warning, sends ea
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
+await step("home-screen widget: a key made once on the push page reads the figures without a session; a wrong, replaced or missing key reads nothing", async () => {
+  await page.goto(`${BASE}/notifications`);
+  const section = page.locator('section', { hasText: 'Home-screen widget' });
+  await section.locator('summary', { hasText: 'Widget key' }).click();
+  await section.getByRole('button', { name: /Make a key/ }).click();
+  const field = section.getByRole('textbox', { name: /Widget key/ });
+  await field.waitFor();
+  const key = await field.inputValue();
+  check(/^[A-Za-z0-9_-]{43}$/.test(key), `a 43-character key, got ${key}`);
+  check((await section.innerText()).includes('只顯示這一次'), 'the key is shown once');
+  // The widget's own request: no cookies, only the key.
+  const ask = (headers) => fetch(`${BASE}/shell/widget`, { headers, redirect: 'manual' });
+  const right = await ask({ authorization: `Bearer ${key}` });
+  check(right.status === 200 && right.headers.get('cache-control') === 'no-store', `200, never cached, got ${right.status}`);
+  const reply = await right.json();
+  check('figures' in reply && (reply.figures === null || (typeof reply.figures.totalTwd === 'number' && typeof reply.figures.stale === 'boolean')), `the figures or none yet, got ${JSON.stringify(reply)}`);
+  const missing = await ask({});
+  check(missing.status === 401 && JSON.stringify(await missing.json()) === '{"error":"key"}', `no key is refused, not sent to sign in, got ${missing.status}`);
+  const wrong = await ask({ authorization: `Bearer ${'x'.repeat(43)}` });
+  check(wrong.status === 401, `a wrong key is refused, got ${wrong.status}`);
+  // A new key ends the old one at once.
+  await section.getByRole('button', { name: /Replace the key/ }).click();
+  await page.waitForFunction((old) => document.querySelector('input[aria-label^="Widget key"]')?.value !== old, key);
+  const fresh = await field.inputValue();
+  check((await ask({ authorization: `Bearer ${key}` })).status === 401, 'the replaced key reads nothing');
+  check((await ask({ authorization: `Bearer ${fresh}` })).status === 200, 'the new key reads the figures');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await section.scrollIntoViewIfNeeded();
+  await snap('notifications-widget-phone', page, false);
+  await page.setViewportSize({ width: 1280, height: 900 });
+});
+
 await step('dashboard: the poster with the value of both pools, the gains and the line of its rise and fall, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();

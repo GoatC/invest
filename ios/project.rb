@@ -52,6 +52,40 @@ target.build_configurations.each do |configuration|
   settings.delete('CURRENT_PROJECT_VERSION')
 end
 
+# The home-screen widget (docs/ios-app.md, "主畫面小工具"): an app extension inside the app, signed
+# with it by the same free Apple ID; its identifier is the app's plus ".widget". It asks for no
+# capability (no App Group): it fetches its figures from the site with a key of its own.
+widget_group = project.new_group('Widget', 'Widget')
+widget = project.new_target(:app_extension, 'LongViewWidget', :ios, '26.0')
+widget_sources = Dir[File.join(here, 'Widget', '*.swift')].sort.map { |file| widget_group.new_file(File.basename(file)) }
+widget.add_file_references(widget_sources)
+widget_group.new_file('Info.plist')
+# The widget's view and its figures are built into the app too, so ios/tests/look.sh can show them.
+target.add_file_references(widget_sources.select { |ref| %w[FiguresView.swift WidgetFigures.swift].include?(ref.path) })
+
+widget.build_configurations.each do |configuration|
+  settings = configuration.build_settings
+  settings['IPHONEOS_DEPLOYMENT_TARGET'] = '26.0'
+  settings['INFOPLIST_FILE'] = 'Widget/Info.plist'
+  settings['GENERATE_INFOPLIST_FILE'] = 'NO'
+  settings['PRODUCT_BUNDLE_IDENTIFIER'] = '$(BUNDLE_ID).widget'
+  settings['PRODUCT_NAME'] = 'LongViewWidget'
+  settings['SWIFT_VERSION'] = '5.0'
+  settings['TARGETED_DEVICE_FAMILY'] = '1'
+  settings['SKIP_INSTALL'] = 'YES'
+  settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+  settings['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks']
+  settings['CODE_SIGN_STYLE'] = 'Automatic'
+  settings.delete('DEVELOPMENT_TEAM')
+  settings.delete('MARKETING_VERSION')
+  settings.delete('CURRENT_PROJECT_VERSION')
+end
+
+target.add_dependency(widget)
+embed = target.new_copy_files_build_phase('Embed Foundation Extensions')
+embed.symbol_dst_subfolder_spec = :plug_ins
+embed.add_file_reference(widget.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeaderOnCopy'] }
+
 project.save
 
 scheme = Xcodeproj::XCScheme.new
