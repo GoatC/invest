@@ -903,6 +903,8 @@ Rules:
 | Banner, stale balance | Balances valued 45 and 103 days ago, threshold 45 | Only the 103-day one is asked about |
 | Dashboard line (added 2026-11-13) | 1 share at 100 (fee 1), +20% to 120; 9 more at 120 in the windfall pool; then −10% over the last week | The line reads +20% before and after the buy and ends at 1.2 × 0.9 − 1 = +8.0%; gain since the start −NT$101 (1,181 in, 1,080 left); last seven days −NT$120, −10% |
 | Dashboard line, drawing | Returns 0, +10%, −10% in a box 200 × 100, 10 clear above and below | Starts at the left edge at 50, peaks at 10 in the middle, ends at the right edge at 90; the zero line at 50; flat at a peak |
+| Widget figures (added 2026-11-18) | The dashboard line's case: 1 at 100 (fee 1), 9 more at 120 on 04-01 (windfall), worth 1,200 at the close of 06-24, 1,080 on 07-01 | As of 07-01: NT$1,080, 7 days −10.00% (the poster's figure), at most 40 points from 0 to +8.00% |
+| Widget stale | A Friday close on 2026-11-13, stale after 3 days; a close on 2027-02-05 | Fresh on Monday 11-16, stale on Tuesday 11-17; stale on 2027-02-10 |
 
 **First prompt for Claude Code 第一個指令**
 
