@@ -1749,7 +1749,7 @@ await step("home-screen widget: a key made once on the push page reads the figur
   await field.waitFor();
   const key = await field.inputValue();
   check(/^[A-Za-z0-9_-]{43}$/.test(key), `a 43-character key, got ${key}`);
-  check((await section.innerText()).includes('Shown this once'), 'the key is shown once');
+  check((await section.innerText()).includes('只顯示這一次'), 'the key is shown once');
   // The widget's own request: no cookies, only the key.
   const ask = (headers) => fetch(`${BASE}/shell/widget`, { headers, redirect: 'manual' });
   const right = await ask({ authorization: `Bearer ${key}` });
