@@ -688,12 +688,12 @@ extension ShellViewController {
     func showWidgetLook() {
         let card = ZStack {
             Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-            VStack(spacing: 24) {
-                ForEach([WidgetState.figures(.demo, offline: false), .noKey], id: \.self) { state in
+            VStack(spacing: 20) {
+                ForEach([WidgetState.figures(.demo, offline: false), .figures(.demoFall, offline: false), .noKey], id: \.self) { state in
                     FiguresView(state: state)
                         .padding(16)
                         .frame(width: 364, height: 170)
-                        .background(PosterGround())
+                        .background(GlowGround(state: state))
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
             }

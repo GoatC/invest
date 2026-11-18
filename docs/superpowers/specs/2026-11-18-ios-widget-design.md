@@ -116,3 +116,13 @@ Hugo 想把它放在主畫面，**順眼看一下，確認沒事就好**，不�
 - 鑰匙欄位在 `AppIntent` 裡怎麼呈現（顯示為一般文字或遮住）。
 - 「iOS shell build」的 `look` job 能不能截到 Widget：例如在 App 的測試畫面裡放一份 Widget view 的預覽；截不到的話，在 PR 裡列出只有 Hugo 手機能確認的項目。
 - 端點的測試方式（Vitest 測 route handler，或 e2e）。
+
+## 7. 外觀改版：B「漲跌光暈」（Hugo，2026-11-18）
+
+Hugo 看過四種方向的比較頁（https://claude.ai/artifact/QvGhSAzEonHRZshh2mNN34：A 夜幕藍光、B 漲跌光暈、C 每日長條、D 晨霧亮色）後選了 **B**，取代 5.3 節「海報藍底」的畫面。小工具因此不再照 Liquid Glass 規格的海報配色；App 其他頁面的視覺之後另開 Claude Design 的 session 整體重整。
+
+- 近黑底，左下角一團光暈。光暈顏色跟著近 7 天漲跌：漲是紅光、跌是綠光（照 config `sectors` 的紅漲綠跌，綠漲時對調）。沒有變化、沒有 7 天數字，或還沒有數字的狀態（沒鑰匙、尚無資料、連不上），用 App 的藍光。
+- 上排：漲跌放在白色膠囊裡（▲／▼，字色跟著光暈）；右邊是「近 7 天 · 11/17 收盤」（⚠︎ 規則不變）。
+- 下排：大號圓體金額，「NT$」縮小在前面，下面一行「總市值」；右下角一條細白走勢線。
+- 不論手機是淺色或深色模式，都是深色卡片（和參考圖一樣）。
+- 做法：`ios/Widget/FiguresView.swift` 的 `WeekTone`（顏色）與 `GlowGround`（底），資料端不變。

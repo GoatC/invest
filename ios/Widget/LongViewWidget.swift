@@ -51,7 +51,7 @@ struct TotalWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: "LongViewTotal", intent: KeyIntent.self, provider: FiguresProvider()) { entry in
             FiguresView(state: entry.state)
-                .containerBackground(for: .widget) { PosterGround() }
+                .containerBackground(for: .widget) { GlowGround(state: entry.state) }
                 // Opens the dashboard in the app (Reminders.swift `Router`, site paths only).
                 .widgetURL(URL(string: "longview://open?path=%2F"))
         }

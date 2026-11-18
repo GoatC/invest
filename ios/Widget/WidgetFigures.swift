@@ -14,6 +14,10 @@ struct Figures: Codable, Hashable {
     /// What the widget gallery and a placeholder show: invented, never anyone's figures.
     static let demo = Figures(asOf: "2026-11-17", totalTwd: 1_234_567, weekChange: 0.0123,
                               points: [0, 0.01, 0.006, 0.02, 0.031, 0.025, 0.04, 0.052, 0.047, 0.061], redUp: true, stale: false)
+
+    /// The same, after a falling week: the look test shows the green glow with it.
+    static let demoFall = Figures(asOf: "2026-11-17", totalTwd: 1_224_180, weekChange: -0.0084,
+                                  points: [0, 0.012, 0.03, 0.026, 0.041, 0.035, 0.028, 0.022, 0.019, 0.014], redUp: true, stale: false)
 }
 
 /// What the widget shows.
