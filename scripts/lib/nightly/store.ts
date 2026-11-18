@@ -7,6 +7,7 @@ import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
+import type { WidgetFigures } from '../../../lib/models/widget.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
@@ -218,6 +219,29 @@ export function supabaseStore(client: SupabaseClient): Store {
         );
         check('nav_snapshots', error);
       }
+    },
+    async widgetRedUp() {
+      return (await loadSectorSettings(client))?.colour !== 'green_up';
+    },
+    async saveWidgetSnapshot(figures: WidgetFigures | null) {
+      if (!figures) {
+        const { error } = await client.from('widget_snapshot').delete().eq('singleton', true);
+        check('widget_snapshot', error);
+        return;
+      }
+      const { error } = await client.from('widget_snapshot').upsert(
+        {
+          singleton: true,
+          as_of: figures.asOf,
+          total_twd: figures.totalTwd,
+          week_change: figures.weekChange,
+          points: figures.points,
+          red_up: figures.redUp,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'singleton' },
+      );
+      check('widget_snapshot', error);
     },
     evaluateRules: (today, now) => runRules(client, today, now),
     async recordRun(run: JobRun) {

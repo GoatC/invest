@@ -22,11 +22,12 @@
  * Everything outside this file is injected, so the whole run can be tested without a network or a database.
  */
 import type { ProfileRecord } from '../../../lib/data.ts';
-import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR } from '../../../lib/models/data-health.ts';
+import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR, WIDGET_ERROR } from '../../../lib/models/data-health.ts';
 import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
+import { widgetFigures, type WidgetFigures } from '../../../lib/models/widget.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
 import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
@@ -141,6 +142,10 @@ export interface Store {
   riskInput(from: string, end: string): Promise<RiskInput>;
   /** Saves one NAV snapshot per day and drops any from before the first (left by trades since deleted). */
   saveSnapshots(rows: readonly Snapshot[]): Promise<void>;
+  /** Whether price moves read red up (config sectors colour, Taiwan's convention by default). */
+  widgetRedUp(): Promise<boolean>;
+  /** Saves the home-screen widget's one row (widget_snapshot); null clears it, before two closes hold a value. */
+  saveWidgetSnapshot(figures: WidgetFigures | null): Promise<void>;
   /** Evaluates every rule as of `now` and saves the proposals it drafts and closes (runRules in lib/data). */
   evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
   recordRun(run: JobRun): Promise<void>;
@@ -190,6 +195,8 @@ export interface RunDetail {
   errors: string[];
   /** The NAV snapshots saved, once anything was bought or recorded, and how many carry a VaR. */
   snapshots?: { days: number; from: string; to: string; valueAtRisk?: number };
+  /** The close the home-screen widget's figures were saved at; the figures stay in widget_snapshot. */
+  widget?: { asOf: string };
   /** Proposals the rules drafted and closed after the refresh. */
   rules?: { created: number; closed: number };
   /** The holdings' β saved for the month (N1), on the month's first run. */
@@ -876,6 +883,15 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     }
     const rows = snapshots(days, valueAtRisk);
     await store.saveSnapshots(rows);
+    // The widget's figures from the same series, so they never disagree with the poster; a failure
+    // here leaves the snapshots saved.
+    try {
+      const figures = widgetFigures(days, await store.widgetRedUp());
+      await store.saveWidgetSnapshot(figures);
+      if (figures) detail.widget = { asOf: figures.asOf };
+    } catch (err) {
+      detail.errors.push(`${WIDGET_ERROR}: ${message(err)}`);
+    }
     const [first, last] = [rows[0], rows[rows.length - 1]];
     if (first && last) {
       detail.snapshots = { days: rows.length, from: first.date, to: last.date };

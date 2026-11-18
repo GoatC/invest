@@ -10,6 +10,7 @@ import type { PerformanceInput, Snapshot } from '../../../lib/models/performance
 import { readLookThroughSettings } from '../../../lib/models/look-through.ts';
 import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
+import type { WidgetFigures } from '../../../lib/models/widget.ts';
 import type { DividendPlan } from '../../../lib/models/dividends.ts';
 import type { DividendRow } from '../feeds/dividends.ts';
 import type { IndexClose } from '../feeds/indices.ts';
@@ -239,8 +240,18 @@ class MemoryStore implements Store {
       look?: { due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> };
       /** The sector tab's proxies (N7); undefined before config sectors. */
       sectors?: Array<{ id: string; market: 'US' | 'TW'; symbol: string; name: string }>;
+      failWidget?: boolean;
     } = {},
   ) {}
+  /** The home-screen widget's figures saved (undefined until saved; null clears them). */
+  widget: WidgetFigures | null | undefined;
+  async widgetRedUp() {
+    return true;
+  }
+  async saveWidgetSnapshot(figures: WidgetFigures | null) {
+    if (this.options.failWidget) throw new Error('widget_snapshot: permission denied');
+    this.widget = figures;
+  }
   async sectorProxies() {
     return this.options.sectors;
   }
@@ -768,6 +779,26 @@ describe('runNightly', () => {
     assert.deepEqual(run.detail.errors, ['NAV snapshots: transactions: permission denied']);
     assert.equal(run.detail.snapshots, undefined);
     assert.ok(store.prices.length > 0);
+  });
+
+  it("saves the home-screen widget's figures from the same series as the snapshots", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(store.widget?.asOf, '2026-10-21');
+    assert.equal(store.widget?.totalTwd, store.snapshots[store.snapshots.length - 1]?.totalTwd);
+    assert.equal(store.widget?.redUp, true);
+    assert.deepEqual(run.detail.widget, { asOf: '2026-10-21' });
+    assert.equal(run.status, 'ok');
+  });
+
+  it("keeps the snapshots and reports a partial run when the widget's figures fail", async () => {
+    const store = new MemoryStore({ failWidget: true });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['Widget figures: widget_snapshot: permission denied']);
+    assert.equal(store.snapshots.length, 2);
+    assert.deepEqual(run.detail.snapshots, { days: 2, from: '2026-10-20', to: '2026-10-21', valueAtRisk: 0 });
+    assert.equal(run.detail.widget, undefined);
   });
 
   it('evaluates the rules once the prices and snapshots are saved, and records what they drafted', async () => {
