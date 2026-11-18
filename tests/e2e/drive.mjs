@@ -1793,6 +1793,15 @@ await step('dashboard: the poster with the value of both pools, the 7-day move a
   const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
   check(Boolean(lineName) && (await poster.locator('.hero-dot').count()) === 1, `the line names the return since the start and ends in today's dot, got ${lineName}`);
   check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
+  // The rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge and count; a tap opens the tiles.
+  const fold = page.locator('#rule-board details.rule-fold');
+  if ((await fold.count()) > 0) {
+    const summary = (await fold.locator('summary').innerText()).replace(/\s+/g, ' ');
+    check(!(await fold.evaluate((details) => details.open)) && /規則 ?(?:\d+ 項需處理|\d+ 項注意|全部正常)/.test(summary), `the rules folded to one row, got ${summary}`);
+    await fold.locator('summary').click();
+    check(await fold.locator('.alert-tile').first().isVisible(), 'a tap opens the rule tiles');
+    await fold.locator('summary').click();
+  }
   const headings = await page.locator('main h2').allInnerTexts();
   const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));

@@ -5,7 +5,7 @@ import type { Bilingual } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
-const ICON: Record<AlertTone, string> = { alert: '✕', watch: '!', info: 'i', ok: '✓' };
+export const ICON: Record<AlertTone, string> = { alert: '✕', watch: '!', info: 'i', ok: '✓' };
 const ROLE: Record<AlertTone, 'alert' | 'status'> = { alert: 'alert', watch: 'alert', info: 'status', ok: 'status' };
 
 /** A bar from 0 to a little past the larger of the figure and the limit: the figure fills it, the limit and target are ticks. */

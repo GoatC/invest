@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense, type CSSProperties } from 'react';
 
-import { AlertTiles } from '@/components/alert-tiles';
+import { AlertTiles, ICON } from '@/components/alert-tiles';
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
@@ -271,12 +271,29 @@ function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portf
   const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
   if (items.length === 0) return null;
   const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
+  // Closed by default (Hugo, 2026-11-18): the worst state's badge, how many need him, and which rules; a tap opens the tiles.
+  const firing = items.filter((item) => item.tone === tone && tone !== 'ok');
+  const count = tone === 'alert' ? `${firing.length} 項需處理` : tone === 'watch' ? `${firing.length} 項注意` : '全部正常';
+  const which = firing.map((item) => `${item.code ? `${item.code} ` : ''}${item.title.zh}`).join(' · ');
   return (
     <section className="card form rule-board" id="rule-board">
-      <h2>
-        <Bi en="Rules" zh="規則" />
-      </h2>
-      <AlertTiles items={items} tone={tone} />
+      <details className="rule-fold">
+        <summary>
+          <span className={`alert-icon ${tone}`} aria-hidden="true">
+            {ICON[tone]}
+          </span>
+          <span className="rule-fold-text">
+            <span className="rule-fold-head">
+              <h2>
+                <Bi en="Rules" zh="規則" />
+              </h2>
+              <span className={`rule-fold-count ${tone}`}>{count}</span>
+            </span>
+            {which && <span className="rule-fold-which">{which}</span>}
+          </span>
+        </summary>
+        <AlertTiles items={items} tone={tone} />
+      </details>
     </section>
   );
 }

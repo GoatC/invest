@@ -2504,6 +2504,7 @@ html[data-opened] .splash {
   font-size: 0.85rem;
 }
 
+/* The state badges (Ink design): red ✕ 需處理, amber ! 留意, ✓ 正常; each sign in the colour that reads on its badge. */
 .alert-icon {
   display: inline-grid;
   place-items: center;
@@ -2512,21 +2513,107 @@ html[data-opened] .splash {
   border-radius: 50%;
   font-size: 0.7rem;
   font-weight: 800;
-  color: #fff;
+  color: var(--surface);
   background: var(--info-text);
   flex: none;
 }
 
 .alert-icon.alert {
-  background: var(--danger-text);
+  background: var(--status-critical);
 }
 
 .alert-icon.watch {
-  background: var(--warn-text);
+  color: var(--warn-badge-ink);
+  background: var(--warn-badge);
 }
 
 .alert-icon.ok {
   background: var(--ok-text);
+}
+
+/* The dashboard's rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge, the count,
+   which rules fire; open, the tiles. */
+.rule-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--tap-min);
+  cursor: pointer;
+  list-style: none;
+}
+
+.rule-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rule-fold > summary::after {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.rule-fold[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.rule-fold > summary .alert-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 0.95rem;
+}
+
+.rule-fold-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.rule-fold-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.rule-fold-head h2 {
+  margin: 0;
+}
+
+.rule-fold-count {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ok-text);
+}
+
+.rule-fold-count.alert {
+  color: var(--danger-text);
+}
+
+.rule-fold-count.watch {
+  color: var(--warn-text);
+}
+
+.rule-fold-which {
+  overflow: hidden;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rule-fold[open] > .alert-group {
+  margin-top: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rule-fold > summary::after {
+    transition: none;
+  }
 }
 
 .alert-code {
@@ -4189,7 +4276,7 @@ html[data-shell] .rule-board {
   gap: 0.5rem;
 }
 
-html[data-shell] .rule-board > h2 {
+html[data-shell] .rule-fold > summary {
   padding: 0 0.25rem;
 }
 
