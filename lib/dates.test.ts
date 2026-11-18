@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { addDays, addMonths, isIsoDate, isMonth, lastDayOf, monthsBetween, taipeiToday } from './dates';
+import { addDays, addMonths, daysBetween, isIsoDate, isMonth, lastDayOf, monthsBetween, taipeiToday } from './dates';
 
 describe('taipeiToday', () => {
   it('is already the next day in Taipei at 16:00 UTC', () => {
@@ -47,5 +47,13 @@ describe('months', () => {
     assert.equal(lastDayOf('2026-10'), '2026-10-31');
     assert.equal(lastDayOf('2028-02'), '2028-02-29');
     assert.equal(lastDayOf('2026-12'), '2026-12-31');
+  });
+});
+
+describe('daysBetween', () => {
+  it('counts calendar days, negative backwards, across a leap day', () => {
+    assert.equal(daysBetween('2026-05-26', '2026-12-31'), 219);
+    assert.equal(daysBetween('2026-12-31', '2026-05-26'), -219);
+    assert.equal(daysBetween('2028-02-28', '2028-03-01'), 2);
   });
 });

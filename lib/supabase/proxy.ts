@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { supabaseEnv } from '../env';
 
+/**
+ * The request header that carries the user id the proxy has just verified, so the page does not
+ * verify the same token again (one round trip to Supabase Auth less per tap). The proxy always
+ * removes any value the browser sent; row-level security still guards every row.
+ */
+export const VERIFIED_USER = 'x-verified-user';
+
 /** The only page a visitor without a session may open. */
 const LOGIN_PATH = '/login';
 
@@ -22,6 +29,7 @@ function carrySession(target: NextResponse, source: NextResponse): NextResponse 
  * advise, so the app stays safe if a route ever falls outside the proxy matcher.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  request.headers.delete(VERIFIED_USER);
   let response = NextResponse.next({ request });
   const { url, key } = supabaseEnv();
   const supabase = createServerClient(url, key, {
@@ -56,5 +64,9 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     target.search = '';
     return carrySession(NextResponse.redirect(target), response);
   }
-  return response;
+  // Hand the page the verified user, keeping the refreshed session cookies and headers.
+  const headers = new Headers(request.headers);
+  const sub = data?.claims?.sub;
+  if (typeof sub === 'string' && sub !== '') headers.set(VERIFIED_USER, sub);
+  return carrySession(NextResponse.next({ request: { headers } }), response);
 }

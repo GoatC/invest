@@ -2,8 +2,19 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { isIsoDate, taipeiToday } from './dates';
+import { readFrontierSettings } from './models/frontier';
+import { readMcSettings } from './models/monte-carlo';
+import { readRedFlagSettings } from './models/red-flags';
+import { readSectorSettings } from './models/sectors';
+import { readVolatilitySettings } from './models/volatility';
+import { readNewsSettings } from './models/news';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
 import {
+  SPLIT_MESSAGES,
+  parseSplitForm,
+  parseEventForm,
+  parseNewsForm,
+  parseVolatilityForm,
   MESSAGES,
   parseAssumptionForm,
   parseAssumptionsForm,
@@ -12,10 +23,11 @@ import {
   parseFeeForm,
   parseFundForm,
   parseManualAsset,
+  parseFrontierForm,
+  parseMonteCarloForm,
   parseNumber,
-  fractionalShares,
+  parseTimelineForm,
   parseEngineSettings,
-  parseOrderSizes,
   parsePaceForm,
   parseCapmForm,
   parseRegressionForm,
@@ -28,10 +40,17 @@ import {
   parseTargets,
   parseTaxForm,
   parseTrade,
+  leverageSteps,
   parseWindfallSettingsForm,
   vehicleField,
   withholdingField,
   parseValuationSettingsForm,
+  listField,
+  parseLookThroughForm,
+  parseSectorForm,
+  parseFlagEntryForm,
+  parseFlagSettingsForm,
+  parseEstimatesForm,
 } from './validation';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
@@ -40,12 +59,37 @@ const TODAY = '2026-10-21';
 
 const usdBuy = { tradeDate: '2026-10-20', ticker: 'vt', side: 'buy', qty: '2', price: '157.80', currency: '', fee: '', tax: '', fxRate: '32.4', pool: 'regular' };
 
+describe('parseTrade: direction and leverage', () => {
+  it('reads a short at 1.5x when the maximum allows it', () => {
+    const parsed = parseTrade({ ...usdBuy, side: 'sell', direction: 'short', leverage: '1.5' }, securities, TODAY, 5);
+    assert.ok(parsed.ok);
+    assert.deepEqual([parsed.value.direction, parsed.value.leverage], ['short', 1.5]);
+  });
+
+  it('takes leverage on the 0.1x grid only, up to the maximum, and blank as 1x', () => {
+    assert.equal(parseTrade({ ...usdBuy, leverage: '' }, securities, TODAY, 5).ok, true);
+    assert.equal(parseTrade({ ...usdBuy, leverage: '2.0×' }, securities, TODAY, 5).ok, true);
+    for (const leverage of ['1.55', '0.9', '5.1', 'two']) {
+      const parsed = parseTrade({ ...usdBuy, leverage }, securities, TODAY, 5);
+      assert.equal(parsed.ok, false, leverage);
+      if (!parsed.ok) assert.equal(parsed.errors.leverage, MESSAGES.leverage);
+    }
+    // Before config leverage exists the maximum is 1x.
+    assert.equal(parseTrade({ ...usdBuy, leverage: '1.1' }, securities, TODAY).ok, false);
+  });
+
+  it('lists the form’s leverage steps', () => {
+    assert.deepEqual(leverageSteps(1.3), [1, 1.1, 1.2, 1.3]);
+    assert.deepEqual(leverageSteps(0.5), [1]);
+  });
+});
+
 describe('parseTrade', () => {
   it('reads a USD buy, taking the currency from the security and treating empty fee and tax as 0', () => {
     const parsed = parseTrade(usdBuy, securities, TODAY);
     assert.deepEqual(parsed, {
       ok: true,
-      value: { tradeDate: '2026-10-20', ticker: 'VT', side: 'buy', qty: 2, price: 157.8, currency: 'USD', fee: 0, tax: 0, fxRate: 32.4, pool: 'regular', note: null },
+      value: { tradeDate: '2026-10-20', ticker: 'VT', side: 'buy', qty: 2, price: 157.8, currency: 'USD', fee: 0, tax: 0, fxRate: 32.4, pool: 'regular', direction: 'long', leverage: 1, note: null },
     });
   });
 
@@ -250,29 +294,6 @@ describe('parsePlanForm', () => {
     });
     assert.ok(!parsePlanForm({ ...typed, years: '61' }).ok);
     assert.ok(!parsePlanForm({ ...typed, years: '0' }).ok);
-  });
-});
-
-describe('parseOrderSizes', () => {
-  const orders = [
-    { kind: 'trade', ticker: 'AAPL', side: 'sell', qty: 3, price: 236, currency: 'USD', fxRate: 32.4, amountTwd: 22_939.2, assetClassId: 'us_stocks' },
-    { kind: 'balance', assetId: 5, label: 'Savings', side: 'deposit', amountTwd: 5_000, assetClassId: 'strategic_cash' },
-  ] as const;
-
-  it('reads whole shares and whole NT$, 0 dropping an order', () => {
-    assert.deepEqual(parseOrderSizes({ size_0: '2', size_1: '4,500' }, orders), { sizes: [2, 4_500], errors: {} });
-    assert.deepEqual(parseOrderSizes({ size_0: '0', size_1: '0' }, orders).sizes, [0, 0]);
-  });
-
-  it('takes a fractional US order to its decimals', () => {
-    const fractional = [{ ...orders[0], decimals: 4 }];
-    assert.deepEqual(parseOrderSizes({ size_0: '0.1641' }, fractional), { sizes: [0.1641], errors: {} });
-    assert.deepEqual(parseOrderSizes({ size_0: '0.16411' }, fractional).errors, { size_0: fractionalShares(4) });
-  });
-
-  it('refuses fractions, negatives and blanks', () => {
-    assert.deepEqual(parseOrderSizes({ size_0: '1.5', size_1: '' }, orders).errors, { size_0: MESSAGES.shares, size_1: MESSAGES.wholeTwd });
-    assert.deepEqual(parseOrderSizes({ size_0: '-1', size_1: '10' }, orders).errors, { size_0: MESSAGES.shares });
   });
 });
 
@@ -533,5 +554,345 @@ describe('F12 valuation forms', () => {
     assert.equal(parsed.value.debtSpread, 0.015);
     assert.equal(parsed.value.checked, '2026-10-29');
     assert.ok(!parseValuationSettingsForm({ ...form, debtSpread: '1.5', tax_US: '21', historyYears: '0', minQuarters: '8' }, ['US'], '2026-10-29').ok);
+  });
+});
+
+describe('red-flag forms (N3)', () => {
+  it('reads an entry: a count of events as of a date, or a governance tier, never in the future', () => {
+    const parsed = parseFlagEntryForm({ ticker: 'AAPL', indicator: 'environmental_penalties', asOf: '2026-10-01', value: '0', note: ' ECHO: none ' }, ['AAPL', '2330'], '2026-10-28');
+    assert.deepEqual(parsed, { ok: true, value: { ticker: 'AAPL', indicator: 'environmental_penalties', asOf: '2026-10-01', value: 0, note: 'ECHO: none' } });
+    const tier = parseFlagEntryForm({ ticker: '2330', indicator: 'governance_rating', asOf: '2026-05-01', value: '33' }, ['2330'], '2026-10-28');
+    assert.equal(tier.ok, false);
+    assert.ok(!tier.ok && tier.errors.value);
+    const wrong = parseFlagEntryForm({ ticker: 'X', indicator: 'beneish_m', asOf: '2026-11-01', value: '1.5' }, ['2330'], '2026-10-28');
+    assert.ok(!wrong.ok && wrong.errors.ticker && wrong.errors.indicator && wrong.errors.asOf && wrong.errors.value);
+  });
+
+  it('reads the settings, lists typed one per line or with commas, and keeps the SIC ranges', () => {
+    const current = readRedFlagSettings({
+      lookback_years: 3,
+      scan_days: 7,
+      beneish: { red_above: -1.78 },
+      altman: { z: { red_below: 1.81, amber_below: 2.99 }, z2: { red_below: 1.1, amber_below: 2.6 } },
+      cash_flow_years: 3,
+      governance: { bottom_share: 0.35 },
+      manufacturing: { sic: [[2000, 3999]], tw_industries: ['24'] },
+      financial: { sic: [[6000, 6799]], tw_industries: ['17'] },
+      excluded: { industries: [], tickers: [] },
+      last_verified: null,
+    });
+    assert.ok(current);
+    const raw = { lookbackYears: '3', scanDays: '7', beneish: '-1.78', zRed: '1.81', zAmber: '2.99', z2Red: '1.1', z2Amber: '2.6', cashFlowYears: '3', governance: '35', manufacturing: '24, 28\n1', financial: '17', industries: 'Tobacco\n菸酒', tickers: 'mo, pm', checked: 'on' };
+    const parsed = parseFlagSettingsForm(raw, current, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.governanceBottomShare, 0.35);
+    assert.deepEqual(parsed.value.manufacturing, { sic: [[2000, 3999]], twIndustries: ['24', '28', '01'] });
+    assert.deepEqual(parsed.value.excluded, { industries: ['Tobacco', '菸酒'], tickers: ['MO', 'PM'] });
+    assert.equal(parsed.value.lastVerified, '2026-10-28');
+    const bad = parseFlagSettingsForm({ ...raw, zAmber: '1', manufacturing: 'semis' }, current, '2026-10-28');
+    assert.ok(!bad.ok && bad.errors.zAmber && bad.errors.manufacturing);
+    assert.deepEqual(listField(' a，b、a\n\n'), ['a', 'b']);
+  });
+});
+
+describe('look-through form (F14)', () => {
+  const sectorNames = new Map([['information technology', 'Information Technology'], ['資訊科技', 'Information Technology'], ['financials', 'Financials']]);
+  const current = { sources: {}, fundCountry: {}, refreshDays: 28, topCompanies: 30, twSectors: {}, lastVerified: null };
+
+  it('reads the TWSE industry map in either language and the whole funds\' countries', () => {
+    const parsed = parseLookThroughForm({ topCompanies: '40', refreshDays: '28', twSectors: '24 = Information Technology\n17：Financials\n2 = 資訊科技', fundCountry: 'bil = us\n0050=TW', checked: 'on' }, current, sectorNames, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.twSectors, { '24': 'Information Technology', '17': 'Financials', '02': 'Information Technology' });
+    assert.deepEqual(parsed.value.fundCountry, { BIL: 'US', '0050': 'TW' });
+    assert.equal(parsed.value.lastVerified, '2026-10-28');
+  });
+
+  it('refuses an unknown sector, a bad country and too few companies', () => {
+    const parsed = parseLookThroughForm({ topCompanies: '3', refreshDays: '28', twSectors: '24 = Chips', fundCountry: 'BIL = USA' }, current, sectorNames, '2026-10-28');
+    assert.ok(!parsed.ok && parsed.errors.topCompanies && parsed.errors.twSectors && parsed.errors.fundCountry);
+  });
+});
+
+describe('sector form (N7)', () => {
+  const current = readSectorSettings({ colour: 'red_up', us: { XLK: 'Information Technology' }, tw: { Electronic: { name: '電子工業類指數', sector: 'Information Technology' }, Cement: { name: '水泥類指數', sector: 'Materials' } }, last_verified: null });
+  const names = new Map([['information technology', 'Information Technology'], ['原物料', 'Materials'], ['industrials', 'Industrials']]);
+
+  it('reads the convention and remaps or drops the Taiwan indices already listed, keeping the US funds', () => {
+    assert.ok(current);
+    const parsed = parseSectorForm({ colour: 'green_up', tw: 'cement = Industrials\n' }, current, names, '2026-10-28');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.colour, 'green_up');
+    assert.deepEqual(parsed.value.proxies.map((proxy) => [proxy.id, proxy.sector]), [['XLK', 'Information Technology'], ['TW_CEMENT', 'Industrials']]);
+  });
+
+  it('refuses an index not listed, or an unknown sector', () => {
+    assert.ok(current);
+    for (const tw of ['Semiconductor = Information Technology', 'Cement = Chips']) {
+      const parsed = parseSectorForm({ colour: 'red_up', tw }, current, names, '2026-10-28');
+      assert.ok(!parsed.ok && parsed.errors.tw, tw);
+    }
+  });
+});
+
+describe('parseMonteCarloForm (F5)', () => {
+  const current = readMcSettings({
+    paths: 10000,
+    lookback_years: 5,
+    block_months: 3,
+    min_months: 36,
+    scale_to_cma: true,
+    band: [0.1, 0.9],
+    mark_years: [10, 20, 30],
+    target_twd: null,
+    windfall: { amount_twd: null, month: null, tranches: 12 },
+  });
+  assert.ok(current);
+
+  it('reads the goal and an expected windfall into the row, leaving the rest as it is', () => {
+    const parsed = parseMonteCarloForm({ target: '20,000,000', windfallAmount: '5500000', windfallMonth: '2030-06', windfallTranches: '24' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, 20_000_000);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: 5_500_000, month: '2030-06', tranches: 24 });
+    assert.equal(parsed.value.paths, 10000);
+  });
+
+  it('takes blank fields as none, and blank tranches as following F3\u2019s CAPE pace', () => {
+    const parsed = parseMonteCarloForm({ target: '', windfallAmount: '', windfallMonth: '', windfallTranches: '' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.targetTwd, null);
+    assert.deepEqual(parsed.value.windfall, { amountTwd: null, month: null, tranches: null });
+  });
+
+  it('asks for the month when there is an amount, and refuses what is not whole NT$ or a month', () => {
+    const noMonth = parseMonteCarloForm({ target: '', windfallAmount: '1000000', windfallMonth: '' }, current);
+    assert.ok(!noMonth.ok);
+    assert.deepEqual(Object.keys(noMonth.errors), ['windfallMonth']);
+    const bad = parseMonteCarloForm({ target: '-5', windfallAmount: '1.5', windfallMonth: '2030-13', windfallTranches: '0' }, current);
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['target', 'windfallAmount', 'windfallMonth', 'windfallTranches']);
+  });
+});
+
+describe('parseTimelineForm (F1)', () => {
+  it('reads one goal per line, in date order, an amount being optional', () => {
+    const parsed = parseTimelineForm({ goals: '2045-06 | 3,000,000 | House\n\n2040-01 |  | Children’s university 子女大學' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, [
+      { month: '2040-01', amountTwd: null, name: 'Children’s university 子女大學' },
+      { month: '2045-06', amountTwd: 3_000_000, name: 'House' },
+    ]);
+  });
+
+  it('takes an empty box as no goals', () => {
+    const parsed = parseTimelineForm({ goals: '  \n' });
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.goals, []);
+  });
+
+  it('refuses a line without a valid month, a whole-NT$ amount above 0 or a name, and too many goals', () => {
+    for (const goals of ['2045-13 | 1 | x', '2045-06 | 1.5 | x', '2045-06 | 0 | x', '2045-06 | 100 | ', '2045-06 only']) {
+      const parsed = parseTimelineForm({ goals });
+      assert.ok(!parsed.ok, goals);
+      assert.deepEqual(Object.keys(parsed.errors), ['goals']);
+    }
+    const many = Array.from({ length: 13 }, (_, i) => `2040-${String((i % 12) + 1).padStart(2, '0')} | | g${i}`).join('\n');
+    assert.ok(!parseTimelineForm({ goals: many }).ok);
+  });
+});
+
+describe('parseFrontierForm (F7)', () => {
+  const current = readFrontierSettings({ lookback_years: 10, min_months: 36, points: 40, risk_free: 0.017, bounds: { a: [0, 0.5], b: [0, 0.6] } });
+  assert.ok(current);
+  const raw = { riskFree: '1.5', lookbackYears: '8', bounds: 'a = 0 - 50\nb = 10 - 60.5', checked: 'on' };
+
+  it('reads the rate, the years and the bounds, and stamps the check', () => {
+    const parsed = parseFrontierForm(raw, current, ['a', 'b'], '2026-10-29');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.riskFree, 0.015);
+    assert.equal(parsed.value.lookbackYears, 8);
+    assert.deepEqual(parsed.value.bounds, { a: [0, 0.5], b: [0.1, 0.605] });
+    assert.equal(parsed.value.lastVerified, '2026-10-29');
+    assert.equal(parsed.value.points, 40);
+  });
+
+  it('refuses an unknown class, a minimum above its maximum, bounds that cannot sum to 100% and bad numbers', () => {
+    for (const bounds of ['z = 0 - 50', 'a = 60 - 50', 'a = 0 - 40\nb = 0 - 40', 'a = 60 - 70\nb = 50 - 60', 'a = x', '']) {
+      const parsed = parseFrontierForm({ ...raw, bounds }, current, ['a', 'b'], '2026-10-29');
+      assert.ok(!parsed.ok, bounds);
+      assert.deepEqual(Object.keys(parsed.errors), ['bounds']);
+    }
+    const bad = parseFrontierForm({ ...raw, riskFree: 'x', lookbackYears: '0' }, current, ['a', 'b'], '2026-10-29');
+    assert.ok(!bad.ok);
+    assert.deepEqual(Object.keys(bad.errors).sort(), ['lookbackYears', 'riskFree']);
+  });
+});
+
+describe('parseSplitForm', () => {
+  const tickers = ['0050', 'AAPL'];
+  const raw = { security: '0050', exDate: '2025-06-18', oldShares: '1', newShares: '4', note: ' 1 拆 4 ' };
+
+  it('reads N old shares becoming M new ones as the ratio M ÷ N', () => {
+    assert.deepEqual(parseSplitForm(raw, tickers, [], '2026-10-29'), { ok: true, value: { ticker: '0050', exDate: '2025-06-18', ratio: 4, note: '1 拆 4' } });
+    const reverse = parseSplitForm({ ...raw, oldShares: '10', newShares: '1', note: '' }, tickers, [], '2026-10-29');
+    assert.ok(reverse.ok && reverse.value.ratio === 0.1 && reverse.value.note === null);
+  });
+
+  it('refuses an unknown ticker, a future ex-date, a second split that day, no change and zero shares', () => {
+    const unknown = parseSplitForm({ ...raw, security: 'NOPE' }, tickers, [], '2026-10-29');
+    assert.ok(!unknown.ok && unknown.errors.ticker === MESSAGES.unknownTicker);
+    const future = parseSplitForm(raw, tickers, [], '2025-06-17');
+    assert.ok(!future.ok && future.errors.exDate === SPLIT_MESSAGES.future);
+    const taken = parseSplitForm(raw, tickers, [{ ticker: '0050', exDate: '2025-06-18' }], '2026-10-29');
+    assert.ok(!taken.ok && taken.errors.exDate === SPLIT_MESSAGES.taken);
+    const same = parseSplitForm({ ...raw, newShares: '1' }, tickers, [], '2026-10-29');
+    assert.ok(!same.ok && same.errors.newShares === SPLIT_MESSAGES.noChange);
+    const zero = parseSplitForm({ ...raw, oldShares: '0' }, tickers, [], '2026-10-29');
+    assert.ok(!zero.ok && zero.errors.oldShares === SPLIT_MESSAGES.shares);
+    const huge = parseSplitForm({ ...raw, newShares: '1000' }, tickers, [], '2026-10-29');
+    assert.ok(!huge.ok && huge.errors.newShares === SPLIT_MESSAGES.range);
+  });
+});
+
+describe('parseEstimatesForm (F12 forward P/E)', () => {
+  it('reads one or two fiscal years, the analysts and the target', () => {
+    const parsed = parseEstimatesForm({ fy1_end: '2026-12-31', fy1_eps: '62.5', fy1_high: '66', fy1_low: '58', fy2_end: '2027-12-31', fy2_eps: '75', analysts: '30', target: '1,650' });
+    assert.deepEqual(parsed, {
+      ok: true,
+      value: {
+        years: [
+          { periodEnd: '2026-12-31', mean: 62.5, high: 66, low: 58, analysts: 30 },
+          { periodEnd: '2027-12-31', mean: 75, analysts: 30 },
+        ],
+        targetPrice: 1650,
+      },
+    });
+    assert.deepEqual(parseEstimatesForm({ fy1_end: '2026-12-31', fy1_eps: '-1.2' }), { ok: true, value: { years: [{ periodEnd: '2026-12-31', mean: -1.2 }] } });
+  });
+
+  it('refuses a missing first year, a second year half given or out of order, a range out of order and a bad count', () => {
+    const errors = (raw: Record<string, string>) => {
+      const parsed = parseEstimatesForm(raw);
+      return parsed.ok ? [] : Object.keys(parsed.errors).sort();
+    };
+    assert.deepEqual(errors({}), ['fy1_end', 'fy1_eps']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy2_end: '2027-12-31' }), ['fy2_eps']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy2_end: '2026-06-30', fy2_eps: '6' }), ['fy2_end']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', fy1_high: '4' }), ['fy1_high']);
+    assert.deepEqual(errors({ fy1_end: '2026-12-31', fy1_eps: '5', analysts: '2.5', target: '0' }), ['analysts', 'target']);
+  });
+});
+
+describe('parseVolatilityForm (N8)', () => {
+  const current = readVolatilitySettings({
+    components: {
+      vix: { calm: 12, panic: 40, weight: 2 },
+      vix_term: { calm: 0.85, panic: 1.15, weight: 2 },
+      tw_vix: { calm: 15, panic: 45, weight: 2 },
+      spx_drawdown: { calm: 0.02, panic: 0.2, weight: 1 },
+      taiex_drawdown: { calm: 0.03, panic: 0.25, weight: 1 },
+      taiex_fall: { calm: 0, panic: 0.1, weight: 1 },
+      hy_spread: { calm: 3, panic: 7, weight: 1 },
+      epu: { calm: 100, panic: 500, weight: 0.5 },
+    },
+    max_age_days: 5,
+    min_coverage: 0.5,
+    drawdown_days: 365,
+    fall_sessions: 5,
+    epu_days: 7,
+    history_days: 400,
+    last_verified: null,
+  });
+  assert.ok(current);
+  const form = (changes: Record<string, string> = {}) => {
+    const raw: Record<string, string> = { maxAgeDays: '5', minCoverage: '50', eventLeadDays: '2', remind_fomc: 'on', remind_cpi: 'on', remind_payrolls: 'on', remind_cbc: 'on', remind_other: 'on' };
+    for (const row of current.components) {
+      const scale = ['spx_drawdown', 'taiex_drawdown', 'taiex_fall'].includes(row.id) ? 100 : 1;
+      raw[`${row.id}_calm`] = String(row.calm * scale);
+      raw[`${row.id}_panic`] = String(row.panic * scale);
+      raw[`${row.id}_weight`] = String(row.weight);
+    }
+    return { ...raw, ...changes };
+  };
+
+  it('reads falls in percent as shares, keeps the rest of the row, and dates the check', () => {
+    const parsed = parseVolatilityForm(form({ taiex_drawdown_panic: '30', vix_weight: '3', minCoverage: '60', checked: 'on' }), current, '2026-11-06');
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.components.find((row) => row.id === 'taiex_drawdown')?.panic, 0.3);
+    assert.equal(parsed.value.components.find((row) => row.id === 'vix')?.weight, 3);
+    assert.equal(parsed.value.minCoverage, 0.6);
+    assert.equal(parsed.value.drawdownDays, 365);
+    assert.equal(parsed.value.lastVerified, '2026-11-06');
+    const quiet = parseVolatilityForm(form({ eventLeadDays: '3', remind_cpi: '' }), current, '2026-11-06');
+    assert.ok(quiet.ok);
+    assert.deepEqual(quiet.value.events, { leadDays: 3, remind: ['fomc', 'payrolls', 'cbc', 'other'] });
+    assert.deepEqual(parseVolatilityForm(form(), current, '2026-11-06'), { ok: true, value: current });
+  });
+
+  it('refuses panic at or below calm, a negative weight, no weight at all, and days or coverage out of range', () => {
+    const errors = (changes: Record<string, string>) => {
+      const parsed = parseVolatilityForm(form(changes), current, '2026-11-06');
+      return parsed.ok ? {} : parsed.errors;
+    };
+    assert.ok(errors({ vix_panic: '12' })['vix_panic']);
+    assert.ok(errors({ epu_weight: '-1' })['epu_weight']);
+    assert.ok(errors(Object.fromEntries(current.components.map((row) => [`${row.id}_weight`, '0'])))['vix_weight']);
+    assert.ok(errors({ maxAgeDays: '0' })['maxAgeDays']);
+    assert.ok(errors({ minCoverage: '150' })['minCoverage']);
+    assert.ok(errors({ vix_calm: 'abc' })['vix_calm']);
+    assert.ok(errors({ eventLeadDays: '15' })['eventLeadDays']);
+  });
+});
+
+describe('parseEventForm (N8 step 2)', () => {
+  it("names a central bank meeting by its kind, another event by Hugo's name, at a Taipei date and optional time", () => {
+    assert.deepEqual(parseEventForm({ kind: 'cbc', date: '2027-03-18', time: '14:00', name: '' }), {
+      ok: true,
+      value: { kind: 'cbc', date: '2027-03-18', time: '14:00', name: { en: "Taiwan's central bank meeting", zh: '央行理監事會議' }, source: 'typed', note: null },
+    });
+    const election = parseEventForm({ kind: 'other', date: '2028-01-15', time: '', name: '總統大選', note: ' Taiwan ' });
+    assert.ok(election.ok);
+    assert.deepEqual(election.value.name, { en: '總統大選', zh: '總統大選' });
+    assert.equal(election.value.time, null);
+    assert.equal(election.value.note, 'Taiwan');
+  });
+
+  it('refuses a feed kind, a bad date or time, another event without a name', () => {
+    const parsed = parseEventForm({ kind: 'fomc', date: '2027-3-18', time: '25:00', name: '' });
+    assert.ok(!parsed.ok);
+    assert.deepEqual(Object.keys(parsed.errors).sort(), ['date', 'kind', 'time']);
+    const unnamed = parseEventForm({ kind: 'other', date: '2027-03-18' });
+    assert.ok(!unnamed.ok && unnamed.errors.name);
+  });
+});
+
+describe('parseRuleForm switches (N8 step 3)', () => {
+  it('reads a true/false threshold entry as a checkbox, words and lists kept', () => {
+    const threshold = { tense: 6, push_in_quiet_hours: true, panic_classes: ['us_global_equity'] };
+    const off = parseRuleForm({ cooldownDays: '7', threshold_tense: '6' }, threshold);
+    assert.ok(off.ok);
+    assert.deepEqual(off.value.threshold, { tense: 6, push_in_quiet_hours: false, panic_classes: ['us_global_equity'] });
+    const on = parseRuleForm({ cooldownDays: '7', threshold_tense: '7', threshold_push_in_quiet_hours: 'on' }, threshold);
+    assert.ok(on.ok);
+    assert.equal(on.value.threshold['push_in_quiet_hours'], true);
+    assert.equal(on.value.threshold['tense'], 7);
+  });
+});
+
+describe('parseNewsForm (N8 step 4)', () => {
+  const current = readNewsSettings({ window_hours: 3, min_sources: 10, spike: 3, baseline_days: 7, cooldown_hours: 12, push_in_quiet_hours: true, topics: { war: { en: 'War', zh: '戰爭', terms: ['airstrike', '空襲'] } } });
+  assert.ok(current);
+  it('reads the counts, the switch and each topic\'s terms, one a line', () => {
+    const parsed = parseNewsForm({ minSources: '12', spike: '2.5', windowHours: '3', cooldownHours: '24', terms_war: 'airstrike\n 空襲 \n\nmissile attack' }, current);
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.minSources, 12);
+    assert.equal(parsed.value.spike, 2.5);
+    assert.equal(parsed.value.pushInQuietHours, false);
+    assert.deepEqual(parsed.value.topics[0]?.terms, ['airstrike', '空襲', 'missile attack']);
+    assert.equal(parsed.value.baselineDays, 7);
+  });
+  it('refuses a topic without terms and counts out of range', () => {
+    const parsed = parseNewsForm({ minSources: '0', spike: '30', windowHours: '3', cooldownHours: '12', terms_war: '  ' }, current);
+    assert.ok(!parsed.ok);
+    assert.deepEqual(Object.keys(parsed.errors).sort(), ['minSources', 'spike', 'terms_war']);
   });
 });

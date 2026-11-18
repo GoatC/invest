@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   adjacentDay,
   align,
+  positionBeta,
   betaFigures,
   excessReturns,
   inTwd,
@@ -262,5 +263,19 @@ describe('settings', () => {
     assert.equal(SETTINGS.riskFree['TWD'], 0.017);
     assert.equal(readRegressionSettings({}), undefined);
     assert.equal(readRegressionSettings({ ...SETTINGS, defaults: { freq: 'hourly', window_years: 2, currency: 'local' } }), undefined);
+  });
+});
+
+describe('positionBeta', () => {
+  it('scales β and α by direction and leverage, and sizes the index hedge', () => {
+    const long = positionBeta({ beta: 1.2, alphaAnnual: 0.02 }, 'long', 2, 100000, -0.1);
+    assert.ok(Math.abs(long.beta - 2.4) < 1e-12);
+    assert.ok(Math.abs(long.alphaAnnual - 0.04) < 1e-12);
+    assert.ok(Math.abs(long.ownMove + 0.24) < 1e-12);
+    assert.ok(Math.abs(long.hedgeTwd - 240000) < 1e-6);
+    const short = positionBeta({ beta: 1.2, alphaAnnual: 0.02 }, 'short', 1.5, 100000, -0.1);
+    assert.ok(Math.abs(short.beta + 1.8) < 1e-12);
+    assert.ok(Math.abs(short.ownMove - 0.18) < 1e-12);
+    assert.ok(Math.abs(short.hedgeTwd + 180000) < 1e-6);
   });
 });

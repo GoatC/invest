@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, orderSettings, toTransaction } from './data';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, leverageSettings, loadWidgetKeyDate, orderSettings, toTransaction } from './data';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {
@@ -45,6 +47,42 @@ describe('toTransaction', () => {
       note: null,
     });
     assert.deepEqual([trade.qty, trade.price, trade.fee, trade.fxRate], [2, 150, 1, 31.8]);
+    // A row saved before direction and leverage existed reads as a plain long.
+    assert.deepEqual([trade.direction, trade.leverage], ['long', 1]);
+  });
+
+  it('reads a short and its leverage', () => {
+    const trade = toTransaction({
+      id: 2,
+      trade_date: '2026-10-08',
+      ticker: 'AAPL',
+      side: 'sell',
+      qty: 1,
+      price: 200,
+      currency: 'USD',
+      fee: 0,
+      tax: 0,
+      fx_rate: 32,
+      pool: 'regular',
+      direction: 'short',
+      leverage: '1.5' as unknown as number,
+      source: 'manual',
+      note: null,
+    });
+    assert.deepEqual([trade.direction, trade.leverage], ['short', 1.5]);
+  });
+});
+
+describe('leverageSettings', () => {
+  it('reads the highest leverage and the margin-call share', () => {
+    assert.deepEqual(leverageSettings({ max: 5, margin_call_share: 0.3 }), { max: 5, marginCallShare: 0.3 });
+    assert.deepEqual(leverageSettings({ max: 2.34 }), { max: 2.3, marginCallShare: null });
+  });
+
+  it('offers 1x only when the setting is missing or out of range', () => {
+    for (const value of [undefined, null, {}, { max: 0.5 }, { max: 11 }, { max: '3' }]) {
+      assert.equal(leverageSettings(value).max, 1);
+    }
   });
 });
 
@@ -90,5 +128,24 @@ describe('orderSettings', () => {
   it('falls back to whole shares when the setting is missing or malformed', () => {
     assert.deepEqual(orderSettings(undefined), { fractionalMarkets: [], shareDecimals: 0 });
     assert.deepEqual(orderSettings({ fractional_markets: ['US', 'XX', 3], share_decimals: 9 }), { fractionalMarkets: ['US'], shareDecimals: 0 });
+  });
+});
+
+describe('loadWidgetKeyDate', () => {
+  const answering = (reply: { data: unknown; error: { message: string; code?: string } | null }) =>
+    ({ from: () => ({ select: () => ({ maybeSingle: async () => reply }) }) }) as unknown as SupabaseClient;
+
+  it("reads when the widget's key was made, or null with none", async () => {
+    assert.equal(await loadWidgetKeyDate(answering({ data: { created_at: '2026-11-18T12:00:00Z' }, error: null })), '2026-11-18T12:00:00Z');
+    assert.equal(await loadWidgetKeyDate(answering({ data: null, error: null })), null);
+  });
+
+  it('reads as no key before its migration is applied, so the push page keeps working', async () => {
+    const missing = { message: "Could not find the table 'public.widget_key' in the schema cache", code: 'PGRST205' };
+    assert.equal(await loadWidgetKeyDate(answering({ data: null, error: missing })), null);
+  });
+
+  it('still reports any other database error', async () => {
+    await assert.rejects(loadWidgetKeyDate(answering({ data: null, error: { message: 'permission denied for table widget_key' } })), /permission denied/);
   });
 });

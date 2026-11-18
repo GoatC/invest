@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
@@ -39,7 +39,7 @@ const marketName = (market: string): Bilingual => MARKET[market] ?? { en: market
 
 /** What a tile's figure is, and its month once (Bi shows both languages side by side). */
 function quoteNote(quote: Quote, series: Bilingual): Bilingual {
-  return quote.from === 'series' ? { en: `${series.en} · ${quote.month}`, zh: series.zh } : { en: 'setting: not loaded yet', zh: '設定值：資料尚未載入' };
+  return quote.from === 'series' ? { en: `${series.en} · ${quote.month}`, zh: `${series.zh} · ${quote.month}` } : { en: 'setting: not loaded yet', zh: '設定值：資料尚未載入' };
 }
 
 /** The markets in a steady order, the US first (jsonb keeps its keys in its own order). */
@@ -87,7 +87,7 @@ export default async function CapmPage({ searchParams }: { searchParams: Promise
     note:
       settings.erp.source === 'manual'
         ? { en: 'typed', zh: '自訂值' }
-        : quoteNote(erp, { en: 'Damodaran', zh: '隱含溢酬' }),
+        : quoteNote(erp, { en: 'Damodaran', zh: 'Damodaran 隱含溢酬' }),
     tone: erp.from === 'series' || settings.erp.source === 'manual' ? 'ok' : 'watch',
   });
   for (const [market, inputs] of markets(settings)) {
@@ -100,7 +100,7 @@ export default async function CapmPage({ searchParams }: { searchParams: Promise
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.costOfEquity} />
+          <Zh {...LABELS.costOfEquity} />
         </h1>
         <p className="equation">
           E(R<sub>i</sub>) = R<sub>f</sub> + β<sub>i</sub> (ERP + CRP)

@@ -1,12 +1,27 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
+import { createHash } from 'node:crypto';
+
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings } from '../../lib/models/costs.ts';
 import { readCapmSettings } from '../../lib/models/capm.ts';
 import { readValuationSettings } from '../../lib/models/intrinsic.ts';
+import { PE_CHECK_DEFAULTS, readPeCheckSettings } from '../../lib/models/forward-pe.ts';
+import { readLookThroughSettings } from '../../lib/models/look-through.ts';
+import { readRedFlagSettings } from '../../lib/models/red-flags.ts';
+import { readMcSettings } from '../../lib/models/monte-carlo.ts';
+import { readFrontierSettings } from '../../lib/models/frontier.ts';
+import { readStressSettings } from '../../lib/models/stress.ts';
+import { readTimelineSettings } from '../../lib/models/timeline.ts';
+import { readSectorSettings } from '../../lib/models/sectors.ts';
 import { readRegressionSettings } from '../../lib/models/regression.ts';
+import { readVolatilitySettings } from '../../lib/models/volatility.ts';
+import { readNewsSettings } from '../../lib/models/news.ts';
+import { readAutoCmaSettings } from '../../lib/models/auto-cma.ts';
+import { readBannerSettings } from '../../lib/models/banners.ts';
+import { readDividendSettings } from '../../lib/models/dividends.ts';
 import { capePercentile, drawdownOf } from '../../lib/models/windfall.ts';
 import { as, errorCode, freshDatabase, OWNER_ID, publicTables, STRANGER_ID } from './harness.ts';
 
@@ -18,12 +33,20 @@ const KEY_MISSING = '23503';
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
 // (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
 // the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
-// and the valuation workbench (step 4) fundamentals.
+// the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
+// red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
+// (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
+// analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
+// F6's auto-scored assumptions add cma_estimates; the dividend prompt and the in-app banner (2026-11-12)
+// add dividend_events and banner_dismissals; the home-screen widget (2026-11-18) widget_snapshot and widget_key.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
   'attribution', 'config', 'watchlist', 'windfall_plan', 'manual_assets', 'push_subscriptions', 'audit_log',
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
+  'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
+  'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts', 'cma_estimates',
+  'dividend_events', 'banner_dismissals', 'widget_snapshot', 'widget_key',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -43,7 +66,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices and fundamentals', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events, banner_dismissals, widget_snapshot and widget_key', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -225,6 +248,32 @@ describe('change logs', () => {
 });
 
 describe('constraints', () => {
+  it('read a trade saved without direction or leverage as a 1x long, and keep leverage in 1.0–10.0', async () => {
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query<{ direction: string; leverage: string }>(
+        `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate)
+         values ('2026-10-21', 'VT', 'buy', 1, 158, 'USD', 32.4) returning direction, leverage`,
+      );
+      assert.deepEqual([rows[0]?.direction, Number(rows[0]?.leverage)], ['long', 1]);
+      const short = await scalar<string>(
+        tx,
+        `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate, direction, leverage)
+         values ('2026-10-21', 'VT', 'sell', 1, 158, 'USD', 32.4, 'short', 2.5) returning leverage`,
+      );
+      assert.equal(Number(short), 2.5);
+    });
+    for (const [direction, leverage] of [['short', 10.5], ['long', 0.9], ['sideways', 1]] as const) {
+      const insert = `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate, direction, leverage)
+                      values ('2026-10-21', 'VT', 'buy', 1, 158, 'USD', 32.4, '${direction}', ${leverage})`;
+      assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert))), CHECK_FAILED);
+    }
+  });
+
+  it('seed config leverage with a 5x maximum and a 30% margin-call share', async () => {
+    const value = await scalar<{ max: number; margin_call_share: number }>(db, `select value from public.config where key = 'leverage'`);
+    assert.deepEqual(value, { max: 5.0, margin_call_share: 0.3 });
+  });
+
   it('require fx_rate 1 on a TWD trade', async () => {
     const insert = `insert into public.transactions (trade_date, ticker, side, qty, price, currency, fx_rate)
                     values ('2026-10-21', '0050', 'buy', 10, 107, 'TWD', 32.4)`;
@@ -298,10 +347,10 @@ describe('reference data from the PRD', () => {
     ]);
   });
 
-  it('loads every Section 4 push rule, with the Phase 2 rules disabled until their step (F3 since Phase 2, step 1, F12 since step 4)', async () => {
+  it('loads every Section 4 push rule, each enabled once its step is built (F3 since Phase 2, step 1, F12 since step 4, N3 since step 5, N8 since its step 3)', async () => {
     const { rows } = await db.query<{ id: string; feature: string; enabled: boolean }>('select id, feature, enabled from public.rules order by id');
-    assert.equal(rows.length, 14);
-    for (const row of rows) assert.equal(row.enabled, row.feature !== 'N3', row.id);
+    assert.equal(rows.length, 16);
+    for (const row of rows) assert.equal(row.enabled, true, row.id);
   });
 
   it("keeps the trade-entry FX default and typo check in config: the trade date's rate, up to 10 days old, and a 20% margin", async () => {
@@ -386,7 +435,7 @@ describe('proposals (step 9)', () => {
   it('keep one open proposal per rule and state, and log every change to one', async () => {
     await as(db, 'owner', async (tx) => {
       const insert = (state: string) =>
-        tx.query(`insert into public.proposals (rule_id, state, orders, detail, expires_at) values ('R1', $1, '[]', '{"weight": 0.055}', now() + interval '14 days') returning id`, [state]);
+        tx.query(`insert into public.proposals (rule_id, state, orders, detail, expires_at) values ('R1', $1, '[]', '{"weight": 0.055}', null) returning id`, [state]);
       const { rows } = await insert('2330');
       const id = (rows[0] as { id: number }).id;
       // A refused statement aborts the transaction; the savepoint lets the test carry on.
@@ -403,6 +452,8 @@ describe('proposals (step 9)', () => {
       const log = await tx.query(`select row_key, action, new_row ->> 'status' as status, changed_by from public.audit_log where table_name = 'proposals'`);
       assert.deepEqual(log.rows, [{ row_key: String(id), action: 'update', status: 'expired', changed_by: OWNER_ID }]);
       assert.equal(await refused(() => tx.query(`update public.proposals set closed_reason = 'whatever' where id = $1`, [id])), '23514');
+      // A standing warning since 2026-11-12: nothing is approved any more.
+      assert.equal(await refused(() => tx.query(`update public.proposals set status = 'approved' where id = $1`, [id])), '23514');
     });
     await as(db, 'stranger', async (tx) => {
       assert.equal(await scalar(tx, 'select count(*) from public.proposals'), 0);
@@ -443,7 +494,7 @@ describe('fee and tax drag (step 11)', () => {
     assert.deepEqual(tax?.amt, { overseasFloorTwd: 1_000_000, exemptionTwd: 7_500_000, rate: 0.2 });
     assert.deepEqual(tax?.withholding, { US: 0.3, IE: 0.15, TW: 0 });
     assert.equal((await scalar<Date>(db, `select last_verified from public.config where key = 'tax'`)).toISOString().slice(0, 10), '2026-10-22');
-    assert.deepEqual(readFeeSettings(await value('fees')), { brokerId: null, tw: { rate: 0.001425, discount: 1, minTwd: 20 }, fxSpread: 0.001 });
+    assert.deepEqual(readFeeSettings(await value('fees')), { brokerId: 'sinopac', tw: { rate: 0.001425, discount: 1, minTwd: 20 }, fxSpread: 0.001 });
     assert.deepEqual(
       readBrokers(await value('brokers')).map((broker) => broker.id),
       ['cathay', 'sinopac', 'yuanta', 'masterlink'],
@@ -577,6 +628,121 @@ describe('valuation workbench (Phase 2, step 4)', () => {
   });
 });
 
+describe('red-flag indicator (Phase 2, step 5)', () => {
+  it('keeps the profiles and events for the owner to read and the job to write, and the scans for both to write', async () => {
+    const scan = `('AAPL', '2099-06-30', 'beneish_m', -2.4, 'green', 87.5, '{"periodEnd": "2099-03-31"}')`;
+    for (const statement of [
+      `insert into public.company_profiles (ticker, source) values ('AAPL', 'sec')`,
+      `insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-01-01', 'sec', 'x', '8-K')`,
+    ]) {
+      await as(db, 'owner', async (tx) => {
+        assert.equal(await errorCode(tx.query(statement)), DENIED, statement);
+      });
+    }
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.red_flags (ticker, flag_date, indicator, value, level, coverage_pct, detail) values ${scan}`);
+    });
+    await db.query(`insert into public.red_flags (ticker, flag_date, indicator, value, level, coverage_pct, detail) values ${scan}`);
+    await db.query(`insert into public.red_flags (ticker, flag_date, indicator, level, coverage_pct) values ('AAPL', '2099-06-30', 'governance_rating', 'na', 87.5)`);
+    assert.equal(await errorCode(db.query(`insert into public.red_flags (ticker, flag_date, indicator, level) values ('AAPL', '2099-06-30', 'altman_z', 'blue')`)), CHECK_FAILED);
+    // The seed has AAPL's profile: overwrite it here, and put it back at the end.
+    const seeded = await scalar(db, `select to_jsonb(p) from public.company_profiles p where ticker = 'AAPL'`);
+    await db.query(`delete from public.company_profiles where ticker = 'AAPL'`);
+    await db.query(`insert into public.company_profiles (ticker, industry_code, industry, sic, checked, source) values ('AAPL', '3571', 'Electronic Computers', 3571, '{"restatement": {"on": "2099-06-30"}}', 'sec')`);
+    assert.equal(await errorCode(db.query(`insert into public.company_profiles (ticker, business_id, source) values ('2330', '123', 'twse')`)), CHECK_FAILED);
+    await db.query(`insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-01-01', 'sec', '0000320193-99-000001', '8-K Item 4.02')`);
+    assert.equal(await errorCode(db.query(`insert into public.red_flag_events (ticker, indicator, event_date, source, ref, title) values ('AAPL', 'restatement', '2099-02-01', 'sec', '0000320193-99-000001', 'again')`)), '23505');
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.red_flags where flag_date = '2099-06-30'`), 2);
+      assert.equal(await scalar(tx, `select industry from public.company_profiles where ticker = 'AAPL'`), 'Electronic Computers');
+    });
+    await as(db, 'stranger', async (tx) => {
+      for (const table of ['red_flags', 'company_profiles', 'red_flag_events', 'red_flag_entries']) assert.equal(await scalar(tx, `select count(*) from public.${table}`), 0, table);
+    });
+    await db.query(`delete from public.red_flags where flag_date = '2099-06-30'`);
+    await db.query(`delete from public.red_flag_events where event_date = '2099-01-01'`);
+    await db.query(`delete from public.company_profiles where ticker = 'AAPL'`);
+    await db.query(`insert into public.company_profiles select * from jsonb_populate_record(null::public.company_profiles, $1)`, [seeded]);
+  });
+
+  it("lets the owner write their own entries, a count of events or a governance tier, and logs each edit", async () => {
+    for (const [indicator, value] of [['governance_rating', 33], ['environmental_penalties', 1.5], ['beneish_m', 0]] as const) {
+      await as(db, 'owner', async (tx) => {
+        assert.equal(await errorCode(tx.query(`insert into public.red_flag_entries (ticker, indicator, as_of, value) values ('2330', '${indicator}', '2099-05-01', ${value})`)), CHECK_FAILED, indicator);
+      });
+    }
+    await as(db, 'owner', async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(`insert into public.red_flag_entries (ticker, indicator, as_of, value, note) values ('2330', 'governance_rating', '2099-05-01', 5, '第 12 屆') returning id`);
+      const id = rows[0]?.id;
+      await tx.query(`update public.red_flag_entries set value = 20 where id = ${id}`);
+      await tx.query(`delete from public.red_flag_entries where id = ${id}`);
+      const { rows: log } = await tx.query<{ action: string }>(`select action from public.audit_log where table_name = 'red_flag_entries' and row_key = '${id}' order by id`);
+      assert.deepEqual(log.map((row) => row.action), ['update', 'delete']);
+    });
+  });
+
+  it('seeds the settings, and turns the two N3 rules on, RED_FLAG_RED selling all of the stock', async () => {
+    const settings = readRedFlagSettings(await scalar(db, `select value from public.config where key = 'red_flags'`));
+    assert.ok(settings);
+    assert.equal(settings.beneish.redAbove, -1.78);
+    assert.deepEqual(settings.altman, { z: { redBelow: 1.81, amberBelow: 2.99 }, z2: { redBelow: 1.1, amberBelow: 2.6 } });
+    assert.ok(settings.manufacturing.twIndustries.includes('24'));
+    assert.deepEqual(settings.excluded, { industries: [], tickers: [] });
+    const { rows } = await db.query<{ id: string; enabled: boolean; threshold: unknown }>(`select id, enabled, threshold from public.rules where feature = 'N3' order by id`);
+    assert.deepEqual(rows, [
+      { id: 'RED_FLAG_RED', enabled: true, threshold: { sell_share: 1 } },
+      { id: 'RED_FLAG_WORSENS', enabled: true, threshold: {} },
+    ]);
+  });
+});
+
+describe('look-through (Phase 2, step 6)', () => {
+  it('keeps each fund\'s holdings file for the owner to read and the job to write, as an array', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[]')`)), DENIED);
+    });
+    assert.equal(await errorCode(db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '{}')`)), CHECK_FAILED);
+    await db.query(`insert into public.fund_holdings (fund, as_of, source, constituents) values ('BNDW', '2099-01-01', 'vanguard', '[["US:X", "X", "X", "US", "USD", null, "bond", 1]]')`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select jsonb_array_length(constituents) from public.fund_holdings where fund = 'BNDW'`), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.fund_holdings'), 0);
+    });
+    await db.query(`delete from public.fund_holdings where fund = 'BNDW'`);
+    assert.equal(await errorCode(db.query(`update public.company_profiles set sector = 'Chips' where ticker = 'AAPL'`)), CHECK_FAILED);
+  });
+
+  it('seeds the settings: VT and VOO from Vanguard, 00692 from Fubon, a GICS sector for every TWSE industry', async () => {
+    const settings = readLookThroughSettings(await scalar(db, `select value from public.config where key = 'look_through'`));
+    assert.ok(settings);
+    assert.deepEqual(Object.keys(settings.sources).sort(), ['00692', 'VOO', 'VT']);
+    assert.equal(settings.twSectors['24'], 'Information Technology');
+    assert.equal(settings.twSectors['17'], 'Financials');
+    assert.equal(Object.keys(settings.twSectors).length, 36);
+  });
+});
+
+describe('sector tab (Phase 2, step 7)', () => {
+  it('seeds the settings: Taiwan red up, an SPDR fund for each of the 11 GICS sectors, 20 TWSE industry indices', async () => {
+    const settings = readSectorSettings(await scalar(db, `select value from public.config where key = 'sectors'`));
+    assert.ok(settings);
+    assert.equal(settings.colour, 'red_up');
+    const us = settings.proxies.filter((proxy) => proxy.market === 'US');
+    assert.equal(us.length, 11);
+    assert.equal(new Set(us.map((proxy) => proxy.sector)).size, 11);
+    assert.equal(settings.proxies.filter((proxy) => proxy.market === 'TW').length, 20);
+    assert.equal(settings.proxies.find((proxy) => proxy.id === 'TW_ELECTRONIC')?.name, '電子工業類指數');
+  });
+
+  it('invents 61 weekly closes for every proxy, to 2026-10-23', async () => {
+    const { rows } = await db.query<{ proxies: string; closes: string; last: string }>(
+      `select count(distinct index_id) as proxies, count(*) as closes, max(price_date)::text as last from public.index_prices where index_id like 'X%' or index_id like 'TW\\_%'`,
+    );
+    assert.deepEqual(rows.map((row) => [Number(row.proxies), Number(row.closes), row.last]), [[31, 31 * 61, '2026-10-23']]);
+  });
+});
+
 describe('windfall planner (Phase 2, step 1)', () => {
   it('keeps the market series for the owner to read and the job to write, one row per series and month', async () => {
     await as(db, 'owner', async (tx) => {
@@ -697,6 +863,22 @@ describe('demo seed', () => {
     assert.equal(await scalar(db, `select count(*) from public.market_series where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.index_prices where source <> 'demo'`), 0);
     assert.equal(await scalar(db, `select count(*) from public.fundamentals where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.company_profiles where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.red_flag_events where source <> 'demo'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.fund_holdings where source <> 'demo'`), 0);
+  });
+
+  it('invents two green weekly red-flag scans (N3), and an auditor change for AAPL after them', async () => {
+    const { rows } = await db.query<{ ticker: string; flag_date: string; levels: string; rows: string }>(
+      `select ticker, flag_date::text, string_agg(distinct level, ',' order by level) as levels, count(*) as rows from public.red_flags group by ticker, flag_date order by ticker, flag_date`,
+    );
+    assert.deepEqual(rows.map((row) => [row.ticker, row.flag_date, row.levels, Number(row.rows)]), [
+      ['2330', '2026-10-11', 'green', 9],
+      ['2330', '2026-10-18', 'green', 9],
+      ['AAPL', '2026-10-11', 'green,na,none', 9],
+      ['AAPL', '2026-10-18', 'green,na,none', 9],
+    ]);
+    assert.equal(await scalar(db, `select event_date::text from public.red_flag_events where ticker = 'AAPL'`), '2026-10-20');
   });
 
   it("invents thirteen quarters of filings for the two demo stocks (F12), AAPL's with the day it filed", async () => {
@@ -749,5 +931,391 @@ describe('demo seed', () => {
             + (select count(*) from public.manual_assets where pool = 'windfall')`,
     );
     assert.equal(windfallRows, 0);
+  });
+});
+
+describe('Monte Carlo (Phase 3, step 1)', () => {
+  it('seeds the settings: 10,000 paths, three-month blocks, marks at 10, 20 and 30 years, no target and no windfall figures', async () => {
+    const settings = readMcSettings(await scalar(db, `select value from public.config where key = 'monte_carlo'`));
+    assert.ok(settings);
+    assert.equal(settings.paths, 10000);
+    assert.equal(settings.blockMonths, 3);
+    assert.deepEqual(settings.markYears, [10, 20, 30]);
+    assert.equal(settings.targetTwd, null);
+    assert.equal(settings.windfall.amountTwd, null);
+    // F5 paces an expected windfall by F3's CAPE pace, and accelerates on the global equity class.
+    assert.equal(settings.windfall.tranches, null);
+    assert.equal(settings.gaugeClass, 'us_global_equity');
+    assert.equal(await scalar(db, `select count(*) from public.asset_classes where id = 'us_global_equity'`), 1);
+  });
+
+  it('keeps one run per model and day, for the owner to read and the job to write', async () => {
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), DENIED);
+    });
+    await db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{"months": 60}')`);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-01', '{}')`)), '23505');
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('monte_carlo', '2099-01-02', '[]')`)), CHECK_FAILED);
+    assert.equal(await errorCode(db.query(`insert into public.simulation_runs (model, run_date, summary) values ('Monte', '2099-01-02', '{}')`)), CHECK_FAILED);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 1);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.simulation_runs'), 0);
+    });
+    await db.query(`delete from public.simulation_runs where run_date = '2099-01-01'`);
+  });
+});
+
+describe('life timeline (Phase 3, step 2)', () => {
+  it('seeds the settings with no goals: they are the owner’s own, not for git', async () => {
+    const settings = readTimelineSettings(await scalar(db, `select value from public.config where key = 'timeline'`));
+    assert.deepEqual(settings, { goals: [] });
+  });
+});
+
+describe('efficient frontier (Phase 3, step 4)', () => {
+  it('seeds the settings: ten years, a bound for every asset class that can hold 100%, a 1.7% rate', async () => {
+    const settings = readFrontierSettings(await scalar(db, `select value from public.config where key = 'frontier'`));
+    assert.ok(settings);
+    assert.equal(settings.lookbackYears, 10);
+    assert.equal(settings.riskFree, 0.017);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.bounds).sort(), classes.rows.map((row) => row.id));
+    const high = Object.values(settings.bounds).reduce((sum, bound) => sum + bound[1], 0);
+    assert.ok(high >= 1);
+  });
+});
+
+describe('stress test (Phase 3, step 3)', () => {
+  it('seeds three scenarios of public market history whose series line up, every asset class mapped', async () => {
+    const settings = readStressSettings(await scalar(db, `select value from public.config where key = 'stress'`));
+    assert.ok(settings);
+    assert.deepEqual(settings.scenarios.map((scenario) => [scenario.id, scenario.from, scenario.returns['us_equity']?.length]), [
+      ['gfc_2008', '2007-10', 39],
+      ['covid_2020', '2020-01', 15],
+      ['rates_2022', '2022-01', 24],
+    ]);
+    const classes = await db.query<{ id: string }>('select id from public.asset_classes order by id');
+    assert.deepEqual(Object.keys(settings.map).sort(), classes.rows.map((row) => row.id));
+    assert.equal(settings.gauge, 'us_equity');
+    // History says what it said: the S&P 500 fell by about half from October 2007 to March 2009.
+    const gfc = settings.scenarios[0]?.returns['us_equity'] ?? [];
+    const level = gfc.slice(0, 18).reduce((acc, value) => acc * (1 + value), 1);
+    assert.ok(level < 0.65 && level > 0.45, `${level}`);
+  });
+});
+
+describe('stock splits (N5)', () => {
+  it('keep one split per security a day, a ratio above 0 that changes the share count, and log edits and deletes', async () => {
+    const split = (values: string) => db.query(`insert into public.splits (ticker, ex_date, ratio) values ${values}`);
+    assert.equal(await errorCode(split(`('AAPL', '2026-07-10', 1)`)), CHECK_FAILED);
+    assert.equal(await errorCode(split(`('AAPL', '2026-07-10', 0)`)), CHECK_FAILED);
+    assert.equal(await errorCode(split(`('NOPE', '2026-07-10', 2)`)), KEY_MISSING);
+    assert.equal(await errorCode(split(`('AAPL', '2026-06-10', 4), ('AAPL', '2026-06-10', 2)`)), '23505');
+    await as(db, 'owner', async (tx) => {
+      const id = await scalar<number>(tx, `insert into public.splits (ticker, ex_date, ratio) values ('AAPL', '2026-06-10', 4) returning id`);
+      await tx.query('update public.splits set ratio = 0.1 where id = $1', [id]);
+      await tx.query('delete from public.splits where id = $1', [id]);
+      const { rows } = await tx.query(`select action, old_row ->> 'ratio' as old_ratio, changed_by from public.audit_log where table_name = 'splits' order by id`);
+      assert.deepEqual(rows, [
+        { action: 'update', old_ratio: '4', changed_by: OWNER_ID },
+        { action: 'delete', old_ratio: '0.1', changed_by: OWNER_ID },
+      ]);
+    });
+  });
+
+  it('stay closed to a stranger', async () => {
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.splits (ticker, ex_date, ratio) values ('AAPL', '2026-06-10', 4)`)), DENIED);
+    });
+  });
+});
+
+describe('forward P/E check (F12, added 2026-11-04)', () => {
+  it("keeps one consensus a stock, the owner's typed or the job's, logged; a stranger sees none", async () => {
+    const row = `('2330', '2026-11-04', 'TWD', '{"years": [{"periodEnd": "2026-12-31", "mean": 62.5}]}', 'typed')`;
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ${row}`);
+      await tx.query(`update public.analyst_estimates set estimates = '{"years": [{"periodEnd": "2026-12-31", "mean": 63}]}' where ticker = '2330'`);
+      assert.equal(await scalar(tx, `select count(*) from public.audit_log where table_name = 'analyst_estimates' and row_key = '2330'`), 1);
+      assert.equal(await errorCode(tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ('AAPL', '2026-11-04', 'USD', '{"years": {}}', 'typed')`)), CHECK_FAILED);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.analyst_estimates'), 0);
+      assert.equal(await errorCode(tx.query(`insert into public.analyst_estimates (ticker, as_of, currency, estimates, source) values ('2330', '2026-11-04', 'TWD', '{"years": []}', 'typed') on conflict (ticker) do nothing`)), DENIED);
+    });
+    await as(db, 'service_role', (tx) => tx.query(`update public.analyst_estimates set source = 'alphavantage' where ticker = 'AAPL'`));
+    await db.query(`delete from public.analyst_estimates where ticker = '2330'`);
+  });
+
+  it('seeds config pe_check and a demo consensus for AAPL', async () => {
+    const settings = readPeCheckSettings(await scalar(db, `select value from public.config where key = 'pe_check'`));
+    assert.deepEqual(settings, PE_CHECK_DEFAULTS);
+    const seeded = await scalar<{ years: unknown[] }>(db, `select estimates from public.analyst_estimates where ticker = 'AAPL'`);
+    assert.equal(seeded.years.length, 2);
+  });
+});
+
+describe('volatility alert (N8, added 2026-11-06)', () => {
+  it('seeds config volatility, readable, and demo closes of its series', async () => {
+    const settings = readVolatilitySettings(await scalar(db, `select value from public.config where key = 'volatility'`));
+    assert.ok(settings);
+    assert.equal(settings.components.find((row) => row.id === 'vix')?.panic, 40);
+    assert.equal(await scalar(db, `select count(distinct index_id) from public.index_prices where index_id in ('VIX', 'VIX3M', 'TWVIX', 'HY_OAS', 'EPU')`), 5);
+  });
+
+  it('keeps one score a day, 1 to 10, written by the job only; the owner reads it, a stranger sees none', async () => {
+    const row = `('2099-11-06', 6.9, 6.57, 0.7143, '[{"id": "vix", "value": 28.18}]')`;
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${row}`)), DENIED);
+    });
+    for (const bad of [`('2099-11-07', 10.5, 10, 1, '[]')`, `('2099-11-07', 5, 5, 1, '{}')`]) {
+      await as(db, 'service_role', async (tx) => {
+        assert.equal(await errorCode(tx.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${bad}`)), CHECK_FAILED);
+      });
+    }
+    await db.query(`insert into public.volatility_scores (score_date, score, mean, coverage, components) values ${row}`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select score from public.volatility_scores where score_date = '2099-11-06'`), '6.9');
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.volatility_scores'), 0);
+    });
+    await db.query(`delete from public.volatility_scores where score_date = '2099-11-06'`);
+  });
+});
+
+describe('event calendar (N8 step 2)', () => {
+  it("lets the owner read every event and type, edit and delete only typed ones, logged; the job's are the job's", async () => {
+    await db.query(`insert into public.market_events (kind, event_date, event_time, name_en, name_zh, source) values ('fomc', '2099-12-10', '03:00', 'FOMC rate decision', '聯準會利率決議', 'fed')`);
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await scalar(tx, `select count(*) from public.market_events where event_date = '2099-12-10'`), 1);
+      const { rows } = await tx.query<{ id: number }>(`insert into public.market_events (kind, event_date, name_en, name_zh, source) values ('other', '2099-01-15', 'Election', '選舉', 'typed') returning id`);
+      await tx.query(`update public.market_events set event_time = '20:00' where id = $1`, [rows[0]?.id]);
+      await tx.query(`delete from public.market_events where id = $1`, [rows[0]?.id]);
+      assert.equal(await scalar(tx, `select count(*) from public.audit_log where table_name = 'market_events' and row_key = $1`, [String(rows[0]?.id)]), 2);
+      // A feed's row cannot be touched: the delete finds nothing to delete.
+      assert.equal((await tx.query(`delete from public.market_events where source = 'fed' returning id`)).rows.length, 0);
+    });
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_events (kind, event_date, name_en, name_zh, source) values ('fomc', '2099-01-15', 'FOMC', 'FOMC', 'fed')`)), DENIED);
+    });
+    await as(db, 'owner', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.market_events (kind, event_date, event_time, name_en, name_zh, source) values ('other', '2099-01-15', '25:00', 'X', 'X', 'typed')`)), CHECK_FAILED);
+    });
+    await as(db, 'stranger', async (tx) => {
+      assert.equal(await scalar(tx, 'select count(*) from public.market_events'), 0);
+    });
+    // The job's own replacing is not logged.
+    await db.query(`delete from public.market_events where event_date = '2099-12-10'`);
+    assert.equal(await scalar(db, `select count(*) from public.audit_log where table_name = 'market_events' and old_row ->> 'source' = 'fed'`), 0);
+  });
+
+  it("seeds 2026's central bank meetings, the reminder settings, and takes event pushes", async () => {
+    assert.equal(await scalar(db, `select count(*) from public.market_events where kind = 'cbc' and event_date between '2026-01-01' and '2026-12-31'`), 4);
+    const settings = readVolatilitySettings(await scalar(db, `select value from public.config where key = 'volatility'`));
+    assert.deepEqual(settings?.events, { leadDays: 2, remind: ['fomc', 'cpi', 'payrolls', 'cbc', 'other'] });
+    await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('event', 'fomc:2099-12-10:FOMC', 't', 'b', '/volatility#events', now())`);
+    await db.query(`delete from public.notifications where kind = 'event'`);
+  });
+});
+
+describe('volatility alert and hedge (N8 step 3)', () => {
+  it('loads VOLATILITY_ALERT and VOLATILITY_HEDGE with their thresholds, and the two VIX products in the tactical sleeve', async () => {
+    const { rows } = await db.query<{ id: string; condition: string; threshold: Record<string, unknown> }>(`select id, condition, threshold from public.rules where feature = 'N8' order by id`);
+    assert.deepEqual(rows.map((row) => [row.id, row.condition]), [['VOLATILITY_ALERT', 'volatility_score_crosses'], ['VOLATILITY_HEDGE', 'volatility_score_calm']]);
+    assert.equal(rows[0]?.threshold['push_in_quiet_hours'], true);
+    assert.equal(rows[1]?.threshold['vol_cap'], 0.05);
+    const products = await db.query<{ ticker: string; sleeve: string; asset_class_id: string }>(`select ticker, sleeve, asset_class_id from public.securities where ticker in ('00677U', 'VIXY') order by ticker`);
+    assert.deepEqual(products.rows, [{ ticker: '00677U', sleeve: 'satellite', asset_class_id: 'tactical_themes' }, { ticker: 'VIXY', sleeve: 'satellite', asset_class_id: 'tactical_themes' }]);
+  });
+});
+
+describe('breaking news (N8 step 4)', () => {
+  it('seeds config news with its seven topics, readable', async () => {
+    const settings = readNewsSettings(await scalar(db, `select value from public.config where key = 'news'`));
+    assert.deepEqual(settings?.topics.map((topic) => topic.id).sort(), ['central_bank', 'crash', 'disaster', 'financial', 'taiwan_strait', 'trade', 'war']);
+    assert.equal(settings?.pushInQuietHours, true);
+  });
+
+  it('keeps counts and alerts for the job to write and the owner to read; a stranger sees none; news pushes are taken', async () => {
+    for (const sql of [`insert into public.news_counts (topic, counted_at, sources) values ('war', now(), 3)`, `insert into public.news_alerts (topic, sources, window_hours, headlines) values ('war', 30, 3, '[]')`]) {
+      await as(db, 'owner', async (tx) => assert.equal(await errorCode(tx.query(sql)), DENIED));
+    }
+    await as(db, 'service_role', async (tx) => {
+      assert.equal(await errorCode(tx.query(`insert into public.news_alerts (topic, sources, window_hours, headlines) values ('war', 0, 3, '[]')`)), CHECK_FAILED);
+    });
+    await db.query(`insert into public.news_alerts (topic, sources, baseline, window_hours, headlines) values ('war', 30, 8, 3, '[{"title": "Strikes on Iran", "source": "CNBC"}]')`);
+    await as(db, 'owner', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.news_alerts'), 1));
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.news_alerts'), 0));
+    await db.query(`insert into public.notifications (kind, key, title, body, url, send_after) values ('news', '1', 't', 'b', '/volatility#news', now())`);
+    await db.query(`delete from public.notifications where kind = 'news'`);
+    await db.query('delete from public.news_alerts');
+  });
+});
+
+describe('auto-scored assumptions (F6)', () => {
+  it('seeds config cma_auto, readable, anchoring US and Taiwan stocks to the two core equity classes', async () => {
+    const settings = readAutoCmaSettings(await scalar(db, `select value from public.config where key = 'cma_auto'`));
+    assert.deepEqual(settings, { enabled: true, premium: 'cma', anchors: { US: 'us_global_equity', TW: 'tw_market_cap' }, lookbackYears: 5, minMonths: 36 });
+  });
+
+  it('keeps one estimate per class for the owner and the job to write; a stranger sees none; a figure out of range is refused', async () => {
+    const row = `('tactical_themes', '2026-11-09', 0.0686, 0.18, 36, '{"lines": []}')`;
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months, detail) values ${row}`);
+      assert.equal(await scalar(tx, `select months from public.cma_estimates where class_id = 'tactical_themes'`), 36);
+    });
+    const insert = (values: string) => `insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months) values ${values}`;
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, -0.1, 36)`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('no_class', '2026-11-09', 0.07, 0.2, 36)`)))), KEY_MISSING);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, 0.2, 36)`)))), DENIED);
+    // A class held with nothing scorable yet keeps a row with neither figure; one figure alone is refused.
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.cma_estimates (class_id, as_of, months, detail) values ('us_stocks', '2026-11-09', 0, '{"left": [{"ticker": "NVDA", "reason": "history"}]}')`);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('us_stocks', '2026-11-09', 0.07, null, 36)`)))), CHECK_FAILED);
+    await db.query(`insert into public.cma_estimates (class_id, as_of, expected_return, volatility, months, detail) values ${row}`);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.cma_estimates'), 0));
+    await as(db, 'owner', async (tx) => assert.equal((await tx.query(`update public.cma_estimates set volatility = 0.2 where class_id = 'tactical_themes'`)).affectedRows, 1));
+    await as(db, 'service_role', async (tx) => assert.equal((await tx.query(`delete from public.cma_estimates where class_id = 'tactical_themes'`)).affectedRows, 1));
+    // Worked out from the holdings, so its writes are not audited.
+    await db.query(`update public.cma_estimates set volatility = 0.2 where class_id = 'tactical_themes'`);
+    assert.equal(await scalar(db, `select count(*) from public.audit_log where table_name = 'cma_estimates'`), 0);
+    await db.query('delete from public.cma_estimates');
+  });
+});
+
+describe('dividend prompts and the in-app banner (2026-11-12)', () => {
+  it('seeds config dividends and banners, readable by the models', async () => {
+    const dividends = readDividendSettings(await scalar(db, `select value from public.config where key = 'dividends'`));
+    assert.deepEqual(dividends, { lookbackDays: 60, matchDays: 30, payLagDays: { US: 7, TW: 30, UK: 14 }, withholding: { US: 0.3 }, push: true, pushDays: 3 });
+    const banners = readBannerSettings(await scalar(db, `select value from public.config where key = 'banners'`));
+    assert.deepEqual([banners?.enabled, banners?.snoozeDays, banners?.balanceStaleDays], [true, 7, 45]);
+    assert.deepEqual(Object.entries(banners?.kinds ?? {}).filter(([, on]) => !on), []);
+  });
+
+  it('marks the accumulating Irish class as reinvesting, and every other security as asked about', async () => {
+    assert.equal(await scalar(db, `select dividends_reinvested from public.securities where ticker = 'AGGU'`), true);
+    assert.equal(await scalar(db, `select count(*) from public.securities where dividends_reinvested and ticker <> 'AGGU'`), 0);
+    assert.equal(await scalar(db, `select count(*) from public.securities where dividends_checked_on is not null`), 0);
+  });
+
+  it('keeps one dividend per security and ex-date; the job upserts it and the owner’s skip stays', async () => {
+    const insert = (values: string) => `insert into public.dividend_events (ticker, ex_date, pay_date, amount, currency, source) values ${values}`;
+    // The job saves it read off the closes; the owner skips it; the next night Alpha Vantage gives the payment date and the exact amount.
+    await db.query(insert(`('VT', '2026-09-18', null, 0.41, 'USD', 'adjusted_close')`));
+    await as(db, 'owner', async (tx) => assert.equal((await tx.query(`update public.dividend_events set skipped_pools = '{regular}' where ticker = 'VT' and ex_date = '2026-09-18'`)).affectedRows, 1));
+    await db.query(`update public.dividend_events set skipped_pools = '{regular}' where ticker = 'VT' and ex_date = '2026-09-18'`);
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(`${insert(`('VT', '2026-09-18', '2026-09-22', 0.4084, 'USD', 'alphavantage')`)} on conflict (ticker, ex_date) do update set pay_date = excluded.pay_date, amount = excluded.amount, source = excluded.source`);
+      const row = (await tx.query<{ pay_date: string; amount: string; skipped_pools: string[] }>(`select pay_date::text, amount, skipped_pools from public.dividend_events where ticker = 'VT' and ex_date = '2026-09-18'`)).rows[0];
+      assert.deepEqual([row?.pay_date, Number(row?.amount), row?.skipped_pools], ['2026-09-22', 0.4084, ['regular']]);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-09-18', null, 0.41, 'USD', 'demo')`)))), '23505');
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-06-18', '2026-06-01', 0.56, 'USD', 'demo')`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('VT', '2026-06-18', null, 0, 'USD', 'demo')`)))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(insert(`('NOPE', '2026-06-18', null, 0.56, 'USD', 'demo')`)))), KEY_MISSING);
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`update public.dividend_events set skipped_pools = '{satellite}' where ticker = 'VT'`))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(insert(`('VT', '2026-06-18', null, 0.56, 'USD', 'demo')`)))), DENIED);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.dividend_events'), 0));
+    await db.query(`delete from public.dividend_events where ticker = 'VT' and ex_date = '2026-09-18'`);
+  });
+
+  it('remembers a closed banner for the owner only', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.banner_dismissals (key, until) values ('push', '2026-11-19')`);
+      await tx.query(`insert into public.banner_dismissals (key, until) values ('push', '2026-11-26') on conflict (key) do update set until = excluded.until`);
+      assert.equal(await scalar(tx, `select until::text from public.banner_dismissals where key = 'push'`), '2026-11-26');
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`insert into public.banner_dismissals (key, until) values ('', '2026-11-19')`))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(`insert into public.banner_dismissals (key, until) values ('first_trade', '2026-11-19')`))), DENIED);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.banner_dismissals'), 0));
+    await db.query('delete from public.banner_dismissals');
+  });
+
+  it('lets the push job plan a dividend push, once', async () => {
+    const insert = `insert into public.notifications (kind, key, title, body, url, send_after) values ('dividend', '1:regular', 'VT 配息', '2026-09-22 發放，約 NT$18：要記一筆股利嗎？', '/cash-flows/new?dividend=1&pool=regular', now())`;
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(insert);
+      assert.equal(await scalar(tx, `select count(*) from public.notifications where kind = 'dividend'`), 1);
+    });
+    await db.query(insert);
+    assert.equal(await errorCode(as(db, 'service_role', (tx) => tx.query(insert))), '23505');
+    await db.query(`delete from public.notifications where kind = 'dividend'`);
+  });
+});
+
+describe('widget', () => {
+  // A demo key: 43 characters, as base64url gives 32 random bytes.
+  const KEY = 'a'.repeat(43);
+  const HASH = createHash('sha256').update(KEY).digest('hex');
+  const figures = (tx: Queryable, key: string) => scalar<{ figures: Record<string, unknown> | null; stale_days: number } | null>(tx, 'select public.widget_figures($1)', [key]);
+  const saveKey = () => db.query('insert into public.widget_key (key_hash) values ($1)', [HASH]);
+  const saveSnapshot = () =>
+    db.query(`insert into public.widget_snapshot (as_of, total_twd, week_change, points, red_up) values ('2026-11-17', 1080, -0.1, '[0, 0.2, 0.08]', true)`);
+  const clear = () => db.exec('delete from public.widget_key; delete from public.widget_snapshot;');
+
+  it('hands anon the figures for the right key only', async () => {
+    await saveKey();
+    await saveSnapshot();
+    try {
+      await as(db, 'anon', async (tx) => {
+        assert.deepEqual(await figures(tx, KEY), {
+          figures: { as_of: '2026-11-17', total_twd: 1080, week_change: -0.1, points: [0, 0.2, 0.08], red_up: true },
+          stale_days: 3,
+        });
+        assert.equal(await figures(tx, 'b'.repeat(43)), null);
+        assert.equal(await figures(tx, 'short'), null);
+        assert.equal(await figures(tx, 'a'.repeat(129)), null);
+      });
+    } finally {
+      await clear();
+    }
+  });
+
+  it('returns figures null and the stale days when the key is right but nothing is saved yet', async () => {
+    await saveKey();
+    try {
+      await as(db, 'anon', async (tx) => assert.deepEqual(await figures(tx, KEY), { figures: null, stale_days: 3 }));
+    } finally {
+      await clear();
+    }
+  });
+
+  it('answers nothing before a key is made', async () => {
+    await saveSnapshot();
+    try {
+      await as(db, 'anon', async (tx) => assert.equal(await figures(tx, KEY), null));
+    } finally {
+      await clear();
+    }
+  });
+
+  it("keeps both tables out of anon's and a stranger's reach", async () => {
+    for (const table of ['widget_snapshot', 'widget_key']) {
+      assert.equal(await errorCode(as(db, 'anon', (tx) => tx.query(`select 1 from public.${table}`))), DENIED, table);
+    }
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query('insert into public.widget_key (key_hash) values ($1)', [HASH]))), DENIED);
+  });
+
+  it('lets the owner replace the key, one row only, stored as a hash', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query('insert into public.widget_key (key_hash) values ($1) on conflict (singleton) do update set key_hash = excluded.key_hash', [HASH]);
+      await tx.query('insert into public.widget_key (key_hash) values ($1) on conflict (singleton) do update set key_hash = excluded.key_hash', ['c'.repeat(64)]);
+      assert.equal(await scalar(tx, 'select count(*)::int from public.widget_key'), 1);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`insert into public.widget_key (key_hash) values ('${KEY}')`))), CHECK_FAILED);
+  });
+
+  it('lets the nightly job write the snapshot with the service role', async () => {
+    await as(db, 'service_role', async (tx) => {
+      await tx.query(
+        `insert into public.widget_snapshot (as_of, total_twd, week_change, points, red_up) values ('2026-11-17', 1080, null, '[0]', false)
+         on conflict (singleton) do update set as_of = excluded.as_of`,
+      );
+      assert.equal(await scalar(tx, 'select count(*)::int from public.widget_snapshot'), 1);
+    });
   });
 });

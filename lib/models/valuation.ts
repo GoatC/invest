@@ -1,6 +1,6 @@
 import { GOLD } from './fx';
-import { chronological, type Position } from './positions';
-import type { AssetClass, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Sleeve, Trade } from './types';
+import { chronological, equityLocal, positionKey, sign, type Position } from './positions';
+import type { AssetClass, Direction, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Sleeve, Trade } from './types';
 
 /** Grams in one troy ounce, the unit gold prices are quoted in. */
 export const GRAMS_PER_TROY_OUNCE = 31.1034768;
@@ -59,10 +59,23 @@ export interface Holding {
   market: Market | null;
   qty: number;
   currency: string;
-  /** Market value in TWD; null when no price or FX rate is known yet. */
+  /**
+   * Own money in it now, TWD: the market value for a plain long, margin ± the move since entry for
+   * a short or a leveraged line (it can fall below 0). Null when no price or FX rate is known yet.
+   * Totals, the pools and net worth add this up.
+   */
   valueTwd: number | null;
-  /** Remaining cost basis in TWD; null for manual assets. */
+  /** Own money put in, TWD, at the opening trades' rates (the cost basis of a plain long); null for manual assets. */
   costTwd: number | null;
+  /** Long for manual assets. */
+  direction: Direction;
+  /** Exposure ÷ own money at entry; 1 for manual assets. */
+  leverage: number;
+  /**
+   * What the line moves with the market, TWD: qty × price, negative for a short. Equals valueTwd
+   * for a plain long and a manual asset. R1, R2, the class weights and the risk figures read this.
+   */
+  exposureTwd: number | null;
   /** True when the price or FX rate came from a trade, or gold carries the value entered by hand. */
   estimated: boolean;
   /** Date of the close, gold price, balance or entered value behind valueTwd; null when there is none. */
@@ -78,6 +91,11 @@ export interface ValuationInput {
   manualAssets: readonly ManualAsset[];
 }
 
+/** What a holding moves with: its exposure, else its value (a line saved before exposure existed). */
+export function exposureOf(holding: Pick<Holding, 'valueTwd'> & { exposureTwd?: number | null }): number {
+  return holding.exposureTwd ?? holding.valueTwd ?? 0;
+}
+
 /** Values every open position and manual asset in TWD. Closed positions (quantity 0) are left out. */
 export function valueHoldings(input: ValuationInput): Holding[] {
   const holdings: Holding[] = [];
@@ -87,8 +105,9 @@ export function valueHoldings(input: ValuationInput): Holding[] {
     if (!security) continue;
     const price = input.prices.get(position.ticker);
     const rate = input.fx.get(position.currency);
+    const known = price && rate ? { price: price.value, rate: rate.value } : null;
     holdings.push({
-      key: `${position.pool}:${position.ticker}`,
+      key: positionKey(position.pool, position.ticker, position.direction),
       ticker: position.ticker,
       label: security.name,
       pool: position.pool,
@@ -98,8 +117,11 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       market: security.market,
       qty: position.qty,
       currency: position.currency,
-      valueTwd: price && rate ? position.qty * price.value * rate.value : null,
-      costTwd: position.costTwd,
+      valueTwd: known ? equityLocal(position, known.price) * known.rate : null,
+      costTwd: position.marginTwd,
+      direction: position.direction,
+      leverage: position.leverage,
+      exposureTwd: known ? sign(position.direction) * position.qty * known.price * known.rate : null,
       estimated: Boolean(price?.estimated || rate?.estimated),
       priceDate: price?.date ?? null,
     });
@@ -125,6 +147,9 @@ export function valueHoldings(input: ValuationInput): Holding[] {
       currency: 'TWD',
       valueTwd,
       costTwd: null,
+      direction: 'long',
+      leverage: 1,
+      exposureTwd: valueTwd,
       estimated: asset.unit === 'grams' && !atGoldPrice,
       priceDate: atGoldPrice ? gold.date : asset.valuedOn,
     });

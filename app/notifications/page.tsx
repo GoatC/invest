@@ -1,9 +1,11 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
+import { PushHandoffSetting } from '@/components/push-handoff';
+import { ShellReminders } from '@/components/shell-reminders';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadDevices, loadNotifications, type DeviceRecord, type NotificationRecord } from '@/lib/data';
+import { DataError, loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { readQuietHours, readWeeklyReview } from '@/lib/models/notify';
 import { vapidFromEnv } from '@/lib/push';
@@ -12,14 +14,18 @@ import { WEEKDAYS } from '@/lib/validation';
 import { removeDevice } from './actions';
 import { PushSetup } from './push-setup';
 import { ScheduleForm } from './schedule-form';
+import { WidgetKey } from './widget-key';
 
 type Params = Record<string, string | string[] | undefined>;
 
 const KIND: Record<NotificationRecord['kind'], Bilingual> = {
-  proposal: { en: 'Proposal', zh: '提案' },
+  proposal: { en: 'Rule warning', zh: '規則警示' },
   weekly: { en: 'Weekly review', zh: '每週檢視' },
   data_failure: { en: 'Data failure', zh: '資料異常' },
   test: { en: 'Test', zh: '測試' },
+  event: { en: 'Event reminder', zh: '事件提醒' },
+  news: { en: 'Breaking news', zh: '前沿新聞' },
+  dividend: { en: 'Dividend paid', zh: '配息入帳' },
 };
 
 function hhmm(minutes: number): string {
@@ -33,13 +39,16 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   let devices: DeviceRecord[];
   let sent: NotificationRecord[];
   let settings: Array<{ key: string; value: unknown }>;
+  let widgetKeyMade: string | null;
   try {
-    const [found, log, config] = await Promise.all([
+    const [found, log, config, widgetKey] = await Promise.all([
       loadDevices(supabase),
       loadNotifications(supabase),
       supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review']),
+      loadWidgetKeyDate(supabase),
     ]);
     if (config.error) throw new DataError('config', config.error.message);
+    widgetKeyMade = widgetKey;
     devices = found;
     sent = log;
     settings = (config.data ?? []) as Array<{ key: string; value: unknown }>;
@@ -57,12 +66,12 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.notifications} />
+          <Zh {...LABELS.notifications} />
         </h1>
         <Info>
           <Bi
-            en="The app pushes only when a decision is due: a new proposal from the rules, the weekly review with its three lines, or a data failure. Never a price move. Pushes wait out the quiet hours."
-            zh="App 只在需要你做決定時推播：規則產生的新提案、三行的每週檢視摘要，或資料異常；不推播價格波動。安靜時段內的推播會等到時段結束後才送出。"
+            en="The app pushes only when a decision is due: a new warning from the rules, the weekly review with its three lines, or a data failure. Never a price move. Pushes wait out the quiet hours."
+            zh="App 只在需要你做決定時推播：規則產生的新警示、三行的每週檢視摘要，或資料異常；不推播價格波動。安靜時段內的推播會等到時段結束後才送出。"
           />
         </Info>
         {saved && (
@@ -79,6 +88,27 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           </p>
         )}
         <PushSetup publicKey={publicKey} devices={devices.map((device) => ({ id: device.id, endpoint: device.endpoint }))} />
+        <PushHandoffSetting />
+      </section>
+
+      <ShellReminders />
+
+      <section className="card form">
+        <h2>
+          <Bi en="Home-screen widget" zh="主畫面小工具" />
+        </h2>
+        <Info>
+          <Bi
+            en="The iOS app's widget shows the total value at the last close and the 7-day change. Make a key, then long-press the widget → Edit Widget and paste it. A new key ends the old one at once."
+            zh="iOS App 的小工具顯示最近收盤的總市值與近 7 天漲跌。產生鑰匙後，長按小工具 →「編輯小工具」貼上。換一把鑰匙，舊的立刻失效。"
+          />
+        </Info>
+        <details>
+          <summary>
+            <Bi en="Widget key" zh="小工具鑰匙" />
+          </summary>
+          <WidgetKey createdAt={widgetKeyMade} />
+        </details>
       </section>
 
       <section className="card form">

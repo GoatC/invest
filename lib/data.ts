@@ -1,12 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { cache } from 'react';
 
 import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
 import { addDays, addMonths } from './dates';
+import { estimatesDue, readEstimates, readPeCheckSettings, type Estimates, type PeCheckSettings } from './models/forward-pe';
 import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
 import { driftBands, type DriftBands } from './models/allocation';
 import { mixReturn, readAssumptions, type Assumptions } from './models/cma';
+import { basketReturns, estimateClass, estimateRow, marketLines, mergeAssumptions, readAutoCmaSettings, readEstimateRow, readUnscoredRow, unscoredRow, type AutoCmaSettings, type IndexFit, type SavedEstimate, type Unscored } from './models/auto-cma';
 import { readBrokers, readFeeSettings, readFundCosts, readTaxSettings, type Broker, type CostSettings, type FeeSettings, type FundCost, type TaxSettings } from './models/costs';
+import { directKey, fileDue, lookThrough, readLookThroughSettings, unpackConstituents, type Exposure, type LookThrough, type LookThroughSettings } from './models/look-through';
+import { readSectorSettings, SECTOR_DAYS, sectorView, type Close as SectorClose, type SectorSettings, type SectorView } from './models/sectors';
+import { shadowRows, type ShadowProposal, type ShadowRow } from './models/shadow';
+import { newsMessage, readNewsSettings, type Headline, type NewsAlert, type NewsSettings } from './models/news';
+import { eventMessage, remindersDue, type EventKind, type EventSource, type MarketEvent } from './models/events';
+import { guideBanners, readBannerSettings, type Banner, type BannerSettings } from './models/banners';
+import { dividendHoldings, dividendPushes, dividendsDue, eventsSince, readDividendSettings, type DividendDue, type DividendEvent, type DividendPlan, type DividendSecurity, type DividendSettings } from './models/dividends';
+import { readVolatilitySettings, scoreHistory, volatilityScore, VOLATILITY_SERIES, type Close as VolatilityClose, type VolatilityScore, type VolatilitySettings } from './models/volatility';
 import {
   evaluate,
   readDetail,
@@ -26,22 +37,48 @@ import {
   type WindfallTranche,
 } from './models/engine';
 import { manualHistories } from './models/manual-history';
-import { benchmarkWeights, firstDay, type PerformanceInput } from './models/performance';
+import { benchmarkWeights, buildSeries, firstDay, type PerformanceInput } from './models/performance';
 import { buildPortfolio, type PortfolioData } from './models/portfolio';
-import { readPlanSettings, type PlanSettings } from './models/projection';
+import { brinson, monthInputs, sectorInputs, type ClassSpec, type MonthInput, type SatelliteStock, type SectorBenchmark } from './models/attribution';
+import { MarketHistory } from './models/market';
+import { fiveFactor, portfolioReturns, readFactorSettings, REGIONS, seriesName, type FactorFit, type FactorMonth, type FactorSettings, type Region } from './models/five-factor';
+import { readFrontierSettings, type FrontierSettings } from './models/frontier';
+import { readStressSettings, type ClassValue, type StressSettings } from './models/stress';
+import { readTimelineSettings } from './models/timeline';
+import { readMcSettings, readRunSummary, runMonteCarlo, runSummary, type McData } from './models/monte-carlo';
+import { readPlanSettings, savedPlan, type PlanSettings } from './models/projection';
+import { LOCAL_REMINDER_DAYS, localReminders, type LocalReminder } from './models/local-reminders';
 import { readQuietHours, readWeeklyReview, weeklySummary, type Message, type PlanInput, type ProposalForPush, type WeeklySummary } from './models/notify';
 import { proposalTitle } from './proposal-text';
 import { pushToAll, type DeviceSubscription, type PushResult, type Sender, type Vapid } from './push';
 import { candidateProxies, gridStart, lookbackWeeks, readRiskSettings, type RiskInput, type VarPoint } from './models/risk';
 import { capsFromRules, type Caps, type RuleRow } from './models/rules';
-import { latestFx, latestPrices } from './models/valuation';
-import { INDICES, loadFrom, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type RegressionSettings } from './models/regression';
-import { MARKET_SERIES } from './models/windfall';
+import { exposureOf, latestFx, latestPrices } from './models/valuation';
+import { restateCloses, restateTrades, type Split } from './models/splits';
+import { INDICES, inTwd, loadFrom, periodReturns, readRegressionSettings, regressTicker, RISK_FREE_SERIES, type Close as SeriesClose, type Point as ReturnPoint, type RegressionSettings } from './models/regression';
+import { capePercentile, MARKET_SERIES, readAcceleration, readPace, type Acceleration } from './models/windfall';
 import { CAPM_SERIES, readCapmSettings, stockCostOfEquity, type BetaInput, type CapmSettings, type CostOutcome, type MonthValue } from './models/capm';
-import type { AssetClass, CashFlow, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
+import type { AssetClass, CashFlow, Direction, FlowType, FxQuote, ManualAsset, Market, Pool, PriceQuote, ProductType, Security, Side, Sleeve, Trade } from './models/types';
 import type { Figures, Quarter } from './models/fundamentals';
 import { assumed, readAssumptions as readStockAssumptions, readValuationSettings, valueStock, type Assumed, type StockAssumptions, type Valuation, type ValuationSettings } from './models/intrinsic';
 import { filedSince, readSaved, valuationInput, valuationRows, watchInputs, type InputProblem, type SavedValuation, type StockSeries, type Trigger } from './models/workbench';
+import {
+  assess,
+  EVENT_INDICATORS,
+  readRedFlagSettings,
+  readScans,
+  scanDue,
+  scanRows,
+  type Assessment,
+  type CompanyInput,
+  type EventIndicator,
+  type FlagEvent,
+  type ManualEntry,
+  type ManualIndicator,
+  type Profile,
+  type RedFlagSettings,
+  type Scan,
+} from './models/red-flags';
 
 /** A query failed; the table name tells which part of the database to look at. */
 export class DataError extends Error {
@@ -75,12 +112,20 @@ async function rows<T>(table: string, query: Result<T>): Promise<T[]> {
 /** The Data API returns at most 1,000 rows per request by default, so long tables are read in pages. */
 const PAGE = 1000;
 
+/** Pages asked for at once after a full first page: a long table costs one round trip per few pages, not per page. */
+const AHEAD = 4;
+
 async function allRows<T>(table: string, page: (from: number, to: number) => Result<T>): Promise<T[]> {
   const all: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const batch = await rows(table, page(from, from + PAGE - 1));
-    all.push(...batch);
-    if (batch.length < PAGE) return all;
+  const first = await rows(table, page(0, PAGE - 1));
+  all.push(...first);
+  if (first.length < PAGE) return all;
+  for (let from = PAGE; ; from += AHEAD * PAGE) {
+    const batches = await Promise.all(Array.from({ length: AHEAD }, (_, i) => rows(table, page(from + i * PAGE, from + (i + 1) * PAGE - 1))));
+    for (const batch of batches) {
+      all.push(...batch);
+      if (batch.length < PAGE) return all;
+    }
   }
 }
 
@@ -106,11 +151,14 @@ interface TransactionRow {
   tax: number;
   fx_rate: number;
   pool: Pool;
+  /** Absent only in rows written before the direction / leverage migration. */
+  direction?: Direction;
+  leverage?: number;
   source: 'manual' | 'csv';
   note: string | null;
 }
 
-export const TRANSACTION_COLUMNS = 'id, trade_date, ticker, side, qty, price, currency, fee, tax, fx_rate, pool, source, note';
+export const TRANSACTION_COLUMNS = 'id, trade_date, ticker, side, qty, price, currency, fee, tax, fx_rate, pool, direction, leverage, source, note';
 
 export function toTransaction(row: TransactionRow): TransactionRecord {
   return {
@@ -125,6 +173,8 @@ export function toTransaction(row: TransactionRow): TransactionRecord {
     tax: Number(row.tax),
     fxRate: Number(row.fx_rate),
     pool: row.pool,
+    direction: row.direction === 'short' ? 'short' : 'long',
+    leverage: Number(row.leverage ?? 1),
     source: row.source,
     note: row.note,
   };
@@ -143,6 +193,8 @@ export function transactionColumns(trade: Omit<Trade, 'id'> & { note: string | n
     tax: trade.tax,
     fx_rate: trade.fxRate,
     pool: trade.pool,
+    direction: trade.direction ?? 'long',
+    leverage: trade.leverage ?? 1,
     note: trade.note,
   };
 }
@@ -253,7 +305,7 @@ export function cashFlowColumns(flow: Omit<CashFlow, 'id'>) {
 // Loaders
 // ---------------------------------------------------------------------------
 
-export async function loadSecurities(supabase: SupabaseClient): Promise<SecurityRecord[]> {
+async function loadSecuritiesUncached(supabase: SupabaseClient): Promise<SecurityRecord[]> {
   const securities = await rows<SecurityRow>(
     'securities',
     supabase.from('securities').select('ticker, name, market, product_type, asset_class_id, sleeve, currency, domicile').order('ticker'),
@@ -274,7 +326,7 @@ function toAssetClass(row: AssetClassRow): AssetClass {
   return { id: row.id, nameEn: row.name_en, nameZh: row.name_zh, targetWeight: Number(row.target_weight), sleeve: row.sleeve, sortOrder: row.sort_order };
 }
 
-export async function loadAssetClasses(supabase: SupabaseClient): Promise<AssetClass[]> {
+async function loadAssetClassesUncached(supabase: SupabaseClient): Promise<AssetClass[]> {
   const assetClasses = await rows<AssetClassRow>('asset_classes', supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order').order('sort_order'));
   return assetClasses.map(toAssetClass);
 }
@@ -298,17 +350,69 @@ export function fxMaxAgeDays(value: unknown): number | null {
   return typeof days === 'number' && Number.isInteger(days) && days >= 0 ? days : null;
 }
 
+// ---------------------------------------------------------------------------
+// Stock splits (N5)
+// ---------------------------------------------------------------------------
+
+interface SplitRow {
+  id: number;
+  ticker: string;
+  ex_date: string;
+  ratio: number;
+  note: string | null;
+}
+
+/** A saved split, with its note. */
+export interface SplitRecord extends Split {
+  id: number;
+  note: string | null;
+}
+
+const SPLIT_COLUMNS = 'id, ticker, ex_date, ratio, note';
+
+/**
+ * Every split entered, oldest first. Nearly every page reads it, so before its migration is
+ * applied (the Data API's PGRST205, table not found) it reads as no splits rather than an error.
+ */
+async function loadSplitsUncached(supabase: SupabaseClient): Promise<SplitRecord[]> {
+  const { data, error } = await supabase.from('splits').select(SPLIT_COLUMNS).order('ex_date').order('id');
+  if (error && (error as { code?: string }).code === 'PGRST205') return [];
+  if (error) throw new DataError('splits', error.message);
+  return ((data ?? []) as SplitRow[]).map((row) => ({ id: row.id, ticker: row.ticker, exDate: row.ex_date, ratio: Number(row.ratio), note: row.note }));
+}
+
+/** The trade form's leverage choices and the margin-call warning (config leverage). */
+export interface LeverageSettings {
+  /** Highest leverage offered, a multiple of 0.1 from 1.0 to 10.0. */
+  max: number;
+  /** Share of a leveraged or short line's own money left at which the holdings page warns; null turns it off. */
+  marginCallShare: number | null;
+}
+
+/** config leverage read defensively; before its migration is applied, 1× only and no warning. */
+export function leverageSettings(value: unknown): LeverageSettings {
+  const max = setting(value, 'max');
+  const share = setting(value, 'margin_call_share');
+  return {
+    max: typeof max === 'number' && max >= 1 && max <= 10 ? Math.round(max * 10) / 10 : 1,
+    marginCallShare: typeof share === 'number' && share > 0 && share < 1 ? share : null,
+  };
+}
+
 /** Everything the holdings page and the trade form need, plus the R1 / R2 thresholds from the rules table. */
 export interface HoldingsData extends PortfolioData {
+  /** As saved, in the units they were traded in; the models restate them with `splits`. */
   trades: TransactionRecord[];
+  splits: SplitRecord[];
   securities: SecurityRecord[];
   caps: Caps;
   fxMaxGap: number | null;
   fxMaxAgeDays: number | null;
+  leverage: LeverageSettings;
 }
 
-export async function loadHoldingsData(supabase: SupabaseClient): Promise<HoldingsData> {
-  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules, settings] = await Promise.all([
+async function loadHoldingsDataUncached(supabase: SupabaseClient): Promise<HoldingsData> {
+  const [transactions, securities, assetClasses, prices, fx, manualAssets, rules, settings, splits] = await Promise.all([
     allRows<TransactionRow>('transactions', (from, to) =>
       supabase.from('transactions').select(TRANSACTION_COLUMNS).order('trade_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
     ),
@@ -318,23 +422,27 @@ export async function loadHoldingsData(supabase: SupabaseClient): Promise<Holdin
     rows<{ pair: string; rate_date: string; rate: number }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate')),
     rows<ManualAssetRow>('manual_assets', supabase.from('manual_assets').select(MANUAL_ASSET_COLUMNS).order('id')),
     rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])),
-    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'fx_rate_check')),
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['fx_rate_check', 'leverage'])),
+    loadSplits(supabase),
   ]);
+  const fxCheck = settings.find((row) => row.key === 'fx_rate_check')?.value;
   return {
     trades: transactions.map(toTransaction),
+    splits,
     securities,
     assetClasses,
     prices: prices.map((row): PriceQuote => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close) })),
     fx: fx.map((row): FxQuote => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
     manualAssets: manualAssets.map(toManualAsset),
     caps: capsFromRules(rules),
-    fxMaxGap: fxMaxGap(settings[0]?.value),
-    fxMaxAgeDays: fxMaxAgeDays(settings[0]?.value),
+    fxMaxGap: fxMaxGap(fxCheck),
+    fxMaxAgeDays: fxMaxAgeDays(fxCheck),
+    leverage: leverageSettings(settings.find((row) => row.key === 'leverage')?.value),
   };
 }
 
 /** Every daily TWD rate the nightly job has loaded, gold aside, for the trade date's rate (lib/models/fx). */
-export async function loadFxHistory(supabase: SupabaseClient): Promise<FxQuote[]> {
+async function loadFxHistoryUncached(supabase: SupabaseClient): Promise<FxQuote[]> {
   const found = await allRows<{ pair: string; rate_date: string; rate: number }>('fx_rates', (from, to) =>
     supabase.from('fx_rates').select('pair, rate_date, rate').like('pair', '%/TWD').neq('pair', `${GOLD}/TWD`).order('rate_date').order('pair').range(from, to),
   );
@@ -366,7 +474,7 @@ interface JobRunRow {
 }
 
 /** The newest nightly runs, newest first, and the DATA_FAILURE rule's threshold. */
-export async function loadJobRuns(supabase: SupabaseClient): Promise<{ runs: JobRun[]; threshold: number | null }> {
+async function loadJobRunsUncached(supabase: SupabaseClient): Promise<{ runs: JobRun[]; threshold: number | null }> {
   const [found, rules] = await Promise.all([
     rows<JobRunRow>(
       'job_runs',
@@ -412,7 +520,7 @@ export async function loadDataStatus(supabase: SupabaseClient): Promise<DataStat
     rows<{ ticker: string; price_date: string; close: number; source: string }>('latest_prices', supabase.from('latest_prices').select('ticker, price_date, close, source')),
     rows<{ pair: string; rate_date: string; rate: number; source: string }>('latest_fx_rates', supabase.from('latest_fx_rates').select('pair, rate_date, rate, source').order('pair')),
     Promise.all(
-      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES), ...Object.values(CAPM_SERIES)].map((name) =>
+      [...MARKET_SERIES, ...Object.values(RISK_FREE_SERIES), ...Object.values(CAPM_SERIES), ...REGIONS.map((region) => seriesName(region, 'mkt'))].map((name) =>
         rows<{ series: string; obs_month: string; value: number; source: string }>(
           'market_series',
           supabase.from('market_series').select('series, obs_month, value, source').eq('series', name).order('obs_month', { ascending: false }).limit(1),
@@ -460,7 +568,7 @@ export async function loadCsvMappings(supabase: SupabaseClient): Promise<SavedMa
 }
 
 /** Every cash flow, newest first. */
-export async function loadCashFlows(supabase: SupabaseClient): Promise<CashFlowRecord[]> {
+async function loadCashFlowsUncached(supabase: SupabaseClient): Promise<CashFlowRecord[]> {
   const found = await allRows<CashFlowRow>('cash_flows', (from, to) =>
     supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).order('flow_date', { ascending: false }).order('id', { ascending: false }).range(from, to),
   );
@@ -612,7 +720,7 @@ const GOLD_PROXY = 'GLDM';
  * nightly job's NAV snapshots both read it.
  */
 export async function loadPerformanceInput(supabase: SupabaseClient, end: string): Promise<PerformanceInput> {
-  const [transactions, dividends, manualAssets, audit, securities, assetClasses] = await Promise.all([
+  const [transactions, dividends, manualAssets, audit, securities, assetClasses, splits] = await Promise.all([
     allRows<TransactionRow>('transactions', (from, to) => supabase.from('transactions').select(TRANSACTION_COLUMNS).order('trade_date').order('id').range(from, to)),
     allRows<CashFlowRow>('cash_flows', (from, to) => supabase.from('cash_flows').select(CASH_FLOW_COLUMNS).eq('type', 'dividend').order('flow_date').order('id').range(from, to)),
     rows<ManualAssetRow & { created_at: string }>('manual_assets', supabase.from('manual_assets').select(`${MANUAL_ASSET_COLUMNS}, created_at`).order('id')),
@@ -627,8 +735,10 @@ export async function loadPerformanceInput(supabase: SupabaseClient, end: string
     ),
     loadSecurities(supabase),
     rows<{ target_weight: number; benchmark_ticker: string | null }>('asset_classes', supabase.from('asset_classes').select('target_weight, benchmark_ticker')),
+    loadSplits(supabase),
   ]);
-  const trades = transactions.map(toTransaction);
+  // In today's units, trades and quoted closes alike, so a split moves no value from one day to the next.
+  const trades = restateTrades(transactions.map(toTransaction), splits);
   const histories = manualHistories(
     manualAssets.map((row) => ({ ...toManualAsset(row), createdAt: row.created_at })),
     audit.map((row) => ({ rowKey: row.row_key, action: row.action, changedAt: row.changed_at, oldRow: row.old_row, newRow: row.new_row })),
@@ -658,7 +768,10 @@ export async function loadPerformanceInput(supabase: SupabaseClient, end: string
   ]);
   return {
     ...input,
-    prices: prices.map((row) => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close), adjClose: row.adj_close === null ? null : Number(row.adj_close) })),
+    prices: restateCloses(
+      prices.map((row) => ({ ticker: row.ticker, date: row.price_date, close: Number(row.close), adjClose: row.adj_close === null ? null : Number(row.adj_close) })),
+      splits,
+    ),
     rates: rates.map((row) => ({ pair: row.pair, date: row.rate_date, rate: Number(row.rate) })),
   };
 }
@@ -672,7 +785,7 @@ export interface AssetClassSettings extends AssetClass {
   benchmarkTicker: string | null;
 }
 
-export async function loadAssetClassSettings(supabase: SupabaseClient): Promise<AssetClassSettings[]> {
+async function loadAssetClassSettingsUncached(supabase: SupabaseClient): Promise<AssetClassSettings[]> {
   const found = await rows<AssetClassRow & { benchmark_ticker: string | null }>(
     'asset_classes',
     supabase.from('asset_classes').select('id, name_en, name_zh, target_weight, sleeve, sort_order, benchmark_ticker').order('sort_order'),
@@ -680,14 +793,59 @@ export async function loadAssetClassSettings(supabase: SupabaseClient): Promise<
   return found.map((row) => ({ ...toAssetClass(row), benchmarkTicker: row.benchmark_ticker }));
 }
 
-/** The capital market assumptions (config cma) and when they were last reviewed; missing is undefined. */
-export async function loadAssumptions(supabase: SupabaseClient): Promise<{ assumptions: Assumptions; verifiedOn: string | null } | undefined> {
-  const [row] = await rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'cma'));
-  return row ? { assumptions: readAssumptions(row.value), verifiedOn: row.last_verified } : undefined;
+/** The capital market assumptions as the models read them, with yours and the auto-scored ones apart. */
+export interface SavedAssumptions {
+  /** Yours, plus the estimate of each satellite class you left blank (F6 auto): what F2, F5, F7 and F10 read. */
+  assumptions: Assumptions;
+  /** Yours alone, as config cma holds them. */
+  manual: Assumptions;
+  /** Every saved estimate, a class you set included (shown beside yours); empty while scoring is off. */
+  estimates: SavedEstimate[];
+  /** The classes held with nothing that can be scored yet, and why each line was left out. */
+  unscored: Unscored[];
+  /** config cma_auto; undefined before its migration. */
+  auto: AutoCmaSettings | undefined;
+  verifiedOn: string | null;
+}
+
+/** The saved estimates (cma_estimates), each read defensively, and the classes held but not scored yet. */
+async function loadCmaEstimates(supabase: SupabaseClient): Promise<{ estimates: SavedEstimate[]; unscored: Unscored[] }> {
+  const found = await rows<{ class_id: string; as_of: string; expected_return: unknown; volatility: unknown; months: unknown; detail: unknown }>(
+    'cma_estimates',
+    supabase.from('cma_estimates').select('class_id, as_of, expected_return, volatility, months, detail'),
+  );
+  return {
+    estimates: found.flatMap((row) => {
+      const read = readEstimateRow(row);
+      return read ? [read] : [];
+    }),
+    unscored: found.flatMap((row) => {
+      const read = readUnscoredRow(row);
+      return read ? [read] : [];
+    }),
+  };
+}
+
+/**
+ * The capital market assumptions (config cma) and when they were last reviewed, merged with the
+ * auto-scored estimate of each satellite class left blank while config cma_auto is on; missing is undefined.
+ */
+async function loadAssumptionsUncached(supabase: SupabaseClient): Promise<SavedAssumptions | undefined> {
+  const [config, classes] = await Promise.all([
+    rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', ['cma', 'cma_auto'])),
+    loadAssetClasses(supabase),
+  ]);
+  const row = config.find((entry) => entry.key === 'cma');
+  if (!row) return undefined;
+  const manual = readAssumptions(row.value);
+  const auto = readAutoCmaSettings(config.find((entry) => entry.key === 'cma_auto')?.value);
+  const { estimates, unscored } = auto?.enabled ? await loadCmaEstimates(supabase) : { estimates: [], unscored: [] };
+  const satellite = new Set(classes.filter((assetClass) => assetClass.sleeve === 'satellite').map((assetClass) => assetClass.id));
+  return { assumptions: mergeAssumptions(manual, estimates, satellite), manual, estimates, unscored, auto, verifiedOn: row.last_verified };
 }
 
 /** R1 and R2 as the rules table holds them. */
-export async function loadCaps(supabase: SupabaseClient): Promise<Caps> {
+async function loadCapsUncached(supabase: SupabaseClient): Promise<Caps> {
   return capsFromRules(await rows<RuleRow>('rules', supabase.from('rules').select('id, threshold, enabled').in('id', ['R1', 'R2'])));
 }
 
@@ -697,10 +855,10 @@ export interface AllocationData extends HoldingsData {
   /** Undefined while the F8_DRIFT rule is off. */
   bands: DriftBands | undefined;
   /** Undefined until the step 6 migration is applied. */
-  assumptions: { assumptions: Assumptions; verifiedOn: string | null } | undefined;
+  assumptions: SavedAssumptions | undefined;
 }
 
-export async function loadAllocationData(supabase: SupabaseClient): Promise<AllocationData> {
+async function loadAllocationDataUncached(supabase: SupabaseClient): Promise<AllocationData> {
   const [holdings, classSettings, drift, display, assumptions] = await Promise.all([
     loadHoldingsData(supabase),
     loadAssetClassSettings(supabase),
@@ -778,7 +936,7 @@ export interface RiskData {
   saved: VarPoint[];
 }
 
-export async function loadRiskData(supabase: SupabaseClient, today: string): Promise<RiskData> {
+async function loadRiskDataUncached(supabase: SupabaseClient, today: string): Promise<RiskData> {
   const [input, saved] = await Promise.all([
     loadRiskInput(supabase, today, today),
     rows<{ snapshot_date: string; total_twd: number; var_95_1w: number | null }>(
@@ -819,7 +977,7 @@ export interface PlanData {
   input: PerformanceInput;
 }
 
-export async function loadPlanData(supabase: SupabaseClient, today: string): Promise<PlanData> {
+async function loadPlanDataUncached(supabase: SupabaseClient, today: string): Promise<PlanData> {
   const [config, assetClasses, assumptions, input] = await Promise.all([
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['projection', 'dca'])),
     loadAssetClasses(supabase),
@@ -849,7 +1007,7 @@ export interface RuleRecord extends EngineRule {
   updatedAt: string;
 }
 
-export async function loadRules(supabase: SupabaseClient): Promise<RuleRecord[]> {
+async function loadRulesUncached(supabase: SupabaseClient): Promise<RuleRecord[]> {
   const found = await rows<{
     id: string;
     feature: string;
@@ -939,15 +1097,15 @@ function toProposal(row: ProposalRow): Proposal {
 /** How far back the engine and the page read decided proposals: past a year's review. */
 const PROPOSAL_DAYS = 400;
 
-/** Every open and approved proposal, and the others of the last 400 days, newest first. */
-export async function loadProposals(supabase: SupabaseClient, today: string): Promise<Proposal[]> {
+/** Every open proposal (a standing warning), and the others of the last 400 days, newest first. */
+async function loadProposalsUncached(supabase: SupabaseClient, today: string): Promise<Proposal[]> {
   const since = addDays(today, -PROPOSAL_DAYS);
   const found = await rows<ProposalRow>(
     'proposals',
     supabase
       .from('proposals')
       .select(PROPOSAL_COLUMNS)
-      .or(`status.in.(open,approved),created_at.gte.${since}`)
+      .or(`status.eq.open,created_at.gte.${since}`)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false }),
   );
@@ -977,7 +1135,7 @@ export function orderSettings(value: unknown): OrderSettings {
 
 /** The latest close and TWD rate of every security that has both, with the decimals its orders may have. */
 export function engineQuotes(data: PortfolioData, orders: OrderSettings = { fractionalMarkets: [], shareDecimals: 0 }): Map<string, EngineQuote> {
-  const prices = latestPrices(data.prices, data.trades);
+  const prices = latestPrices(data.prices, restateTrades(data.trades, data.splits));
   const fx = latestFx(data.fx, data.trades);
   const out = new Map<string, EngineQuote>();
   for (const security of data.securities) {
@@ -1008,7 +1166,7 @@ export async function loadEngineInput(
     loadProposals(supabase, today),
     loadWindfallInput(supabase, today),
   ]);
-  const watch = await loadWatchInputs(supabase, data.securities);
+  const [watch, redFlags, volatility] = await Promise.all([loadWatchInputs(supabase, data.securities), loadFlagInputs(supabase, today, data), loadVolatilityInput(supabase, today)]);
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const day = configNumber(value('dca'), 'day_of_month');
   const expiry = configNumber(value('proposal_expiry_days'));
@@ -1027,8 +1185,24 @@ export async function loadEngineInput(
     usdTwd: usd?.value ?? null,
     windfall,
     ...(watch ? { watch } : {}),
+    ...(redFlags ? { redFlags } : {}),
+    ...(volatility ? { volatility } : {}),
   };
   return { input, rules, proposals, orders: orderSettings(value('orders')) };
+}
+
+/** The days of saved volatility scores the N8 rules read: a run is followed back this far at most. */
+const VOLATILITY_RUN_DAYS = 120;
+
+/** The saved volatility scores (N8 step 3), oldest first; undefined before config volatility exists. */
+async function loadVolatilityInput(supabase: SupabaseClient, today: string): Promise<EngineInput['volatility']> {
+  const settings = await loadVolatilitySettings(supabase);
+  if (!settings) return undefined;
+  const found = await rows<{ score_date: string; score: number }>(
+    'volatility_scores',
+    supabase.from('volatility_scores').select('score_date, score').gte('score_date', addDays(today, -VOLATILITY_RUN_DAYS)).lte('score_date', today).order('score_date'),
+  );
+  return { scores: found.map((row) => ({ date: row.score_date, score: Number(row.score) })), maxAgeDays: settings.maxAgeDays };
 }
 
 /** Closes and drafts what the engine decided. Two runs at once cannot draft the same open proposal twice. */
@@ -1042,7 +1216,7 @@ export async function saveOutcome(supabase: SupabaseClient, outcome: Outcome): P
   let created = 0;
   let tierDrafted = false;
   for (const draft of outcome.create) {
-    const { error } = await supabase.from('proposals').insert({ rule_id: draft.ruleId, state: draft.state, orders: draft.orders, detail: draft.detail, expires_at: draft.expiresAt });
+    const { error } = await supabase.from('proposals').insert({ rule_id: draft.ruleId, state: draft.state, orders: draft.orders, detail: draft.detail });
     if (error && error.code !== '23505') throw new DataError('proposals', error.message);
     if (!error) created += 1;
     if (!error && draft.state.startsWith('tier:')) tierDrafted = true;
@@ -1092,7 +1266,7 @@ export async function loadValueWeek(supabase: SupabaseClient, today: string): Pr
 export async function loadWeeklySummary(supabase: SupabaseClient, today: string): Promise<WeeklySummary> {
   const [holdings, proposals, value] = await Promise.all([
     loadHoldingsData(supabase),
-    rows<{ status: ProposalStatus }>('proposals', supabase.from('proposals').select('status').in('status', ['open', 'approved'])),
+    rows<{ status: ProposalStatus }>('proposals', supabase.from('proposals').select('status').eq('status', 'open')),
     loadValueWeek(supabase, today),
   ]);
   const portfolio = buildPortfolio(holdings);
@@ -1106,10 +1280,23 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     loadRules(supabase),
     loadAssetClasses(supabase),
     rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
-    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly']).gte('created_at', addDays(today, -400))),
+    rows<{ kind: string; key: string }>('notifications', supabase.from('notifications').select('kind, key').in('kind', ['proposal', 'weekly', 'event', 'news', 'dividend']).gte('created_at', addDays(today, -400))),
     loadWeeklySummary(supabase, today),
     loadJobRuns(supabase),
   ]);
+  // The event reminders (N8 step 2): none before config volatility or market_events exist.
+  const volatility = await loadVolatilitySettings(supabase);
+  const events = volatility ? await loadMarketEvents(supabase, addDays(today, 1), addDays(today, volatility.events.leadDays)) : null;
+  const eventKeys = new Set(planned.filter((row) => row.kind === 'event').map((row) => row.key));
+  const reminders = volatility && events ? remindersDue(events, today, volatility.events, eventKeys).map((event) => eventMessage(event, today)) : [];
+  // Breaking news (N8 step 4): each alert of the last day not pushed yet; none before config news exists.
+  const newsSettings = await loadNewsSettings(supabase);
+  const newsKeys = new Set(planned.filter((row) => row.kind === 'news').map((row) => row.key));
+  const fresh = newsSettings ? await loadNewsAlerts(supabase, newsSettings, new Date(Date.now() - NEWS_PUSH_HOURS * 3_600_000).toISOString(), 50) : null;
+  const news = newsSettings && fresh ? { messages: fresh.filter((alert) => !newsKeys.has(String(alert.id))).map(newsMessage), urgent: newsSettings.pushInQuietHours } : undefined;
+  // Dividends paid and not recorded (2026-11-12): one push each, on the day; none before config dividends exists.
+  const dividendView = await loadDividendView(supabase, today);
+  const dividends = dividendView ? dividendPushes(dividendView.due, dividendView.settings, today, new Set(planned.filter((row) => row.kind === 'dividend').map((row) => row.key))) : [];
   const value = (key: string) => config.find((row) => row.key === key)?.value;
   const pushed = new Set(planned.filter((row) => row.kind === 'proposal').map((row) => row.key));
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -1117,7 +1304,8 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     .filter((proposal) => proposal.status === 'open' && !pushed.has(String(proposal.id)))
     .map((proposal) => {
       const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
-      return { id: proposal.id, ruleId: proposal.ruleId, condition: rule.condition, title: proposalTitle(rule), state: proposal.state, detail: proposal.detail };
+      const urgent = rule.condition === 'volatility_score_crosses' && (('threshold' in rule ? rule.threshold : null) as Record<string, unknown> | null)?.['push_in_quiet_hours'] === true;
+      return { id: proposal.id, ruleId: proposal.ruleId, condition: rule.condition, title: proposalTitle(rule), state: proposal.state, detail: proposal.detail, ...(urgent ? { urgent } : {}) };
     });
   return {
     proposals: open,
@@ -1128,6 +1316,9 @@ export async function loadNotifyInput(supabase: SupabaseClient, today: string): 
     health: dataHealth(jobs.runs, jobs.threshold, today),
     lastGoodRunId: jobs.runs.find((run) => run.status !== 'failed')?.id ?? null,
     quiet: readQuietHours(value('quiet_hours')),
+    reminders,
+    ...(news ? { news } : {}),
+    dividends,
   };
 }
 
@@ -1282,7 +1473,7 @@ export interface CostConfig {
 
 export const COST_KEYS = ['fees', 'brokers', 'fund_costs', 'tax'] as const;
 
-export async function loadCostConfig(supabase: SupabaseClient): Promise<CostConfig> {
+async function loadCostConfigUncached(supabase: SupabaseClient): Promise<CostConfig> {
   const found = await rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', [...COST_KEYS]));
   const row = (key: string) => found.find((candidate) => candidate.key === key);
   return {
@@ -1306,7 +1497,7 @@ export interface FeeContext {
   securities: Map<string, { market: Market; productType: ProductType }>;
 }
 
-export async function loadFeeContext(supabase: SupabaseClient): Promise<FeeContext> {
+async function loadFeeContextUncached(supabase: SupabaseClient): Promise<FeeContext> {
   const [config, securities] = await Promise.all([loadCostConfig(supabase), loadSecurities(supabase)]);
   return {
     costs: { broker: chosenBroker(config), tw: config.fees.tw, tax: config.tax },
@@ -1378,7 +1569,7 @@ function readFired(value: unknown): FiredTier[] {
 }
 
 /** The newest windfall plan with its tranches; undefined when none has been started. */
-export async function loadWindfallPlan(supabase: SupabaseClient): Promise<WindfallPlanRecord | undefined> {
+async function loadWindfallPlanUncached(supabase: SupabaseClient): Promise<WindfallPlanRecord | undefined> {
   const [plan] = await rows<{ id: number; total_twd: number; received_on: string; cape_percentile: number | null; tranche_count: number | null; tiers_fired: unknown; current_drawdown_peak: number | null }>(
     'windfall_plan',
     supabase.from('windfall_plan').select('id, total_twd, received_on, cape_percentile, tranche_count, tiers_fired, current_drawdown_peak').order('id', { ascending: false }).limit(1),
@@ -1438,6 +1629,28 @@ export async function loadGauge(supabase: SupabaseClient, today: string): Promis
   return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
 }
 
+/** Every daily close of one ticker, oldest first, as quoted (the holding's price chart, N5). */
+export async function loadPriceHistory(supabase: SupabaseClient, ticker: string): Promise<Array<{ date: string; close: number }>> {
+  const found = await allRows<{ price_date: string; close: number }>('prices', (start, end) =>
+    supabase.from('prices').select('price_date, close').eq('ticker', ticker).order('price_date').range(start, end),
+  );
+  return found.map((row) => ({ date: row.price_date, close: Number(row.close) }));
+}
+
+/**
+ * Each ticker's daily closes from a date on, oldest first, for the holdings overview (the cards'
+ * three months, the last session's move, the 52-week range): one read per ticker, all at once.
+ */
+export async function loadHoldingCloses(supabase: SupabaseClient, tickers: readonly string[], from: string): Promise<Map<string, Array<{ date: string; close: number }>>> {
+  const unique = [...new Set(tickers)];
+  const found = await Promise.all(
+    unique.map((ticker) =>
+      rows<{ price_date: string; close: number }>('prices', supabase.from('prices').select('price_date, close').eq('ticker', ticker).gte('price_date', from).order('price_date')),
+    ),
+  );
+  return new Map(unique.map((ticker, index) => [ticker, (found[index] ?? []).map((row) => ({ date: row.price_date, close: Number(row.close) }))]));
+}
+
 /** What the two windfall rules read; the plan is null until one is started (or before the migration). */
 export async function loadWindfallInput(supabase: SupabaseClient, today: string): Promise<WindfallInput | undefined> {
   const [plan, gauge, settings] = await Promise.all([
@@ -1459,7 +1672,7 @@ export interface SeriesPoint {
 }
 
 /** Every month of the market series (market_series), oldest first; a few thousand rows, read in pages. */
-export async function loadMarketSeries(supabase: SupabaseClient): Promise<{ series: Record<string, SeriesPoint[]>; sources: Record<string, string> }> {
+async function loadMarketSeriesUncached(supabase: SupabaseClient): Promise<{ series: Record<string, SeriesPoint[]>; sources: Record<string, string> }> {
   const found = await allRows<{ series: string; obs_month: string; value: number; source: string }>('market_series', (from, to) =>
     supabase.from('market_series').select('series, obs_month, value, source').order('series').order('obs_month').range(from, to),
   );
@@ -1527,7 +1740,7 @@ async function regressionConfig(supabase: SupabaseClient): Promise<unknown> {
 }
 
 /** The settings, the securities and which of them have closes. */
-export async function loadRegressionSetup(supabase: SupabaseClient): Promise<RegressionSetup> {
+async function loadRegressionSetupUncached(supabase: SupabaseClient): Promise<RegressionSetup> {
   const [config, securities, latest] = await Promise.all([
     regressionConfig(supabase),
     loadSecurities(supabase),
@@ -1633,7 +1846,7 @@ export async function refreshBetas(supabase: SupabaseClient, today: string): Pro
 }
 
 /** The newest β saved for each ticker and benchmark (the monthly refresh), for the Regression page. */
-export async function loadSavedBetas(supabase: SupabaseClient): Promise<Array<{ ticker: string; benchmark: string; beta: number; runDate: string }>> {
+async function loadSavedBetasUncached(supabase: SupabaseClient): Promise<Array<{ ticker: string; benchmark: string; beta: number; runDate: string }>> {
   const found = await rows<{ ticker: string; benchmark: string; beta: number | null; run_date: string }>(
     'beta_results',
     supabase.from('beta_results').select('ticker, benchmark, beta, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(200),
@@ -1672,46 +1885,52 @@ export interface CapmData {
   stocks: StockCost[];
 }
 
-/** The newest β saved for each ticker and benchmark (N1's monthly refresh), raw and adjusted. */
-async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, BetaInput>> {
-  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; factor_loadings: Record<string, unknown> | null; run_date: string }>(
+/** The newest β saved for each ticker and benchmark (N1's monthly refresh), raw and adjusted, with its R². */
+async function savedBetaInputs(supabase: SupabaseClient): Promise<Map<string, BetaInput & { r2: number | null }>> {
+  const found = await rows<{ ticker: string; benchmark: string; beta: number | null; factor_loadings: Record<string, unknown> | null; r2: number | null; run_date: string }>(
     'beta_results',
-    supabase.from('beta_results').select('ticker, benchmark, beta, factor_loadings, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(500),
+    supabase.from('beta_results').select('ticker, benchmark, beta, factor_loadings, r2, run_date').eq('model', '1F').order('run_date', { ascending: false }).limit(500),
   );
-  const out = new Map<string, BetaInput>();
+  const out = new Map<string, BetaInput & { r2: number | null }>();
   for (const row of found) {
     const key = `${row.ticker}|${row.benchmark}`;
     const adjusted = row.factor_loadings?.['adjusted'];
     if (out.has(key) || row.beta === null || typeof adjusted !== 'number') continue;
-    out.set(key, { raw: Number(row.beta), adjusted, runDate: row.run_date });
+    out.set(key, { raw: Number(row.beta), adjusted, runDate: row.run_date, r2: row.r2 === null ? null : Number(row.r2) });
   }
   return out;
+}
+
+/** F11's monthly series (the 10-year yields and Damodaran's ERP) of the last CAPM_MONTHS, oldest first. */
+async function loadCapmSeries(supabase: SupabaseClient, today: string): Promise<Map<string, MonthValue[]>> {
+  const since = `${addMonths(today.slice(0, 7), -CAPM_MONTHS)}-01`;
+  const found = await rows<{ series: string; obs_month: string; value: number }>(
+    'market_series',
+    supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(CAPM_SERIES)).gte('obs_month', since).order('obs_month'),
+  );
+  const series = new Map<string, MonthValue[]>();
+  for (const row of found) {
+    const list = series.get(row.series) ?? [];
+    list.push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
+    series.set(row.series, list);
+  }
+  return series;
 }
 
 /**
  * Each single stock's cost of equity (F11): its market's 10-year yield and ERP, and its β against
  * the market's index, the newest saved by the monthly refresh, else worked out now at N1's defaults.
  */
-export async function loadCapmData(supabase: SupabaseClient, today: string): Promise<CapmData> {
-  const since = `${addMonths(today.slice(0, 7), -CAPM_MONTHS)}-01`;
-  const [capmRow, setup, saved, seriesRows, holdings] = await Promise.all([
+async function loadCapmDataUncached(supabase: SupabaseClient, today: string): Promise<CapmData> {
+  const [capmRow, setup, saved, series, holdings] = await Promise.all([
     rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'capm')),
     loadRegressionSetup(supabase),
     savedBetaInputs(supabase),
-    rows<{ series: string; obs_month: string; value: number }>(
-      'market_series',
-      supabase.from('market_series').select('series, obs_month, value').in('series', Object.values(CAPM_SERIES)).gte('obs_month', since).order('obs_month'),
-    ),
+    loadCapmSeries(supabase, today),
     loadHoldingsData(supabase),
   ]);
   const settings = readCapmSettings(capmRow[0]?.value);
   const regression = setup.settings;
-  const series = new Map<string, MonthValue[]>();
-  for (const row of seriesRows) {
-    const list = series.get(row.series) ?? [];
-    list.push({ month: row.obs_month.slice(0, 7), value: Number(row.value) });
-    series.set(row.series, list);
-  }
   const held = new Set(buildPortfolio(holdings).holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])));
   const stocks = setup.securities.filter((security) => security.productType === 'stock').sort((a, b) => Number(held.has(b.ticker)) - Number(held.has(a.ticker)) || a.ticker.localeCompare(b.ticker));
   if (!settings) return { settings, regression, series, stocks: [] };
@@ -1744,6 +1963,135 @@ export async function loadCapmData(supabase: SupabaseClient, today: string): Pro
 }
 
 // ---------------------------------------------------------------------------
+// F6 auto-scored assumptions (asked 2026-11-09)
+// ---------------------------------------------------------------------------
+
+/**
+ * Each ticker's fit against every N1 index, its β as config capm.beta reads it: the newest the
+ * monthly refresh saved, else worked out now at N1's defaults, as F11 does for a stock with none.
+ */
+async function loadIndexFits(supabase: SupabaseClient, today: string, tickers: readonly string[], capm: CapmSettings): Promise<Map<string, IndexFit[]>> {
+  const [setup, saved] = await Promise.all([loadRegressionSetup(supabase), savedBetaInputs(supabase)]);
+  const regression = setup.settings;
+  const benchmarks = regression?.benchmarks ?? [];
+  const used = (beta: { raw: number; adjusted: number }) => (capm.beta === 'adjusted' ? beta.adjusted : beta.raw);
+  const out = new Map<string, IndexFit[]>();
+  const missing: string[] = [];
+  for (const ticker of tickers) {
+    const fits: IndexFit[] = [];
+    for (const benchmark of benchmarks) {
+      const found = saved.get(`${ticker}|${benchmark.id}`);
+      if (found) fits.push({ benchmark: benchmark.id, beta: used(found), r2: found.r2 });
+    }
+    out.set(ticker, fits);
+    if (fits.length < benchmarks.length && setup.priced.has(ticker)) missing.push(ticker);
+  }
+  if (missing.length > 0 && regression) {
+    const { defaults } = regression;
+    const data = await loadRegressionData(supabase, missing, loadFrom(today, defaults.years, regression.rollingWeeks), setup);
+    const securities = new Map(setup.securities.map((security) => [security.ticker, security]));
+    for (const ticker of missing) {
+      const security = securities.get(ticker);
+      const fits = out.get(ticker) ?? [];
+      if (!security) continue;
+      for (const benchmark of benchmarks) {
+        if (fits.some((fit) => fit.benchmark === benchmark.id)) continue;
+        const outcome = regressTicker(data, security, benchmark, { freq: defaults.freq, years: defaults.years, basis: defaults.currency }, regression);
+        if (outcome.ok) fits.push({ benchmark: benchmark.id, beta: used({ raw: outcome.result.beta, adjusted: outcome.result.adjusted }), r2: outcome.result.r2 });
+      }
+    }
+  }
+  return out;
+}
+
+export interface CmaRefresh {
+  /** The satellite classes scored and saved. */
+  saved: string[];
+  /** The classes held with nothing that can be scored yet: saved with no figures, naming the lines left out. */
+  unscored: string[];
+}
+
+/**
+ * Scores each satellite class from its long lines of both pools (lib/models/auto-cma.ts) and saves
+ * the estimates in cma_estimates, today's date as of; a class holding nothing that can be scored
+ * loses its row. Undefined before the migration, without config capm or while scoring is off. The
+ * nightly job runs it, and so does the owner's save of a trade in a satellite class or of the
+ * assumptions, so a new holding is scored at once when its closes are in.
+ */
+export async function refreshCmaEstimates(supabase: SupabaseClient, today: string): Promise<CmaRefresh | undefined> {
+  const config = await rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['cma', 'cma_auto', 'capm']));
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const settings = readAutoCmaSettings(value('cma_auto'));
+  const capm = readCapmSettings(value('capm'));
+  if (!settings?.enabled || !capm || value('cma') === undefined) return undefined;
+  // Uncached: a server action calls this right after saving a trade.
+  const [classes, holdings, series] = await Promise.all([loadAssetClassSettingsUncached(supabase), loadHoldingsDataUncached(supabase), loadCapmSeries(supabase, today)]);
+  const satellite = classes.filter((assetClass) => assetClass.sleeve === 'satellite');
+  const ids = new Set(satellite.map((assetClass) => assetClass.id));
+  // Each satellite class's long lines by ticker, both pools: what the class holds.
+  const byClass = new Map<string, Map<string, { market: string; exposure: number }>>();
+  for (const holding of buildPortfolio(holdings).holdings) {
+    if (!holding.ticker || !holding.market || holding.qty <= 0 || holding.direction !== 'long' || !ids.has(holding.assetClassId)) continue;
+    const exposure = exposureOf(holding);
+    if (!(exposure > 0)) continue;
+    const lines = byClass.get(holding.assetClassId) ?? new Map<string, { market: string; exposure: number }>();
+    const line = lines.get(holding.ticker) ?? { market: holding.market, exposure: 0 };
+    line.exposure += exposure;
+    lines.set(holding.ticker, line);
+    byClass.set(holding.assetClassId, lines);
+  }
+  const tickers = [...new Set([...byClass.values()].flatMap((lines) => [...lines.keys()]))].sort();
+  const [fits, returns] =
+    tickers.length > 0
+      ? await Promise.all([loadIndexFits(supabase, today, tickers, capm), loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today)])
+      : [new Map<string, IndexFit[]>(), new Map<string, ReturnPoint[]>()];
+  const lines = marketLines(settings, capm, series, readAssumptions(value('cma')));
+  const out: Array<Record<string, unknown>> = [];
+  const saved: string[] = [];
+  const unscored: string[] = [];
+  for (const assetClass of satellite) {
+    const held = byClass.get(assetClass.id);
+    if (!held) continue;
+    const outcome = estimateClass(
+      assetClass.id,
+      [...held].map(([ticker, line]) => ({ ticker, market: line.market, exposure: line.exposure, fits: fits.get(ticker) ?? [], returns: returns.get(ticker) ?? [] })),
+      lines,
+      settings,
+    );
+    if (outcome.ok) {
+      out.push(estimateRow(outcome.estimate, lines, today));
+      saved.push(assetClass.id);
+    } else {
+      out.push(unscoredRow(assetClass.id, outcome.left, today));
+      unscored.push(assetClass.id);
+    }
+  }
+  if (out.length > 0) {
+    const { error } = await supabase.from('cma_estimates').upsert(out, { onConflict: 'class_id' });
+    if (error) throw new DataError('cma_estimates', error.message);
+  }
+  // A class that holds nothing any more has nothing to say.
+  const empty = satellite.map((assetClass) => assetClass.id).filter((id) => !byClass.has(id));
+  if (empty.length > 0) {
+    const { error } = await supabase.from('cma_estimates').delete().in('class_id', empty);
+    if (error) throw new DataError('cma_estimates', error.message);
+  }
+  return { saved, unscored };
+}
+
+/**
+ * The same after an owner's save, as a courtesy: the save already succeeded, so a failure here is
+ * left for the nightly job to retry rather than shown as the save's.
+ */
+export async function rescoreQuietly(supabase: SupabaseClient, today: string): Promise<void> {
+  try {
+    await refreshCmaEstimates(supabase, today);
+  } catch {
+    // The nightly job scores again tonight.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // F12 valuation workbench (Phase 2, step 4)
 // ---------------------------------------------------------------------------
 
@@ -1773,6 +2121,8 @@ export interface StockBench {
   problem?: InputProblem;
   /** Saved values of every model, newest first. */
   saved: SavedValuation[];
+  /** The analysts' newest consensus (F12 forward P/E), from the nightly job or typed in. */
+  estimates?: Estimates;
 }
 
 export interface WorkbenchData {
@@ -1783,6 +2133,8 @@ export interface WorkbenchData {
   /** Watched and held single stocks, watched first, valued; then the other single stocks, to add. */
   stocks: StockBench[];
   others: SecurityRecord[];
+  /** config pe_check (F12 forward P/E); undefined before its migration. */
+  peCheck?: PeCheckSettings;
 }
 
 const WATCH_COLUMNS = 'ticker, added_on, buy_threshold, trim_threshold, active, assumptions';
@@ -1852,12 +2204,14 @@ function zoneRules(rules: readonly RuleRecord[]): WorkbenchData['rules'] {
  * quarters, its newest close and F11's cost of equity, with its saved values; `only` limits the
  * valuing to those tickers (the nightly job's re-run, a save).
  */
-export async function loadWorkbench(supabase: SupabaseClient, today: string, only?: readonly string[]): Promise<WorkbenchData> {
-  const [settings, watchRows, holdings, capm, rules] = await Promise.all([
+async function loadWorkbenchUncached(supabase: SupabaseClient, today: string, only?: readonly string[]): Promise<WorkbenchData> {
+  // F11's cost of equity may first regress a β; it runs while the filings and closes load.
+  const capmLoad = loadCapmData(supabase, today);
+  capmLoad.catch(() => undefined);
+  const [settings, watchRows, holdings, rules] = await Promise.all([
     loadValuationConfig(supabase),
     rows<Parameters<typeof toWatch>[0]>('watchlist', supabase.from('watchlist').select(WATCH_COLUMNS).order('ticker')),
     loadHoldingsData(supabase),
-    loadCapmData(supabase, today),
     loadRules(supabase),
   ]);
   const watch = new Map(watchRows.map((row) => [row.ticker, toWatch(row)]));
@@ -1874,7 +2228,15 @@ export async function loadWorkbench(supabase: SupabaseClient, today: string, onl
   const peers = [...new Set(benched.flatMap((security) => assumedOf(security.ticker).peers))].filter((ticker) => known.has(ticker));
   const tickers = [...new Set([...benched.map((security) => security.ticker), ...peers])];
   const from = `${Number(today.slice(0, 4)) - settings.historyYears - 1}${today.slice(4)}`;
-  const [quarters, closes, saved] = await Promise.all([loadQuarters(supabase, tickers), loadQuotedCloses(supabase, tickers, from), loadSavedValuations(supabase, benched.map((security) => security.ticker))]);
+  const [quarters, closes, saved, capm, estimates, peCheck] = await Promise.all([
+    loadQuarters(supabase, tickers),
+    loadQuotedCloses(supabase, tickers, from),
+    loadSavedValuations(supabase, benched.map((security) => security.ticker)),
+    capmLoad,
+    // Before the forward P/E's migration the valuations still show, without it.
+    loadEstimates(supabase, benched.map((security) => security.ticker)).catch(() => new Map<string, Estimates>()),
+    loadPeCheckSettings(supabase).catch(() => undefined),
+  ]);
   const seriesOf = (security: SecurityRecord): StockSeries => {
     const filings = quarters.get(security.ticker);
     return { ticker: security.ticker, market: security.market, currency: security.currency, reportCurrency: filings?.currency ?? null, quarters: filings?.quarters ?? [], closes: closes.get(security.ticker) ?? [] };
@@ -1884,6 +2246,7 @@ export async function loadWorkbench(supabase: SupabaseClient, today: string, onl
     settings,
     rules: zoneRules(rules),
     others,
+    ...(peCheck ? { peCheck } : {}),
     stocks: benched.map((security) => {
       const series = seriesOf(security);
       const choice = assumedOf(security.ticker);
@@ -1906,6 +2269,7 @@ export async function loadWorkbench(supabase: SupabaseClient, today: string, onl
         ...(cost ? { cost } : {}),
         ...(built.ok ? { valuation: valueStock(built.input), input: { quarter: built.quarter, price: built.price } } : { problem: built.problem }),
         saved: saved.filter((row) => row.ticker === security.ticker),
+        ...(estimates.has(security.ticker) ? { estimates: estimates.get(security.ticker) as Estimates } : {}),
       };
     }),
   };
@@ -1969,3 +2333,1129 @@ export async function loadFilingTickers(supabase: SupabaseClient): Promise<Array
   const wanted = new Set([...held, ...watched.map((entry) => entry.ticker), ...watched.flatMap((entry) => entry.assumptions.peers ?? [])]);
   return holdings.securities.filter((security) => security.productType === 'stock' && wanted.has(security.ticker)).map((security) => ({ ticker: security.ticker, market: security.market }));
 }
+
+// ---------------------------------------------------------------------------
+// The red-flag indicator (N3, Phase 2 step 5)
+// ---------------------------------------------------------------------------
+
+/** A company profile as saved, with what the nightly job needs to update it. */
+export interface ProfileRecord extends Profile {
+  ticker: string;
+  businessId: string | null;
+  source: string;
+}
+
+interface ProfileRow {
+  ticker: string;
+  industry_code: string | null;
+  industry: string | null;
+  sic: number | null;
+  auditor: string | null;
+  business_id: string | null;
+  checked: unknown;
+  source: string;
+}
+
+const PROFILE_COLUMNS = 'ticker, industry_code, industry, sic, auditor, business_id, checked, source';
+
+function readChecked(value: unknown): Profile['checked'] {
+  const out: Profile['checked'] = {};
+  if (typeof value !== 'object' || value === null) return out;
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!(EVENT_INDICATORS as readonly string[]).includes(key) || typeof entry !== 'object' || entry === null) continue;
+    const { on, since } = entry as Record<string, unknown>;
+    if (typeof on === 'string') out[key as EventIndicator] = { on, ...(typeof since === 'string' ? { since } : {}) };
+  }
+  return out;
+}
+
+export function toProfile(row: ProfileRow): ProfileRecord {
+  return {
+    ticker: row.ticker,
+    industryCode: row.industry_code,
+    industry: row.industry,
+    sic: row.sic === null ? null : Number(row.sic),
+    auditor: row.auditor,
+    businessId: row.business_id,
+    checked: readChecked(row.checked),
+    source: row.source,
+  };
+}
+
+/** The columns a profile is saved with. */
+export function profileColumns(profile: ProfileRecord): ProfileRow & { updated_at: string } {
+  return {
+    ticker: profile.ticker,
+    industry_code: profile.industryCode,
+    industry: profile.industry,
+    sic: profile.sic,
+    auditor: profile.auditor,
+    business_id: profile.businessId,
+    checked: profile.checked,
+    source: profile.source,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export interface EntryRecord extends ManualEntry {
+  ticker: string;
+}
+
+const ENTRY_COLUMNS = 'id, ticker, indicator, as_of, value, note';
+
+async function loadRedFlagSettingsUncached(supabase: SupabaseClient): Promise<RedFlagSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'red_flags'));
+  return readRedFlagSettings(found[0]?.value);
+}
+
+/** The single stocks N3 lights: held, or actively watched. */
+async function flagSecurities(supabase: SupabaseClient, holdings?: HoldingsData): Promise<{ securities: SecurityRecord[]; held: Set<string>; watched: Set<string>; data: HoldingsData }> {
+  const [data, watchRows] = await Promise.all([holdings ?? loadHoldingsData(supabase), rows<{ ticker: string; active: boolean }>('watchlist', supabase.from('watchlist').select('ticker, active'))]);
+  const held = new Set(buildPortfolio(data).holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])));
+  const watched = new Set(watchRows.filter((row) => row.active).map((row) => row.ticker));
+  return { securities: data.securities.filter((security) => security.productType === 'stock' && (held.has(security.ticker) || watched.has(security.ticker))), held, watched, data };
+}
+
+/** Saved scans since `from`, per ticker, newest first. */
+async function loadScans(supabase: SupabaseClient, tickers: readonly string[], from: string): Promise<Map<string, Scan[]>> {
+  if (tickers.length === 0) return new Map();
+  const found = await allRows<Parameters<typeof readScans>[0][number]>('red_flags', (start, end) =>
+    supabase.from('red_flags').select('ticker, flag_date, indicator, value, level, coverage_pct, detail').in('ticker', [...tickers]).gte('flag_date', from).order('flag_date', { ascending: false }).order('id').range(start, end),
+  );
+  return readScans(found);
+}
+
+/** What the nightly job reads for N3: the companies, their saved profiles, and whether each is due a scan. Undefined before config red_flags. */
+export async function loadRedFlagCompanies(supabase: SupabaseClient, today: string): Promise<{ settings: RedFlagSettings; companies: Array<{ ticker: string; market: Market; due: boolean; profile: ProfileRecord | null }> } | undefined> {
+  const settings = await loadRedFlagSettings(supabase);
+  if (!settings) return undefined;
+  const { securities } = await flagSecurities(supabase);
+  const tickers = securities.map((security) => security.ticker);
+  const [profiles, newest] = await Promise.all([
+    tickers.length ? rows<ProfileRow>('company_profiles', supabase.from('company_profiles').select(PROFILE_COLUMNS).in('ticker', tickers)) : Promise.resolve([]),
+    tickers.length ? rows<{ ticker: string; flag_date: string }>('red_flags', supabase.from('red_flags').select('ticker, flag_date').in('ticker', tickers).gte('flag_date', addDays(today, -settings.scanDays * 2)).order('flag_date', { ascending: false })) : Promise.resolve([]),
+  ]);
+  const byTicker = new Map(profiles.map((row) => [row.ticker, toProfile(row)]));
+  return {
+    settings,
+    companies: securities.map((security) => ({
+      ticker: security.ticker,
+      market: security.market,
+      due: scanDue(newest.find((row) => row.ticker === security.ticker)?.flag_date, today, settings.scanDays),
+      profile: byTicker.get(security.ticker) ?? null,
+    })),
+  };
+}
+
+export interface FlagCompany {
+  security: SecurityRecord;
+  held: boolean;
+  watched: boolean;
+  profile: ProfileRecord | null;
+  events: FlagEvent[];
+  entries: EntryRecord[];
+  /** The indicators now, from the saved filings, events and entries. */
+  assessment: Assessment;
+  /** Saved weekly scans, newest first. */
+  scans: Scan[];
+}
+
+export interface RedFlagData {
+  settings: RedFlagSettings | undefined;
+  companies: FlagCompany[];
+}
+
+/** Every company N3 lights, assessed now, with its saved scans of the last year. */
+async function loadRedFlagDataUncached(supabase: SupabaseClient, today: string, only?: readonly string[], holdings?: HoldingsData): Promise<RedFlagData> {
+  const [settings, { securities, held, watched, data }] = await Promise.all([loadRedFlagSettings(supabase), flagSecurities(supabase, holdings)]);
+  if (!settings) return { settings, companies: [] };
+  const chosen = securities.filter((security) => !only || only.includes(security.ticker));
+  const tickers = chosen.map((security) => security.ticker);
+  if (tickers.length === 0) return { settings, companies: [] };
+  const [profiles, events, entries, quarters, scans] = await Promise.all([
+    rows<ProfileRow>('company_profiles', supabase.from('company_profiles').select(PROFILE_COLUMNS).in('ticker', tickers)),
+    rows<{ ticker: string; indicator: EventIndicator; event_date: string; source: string; title: string; url: string | null; value: number | null }>(
+      'red_flag_events',
+      supabase.from('red_flag_events').select('ticker, indicator, event_date, source, title, url, value').in('ticker', tickers).order('event_date', { ascending: false }),
+    ),
+    rows<{ id: number; ticker: string; indicator: ManualIndicator; as_of: string; value: number; note: string }>('red_flag_entries', supabase.from('red_flag_entries').select(ENTRY_COLUMNS).in('ticker', tickers).order('as_of', { ascending: false })),
+    loadQuarters(supabase, tickers),
+    loadScans(supabase, tickers, addDays(today, -366)),
+  ]);
+  const prices = new Map(data.prices.map((price) => [price.ticker, price]));
+  const profileOf = new Map(profiles.map((row) => [row.ticker, toProfile(row)]));
+  return {
+    settings,
+    companies: chosen
+      .map((security) => {
+        const profile = profileOf.get(security.ticker) ?? null;
+        const mine = events.filter((row) => row.ticker === security.ticker).map((row): FlagEvent => ({ indicator: row.indicator, date: row.event_date, source: row.source, title: row.title, url: row.url, value: row.value === null ? null : Number(row.value) }));
+        const typed = entries.filter((row) => row.ticker === security.ticker).map((row): EntryRecord => ({ id: Number(row.id), ticker: row.ticker, indicator: row.indicator, asOf: row.as_of, value: Number(row.value), note: row.note }));
+        const filings = quarters.get(security.ticker);
+        const price = prices.get(security.ticker);
+        const input: CompanyInput = {
+          ticker: security.ticker,
+          market: security.market,
+          quarters: filings?.quarters ?? [],
+          reportCurrency: filings?.currency ?? null,
+          price: price ? { close: price.close, date: price.date, currency: security.currency } : null,
+          profile,
+          events: mine,
+          entries: typed,
+        };
+        return { security, held: held.has(security.ticker), watched: watched.has(security.ticker), profile, events: mine, entries: typed, assessment: assess(input, settings, today), scans: scans.get(security.ticker) ?? [] };
+      })
+      .sort((a, b) => Number(b.held) - Number(a.held) || a.security.ticker.localeCompare(b.security.ticker)),
+  };
+}
+
+/** The weekly scan: each company asked for assessed now and saved as today's rows (upserted by day and indicator). */
+export async function scanRedFlags(supabase: SupabaseClient, today: string, tickers: readonly string[]): Promise<{ scanned: string[] }> {
+  if (tickers.length === 0) return { scanned: [] };
+  const data = await loadRedFlagData(supabase, today, tickers);
+  const out = data.companies.flatMap((company) => scanRows(company.assessment, today));
+  for (let at = 0; at < out.length; at += 500) {
+    const { error } = await supabase.from('red_flags').upsert(out.slice(at, at + 500), { onConflict: 'ticker,flag_date,indicator' });
+    if (error) throw new DataError('red_flags', error.message);
+  }
+  return { scanned: data.companies.map((company) => company.security.ticker) };
+}
+
+/** What the two N3 rules read: each company's saved scans of the last half year; undefined before config red_flags. */
+export async function loadFlagInputs(supabase: SupabaseClient, today: string, holdings: HoldingsData): Promise<EngineInput['redFlags']> {
+  const settings = await loadRedFlagSettings(supabase);
+  if (!settings) return undefined;
+  const { securities } = await flagSecurities(supabase, holdings);
+  const scans = await loadScans(supabase, securities.map((security) => security.ticker), addDays(today, -183));
+  return [...scans.entries()].map(([ticker, list]) => ({ ticker, scans: list }));
+}
+
+// ---------------------------------------------------------------------------
+// The combined look-through (F14, Phase 2 step 6)
+// ---------------------------------------------------------------------------
+
+async function loadLookThroughSettingsUncached(supabase: SupabaseClient): Promise<LookThroughSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'look_through'));
+  return readLookThroughSettings(found[0]?.value);
+}
+
+/** The funds and single stocks held, both pools: what the look-through opens up. */
+function heldTickers(data: HoldingsData): { funds: SecurityRecord[]; stocks: SecurityRecord[] } {
+  const held = new Set(buildPortfolio(data).holdings.flatMap((holding) => (holding.ticker && (holding.valueTwd ?? 0) > 0 ? [holding.ticker] : [])));
+  const securities = data.securities.filter((security) => held.has(security.ticker));
+  return { funds: securities.filter((security) => security.productType !== 'stock'), stocks: securities.filter((security) => security.productType === 'stock') };
+}
+
+/** What the nightly job reads for F14: the held funds whose file is due, and the held stocks; undefined before config look_through. */
+export async function loadLookThroughPlan(
+  supabase: SupabaseClient,
+  today: string,
+): Promise<{ settings: LookThroughSettings; due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: Market; sector: string | null }> } | undefined> {
+  const settings = await loadLookThroughSettings(supabase);
+  if (!settings) return undefined;
+  const data = await loadHoldingsData(supabase);
+  const { funds, stocks } = heldTickers(data);
+  const sourced = funds.filter((fund) => settings.sources[fund.ticker]);
+  const [loaded, sectors] = await Promise.all([
+    sourced.length ? rows<{ fund: string; loaded_at: string }>('fund_holdings', supabase.from('fund_holdings').select('fund, loaded_at').in('fund', sourced.map((fund) => fund.ticker))) : Promise.resolve([]),
+    stocks.length ? rows<{ ticker: string; sector: string | null }>('company_profiles', supabase.from('company_profiles').select('ticker, sector').in('ticker', stocks.map((stock) => stock.ticker))) : Promise.resolve([]),
+  ]);
+  return {
+    settings,
+    due: sourced
+      .filter((fund) => fileDue(loaded.find((row) => row.fund === fund.ticker)?.loaded_at, today, settings.refreshDays))
+      .map((fund) => ({ fund: fund.ticker, ...(settings.sources[fund.ticker] as { source: 'vanguard' | 'fubon'; id: string }) })),
+    stocks: stocks.map((stock) => ({ ticker: stock.ticker, market: stock.market, sector: sectors.find((row) => row.ticker === stock.ticker)?.sector ?? null })),
+  };
+}
+
+export interface LookThroughData {
+  settings: LookThroughSettings | undefined;
+  result?: LookThrough;
+  securities: SecurityRecord[];
+  /** config fund_costs (F15): each fund's TER and tracking difference. */
+  fundCosts: FundCost[];
+}
+
+/** The whole portfolio opened up, from the saved holdings files; `pool` keeps one pool's holdings only. */
+async function loadLookThroughDataUncached(supabase: SupabaseClient, holdings?: HoldingsData, pool?: Pool): Promise<LookThroughData> {
+  const [settings, data, costs] = await Promise.all([
+    loadLookThroughSettings(supabase),
+    holdings ?? loadHoldingsData(supabase),
+    rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'fund_costs')),
+  ]);
+  const fundCosts = readFundCosts(costs[0]?.value);
+  if (!settings) return { settings, securities: data.securities, fundCosts };
+  const { funds, stocks } = heldTickers(data);
+  const [files, sectors] = await Promise.all([
+    funds.length ? rows<{ fund: string; as_of: string; source: string; constituents: unknown }>('fund_holdings', supabase.from('fund_holdings').select('fund, as_of, source, constituents').in('fund', funds.map((fund) => fund.ticker))) : Promise.resolve([]),
+    stocks.length ? rows<{ ticker: string; sector: string | null }>('company_profiles', supabase.from('company_profiles').select('ticker, sector').in('ticker', stocks.map((stock) => stock.ticker))) : Promise.resolve([]),
+  ]);
+  const byTicker = new Map(data.securities.map((security) => [security.ticker, security]));
+  const result = lookThrough({
+    holdings: buildPortfolio(data).holdings.filter((holding) => !pool || holding.pool === pool),
+    files: new Map(files.map((row) => [row.fund, { fund: row.fund, asOf: row.as_of, source: row.source, constituents: unpackConstituents(row.constituents) }])),
+    sectors: new Map(sectors.flatMap((row) => (row.sector && byTicker.get(row.ticker) ? [[directKey((byTicker.get(row.ticker) as SecurityRecord).market, row.ticker), row.sector] as [string, string]] : []))),
+    settings,
+  });
+  return { settings, result, securities: data.securities, fundCosts };
+}
+
+// ---------------------------------------------------------------------------
+// The sector tab (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+async function loadSectorSettingsUncached(supabase: SupabaseClient): Promise<SectorSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'sectors'));
+  return readSectorSettings(found[0]?.value);
+}
+
+export interface SectorData {
+  settings: SectorSettings | undefined;
+  view?: SectorView;
+  /** The look-through's exposures, for the companies behind a sector. */
+  exposures?: Exposure[];
+}
+
+/** Each sector's returns and volatility from its proxies' closes, and the portfolio's exposure from the look-through. */
+export async function loadSectorData(supabase: SupabaseClient, today: string, pool?: Pool): Promise<SectorData> {
+  const [settings, look] = await Promise.all([loadSectorSettings(supabase), loadLookThroughData(supabase, undefined, pool)]);
+  if (!settings || !look.result) return { settings };
+  const ids = settings.proxies.map((proxy) => proxy.id);
+  const found = await allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (from, to) =>
+    supabase.from('index_prices').select('index_id, price_date, close').in('index_id', ids).gte('price_date', addDays(today, -SECTOR_DAYS)).order('index_id').order('price_date').range(from, to),
+  );
+  const closes = new Map<string, SectorClose[]>();
+  for (const row of found) closes.set(row.index_id, [...(closes.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  return { settings, view: sectorView(settings.proxies, closes, look.result.exposures, today), exposures: look.result.exposures };
+}
+
+// ---------------------------------------------------------------------------
+// The volatility alert (N8, added 2026-11-06)
+// ---------------------------------------------------------------------------
+
+/** The volatility job's name in job_runs (scripts/lib/volatility/job.ts). */
+export const VOLATILITY_JOB = 'volatility';
+
+async function loadVolatilitySettingsUncached(supabase: SupabaseClient): Promise<VolatilitySettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'volatility'));
+  return readVolatilitySettings(found[0]?.value);
+}
+
+export interface VolatilityData {
+  settings: VolatilitySettings | undefined;
+  /** Today's score from the closes saved. */
+  today?: VolatilityScore;
+  /** The score on each day of the last year with a close, for the chart. */
+  history?: Array<{ date: string; score: number | null; coverage: number }>;
+  /** The volatility job's newest run. */
+  lastRun?: { finishedAt: string; status: RunStatus } | null;
+  /** The calendar's events from today on (step 2); null before its migration. */
+  events?: MarketEvent[] | null;
+}
+
+interface EventRow {
+  id: number;
+  kind: EventKind;
+  event_date: string;
+  event_time: string | null;
+  name_en: string;
+  name_zh: string;
+  source: EventSource;
+  note: string | null;
+}
+
+/**
+ * The calendar's events from `from` to `to` (N8 step 2), in order; null when market_events is not
+ * there yet (its migration not applied), so the pushes and pages that read it keep working.
+ */
+export async function loadMarketEvents(supabase: SupabaseClient, from: string, to: string): Promise<MarketEvent[] | null> {
+  const { data, error } = await supabase
+    .from('market_events')
+    .select('id, kind, event_date, event_time, name_en, name_zh, source, note')
+    .gte('event_date', from)
+    .lte('event_date', to)
+    .order('event_date')
+    .order('event_time', { nullsFirst: true });
+  if (error) {
+    if (/market_events/.test(error.message) && /(does not exist|schema cache|not find)/i.test(error.message)) return null;
+    throw new DataError('market_events', error.message);
+  }
+  return ((data ?? []) as EventRow[]).map((row) => ({ id: Number(row.id), kind: row.kind, date: row.event_date, time: row.event_time, name: { en: row.name_en, zh: row.name_zh }, source: row.source, note: row.note }));
+}
+
+/** The score today and over the last year, from the series in index_prices, and the job's newest run. */
+export async function loadVolatilityData(supabase: SupabaseClient, today: string): Promise<VolatilityData> {
+  const settings = await loadVolatilitySettings(supabase);
+  if (!settings) return { settings };
+  const from = addDays(today, -(366 + settings.drawdownDays + 14));
+  const [found, runs, events] = await Promise.all([
+    allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (start, end) =>
+      supabase.from('index_prices').select('index_id, price_date, close').in('index_id', [...VOLATILITY_SERIES]).gte('price_date', from).order('index_id').order('price_date').range(start, end),
+    ),
+    rows<{ finished_at: string; status: RunStatus }>('job_runs', supabase.from('job_runs').select('finished_at, status').eq('job', VOLATILITY_JOB).order('finished_at', { ascending: false }).limit(1)),
+    loadMarketEvents(supabase, today, addDays(today, EVENT_PAGE_DAYS)),
+  ]);
+  const series = new Map<string, VolatilityClose[]>();
+  for (const row of found) series.set(row.index_id, [...(series.get(row.index_id) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  const run = runs[0];
+  return {
+    settings,
+    today: volatilityScore(series, settings, today),
+    history: scoreHistory(series, settings, addDays(today, -365), today),
+    lastRun: run ? { finishedAt: run.finished_at, status: run.status } : null,
+    events,
+  };
+}
+
+/** The rules whose proposals the shadow log follows (N8 step 3). */
+export const SHADOW_RULES = ['VOLATILITY_ALERT', 'VOLATILITY_HEDGE'];
+/** The proposals the page lists, newest first. */
+const SHADOW_LIMIT = 40;
+
+/** The alert's and hedge's proposals, any status, and the quoted closes of their trades since (N8 step 3). */
+export async function loadShadowLog(supabase: SupabaseClient): Promise<ShadowRow[]> {
+  const found = await rows<{ id: number; rule_id: string; created_at: string; status: string; orders: unknown; detail: unknown }>(
+    'proposals',
+    supabase.from('proposals').select('id, rule_id, created_at, status, orders, detail').in('rule_id', SHADOW_RULES).order('created_at', { ascending: false }).limit(SHADOW_LIMIT),
+  );
+  const proposals: ShadowProposal[] = found.map((row) => ({
+    id: Number(row.id),
+    ruleId: row.rule_id,
+    date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(row.created_at)),
+    status: row.status,
+    orders: readOrders(row.orders),
+    detail: readDetail(row.detail),
+  }));
+  const tickers = [...new Set(proposals.flatMap((proposal) => proposal.orders.flatMap((order) => (order.kind === 'trade' ? [order.ticker] : []))))];
+  const from = proposals.reduce((min, proposal) => (proposal.date < min ? proposal.date : min), '9999-12-31');
+  const closes = new Map<string, Array<{ date: string; close: number }>>();
+  if (tickers.length > 0) {
+    const prices = await allRows<{ ticker: string; price_date: string; close: number }>('prices', (start, end) =>
+      supabase.from('prices').select('ticker, price_date, close').in('ticker', tickers).gt('price_date', from).order('ticker').order('price_date').range(start, end),
+    );
+    for (const row of prices) closes.set(row.ticker, [...(closes.get(row.ticker) ?? []), { date: row.price_date, close: Number(row.close) }]);
+  }
+  return shadowRows(proposals, closes);
+}
+
+// ---------------------------------------------------------------------------
+// Breaking news (N8 step 4, added 2026-11-07)
+// ---------------------------------------------------------------------------
+
+/** A missing table (its migration not applied yet) reads as nothing, so pages and pushes keep working. */
+function missingTable(table: string, message: string): boolean {
+  return message.includes(table) && /(does not exist|schema cache|not find)/i.test(message);
+}
+
+/**
+ * When the home-screen widget's key was made (ISO), or null with none; the key itself is never
+ * stored. Null too before its migration is applied, so the push page keeps working.
+ */
+export async function loadWidgetKeyDate(supabase: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabase.from('widget_key').select('created_at').maybeSingle();
+  if (error) {
+    if (missingTable('widget_key', error.message)) return null;
+    throw new DataError('widget_key', error.message);
+  }
+  return (data as { created_at: string } | null)?.created_at ?? null;
+}
+
+export async function loadNewsSettings(supabase: SupabaseClient): Promise<NewsSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'news'));
+  return readNewsSettings(found[0]?.value);
+}
+
+/** The newest breaking-news alerts, newest first, since `since` (ISO); null before the migration. */
+export async function loadNewsAlerts(supabase: SupabaseClient, settings: NewsSettings, since: string, limit = 20): Promise<NewsAlert[] | null> {
+  const { data, error } = await supabase.from('news_alerts').select('id, topic, detected_at, sources, baseline, window_hours, headlines').gte('detected_at', since).order('detected_at', { ascending: false }).limit(limit);
+  if (error) {
+    if (missingTable('news_alerts', error.message)) return null;
+    throw new DataError('news_alerts', error.message);
+  }
+  const topics = new Map(settings.topics.map((topic) => [topic.id, topic]));
+  return ((data ?? []) as Array<{ id: number; topic: string; detected_at: string; sources: number; baseline: number | null; window_hours: number; headlines: unknown }>).map((row) => ({
+    id: Number(row.id),
+    topic: topics.get(row.topic) ?? { id: row.topic, name: { en: row.topic, zh: row.topic }, terms: [] },
+    detectedAt: row.detected_at,
+    sources: Number(row.sources),
+    baseline: row.baseline === null ? null : Number(row.baseline),
+    windowHours: Number(row.window_hours),
+    headlines: Array.isArray(row.headlines) ? (row.headlines as Headline[]) : [],
+  }));
+}
+
+/** How far back the page lists breaking news, and the push job looks for alerts not pushed yet. */
+export const NEWS_PAGE_DAYS = 14;
+const NEWS_PUSH_HOURS = 24;
+
+/** The days ahead the volatility page lists events for. */
+export const EVENT_PAGE_DAYS = 120;
+
+// ---------------------------------------------------------------------------
+// F5 Monte Carlo (Phase 3, step 1)
+// ---------------------------------------------------------------------------
+
+/** The newest saved monthly re-run (simulation_runs) of a model, if any. */
+export async function loadLastRun(supabase: SupabaseClient, model: string): Promise<ReturnType<typeof readRunSummary>> {
+  const [row] = await rows<{ summary: unknown }>('simulation_runs', supabase.from('simulation_runs').select('summary').eq('model', model).order('run_date', { ascending: false }).limit(1));
+  return row ? readRunSummary(row.summary) : null;
+}
+
+/** Each class benchmark's monthly returns in TWD over the last `years` (and a little more), the month still running left out. */
+export async function loadMonthlyReturns(supabase: SupabaseClient, tickers: readonly string[], years: number, today: string): Promise<Map<string, ReturnPoint[]>> {
+  if (tickers.length === 0) return new Map();
+  const from = addDays(today, -(years * 366 + 62));
+  const securities = new Map((await loadSecurities(supabase)).map((security) => [security.ticker, security]));
+  const wanted = tickers.filter((ticker) => securities.has(ticker));
+  const currencies = [...new Set(wanted.map((ticker) => securities.get(ticker)?.currency ?? 'TWD'))].filter((currency) => currency !== 'TWD');
+  const [closeRows, rateRows] = await Promise.all([
+    Promise.all(
+      wanted.map((ticker) =>
+        allRows<{ price_date: string; close: number; adj_close: number | null }>('prices', (start, end) =>
+          supabase.from('prices').select('price_date, close, adj_close').eq('ticker', ticker).gte('price_date', from).order('price_date').range(start, end),
+        ),
+      ),
+    ),
+    Promise.all(
+      currencies.map((currency) =>
+        allRows<{ rate_date: string; rate: number }>('fx_rates', (start, end) =>
+          supabase.from('fx_rates').select('rate_date, rate').eq('pair', `${currency}/TWD`).gte('rate_date', addDays(from, -14)).order('rate_date').range(start, end),
+        ),
+      ),
+    ),
+  ]);
+  const rates = new Map(currencies.map((currency, i) => [currency, (rateRows[i] ?? []).map((row) => ({ date: row.rate_date, close: Number(row.rate) }))]));
+  const month = today.slice(0, 7);
+  return new Map(
+    wanted.map((ticker, i) => {
+      const closes = (closeRows[i] ?? []).map((row) => ({ date: row.price_date, close: Number(row.adj_close ?? row.close) }));
+      const currency = securities.get(ticker)?.currency ?? 'TWD';
+      const twd = currency === 'TWD' ? closes : inTwd(closes, rates.get(currency) ?? []);
+      return [ticker, periodReturns(twd, 'monthly').filter((point) => point.date.slice(0, 7) < month)];
+    }),
+  );
+}
+
+/** Everything a Monte Carlo run reads (config monte_carlo and projection, F6, F3, the proxies' prices). */
+export async function loadMonteCarloInput(supabase: SupabaseClient, today: string): Promise<McData> {
+  const [config, classes, assumptions, windfallPlan, holdings, rules, capes] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['monte_carlo', 'projection', 'windfall', 'windfall_pace'])),
+    loadAssetClassSettings(supabase),
+    loadAssumptions(supabase),
+    loadWindfallPlan(supabase),
+    loadHoldingsData(supabase),
+    rows<{ threshold: unknown; enabled: boolean }>('rules', supabase.from('rules').select('threshold, enabled').eq('id', 'WINDFALL_ACCELERATION')),
+    allRows<{ obs_month: string; value: number }>('market_series', (from, to) => supabase.from('market_series').select('obs_month, value').eq('series', 'us_cape').order('obs_month').range(from, to)),
+  ]);
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const settings = readMcSettings(value('monte_carlo'));
+  const proposed = readPlanSettings(value('projection'));
+  const tickers = [...new Set(classes.filter((entry) => entry.targetWeight > 0).flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])))];
+  const history = settings ? await loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today) : new Map<string, ReturnPoint[]>();
+  const windfallValue = buildPortfolio(holdings).holdings.filter((holding) => holding.pool === 'windfall').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  return {
+    settings,
+    plan: savedPlan(proposed),
+    classes: classes.map((entry) => ({ id: entry.id, targetWeight: entry.targetWeight, sleeve: entry.sleeve, benchmarkTicker: entry.benchmarkTicker })),
+    assumptions: assumptions?.assumptions ?? {},
+    history,
+    windfallPlan: windfallPlan ?? null,
+    windfallValue,
+    cashReturn: readWindfallSettings(value('windfall')).cashReturn,
+    // F3's pace for an expected windfall, at today's CAPE percentile; its acceleration only while the rule is on.
+    pace: readPace(value('windfall_pace')),
+    cape: capePercentile(capes.map((row) => ({ month: row.obs_month.slice(0, 7), value: Number(row.value) }))),
+    acceleration: rules[0]?.enabled ? readAcceleration(rules[0].threshold) : null,
+  };
+}
+
+/** The nightly job's monthly re-run: saves this month's summary once; undefined when it is saved or cannot run yet. */
+export async function refreshMonteCarlo(supabase: SupabaseClient, today: string): Promise<{ runDate: string; median: number | null } | undefined> {
+  const [ready] = await rows<{ key: string }>('config', supabase.from('config').select('key').eq('key', 'monte_carlo'));
+  if (!ready) return undefined;
+  const [latest] = await rows<{ run_date: string }>('simulation_runs', supabase.from('simulation_runs').select('run_date').eq('model', 'monte_carlo').order('run_date', { ascending: false }).limit(1));
+  if (latest && latest.run_date.slice(0, 7) === today.slice(0, 7)) return undefined;
+  const run = runMonteCarlo(await loadMonteCarloInput(supabase, today), today);
+  if (!run.ok) return undefined;
+  const { error } = await supabase.from('simulation_runs').upsert({ model: 'monte_carlo', run_date: today, summary: runSummary(run, today) }, { onConflict: 'model,run_date' });
+  if (error) throw new DataError('simulation_runs', error.message);
+  return { runDate: today, median: run.result.marks[run.result.marks.length - 1]?.median ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// F1 life timeline (Phase 3, step 2)
+// ---------------------------------------------------------------------------
+
+/** config timeline: the later goals; undefined before its migration. */
+export async function loadTimelineSettings(supabase: SupabaseClient) {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'timeline'));
+  return readTimelineSettings(row?.value);
+}
+
+// ---------------------------------------------------------------------------
+// F10 stress test (Phase 3, step 3)
+// ---------------------------------------------------------------------------
+
+export interface StressData {
+  /** config stress; undefined before its migration. */
+  settings: StressSettings | undefined;
+  /** Today's holdings by asset class, both pools, TWD. */
+  classes: ClassValue[];
+  classNames: AssetClass[];
+  /** The capital market assumptions' expected return by class id. */
+  expected: Record<string, number>;
+  /** F3's tiers and window from the rule; null when missing or malformed. */
+  acceleration: Acceleration | null;
+  /** config leverage: when the what-if position is close to a margin call. */
+  leverage: LeverageSettings;
+}
+
+export async function loadStressData(supabase: SupabaseClient): Promise<StressData> {
+  const [config, holdings, assumptions, rules, classNames] = await Promise.all([
+    rows<{ key: string; value: unknown; last_verified: string | null }>('config', supabase.from('config').select('key, value, last_verified').in('key', ['stress', 'leverage'])),
+    loadHoldingsData(supabase),
+    loadAssumptions(supabase),
+    loadRules(supabase),
+    loadAssetClasses(supabase),
+  ]);
+  // Own money and exposure by class: a short or leveraged line moves its class by its exposure.
+  const totals = new Map<string, { valueTwd: number; exposureTwd: number }>();
+  for (const holding of buildPortfolio(holdings).holdings) {
+    if (!holding.assetClassId) continue;
+    const total = totals.get(holding.assetClassId) ?? { valueTwd: 0, exposureTwd: 0 };
+    total.valueTwd += holding.valueTwd ?? 0;
+    total.exposureTwd += holding.valueTwd === null ? 0 : exposureOf(holding);
+    totals.set(holding.assetClassId, total);
+  }
+  const rule = rules.find((entry) => entry.id === 'WINDFALL_ACCELERATION');
+  return {
+    settings: (() => {
+      const row = config.find((entry) => entry.key === 'stress');
+      return readStressSettings(row?.value, row?.last_verified ?? null);
+    })(),
+    leverage: leverageSettings(config.find((entry) => entry.key === 'leverage')?.value),
+    classes: [...totals].map(([id, total]) => ({ id, valueTwd: total.valueTwd, ...(Math.abs(total.exposureTwd - total.valueTwd) > 1e-6 ? { exposureTwd: total.exposureTwd } : {}) })),
+    classNames,
+    expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
+    acceleration: rule ? readAcceleration(rule.threshold) : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// F7 efficient frontier (Phase 3, step 4)
+// ---------------------------------------------------------------------------
+
+export interface FrontierData {
+  /** config frontier; undefined before its migration. */
+  settings: FrontierSettings | undefined;
+  classes: AssetClassSettings[];
+  /** Expected yearly return by class id (the CMA). */
+  expected: Record<string, number>;
+  /** Each class benchmark's monthly returns in TWD, and those of the lines an auto-scored class holds. */
+  history: Map<string, ReturnPoint[]>;
+  /**
+   * The monthly TWD returns of each auto-scored class's basket (F6 auto), read in place of its
+   * benchmark's, so its expected return and its covariance describe the same holdings.
+   */
+  baskets: Map<string, ReturnPoint[]>;
+  /** The regular pool's actual share of each class, 0 to 1. */
+  current: Record<string, number>;
+}
+
+export async function loadFrontierData(supabase: SupabaseClient, today: string): Promise<FrontierData> {
+  const [config, classes, assumptions, holdings] = await Promise.all([
+    rows<{ value: unknown; last_verified: string | null }>('config', supabase.from('config').select('value, last_verified').eq('key', 'frontier')),
+    loadAssetClassSettings(supabase),
+    loadAssumptions(supabase),
+    loadHoldingsData(supabase),
+  ]);
+  const settings = readFrontierSettings(config[0]?.value, config[0]?.last_verified ?? null);
+  const estimates = new Map((assumptions?.estimates ?? []).map((estimate) => [estimate.classId, estimate]));
+  const scored = classes.flatMap((entry) => {
+    const estimate = assumptions?.assumptions[entry.id]?.auto ? estimates.get(entry.id) : undefined;
+    return estimate && estimate.lines.length > 0 ? [estimate] : [];
+  });
+  const tickers = [...new Set([...classes.flatMap((entry) => (entry.benchmarkTicker ? [entry.benchmarkTicker] : [])), ...scored.flatMap((estimate) => estimate.lines.map((line) => line.ticker))])];
+  const history = settings ? await loadMonthlyReturns(supabase, tickers, settings.lookbackYears, today) : new Map<string, ReturnPoint[]>();
+  const baskets = new Map(scored.flatMap((estimate) => {
+    const basket = basketReturns(estimate.lines, history);
+    return basket.length > 0 ? [[estimate.classId, basket] as const] : [];
+  }));
+  const portfolio = buildPortfolio(holdings);
+  return {
+    settings,
+    classes,
+    expected: Object.fromEntries(Object.entries(assumptions?.assumptions ?? {}).map(([id, assumption]) => [id, assumption.expectedReturn])),
+    history,
+    baskets,
+    current: Object.fromEntries(portfolio.classes.map((entry) => [entry.assetClass.id, entry.weight])),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// N2 Brinson attribution (Phase 3, step 5)
+// ---------------------------------------------------------------------------
+
+export interface AttributionData {
+  input: PerformanceInput;
+  classes: ClassSpec[];
+  /** The satellite's single stocks and their GICS sectors (level 2). */
+  stocks: SatelliteStock[];
+  /** The core equity fund's sector weights and the fund pricing each sector (level 2); empty without them. */
+  sectorBenchmark: SectorBenchmark[];
+  /** The fund level 2's benchmark weights come from, and the date of its holdings file. */
+  coreFund: { ticker: string; asOf: string } | null;
+  /** The sector funds' closes, as index_prices holds them. */
+  sectorPrices: Array<{ ticker: string; date: string; close: number; adjClose: number | null }>;
+}
+
+export async function loadAttributionData(supabase: SupabaseClient, today: string): Promise<AttributionData> {
+  const [input, classes, sectorSettings, profiles] = await Promise.all([
+    loadPerformanceInput(supabase, today),
+    loadAssetClassSettings(supabase),
+    loadSectorSettings(supabase),
+    rows<{ ticker: string; sector: string | null }>('company_profiles', supabase.from('company_profiles').select('ticker, sector')),
+  ]);
+  const currency = new Map(input.securities.map((security) => [security.ticker, security.currency]));
+  const specs: ClassSpec[] = classes.map((entry) => ({ id: entry.id, targetWeight: entry.targetWeight, benchmarkTicker: entry.benchmarkTicker, benchmarkCurrency: (entry.benchmarkTicker ? currency.get(entry.benchmarkTicker) : undefined) ?? 'USD' }));
+  const sectorOf = new Map(profiles.map((row) => [row.ticker, row.sector]));
+  const stocks = input.securities.filter((security) => security.productType === 'stock' && security.sleeve === 'satellite').map((security) => ({ ticker: security.ticker, currency: security.currency, sector: sectorOf.get(security.ticker) ?? null }));
+
+  const fund = classes.find((entry) => entry.id === 'us_global_equity')?.benchmarkTicker ?? null;
+  const [file] = fund ? await rows<{ fund: string; as_of: string; constituents: unknown }>('fund_holdings', supabase.from('fund_holdings').select('fund, as_of, constituents').eq('fund', fund)) : [];
+  const proxies = new Map((sectorSettings?.proxies ?? []).filter((proxy) => proxy.market === 'US').map((proxy) => [proxy.sector, proxy.id]));
+  const weights = new Map<string, number>();
+  for (const constituent of file ? unpackConstituents(file.constituents) : []) {
+    if (constituent.sector && constituent.assetType === 'equity' && proxies.has(constituent.sector)) weights.set(constituent.sector, (weights.get(constituent.sector) ?? 0) + constituent.weight);
+  }
+  const total = [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+  const sectorBenchmark: SectorBenchmark[] = total > 0 ? [...weights].map(([sector, weight]) => ({ sector, weight: weight / total, proxy: proxies.get(sector) as string, currency: 'USD' })) : [];
+  const ids = sectorBenchmark.map((entry) => entry.proxy);
+  const found = ids.length
+    ? await allRows<{ index_id: string; price_date: string; close: number }>('index_prices', (from, to) => supabase.from('index_prices').select('index_id, price_date, close').in('index_id', ids).order('index_id').order('price_date').range(from, to))
+    : [];
+  return {
+    input,
+    classes: specs,
+    stocks,
+    sectorBenchmark,
+    coreFund: file ? { ticker: file.fund, asOf: file.as_of } : null,
+    sectorPrices: found.map((row) => ({ ticker: row.index_id, date: row.price_date, close: Number(row.close), adjClose: null })),
+  };
+}
+
+/** The effects of each complete month by segment, ready for the attribution table (level 1 by class, 2 by sector). */
+export function attributionRows(level: 1 | 2, month: MonthInput): Array<Record<string, unknown>> {
+  const result = brinson(month.segments);
+  return result.segments.map((row) => ({
+    period_start: `${month.month}-01`,
+    period_end: month.to,
+    level,
+    segment: row.id,
+    allocation: row.allocation,
+    selection: row.selection,
+    interaction: row.interaction,
+    fx: row.currency,
+  }));
+}
+
+/**
+ * The nightly job's monthly run: saves each complete month's effects, both levels, that the table
+ * does not have yet; undefined when there is nothing new or no history to attribute.
+ */
+export async function refreshAttribution(supabase: SupabaseClient, today: string): Promise<{ months: number } | undefined> {
+  const saved = await rows<{ period_end: string }>('attribution', supabase.from('attribution').select('period_end').eq('level', 1));
+  const done = new Set(saved.map((row) => row.period_end));
+  const data = await loadAttributionData(supabase, today);
+  const days = buildSeries(data.input);
+  const market = new MarketHistory([...data.input.prices, ...data.sectorPrices], data.input.rates);
+  const complete = monthInputs(days, market, data.classes).filter((month) => month.complete);
+  const fresh = complete.filter((month) => !done.has(month.to));
+  if (fresh.length === 0) return undefined;
+  const level2 = sectorInputs(fresh, days, market, data.stocks, data.sectorBenchmark);
+  const out = [...fresh.flatMap((month) => attributionRows(1, month)), ...level2.flatMap((month) => attributionRows(2, month))];
+  const { error } = await supabase.from('attribution').upsert(out, { onConflict: 'period_start,period_end,level,segment' });
+  if (error) throw new DataError('attribution', error.message);
+  return { months: fresh.length };
+}
+
+/** The newest month saved by the monthly run: its date, when it was saved and level 1's effects summed. */
+export async function loadLastAttribution(supabase: SupabaseClient): Promise<{ periodEnd: string; savedAt: string; allocation: number; selection: number; interaction: number; fx: number } | null> {
+  const [latest] = await rows<{ period_end: string }>('attribution', supabase.from('attribution').select('period_end').eq('level', 1).order('period_end', { ascending: false }).limit(1));
+  if (!latest) return null;
+  const found = await rows<{ allocation: number; selection: number; interaction: number; fx: number; created_at: string }>(
+    'attribution',
+    supabase.from('attribution').select('allocation, selection, interaction, fx, created_at').eq('level', 1).eq('period_end', latest.period_end),
+  );
+  const sum = (key: 'allocation' | 'selection' | 'interaction' | 'fx') => found.reduce((total, row) => total + Number(row[key]), 0);
+  return { periodEnd: latest.period_end, savedAt: found.map((row) => row.created_at).sort().pop() ?? '', allocation: sum('allocation'), selection: sum('selection'), interaction: sum('interaction'), fx: sum('fx') };
+}
+
+// ---------------------------------------------------------------------------
+// N1 Fama-French five-factor mode (Phase 3, step 6)
+// ---------------------------------------------------------------------------
+
+/** One regression: a holding, or the whole portfolio, on a region's factors. */
+export interface FactorRow {
+  /** A ticker, or "portfolio". */
+  key: string;
+  name: string;
+  region: Region;
+  /** The weight in today's portfolio, 0 to 1; null for the portfolio itself. */
+  weight: number | null;
+  /** Undefined when there were too few months with returns and factors. */
+  fit: FactorFit | undefined;
+  /** Months with both a return and the region's factors. */
+  months: number;
+}
+
+export interface FactorData {
+  /** config factors; undefined before its migration. */
+  settings: FactorSettings | undefined;
+  rows: FactorRow[];
+  /** The newest month of each region's factors the job has loaded. */
+  loaded: Partial<Record<Region, string>>;
+  /** Held tickers left out of the portfolio's fit for want of a dollar return, and holdings with no ticker (gold, balances). */
+  left: string[];
+  noTicker: number;
+}
+
+export async function loadFactorData(supabase: SupabaseClient, today: string, years: number): Promise<FactorData> {
+  const settings = readFactorSettings((await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'factors')))[0]?.value);
+  if (!settings) return { settings, rows: [], loaded: {}, left: [], noTicker: 0 };
+  const holdings = await loadHoldingsData(supabase);
+  const held = buildPortfolio(holdings).holdings.filter((holding) => holding.ticker && holding.qty > 0 && (holding.valueTwd ?? 0) > 0);
+  const byTicker = new Map<string, number>();
+  for (const holding of held) byTicker.set(holding.ticker as string, (byTicker.get(holding.ticker as string) ?? 0) + (holding.valueTwd ?? 0));
+  const noTicker = buildPortfolio(holdings).holdings.filter((holding) => !holding.ticker && (holding.valueTwd ?? 0) > 0).length;
+  const total = [...byTicker.values()].reduce((sum, value) => sum + value, 0);
+  const tickers = [...byTicker.keys()].sort();
+
+  const factorRows = await allRows<{ series: string; obs_month: string; value: number }>('market_series', (from, to) =>
+    supabase.from('market_series').select('series, obs_month, value').like('series', 'ff5_%').order('series').order('obs_month').range(from, to),
+  );
+  const factorsByRegion = new Map<Region, Map<string, Partial<FactorMonth>>>();
+  const loaded: Partial<Record<Region, string>> = {};
+  for (const region of REGIONS) {
+    const months = new Map<string, Partial<FactorMonth>>();
+    for (const key of ['mkt', 'smb', 'hml', 'rmw', 'cma', 'rf'] as const) {
+      for (const row of factorRows.filter((entry) => entry.series === seriesName(region, key))) {
+        const month = row.obs_month.slice(0, 7);
+        months.set(month, { ...months.get(month), month, [key]: Number(row.value) });
+      }
+    }
+    factorsByRegion.set(region, months);
+    const newest = [...months.keys()].sort().pop();
+    if (newest) loaded[region] = newest;
+  }
+  const factorsOf = (region: Region): FactorMonth[] => [...(factorsByRegion.get(region)?.values() ?? [])].filter((entry): entry is FactorMonth => ['mkt', 'smb', 'hml', 'rmw', 'cma', 'rf'].every((key) => typeof entry[key as keyof FactorMonth] === 'number'));
+
+  // Monthly returns in dollars of each held ticker over the longest window.
+  const from = addDays(today, -Math.ceil(years * 366 + 62));
+  const regression = await loadRegressionData(supabase, tickers, from);
+  const usd = regression.fx.get('USD') ?? [];
+  const month = today.slice(0, 7);
+  const returns = new Map<string, ReturnPoint[]>();
+  const left: string[] = [];
+  for (const ticker of tickers) {
+    const security = regression.securities.find((entry) => entry.ticker === ticker);
+    const closes = regression.closes.get(ticker) ?? [];
+    let inUsd: SeriesClose[] | undefined;
+    if (security?.currency === 'USD') inUsd = closes;
+    else if (security?.currency === 'TWD' && usd.length > 0) {
+      // Dollars per share: the close over the day's TWD per dollar.
+      const sorted = [...usd].sort((a, b) => a.date.localeCompare(b.date));
+      let at = -1;
+      inUsd = [];
+      for (const close of closes) {
+        while (at + 1 < sorted.length && (sorted[at + 1] as SeriesClose).date <= close.date) at += 1;
+        const rate = sorted[at];
+        if (rate) inUsd.push({ date: close.date, close: close.close / rate.close });
+      }
+    }
+    const monthly = inUsd ? periodReturns(inUsd, 'monthly').filter((point) => point.date.slice(0, 7) < month) : [];
+    if (monthly.length === 0) left.push(ticker);
+    else returns.set(ticker, monthly);
+  }
+
+  const out: FactorRow[] = [];
+  const window = years * 12;
+  const portfolio = portfolioReturns(tickers.filter((ticker) => returns.has(ticker)).map((ticker) => ({ weight: (byTicker.get(ticker) ?? 0) / total, returns: returns.get(ticker) as ReturnPoint[] })));
+  const factors = factorsOf(settings.portfolio);
+  out.push({ key: 'portfolio', name: 'portfolio', region: settings.portfolio, weight: null, fit: fiveFactor(portfolio, factors, settings, window), months: portfolio.length });
+  for (const ticker of tickers) {
+    const security = regression.securities.find((entry) => entry.ticker === ticker);
+    const region = settings.regions[security?.market ?? 'US'] ?? 'us';
+    const series = returns.get(ticker) ?? [];
+    out.push({ key: ticker, name: security?.name ?? ticker, region, weight: (byTicker.get(ticker) ?? 0) / total, fit: fiveFactor(series, factorsOf(region), settings, window), months: series.length });
+  }
+  return { settings, rows: out, loaded, left, noTicker };
+}
+
+// ---------------------------------------------------------------------------
+// F12 forward P/E check (added 2026-11-04)
+// ---------------------------------------------------------------------------
+
+/** config pe_check; undefined before its migration. */
+export async function loadPeCheckSettings(supabase: SupabaseClient): Promise<PeCheckSettings | undefined> {
+  const found = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'pe_check'));
+  return found[0] ? readPeCheckSettings(found[0].value) : undefined;
+}
+
+type EstimateRowShape = { ticker: string; as_of: string; currency: string; estimates: unknown; source: string };
+
+/** Each stock's saved consensus (analyst_estimates). */
+export async function loadEstimates(supabase: SupabaseClient, tickers: readonly string[]): Promise<Map<string, Estimates>> {
+  if (tickers.length === 0) return new Map();
+  const found = await rows<EstimateRowShape>('analyst_estimates', supabase.from('analyst_estimates').select('ticker, as_of, currency, estimates, source').in('ticker', [...tickers]));
+  return new Map(found.flatMap((row) => {
+    const read = readEstimates(row);
+    return read ? [[row.ticker, read] as const] : [];
+  }));
+}
+
+/**
+ * The US single stocks held or watched whose consensus the nightly job should load tonight: none
+ * saved, or the saved one loaded by the job pe_check.refresh_days or more ago (a typed one is
+ * Hugo's and stays). Undefined before config pe_check exists.
+ */
+export async function loadEstimatePlan(supabase: SupabaseClient, today: string): Promise<Array<{ ticker: string; currency: string }> | undefined> {
+  const settings = await loadPeCheckSettings(supabase);
+  if (!settings) return undefined;
+  const [holdings, watchRows] = await Promise.all([loadHoldingsData(supabase), rows<{ ticker: string; active: boolean }>('watchlist', supabase.from('watchlist').select('ticker, active'))]);
+  const held = new Set(buildPortfolio(holdings).holdings.flatMap((holding) => (holding.ticker && holding.qty > 0 ? [holding.ticker] : [])));
+  const watched = new Set(watchRows.filter((row) => row.active).map((row) => row.ticker));
+  const stocks = holdings.securities.filter((security) => security.productType === 'stock' && security.market === 'US' && (held.has(security.ticker) || watched.has(security.ticker)));
+  if (stocks.length === 0) return [];
+  const saved = await rows<{ ticker: string; as_of: string; source: string }>('analyst_estimates', supabase.from('analyst_estimates').select('ticker, as_of, source').in('ticker', stocks.map((security) => security.ticker)));
+  const last = new Map(saved.map((row) => [row.ticker, row]));
+  return stocks
+    .filter((security) => {
+      const row = last.get(security.ticker);
+      return !row || (row.source !== 'typed' && estimatesDue(row.as_of, today, settings));
+    })
+    .map((security) => ({ ticker: security.ticker, currency: security.currency }));
+}
+
+// ---------------------------------------------------------------------------
+// Dividend prompts and the in-app banner (asked by Hugo on 2026-11-12)
+// ---------------------------------------------------------------------------
+
+/** config dividends; undefined before its migration. */
+async function loadDividendSettingsUncached(supabase: SupabaseClient): Promise<DividendSettings | undefined> {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'dividends'));
+  return row ? readDividendSettings(row.value) : undefined;
+}
+
+interface DividendEventRow {
+  id: number;
+  ticker: string;
+  ex_date: string;
+  pay_date: string | null;
+  amount: number;
+  currency: string;
+  source: string;
+  skipped_pools: string[] | null;
+}
+
+async function loadDividendEvents(supabase: SupabaseClient, since: string): Promise<DividendEvent[]> {
+  const found = await rows<DividendEventRow>(
+    'dividend_events',
+    supabase.from('dividend_events').select('id, ticker, ex_date, pay_date, amount, currency, source, skipped_pools').gte('ex_date', since).order('ex_date', { ascending: false }),
+  );
+  return found.map((row) => ({
+    id: Number(row.id),
+    ticker: row.ticker,
+    exDate: row.ex_date,
+    payDate: row.pay_date,
+    amount: Number(row.amount),
+    currency: row.currency,
+    source: row.source,
+    skippedPools: (row.skipped_pools ?? []).filter((pool): pool is Pool => pool === 'regular' || pool === 'windfall'),
+  }));
+}
+
+/** One dividend by its id, for the cash-flow form a prompt opens. */
+export async function loadDividendEvent(supabase: SupabaseClient, id: number): Promise<DividendEvent | undefined> {
+  const [row] = await rows<DividendEventRow>('dividend_events', supabase.from('dividend_events').select('id, ticker, ex_date, pay_date, amount, currency, source, skipped_pools').eq('id', id));
+  return row ? { id: Number(row.id), ticker: row.ticker, exDate: row.ex_date, payDate: row.pay_date, amount: Number(row.amount), currency: row.currency, source: row.source, skippedPools: [] } : undefined;
+}
+
+/** Every security with what the dividend model reads, the reinvesting flag included (a column the main read leaves out, so it works before the migration). */
+async function loadDividendSecurities(supabase: SupabaseClient): Promise<DividendSecurity[]> {
+  const found = await rows<{ ticker: string; name: string; market: Market; domicile: string; currency: string; dividends_reinvested: boolean; dividends_checked_on: string | null }>(
+    'securities',
+    supabase.from('securities').select('ticker, name, market, domicile, currency, dividends_reinvested, dividends_checked_on').order('ticker'),
+  );
+  return found.map((row) => ({ ticker: row.ticker, name: row.name, market: row.market, domicile: row.domicile, currency: row.currency, reinvested: row.dividends_reinvested, checkedOn: row.dividends_checked_on }));
+}
+
+/** The dividends to ask about and those ahead, with what they were worked out from. */
+export interface DividendView {
+  settings: DividendSettings;
+  due: DividendDue[];
+  upcoming: DividendDue[];
+  securities: DividendSecurity[];
+}
+
+/** Undefined before config dividends exists (the migration is not applied yet). */
+async function loadDividendViewUncached(supabase: SupabaseClient, today: string): Promise<DividendView | undefined> {
+  const settings = await loadDividendSettings(supabase);
+  if (!settings) return undefined;
+  const [holdings, flows, events, securities] = await Promise.all([loadHoldingsData(supabase), loadCashFlows(supabase), loadDividendEvents(supabase, eventsSince(settings, today)), loadDividendSecurities(supabase)]);
+  const fx = new Map([...latestFx(holdings.fx, holdings.trades)].map(([currency, quote]) => [currency, quote.value]));
+  return { settings, securities, ...dividendsDue({ events, trades: holdings.trades, splits: holdings.splits, securities, flows, fx }, settings, today) };
+}
+
+/**
+ * What the iOS shell schedules on the phone (lib/models/local-reminders.ts, app/shell/reminders):
+ * the reminders of the next 14 days, and how many devices get the web app's pushes, which the
+ * shell's settings read to leave on only what would not come twice.
+ */
+export async function loadLocalReminders(supabase: SupabaseClient, now: Date, today: string): Promise<{ reminders: LocalReminder[]; pushDevices: number }> {
+  const [config, volatility, dividendView, devices] = await Promise.all([
+    rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review'])),
+    loadVolatilitySettings(supabase),
+    loadDividendView(supabase, today),
+    rows<{ id: number }>('push_subscriptions', supabase.from('push_subscriptions').select('id')),
+  ]);
+  const events = volatility ? await loadMarketEvents(supabase, today, addDays(today, LOCAL_REMINDER_DAYS + volatility.events.leadDays)) : null;
+  const value = (key: string) => config.find((row) => row.key === key)?.value;
+  const reminders = localReminders({
+    now,
+    today,
+    quiet: readQuietHours(value('quiet_hours')),
+    weekly: readWeeklyReview(value('weekly_review')),
+    events,
+    eventSettings: volatility?.events ?? null,
+    dividends: dividendView ? [...dividendView.due, ...dividendView.upcoming] : null,
+    dividendSettings: dividendView?.settings ?? null,
+  });
+  return { reminders, pushDevices: devices.length };
+}
+
+/** What the nightly job's dividend step looks up; undefined before config dividends exists. */
+export async function loadDividendPlan(supabase: SupabaseClient, today: string): Promise<DividendPlan | undefined> {
+  const settings = await loadDividendSettings(supabase);
+  if (!settings) return undefined;
+  const since = eventsSince(settings, today);
+  const [holdings, events, securities] = await Promise.all([loadHoldingsData(supabase), loadDividendEvents(supabase, since), loadDividendSecurities(supabase)]);
+  const stocks = new Set(holdings.securities.filter((security) => security.productType === 'stock').map((security) => security.ticker));
+  return {
+    since,
+    holdings: dividendHoldings(holdings.trades, holdings.splits, securities, since).map((security) => ({
+      ticker: security.ticker,
+      market: security.market,
+      currency: security.currency,
+      etf: !stocks.has(security.ticker),
+      known: Object.fromEntries(events.filter((event) => event.ticker === security.ticker).map((event) => [event.exDate, { payDate: event.payDate, source: event.source }])),
+      checkedOn: security.checkedOn ?? null,
+    })),
+  };
+}
+
+/** Upserts dividends by security and ex-dividend date; the pools already answered "skip" stay as they are. */
+export async function saveDividendEvents(supabase: SupabaseClient, events: ReadonlyArray<Omit<DividendEvent, 'id' | 'skippedPools'>>): Promise<void> {
+  if (events.length === 0) return;
+  const { error } = await supabase
+    .from('dividend_events')
+    .upsert(events.map((event) => ({ ticker: event.ticker, ex_date: event.exDate, pay_date: event.payDate, amount: event.amount, currency: event.currency, source: event.source })), { onConflict: 'ticker,ex_date' });
+  if (error) throw new DataError('dividend_events', error.message);
+}
+
+/** Notes the day Alpha Vantage answered for these securities' dividends (securities.dividends_checked_on). */
+export async function markDividendsChecked(supabase: SupabaseClient, tickers: readonly string[], today: string): Promise<void> {
+  if (tickers.length === 0) return;
+  const { error } = await supabase.from('securities').update({ dividends_checked_on: today }).in('ticker', [...tickers]);
+  if (error) throw new DataError('securities', error.message);
+}
+
+/** config banners; undefined before its migration. */
+async function loadBannerSettings(supabase: SupabaseClient): Promise<BannerSettings | undefined> {
+  const [row] = await rows<{ value: unknown }>('config', supabase.from('config').select('value').eq('key', 'banners'));
+  return row ? readBannerSettings(row.value) : undefined;
+}
+
+/** How long ✕ hides a banner; undefined before config banners exists. */
+export async function loadBannerSnooze(supabase: SupabaseClient): Promise<number | undefined> {
+  return (await loadBannerSettings(supabase))?.snoozeDays;
+}
+
+/** The in-app banners needed now (lib/models/banners), the most pressing first; none before config banners exists. */
+async function loadBannersUncached(supabase: SupabaseClient, today: string): Promise<Banner[]> {
+  const settings = await loadBannerSettings(supabase);
+  if (!settings?.enabled) return [];
+  const [holdings, flows, dividends, plan, proposals, devices, dismissals] = await Promise.all([
+    loadHoldingsData(supabase),
+    loadCashFlows(supabase),
+    loadDividendView(supabase, today),
+    loadWindfallPlan(supabase),
+    loadProposals(supabase, today),
+    rows<{ id: number }>('push_subscriptions', supabase.from('push_subscriptions').select('id').limit(1)),
+    rows<{ key: string; until: string }>('banner_dismissals', supabase.from('banner_dismissals').select('key, until').gt('until', today)),
+  ]);
+  const arrivals = flows.filter((flow) => flow.type === 'windfall');
+  const cash = holdings.manualAssets.filter((asset) => asset.unit === 'TWD');
+  return guideBanners(
+    {
+      dividends: dividends?.due ?? [],
+      proposals: proposals.filter((proposal) => proposal.status === 'open').map((proposal) => ({ id: proposal.id })),
+      windfall: {
+        arrivedTwd: arrivals.reduce((sum, flow) => sum + flow.amountTwd, 0),
+        lastArrival: arrivals.reduce<string | null>((newest, flow) => (newest === null || flow.flowDate > newest ? flow.flowDate : newest), null),
+        cashTwd: cash.filter((asset) => asset.pool === 'windfall').reduce((sum, asset) => sum + asset.quantity, 0),
+        traded: holdings.trades.some((trade) => trade.pool === 'windfall'),
+        hasPlan: plan !== undefined,
+      },
+      balances: cash.map((asset) => ({ id: asset.id, name: asset.name, valuedOn: asset.valuedOn })),
+      trades: holdings.trades.length,
+      assets: holdings.manualAssets.length,
+      devices: devices.length,
+      dismissed: new Map(dismissals.map((row) => [row.key, row.until])),
+    },
+    settings,
+    today,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// One read per request
+// ---------------------------------------------------------------------------
+
+// A page reads the same tables through several loaders (the dashboard reads the holdings for the
+// allocation, the risk, the plan and the watchlist): within one server render each loader below
+// runs once for the same client and arguments, and its callers share the result. Outside a render
+// (server actions, the nightly job) React's cache runs the loader every time.
+export const loadSecurities = cache(loadSecuritiesUncached);
+export const loadCashFlows = cache(loadCashFlowsUncached);
+export const loadDividendSettings = cache(loadDividendSettingsUncached);
+export const loadDividendView = cache(loadDividendViewUncached);
+export const loadAssetClasses = cache(loadAssetClassesUncached);
+export const loadSplits = cache(loadSplitsUncached);
+export const loadHoldingsData = cache(loadHoldingsDataUncached);
+export const loadFxHistory = cache(loadFxHistoryUncached);
+export const loadRules = cache(loadRulesUncached);
+export const loadAllocationData = cache(loadAllocationDataUncached);
+export const loadRiskData = cache(loadRiskDataUncached);
+export const loadPlanData = cache(loadPlanDataUncached);
+export const loadProposals = cache(loadProposalsUncached);
+export const loadCostConfig = cache(loadCostConfigUncached);
+export const loadFeeContext = cache(loadFeeContextUncached);
+export const loadWindfallPlan = cache(loadWindfallPlanUncached);
+export const loadMarketSeries = cache(loadMarketSeriesUncached);
+export const loadRegressionSetup = cache(loadRegressionSetupUncached);
+export const loadSavedBetas = cache(loadSavedBetasUncached);
+export const loadCapmData = cache(loadCapmDataUncached);
+export const loadWorkbench = cache(loadWorkbenchUncached);
+export const loadRedFlagSettings = cache(loadRedFlagSettingsUncached);
+export const loadRedFlagData = cache(loadRedFlagDataUncached);
+export const loadLookThroughSettings = cache(loadLookThroughSettingsUncached);
+export const loadLookThroughData = cache(loadLookThroughDataUncached);
+export const loadSectorSettings = cache(loadSectorSettingsUncached);
+export const loadVolatilitySettings = cache(loadVolatilitySettingsUncached);
+export const loadAssetClassSettings = cache(loadAssetClassSettingsUncached);
+export const loadAssumptions = cache(loadAssumptionsUncached);
+export const loadCaps = cache(loadCapsUncached);
+export const loadJobRuns = cache(loadJobRunsUncached);
+export const loadBanners = cache(loadBannersUncached);

@@ -1,0 +1,37 @@
+{
+  "info": { "arguments": ["devicectl", "list", "devices", "--json-output", "devices.json"], "commandType": "devicectl.list.devices", "jsonVersion": 2, "outcome": "success" },
+  "result": {
+    "devices": [
+      {
+        "identifier": "11111111-2222-3333-4444-555555555555",
+        "deviceProperties": { "name": "Vision", "osVersionNumber": "27.1" },
+        "hardwareProperties": { "platform": "xrOS", "reality": "physical", "udid": "00008112-0000000000000001" },
+        "connectionProperties": { "pairingState": "paired", "tunnelState": "connected", "transportType": "wired" }
+      },
+      {
+        "identifier": "AAAAAAAA-BBBB-CCCC-DDDD-000000000001",
+        "deviceProperties": { "name": "舊的 iPhone", "osVersionNumber": "26.4" },
+        "hardwareProperties": { "platform": "iOS", "reality": "physical", "udid": "00008101-0000000000000002" },
+        "connectionProperties": { "pairingState": "paired", "tunnelState": "disconnected", "transportType": "localNetwork" }
+      },
+      {
+        "identifier": "AAAAAAAA-BBBB-CCCC-DDDD-000000000002",
+        "deviceProperties": { "name": "Hugo 的 iPhone", "osVersionNumber": "27.2.1" },
+        "hardwareProperties": { "platform": "iOS", "reality": "physical", "udid": "00008150-0000000000000003" },
+        "connectionProperties": { "pairingState": "paired", "tunnelState": "connected", "transportType": "wired" }
+      },
+      {
+        "identifier": "AAAAAAAA-BBBB-CCCC-DDDD-000000000003",
+        "deviceProperties": { "name": "Simulator" },
+        "hardwareProperties": { "platform": "iOS", "reality": "virtual", "udid": "SIM" },
+        "connectionProperties": { "pairingState": "paired", "tunnelState": "connected", "transportType": "wired" }
+      },
+      {
+        "identifier": "AAAAAAAA-BBBB-CCCC-DDDD-000000000004",
+        "deviceProperties": { "name": "Not paired" },
+        "hardwareProperties": { "platform": "iOS", "reality": "physical", "udid": "00008150-0000000000000004" },
+        "connectionProperties": { "pairingState": "unpaired", "tunnelState": "connected", "transportType": "wired" }
+      }
+    ]
+  }
+}

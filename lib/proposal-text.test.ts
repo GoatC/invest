@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DraftOrder } from './models/engine';
-import { checkText, howLines, orderLine, proposalTitle, whyLines } from './proposal-text';
+import { checkText, howLines, orderLine, proposalAlert, proposalTitle, stateLabel, suggestionLine, whyLines } from './proposal-text';
 
 const NAMES = new Map([
   ['global_bonds', { en: 'Global bonds', zh: '全球債券' }],
@@ -96,6 +96,24 @@ describe('proposal text', () => {
     assert.deepEqual(checkText({ ruleId: 'BUY_ZONE', outcome: 'waiting', why: 'valuation' }), { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' });
   });
 
+  it('explains the red-flag prompts (N3): the light before and now, what fired, and the exit drafted', () => {
+    const worse = whyLines(
+      { id: 'RED_FLAG_WORSENS', condition: 'red_flag_worsens' },
+      { poolTwd: 100_000, flags: [{ ticker: 'AAPL', before: 'green', light: 'amber', since: '2026-10-14', fired: ['altman_z', 'auditor_change'] }], cashTwd: 0, leftTwd: 0 },
+      NAMES,
+    );
+    assert.deepEqual(worse[0], { en: 'AAPL: green → amber since 2026-10-14 · Altman Z-Score, Auditor change', zh: 'AAPL：綠燈 → 黃燈，自 2026-10-14 · 財務危機（Altman Z）、更換會計師' });
+    const exit = whyLines(
+      { id: 'RED_FLAG_RED', condition: 'satellite_red_flag' },
+      { poolTwd: 100_000, flags: [{ ticker: '2330', before: null, light: 'red', since: '2026-10-21', fired: ['going_concern'], heldTwd: 8_000, soldTwd: 8_000 }], sellShare: 1, cashTwd: 8_000, leftTwd: 0 },
+      NAMES,
+    );
+    assert.equal(exit[0]?.en, '2330: first scan → red since 2026-10-21 · Going-concern opinion');
+    assert.equal(exit[1]?.en, 'Exit option: sell NT$8,000 of NT$8,000');
+    assert.deepEqual(proposalTitle({ id: 'RED_FLAG_RED', condition: 'satellite_red_flag' }), { en: 'RED_FLAG_RED · Red flag turns red', zh: 'RED_FLAG_RED · 紅旗轉紅' });
+    assert.equal(checkText({ ruleId: 'RED_FLAG_RED', outcome: 'waiting', why: 'red_flags' }).en, 'Waiting for a red-flag scan');
+  });
+
   it('says when a whole share sells much more than the trim', () => {
     const lines = whyLines(
       { id: 'R1', condition: 'single_stock_weight_above' },
@@ -147,5 +165,32 @@ describe('proposal text', () => {
     assert.equal(checkText({ ruleId: 'US_ESTATE_TAX', outcome: 'waiting', why: 'usd' }).en, 'Waiting for a USD/TWD rate');
     assert.equal(checkText({ ruleId: 'BUY_ZONE', outcome: 'later' }).en, 'Comes with a later step');
     assert.ok(checkText({ ruleId: 'DATA_FAILURE', outcome: 'later' }, 'job_failed_consecutively').en.startsWith('Watched by the data status check'));
+  });
+});
+
+describe('proposalAlert', () => {
+  it('names the rule in place of its code, reads the volatility band, and gives the Taipei day it stands since', () => {
+    const tile = proposalAlert({ id: 12, ruleId: 'VOLATILITY_ALERT', state: 'tense:2026-11-07', createdAt: '2026-11-07T17:30:00.000Z' }, { id: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses' });
+    assert.equal(tile.code, undefined);
+    assert.equal(tile.tone, 'watch');
+    assert.deepEqual(tile.title, { en: 'Volatility alert', zh: '波動警報' });
+    assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['觸發 緊張 · 2026-11-07', '起 2026-11-08']);
+    assert.equal(tile.href, '/#proposal-12');
+  });
+
+  it('keeps a short rule code', () => {
+    const tile = proposalAlert({ id: 3, ruleId: 'R1', state: '2330,NVDA', createdAt: '2026-11-01T01:00:00.000Z' }, { id: 'R1', condition: 'single_stock_weight_above' });
+    assert.equal(tile.code, 'R1');
+    assert.deepEqual(tile.chips?.map((chip) => chip.value), ['2330, NVDA', '2026-11-01']);
+    assert.equal(stateLabel('satellite'), undefined);
+    assert.equal(stateLabel('global_bonds:under,strategic_cash:over'), undefined);
+  });
+});
+
+describe('suggestionLine', () => {
+  it('says what a warning suggests in a line', () => {
+    assert.deepEqual(suggestionLine('single_stock_weight_above', '2330', { poolTwd: 200_000, cashTwd: 0, leftTwd: 0, limit: 0.05 }, new Map()), { en: 'Trim 2330 back to the 5% cap.', zh: '2330 減碼回 5% 上限。' });
+    assert.deepEqual(suggestionLine('red_flag_worsens', 'AAPL:2026-10-14', { poolTwd: 0, cashTwd: 0, leftTwd: 0 }, new Map()), { en: 'AAPL: the red-flag light worsened; review it.', zh: 'AAPL 的紅旗燈號轉差：請重新檢視。' });
+    assert.deepEqual(suggestionLine('unknown', '', { poolTwd: 0, cashTwd: 0, leftTwd: 0 }, new Map()), { en: 'A rule fired.', zh: '有規則觸發。' });
   });
 });

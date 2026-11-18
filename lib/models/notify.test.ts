@@ -69,8 +69,7 @@ describe('the weekly review time', () => {
 });
 
 const SUMMARY: WeeklySummary = {
-  openProposals: 2,
-  approvedProposals: 1,
+  openProposals: 3,
   largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.129 },
   valueTwd: 101_000,
   weekAgoTwd: 100_000,
@@ -79,17 +78,17 @@ const SUMMARY: WeeklySummary = {
 describe('messages', () => {
   it('sums the week up in three lines: rules, allocation, value', () => {
     assert.deepEqual(summaryLines(SUMMARY), [
-      { en: 'Rules: 3 proposals waiting (1 approved, to trade).', zh: '規則：3 份提案待處理（其中 1 份已核准、待下單）。' },
+      { en: 'Rules: 3 warnings.', zh: '規則：3 則警示。' },
       { en: 'Allocation: largest drift Global bonds −12.9 pp.', zh: '配置：最大偏離為全球債券 −12.9 pp。' },
       { en: 'Value: NT$101,000, +NT$1,000 (+1.0%) this week.', zh: '市值：NT$101,000，本週 +NT$1,000（+1.0%）。' },
     ]);
-    const quiet = summaryLines({ openProposals: 0, approvedProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null });
+    const quiet = summaryLines({ openProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null });
     assert.deepEqual(
       quiet.map((line) => line.en),
       ['Rules: all on track.', 'Allocation: nothing held yet.', 'Value: no NAV snapshot yet.'],
     );
     const message = weeklyMessage(SUMMARY, '2026-10-25');
-    assert.deepEqual([message.kind, message.key, message.title, message.url], ['weekly', '2026-10-25', 'Weekly review 每週檢視', '/']);
+    assert.deepEqual([message.kind, message.key, message.title, message.url], ['weekly', '2026-10-25', '每週檢視', '/']);
     assert.equal(message.body.split('\n').length, 3);
   });
 
@@ -105,30 +104,30 @@ describe('messages', () => {
     assert.deepEqual(proposalMessage(r1, new Map()), {
       kind: 'proposal',
       key: '7',
-      title: 'R1 · Single-stock trim 單一個股減碼',
-      body: 'Trim 2330, NVDA back to the 5% cap.\n2330, NVDA 減碼回 5% 上限。',
-      url: '/proposals#proposal-7',
+      title: 'R1 · 單一個股減碼',
+      body: '2330, NVDA 減碼回 5% 上限。',
+      url: '/#proposal-7',
     });
     const drift = proposalMessage(
       { ...r1, id: 8, ruleId: 'F8_DRIFT', condition: 'class_drift_exceeds', title: { en: 'F8_DRIFT · Drift rebalance', zh: 'F8_DRIFT · 偏離再平衡' }, detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, classes: [{ id: 'global_bonds', weight: 0.091, target: 0.22, band: 0.05 }] } },
       new Map([['global_bonds', { en: 'Global bonds', zh: '全球債券' }]]),
     );
-    assert.equal(drift.body, 'Rebalance: Global bonds −12.9 pp.\n再平衡：全球債券 −12.9 pp。');
+    assert.equal(drift.body, '再平衡：全球債券 −12.9 pp。');
     const estate = proposalMessage(
       { ...r1, id: 9, ruleId: 'US_ESTATE_TAX', condition: 'us_situs_value_above', title: { en: 'US_ESTATE_TAX · US estate tax', zh: 'US_ESTATE_TAX · 美國遺產稅' }, state: 'over', detail: { poolTwd: 1, cashTwd: 0, leftTwd: 0, situsUsd: 61_000, limitUsd: 60_000 } },
       new Map(),
     );
-    assert.equal(estate.title, 'US_ESTATE_TAX · US estate tax 美國遺產稅');
+    assert.equal(estate.title, '美國遺產稅');
     const tranche = proposalMessage({ ...r1, id: 10, ruleId: 'WINDFALL_TRANCHE_DUE', condition: 'tranche_due', title: { en: 'WINDFALL_TRANCHE_DUE · Windfall tranche', zh: 'WINDFALL_TRANCHE_DUE · 大額資金分批' }, state: 'tranche:1', detail: { poolTwd: 1, cashTwd: 229_167, leftTwd: 0, dueDate: '2026-11-02' } }, new Map());
-    assert.equal(tranche.body, 'Deploy NT$229,167 of the windfall: the tranche due 2026-11-02.\n投入大額資金 NT$229,167：2026-11-02 到期的分批。');
-    assert.equal(estate.body, 'US assets 61,000 USD, above the 60,000 USD exemption: consider Irish-domiciled ETFs.\n美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
+    assert.equal(tranche.body, '投入大額資金 NT$229,167：2026-11-02 到期的分批。');
+    assert.equal(estate.body, '美國資產 61,000 USD，超過 60,000 USD 免稅額：可考慮愛爾蘭註冊 ETF。');
   });
 
   it('alerts once per streak of missed nights, keyed by the last good run', () => {
     assert.equal(dataFailureMessage({ latest: undefined, misses: 1, alert: false }, 4), undefined);
     const alert = dataFailureMessage({ latest: undefined, misses: 2, alert: true }, 41);
     assert.deepEqual([alert?.key, alert?.url], ['after-run-41', '/data']);
-    assert.ok(alert?.body.includes('missed 2 nights in a row'));
+    assert.ok(alert?.body.includes('連續 2 晚未成功'));
   });
 });
 
@@ -161,7 +160,7 @@ describe('plan', () => {
     const late = plan({ ...base, now: taipei('2026-10-25T23:40'), proposals: [proposal], weeklyKeys: new Set(['2026-10-25']) });
     assert.equal(late.length, 1);
     assert.equal(late[0]?.sendAfter.toISOString(), taipei('2026-10-26T08:00').toISOString());
-    assert.equal(late[0]?.body, 'Trim the satellite from 26.0% back to 20%.\n衛星部位由 26.0% 減碼回 20%。');
+    assert.equal(late[0]?.body, '衛星部位由 26.0% 減碼回 20%。');
   });
 });
 
@@ -173,20 +172,20 @@ describe('weeklySummary', () => {
     assert.ok(bonds && stocks);
     bonds.drift = -0.05;
     stocks.drift = 0.08;
-    const summary = weeklySummary({ statuses: ['open', 'approved', 'open'], classes, poolTwd: 100_000, valueTwd: 100_000, weekAgoTwd: null });
+    const summary = weeklySummary({ statuses: ['open', 'dismissed', 'open'], classes, poolTwd: 100_000, valueTwd: 100_000, weekAgoTwd: null });
     // The satellite class drifts more, but R2 watches the satellite as a whole: the core's largest is bonds.
-    assert.deepEqual(summary, { openProposals: 2, approvedProposals: 1, largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.05 }, valueTwd: 100_000, weekAgoTwd: null });
+    assert.deepEqual(summary, { openProposals: 2, largestDrift: { name: { en: 'Global bonds', zh: '全球債券' }, drift: -0.05 }, valueTwd: 100_000, weekAgoTwd: null });
     assert.equal(weeklySummary({ statuses: [], classes, poolTwd: 0, valueTwd: null, weekAgoTwd: null }).largestDrift, null);
   });
 });
 
 describe('comingWeek', () => {
-  it('lists the DCA debit and the proposal after it, the weekly review and January review in the next seven days', () => {
+  it('lists the DCA debit and the warning after it, the weekly review and January review in the next seven days', () => {
     // Thursday 22 October 2026, DCA on the 26th: the debit, the proposal the day after, Sunday's review.
     assert.deepEqual(comingWeek('2026-10-22', 26, SUNDAY_8PM, 1), [
       { date: '2026-10-25', time: '20:00', what: { en: 'Weekly review push', zh: '每週檢視推播' } },
       { date: '2026-10-26', what: { en: 'DCA debit', zh: '定期定額扣款' } },
-      { date: '2026-10-27', what: { en: 'Monthly-contribution proposal', zh: '每月投入提案' } },
+      { date: '2026-10-27', what: { en: 'Monthly-contribution warning', zh: '每月投入提醒' } },
     ]);
   });
 
@@ -214,11 +213,35 @@ describe('comingWeek', () => {
       events.map((event) => [event.date, event.what.en]),
       [
         ['2027-01-02', 'DCA debit'],
-        ['2027-01-02', 'Annual review proposal'],
-        ['2027-01-03', 'Monthly-contribution proposal'],
+        ['2027-01-02', 'Annual review warning'],
+        ['2027-01-03', 'Monthly-contribution warning'],
       ],
     );
-    assert.deepEqual(comingWeek('2027-01-01', null, null, 1), [{ date: '2027-01-02', what: { en: 'Annual review proposal', zh: '年度檢查提案' } }]);
+    assert.deepEqual(comingWeek('2027-01-01', null, null, 1), [{ date: '2027-01-02', what: { en: 'Annual review warning', zh: '年度檢查提醒' } }]);
     assert.deepEqual(comingWeek('2026-10-22', null, null, null), []);
+  });
+});
+
+describe('the volatility alert through the quiet hours (N8 step 3)', () => {
+  it('pushes an urgent proposal at once inside the quiet hours, the others after them', () => {
+    const at = new Date('2026-11-06T16:30:00Z'); // 00:30 in Taipei
+    const detail = { poolTwd: 200_000, cashTwd: 0, leftTwd: 0, volatility: { band: 'panic' as const, score: 8.4, scoreDate: '2026-11-06', line: 8, since: '2026-11-05', share: 0.05, budgetTwd: 10_000, fundedTwd: 10_000 } };
+    const planned = plan({
+      now: at,
+      proposals: [
+        { id: 1, ruleId: 'VOLATILITY_ALERT', condition: 'volatility_score_crosses', title: { en: 'VOLATILITY_ALERT · Volatility alert', zh: 'VOLATILITY_ALERT · 波動警報' }, state: 'panic:2026-11-05', detail, urgent: true },
+        { id: 2, ruleId: 'R1', condition: 'single_stock_weight_above', title: { en: 'R1 · Single-stock trim', zh: 'R1 · 單一個股減碼' }, state: 'AAPL', detail: { poolTwd: 0, cashTwd: 0, leftTwd: 0, limit: 0.05 } },
+      ],
+      names: new Map(),
+      weekly: null,
+      weeklyKeys: new Set(),
+      summary: { openProposals: 0, largestDrift: null, valueTwd: null, weekAgoTwd: null },
+      health: { alert: false, misses: 0 } as unknown as Parameters<typeof plan>[0]['health'],
+      lastGoodRunId: null,
+      quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },
+    });
+    assert.equal(planned[0]?.sendAfter.toISOString(), at.toISOString());
+    assert.equal(planned[0]?.body, '波動分數 8.4/10，恐慌：賣出 VIX 避險，分批買進核心。');
+    assert.equal(planned[1]?.sendAfter.toISOString(), '2026-11-07T00:00:00.000Z');
   });
 });

@@ -1,14 +1,20 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadFilingTickers, loadPerformanceInput, loadRiskInput, refreshBetas, revalueOnFilings, runRules } from '../../../lib/data.ts';
+import { loadDividendPlan, loadEstimatePlan, markDividendsChecked, saveDividendEvents, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshCmaEstimates, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { readFactorSettings } from '../../../lib/models/five-factor.ts';
+import { readFrontierSettings } from '../../../lib/models/frontier.ts';
+import { readMcSettings } from '../../../lib/models/monte-carlo.ts';
 import { readRegressionSettings } from '../../../lib/models/regression.ts';
 import type { Snapshot } from '../../../lib/models/performance.ts';
+import type { WidgetFigures } from '../../../lib/models/widget.ts';
 import { candidateProxies } from '../../../lib/models/risk.ts';
 import type { ProductType } from '../../../lib/models/types.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import type { DailyPrice, DailyRate, MonthlyPoint } from '../feeds/types.ts';
-import type { FundamentalRow, JobRun, Security, Store } from './job.ts';
+import { packConstituent } from '../../../lib/models/look-through.ts';
+import type { EstimateRow, FundamentalRow, FundFileRow, JobRun, Security, Store } from './job.ts';
 
 /** Rows per upsert request; a full history is a few thousand rows. */
 const BATCH = 500;
@@ -84,6 +90,22 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('market_series', error);
       }
     },
+    async factorYears() {
+      const { data, error } = await client.from('config').select('value').eq('key', 'factors');
+      check('config', error);
+      const settings = readFactorSettings((data?.[0] as { value?: unknown } | undefined)?.value);
+      return settings?.keepYears;
+    },
+    async historyYears() {
+      const { data, error } = await client.from('config').select('key, value').in('key', ['monte_carlo', 'frontier']);
+      check('config', error);
+      const found = (data ?? []) as Array<{ key: string; value: unknown }>;
+      const years = found.flatMap((row) => {
+        const settings = row.key === 'monte_carlo' ? readMcSettings(row.value) : readFrontierSettings(row.value);
+        return settings ? [settings.lookbackYears] : [];
+      });
+      return years.length > 0 ? Math.max(...years) + 1 : undefined;
+    },
     async regressionYears() {
       const { data, error } = await client.from('config').select('value').eq('key', 'regression');
       check('config', error);
@@ -120,8 +142,60 @@ export function supabaseStore(client: SupabaseClient): Store {
         check('fundamentals', error);
       }
     },
+    estimatesPlan: (today) => loadEstimatePlan(client, today),
+    async saveEstimates(rows: readonly EstimateRow[]) {
+      const { error } = await client.from('analyst_estimates').upsert(
+        rows.map((row) => ({ ticker: row.ticker, as_of: row.asOf, currency: row.currency, estimates: row.estimates, source: row.source })),
+        { onConflict: 'ticker' },
+      );
+      check('analyst_estimates', error);
+    },
+    dividendPlan: (today) => loadDividendPlan(client, today),
+    saveDividends: (rows) => saveDividendEvents(client, rows),
+    markDividendsChecked: (tickers, today) => markDividendsChecked(client, tickers, today),
+    redFlagCompanies: (today) => loadRedFlagCompanies(client, today),
+    async saveProfiles(rows) {
+      const { error } = await client.from('company_profiles').upsert(rows.map(profileColumns), { onConflict: 'ticker' });
+      check('company_profiles', error);
+    },
+    async saveFlagEvents(rows: readonly FeedEvent[]) {
+      for (const batch of batches(rows)) {
+        const { error } = await client.from('red_flag_events').upsert(
+          batch.map((row) => ({ ticker: row.ticker, indicator: row.indicator, event_date: row.date, source: row.source, ref: row.ref, title: row.title, url: row.url, value: row.value })),
+          { onConflict: 'ticker,indicator,source,ref', ignoreDuplicates: true },
+        );
+        check('red_flag_events', error);
+      }
+    },
+    scanRedFlags: (today, tickers) => scanRedFlags(client, today, tickers),
+    lookThroughPlan: (today) => loadLookThroughPlan(client, today),
+    async sectorProxies() {
+      const settings = await loadSectorSettings(client);
+      return settings?.proxies.map((proxy) => ({ id: proxy.id, market: proxy.market, symbol: proxy.symbol, name: proxy.name }));
+    },
+    async saveFundFile(file: FundFileRow) {
+      const { error } = await client
+        .from('fund_holdings')
+        .upsert({ fund: file.fund, as_of: file.asOf, source: file.source, constituents: file.constituents.map(packConstituent), loaded_at: new Date().toISOString() }, { onConflict: 'fund' });
+      check('fund_holdings', error);
+    },
+    async saveSectors(rows) {
+      for (const row of rows) {
+        const { data, error } = await client.from('company_profiles').update({ sector: row.sector }).eq('ticker', row.ticker).select('ticker');
+        check('company_profiles', error);
+        if ((data ?? []).length > 0) continue;
+        const { error: insertError } = await client.from('company_profiles').insert({ ticker: row.ticker, sector: row.sector, source: row.market === 'TW' ? 'twse' : 'ssga' });
+        check('company_profiles', insertError);
+      }
+    },
     revalue: (today) => revalueOnFilings(client, today),
     refreshBetas: (today) => refreshBetas(client, today),
+    refreshAttribution: (today) => refreshAttribution(client, today),
+    refreshCmaEstimates: (today) => refreshCmaEstimates(client, today),
+    refreshMonteCarlo: async (today) => {
+      const saved = await refreshMonteCarlo(client, today);
+      return saved ? { runDate: saved.runDate } : undefined;
+    },
     performanceInput: (end) => loadPerformanceInput(client, end),
     riskInput: (from, end) => loadRiskInput(client, from, end),
     async saveSnapshots(rows: readonly Snapshot[]) {
@@ -145,6 +219,29 @@ export function supabaseStore(client: SupabaseClient): Store {
         );
         check('nav_snapshots', error);
       }
+    },
+    async widgetRedUp() {
+      return (await loadSectorSettings(client))?.colour !== 'green_up';
+    },
+    async saveWidgetSnapshot(figures: WidgetFigures | null) {
+      if (!figures) {
+        const { error } = await client.from('widget_snapshot').delete().eq('singleton', true);
+        check('widget_snapshot', error);
+        return;
+      }
+      const { error } = await client.from('widget_snapshot').upsert(
+        {
+          singleton: true,
+          as_of: figures.asOf,
+          total_twd: figures.totalTwd,
+          week_change: figures.weekChange,
+          points: figures.points,
+          red_up: figures.redUp,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'singleton' },
+      );
+      check('widget_snapshot', error);
     },
     evaluateRules: (today, now) => runRules(client, today, now),
     async recordRun(run: JobRun) {

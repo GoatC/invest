@@ -4,11 +4,11 @@ import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
 import { makeRedactor } from '../http.ts';
-import { avDaily, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
+import { avDaily, avEstimates, avOverview, avSymbol, avWeeklyAdjusted } from './alphavantage.ts';
 import { fredRates } from './fred.ts';
 import { makeGet } from './get.ts';
 import { adjustForDividends, bankOfTaiwanRates, exDividendFactors, finmindRows, goldCloses, splitFactors, taiwanPrices, usPrices } from './finmind.ts';
-import { navFromProductPage, navHistory } from './ishares.ts';
+import { adjustForSplits, ISHARES_FUNDS, navFromProductPage, navHistory } from './ishares.ts';
 import { rocDateToIso, twseCloses } from './twse.ts';
 import { FeedError } from './types.ts';
 
@@ -144,6 +144,38 @@ describe('iShares', () => {
     assert.equal(navFromProductPage('<p>no price here</p>', 'AGGU'), undefined);
   });
 
+  it('reads the full-precision NAV from the page data, and the text where the figure runs into the 52-week range (October 2026 page)', () => {
+    const data =
+      '<script>{&quot;navAmount&quot;:{&quot;name&quot;:&quot;navAmount&quot;,&quot;asOfDate&quot;:20261028,&quot;formattedAsOfDate&quot;:&quot;28/Oct/2026&quot;,' +
+      '&quot;formattedValue&quot;:&quot;5.79&quot;,&quot;prefix&quot;:&quot;USD &quot;,&quot;value&quot;:5.786162,&quot;fullName&quot;:&quot;fundHeader.fundNav.navAmount&quot;}}</script>';
+    assert.deepEqual(navFromProductPage(data, 'AGGU'), { ticker: 'AGGU', date: '2026-10-28', close: 5.786162, adjClose: 5.786162, source: 'ishares_nav' });
+    const text = '<span>NAV as of 28/Oct/2026</span><span>NAV as of</span><span>28/Oct/2026</span><div>USD 835.69</div><span>52 WK: 681.22 - 843.55</span>';
+    assert.deepEqual(navFromProductPage(text, 'CSPX'), { ticker: 'CSPX', date: '2026-10-28', close: 835.69, adjClose: 835.69, source: 'ishares_nav' });
+  });
+
+  it('prices the Irish swaps the estate-tax check suggests from iShares too', () => {
+    assert.deepEqual(Object.keys(ISHARES_FUNDS).sort(), ['AGGU', 'CSPX', 'IB01', 'IGLN']);
+    assert.ok(ISHARES_FUNDS['IB01']?.download.includes('portfolioId=307243'));
+  });
+
+  it('scales the NAVs before a consolidation, as IB01’s about 20 into 1 on 2021-07-26, and leaves a market move alone', () => {
+    const price = (date: string, close: number) => ({ ticker: 'IB01', date, close, adjClose: close, source: 'ishares_nav' });
+    const adjusted = adjustForSplits([price('2021-07-26', 102.11), price('2021-07-22', 5.14), price('2021-07-23', 5.15), price('2021-07-27', 102.12)]);
+    assert.deepEqual(
+      adjusted.map((p) => [p.date, p.close, p.adjClose]),
+      [
+        ['2021-07-22', 5.14, 5.14 * 20],
+        ['2021-07-23', 5.15, 5.15 * 20],
+        ['2021-07-26', 102.11, 102.11],
+        ['2021-07-27', 102.12, 102.12],
+      ],
+    );
+    const crash = adjustForSplits([price('2020-03-13', 270.44), price('2020-03-16', 238.04)]);
+    assert.deepEqual(crash.map((p) => p.adjClose), [270.44, 238.04]);
+    const split = adjustForSplits([price('2026-01-01', 100), price('2026-01-02', 25.2)]);
+    assert.deepEqual(split.map((p) => p.adjClose), [25, 25.2]);
+  });
+
   it('reads the NAV history from the fund download', () => {
     const xml = `<Workbook><ss:Worksheet ss:Name="Holdings"><ss:Table><ss:Row><ss:Cell><ss:Data ss:Type="String">x</ss:Data></ss:Cell></ss:Row></ss:Table></ss:Worksheet>
       <ss:Worksheet ss:Name="Historical NAVs"><ss:Table>
@@ -154,8 +186,8 @@ describe('iShares', () => {
     assert.deepEqual(
       navHistory(xml, 'AGGU').map((p) => [p.date, p.close]),
       [
-        ['2026-10-20', 5.77],
         ['2026-10-19', 5.76],
+        ['2026-10-20', 5.77],
       ],
     );
   });
@@ -231,5 +263,35 @@ describe('makeGet', () => {
       assert.doesNotMatch(err.message, /SECRET123/);
       return true;
     });
+  });
+});
+
+describe('Alpha Vantage analysts (F12 forward P/E)', () => {
+  // Cut down from the demo key's IBM reply, 2026-11-04.
+  const estimates = JSON.stringify({
+    symbol: 'IBM',
+    estimates: [
+      {
+        date: '2027-12-31', horizon: 'fiscal year', eps_estimate_average: '13.2353', eps_estimate_high: '13.6733', eps_estimate_low: '12.3018', eps_estimate_analyst_count: '24.0000',
+        eps_estimate_average_30_days_ago: '13.1477', eps_estimate_revision_up_trailing_30_days: '1.0000', eps_estimate_revision_down_trailing_30_days: null,
+      },
+      { date: '2026-12-31', horizon: 'fiscal year', eps_estimate_average: '12.4199', eps_estimate_analyst_count: '23.0000' },
+      { date: '2027-03-31', horizon: 'fiscal quarter', eps_estimate_average: '2.1442' },
+    ],
+  });
+
+  it('reads each fiscal year, oldest first, leaving quarters and missing figures out', () => {
+    assert.deepEqual(avEstimates(estimates), [
+      { periodEnd: '2026-12-31', mean: 12.4199, analysts: 23 },
+      { periodEnd: '2027-12-31', mean: 13.2353, high: 13.6733, low: 12.3018, analysts: 24, mean30: 13.1477, up30: 1 },
+    ]);
+    assert.throws(() => avEstimates(JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' })), /refused/);
+    assert.throws(() => avEstimates('{}'), /no "estimates"/);
+  });
+
+  it('reads the target price and ratings from OVERVIEW', () => {
+    const overview = JSON.stringify({ Symbol: 'IBM', Currency: 'USD', AnalystTargetPrice: '259.3', AnalystRatingStrongBuy: '3', AnalystRatingBuy: '9', AnalystRatingHold: '10', AnalystRatingSell: '1', AnalystRatingStrongSell: '1' });
+    assert.deepEqual(avOverview(overview), { currency: 'USD', targetPrice: 259.3, ratings: { strongBuy: 3, buy: 9, hold: 10, sell: 1, strongSell: 1 } });
+    assert.deepEqual(avOverview(JSON.stringify({ Symbol: 'X', AnalystTargetPrice: 'None' })), {});
   });
 });

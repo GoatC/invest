@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { CAPS } from './models/test-helpers';
-import { breachText, ruleMath } from './rule-text';
+import { classDrifts, type DriftBands } from './models/allocation';
+import { classWeights, regularPool, type Caps } from './models/rules';
+import { ASSET_CLASSES, CAPS, holding } from './models/test-helpers';
+import { breachAlert, ruleBoard, ruleMath } from './rule-text';
 
-describe('breachText', () => {
-  it('describes the R1 acceptance case with the trim back to the cap', () => {
-    const text = breachText({ rule: 'R1', subject: 'AAPL', valueTwd: 11_000, weight: 0.055, limit: 0.05, trimTwd: 1_000 }, CAPS, 'now');
-    assert.equal(text.en, 'R1: AAPL is 5.5% of the regular pool, above the 5% single-stock cap. Selling about NT$1,000 brings it back to the cap.');
-    assert.equal(text.zh, 'R1：AAPL 目前占一般投入資金池的 5.5%，超過單一個股 5% 上限；賣出約 NT$1,000 可回到上限內。');
+describe('breachAlert', () => {
+  it('puts the R1 acceptance case on a tile: the weight against the cap and the sale back to it', () => {
+    const tile = breachAlert({ rule: 'R1', subject: 'AAPL', valueTwd: 11_000, weight: 0.055, limit: 0.05, trimTwd: 1_000 }, CAPS);
+    assert.deepEqual(
+      [tile.code, tile.title.zh, tile.value, tile.gauge, tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`)],
+      ['R1', 'AAPL', '5.5%', { value: 0.055, limit: 0.05 }, ['上限 5%', '賣出 ≈NT$1,000']],
+    );
   });
 
-  it('describes the R2 acceptance case with the trim back to the 20% target', () => {
-    const text = breachText({ rule: 'R2', subject: 'satellite', valueTwd: 51_000, weight: 0.255, limit: 0.25, trimTwd: 11_000 }, CAPS, 'after');
-    assert.equal(text.en, 'R2: the satellite would be 25.5% of the regular pool, above the 25% trigger. Trimming about NT$11,000 brings it back to 20%.');
-    assert.equal(text.zh, 'R2：衛星部位將占一般投入資金池的 25.5%，超過 25% 觸發點；減碼約 NT$11,000 可回到 20%。');
+  it('puts the R2 acceptance case on a tile with the trim back to the 20% target', () => {
+    const tile = breachAlert({ rule: 'R2', subject: 'satellite', valueTwd: 51_000, weight: 0.255, limit: 0.25, trimTwd: 11_000 }, CAPS, 'info');
+    assert.equal(tile.tone, 'info');
+    assert.deepEqual(tile.gauge, { value: 0.255, limit: 0.25, target: 0.2 });
+    assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['觸發 25%', '減碼 ≈NT$11,000 → 20%']);
   });
 });
 
@@ -38,5 +43,54 @@ describe('ruleMath', () => {
     assert.equal(lines.length, 3);
     assert.ok(!lines.some((line) => line.en.startsWith('R2')));
     assert.ok(!lines[1]?.en.includes('may hold up to'));
+  });
+});
+
+describe('ruleBoard', () => {
+  const BANDS: DriftBands = { absDrift: 0.05, relDrift: 0.25, warnShare: 0.5 };
+  const stock = (ticker: string, valueTwd: number) =>
+    holding({ key: `regular:${ticker}`, ticker, label: ticker, sleeve: 'satellite', assetClassId: 'us_stocks', productType: 'stock', valueTwd });
+  /** A NT$200,000 regular pool: the core ETF holds what the others leave. */
+  const pool = (...others: ReturnType<typeof holding>[]) => [holding({ valueTwd: 200_000 - others.reduce((sum, h) => sum + (h.valueTwd ?? 0), 0) }), ...others];
+  /** `bands` null: F8 is off. */
+  const board = (holdings: ReturnType<typeof holding>[], caps: Caps = CAPS, bands: DriftBands | null = BANDS) => {
+    const view = regularPool(holdings);
+    return ruleBoard(holdings, caps, classDrifts(classWeights(view, ASSET_CLASSES), bands ?? undefined, view.totalTwd));
+  };
+  const line = (item: ReturnType<typeof ruleBoard>[number]) => `${item.tone} ${item.code} ${item.title.zh} ${item.value} ${item.chips?.map((chip) => `${chip.label.zh} ${chip.value}`).join(', ') ?? ''}`.trim();
+
+  it('shows R1\'s acceptance breach (AAPL 5.5% of NT$200,000) as its warning, R2 and F8 with their standing', () => {
+    const items = board(pool(stock('AAPL', 11_000)));
+    assert.deepEqual(items.map((item) => item.code), ['R1', 'R2', 'F8']);
+    assert.equal(line(items[0]!), 'alert R1 AAPL 5.5% 上限 5%, 賣出 ≈NT$1,000');
+    assert.equal(items[0]!.href, '/holdings#rules-status');
+    assert.equal(line(items[1]!), 'ok R2 衛星部位 5.5% 觸發 25%');
+    assert.deepEqual(items[1]!.gauge, { value: 0.055, limit: 0.25, target: 0.2 });
+    assert.equal(items[2]!.href, '/allocation');
+  });
+
+  it('shows R2\'s acceptance breach (a NT$51,000 satellite, 25.5%) as its warning with the trim back to 20%', () => {
+    const items = board(pool(stock('AAPL', 9_000), stock('MSFT', 9_500), stock('2330', 9_800), holding({ key: 'regular:QQQM', ticker: 'QQQM', sleeve: 'satellite', assetClassId: 'tactical_themes', productType: 'theme_etf', valueTwd: 22_700 })));
+    assert.equal(line(items[0]!), 'ok R1 2330 4.9% 上限 5%');
+    assert.equal(line(items[1]!), 'alert R2 衛星部位 25.5% 觸發 25%, 減碼 ≈NT$11,000 → 20%');
+  });
+
+  it('marks the satellite between its 20% target and 25% trigger as one to watch', () => {
+    const items = board(pool(holding({ key: 'regular:QQQM', ticker: 'QQQM', sleeve: 'satellite', assetClassId: 'tactical_themes', productType: 'theme_etf', valueTwd: 44_000 })));
+    assert.equal(items[1]!.tone, 'watch');
+    assert.equal(items[1]!.value, '22.0%');
+  });
+
+  it('names the core class furthest into its F8 band, with its drift and the band', () => {
+    const items = board(pool());
+    const f8 = items.find((item) => item.code === 'F8')!;
+    assert.equal(f8.tone, 'alert', 'all in one class: far past its band');
+    assert.match(f8.value ?? '', /^\+\d+\.\d pp$/);
+    assert.match(f8.chips?.[0]?.value ?? '', /^\d+\.\d pp$/);
+  });
+
+  it('keeps a row for a rule that is off, with the word for it', () => {
+    const items = board(pool(stock('AAPL', 11_000)), { satellite: CAPS.satellite }, null);
+    assert.deepEqual(items.map((item) => `${item.code} ${item.value}`), ['R1 停用', 'R2 5.5%', 'F8 停用']);
   });
 });

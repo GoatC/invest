@@ -1,14 +1,13 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { loadSecurities, loadWorkbench, saveValuation } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readValuationSettings } from '@/lib/models/intrinsic';
-import { parseAssumptionsForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
 
 export interface ValuationFormState {
   errors: FieldErrors<string>;
@@ -27,9 +26,9 @@ export async function watchStock(formData: FormData): Promise<void> {
   const { supabase } = await requireSession();
   const ticker = String(formData.get('ticker') ?? '');
   const security = (await loadSecurities(supabase)).find((candidate) => candidate.ticker === ticker && candidate.productType === 'stock');
-  if (!security) redirect('/valuation?error=ticker');
+  if (!security) redirect('/holdings?valuation-error=ticker#valuation');
   const { error } = await supabase.from('watchlist').upsert({ ticker, active: true }, { onConflict: 'ticker', ignoreDuplicates: true });
-  if (error) redirect(`/valuation?error=${encodeURIComponent(error.message.slice(0, 80))}`);
+  if (error) redirect(`/holdings?valuation-error=${encodeURIComponent(error.message.slice(0, 80))}#valuation`);
   redirect(pageOf(ticker));
 }
 
@@ -39,7 +38,7 @@ export async function unwatchStock(formData: FormData): Promise<void> {
   const ticker = String(formData.get('ticker') ?? '');
   const { error } = await supabase.from('watchlist').delete().eq('ticker', ticker);
   if (error) redirect(`${pageOf(ticker)}&error=${encodeURIComponent(error.message.slice(0, 80))}`);
-  redirect('/valuation');
+  redirect('/holdings#valuation');
 }
 
 /** A stock's assumptions and alert multiples, logged; then its valuation is saved as the alerts' basis. */
@@ -80,5 +79,30 @@ export async function saveValuationSettings(_previous: ValuationFormState, formD
   const value = { ...current, model, years, growth, terminal, debt_spread: debtSpread, tax_rate: taxRate, history_years: historyYears, min_quarters: minQuarters, last_verified: checked };
   const { error: saveError } = await supabase.from('config').update({ value }).eq('key', 'valuation');
   if (saveError) return { errors: {}, message: saveFailed(saveError.message) };
-  redirect('/valuation?saved=settings#settings');
+  redirect('/holdings?valuation=settings#valuation-settings');
+}
+
+/** The analysts' consensus typed in for a stock (Taiwan has no free feed); logged, and it replaces the nightly job's. */
+export async function saveEstimates(_previous: ValuationFormState, formData: FormData): Promise<ValuationFormState> {
+  const { supabase } = await requireSession();
+  const raw = formFields(formData);
+  const ticker = raw['ticker'] ?? '';
+  const security = (await loadSecurities(supabase)).find((candidate) => candidate.ticker === ticker && candidate.productType === 'stock');
+  if (!security) return { errors: {}, message: { en: 'Unknown stock.', zh: '找不到這檔個股。' } };
+  const parsed = parseEstimatesForm(raw);
+  if (!parsed.ok) return { errors: parsed.errors, message: ACTION_MESSAGES.checkFields };
+  const { error } = await supabase
+    .from('analyst_estimates')
+    .upsert({ ticker, as_of: taipeiToday(), currency: security.currency, estimates: parsed.value, source: 'typed' }, { onConflict: 'ticker' });
+  if (error) return { errors: {}, message: saveFailed(error.message) };
+  redirect(`${pageOf(ticker)}&saved=estimates#pe-check`);
+}
+
+/** Removes a stock's saved consensus; a US stock's is loaded again by the next nightly run. */
+export async function clearEstimates(formData: FormData): Promise<void> {
+  const { supabase } = await requireSession();
+  const ticker = String(formData.get('ticker') ?? '');
+  const { error } = await supabase.from('analyst_estimates').delete().eq('ticker', ticker);
+  if (error) redirect(`${pageOf(ticker)}&error=${encodeURIComponent(error.message.slice(0, 80))}`);
+  redirect(`${pageOf(ticker)}&saved=estimates-cleared#pe-check`);
 }

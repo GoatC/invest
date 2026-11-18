@@ -1,6 +1,7 @@
+import { TickerTabs } from '@/components/ticker-tabs';
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { BetaRanges, RollingBeta, ScatterFit, type Line, type Range } from '@/components/regression-charts';
 import { requireSession } from '@/lib/auth';
@@ -11,6 +12,8 @@ import { bi, LABELS, type Bilingual } from '@/lib/i18n';
 import { FREQUENCIES, loadFrom, regressTicker, type Benchmark, type Choice, type CurrencyBasis, type Frequency, type Regression, type RegressionOutcome, type RegressionSettings } from '@/lib/models/regression';
 
 import { RegressionSettingsForm, type SettingsField } from './forms';
+
+import { BetaWhatIf } from './what-if';
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -84,10 +87,17 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
 
   return (
     <>
+      {/* Reached from a holding (its ticker in the address): the holding's other analyses are one tap away. */}
+      {security && one(params, 't')?.toUpperCase() === ticker && <TickerTabs ticker={ticker} stock={security.productType === 'stock'} current="beta" />}
       <section className="card form">
-        <h1>
-          <Bi {...LABELS.regression} />
-        </h1>
+        <div className="row spread">
+          <h1>
+            <Zh {...LABELS.regression} />
+          </h1>
+          <Link href="/regression/factors">
+            <Bi en="Five-factor mode" zh="五因子模式" />
+          </Link>
+        </div>
         <p className="equation">
           R<sub>i</sub> − R<sub>f</sub> = α + β (R<sub>m</sub> − R<sub>f</sub>) + ε
         </p>
@@ -129,6 +139,8 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
           <Panel key={benchmark.id} ticker={ticker} benchmark={benchmark} outcome={outcome} colorIndex={index} />
         ))}
       </div>
+
+      <BetaWhatIf params={params} ticker={ticker} choice={choice} compare={compare} against={against.id} results={results} />
 
       {results.some(({ outcome }) => outcome.ok && outcome.result.rolling.length > 1) && (
         <section className="card form" id="rolling">

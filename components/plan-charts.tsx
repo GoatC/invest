@@ -14,7 +14,7 @@ import { twd } from '@/lib/format';
 import { bi, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import type { PlanRow, YearPoint } from '@/lib/models/projection';
 
-import { dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 /** Axis ticks in TWD, short: "NT$1.2M", "NT$850K". */
 function axisTwd(value: number): string {
@@ -35,7 +35,7 @@ function valueAxis(colors: Colors) {
 
 function line(label: Bilingual, color: string, data: Array<[string | number, number]>, z: number, colors: Colors): LineSeriesOption {
   return {
-    name: bi(label),
+    name: chartText(label),
     type: 'line',
     data,
     z,
@@ -61,7 +61,7 @@ function projectionOption(years: readonly YearBar[], colors: Colors): Option {
   // A year that lost money shows its value as put in, with no growth on top; the table and the
   // tooltip give the loss.
   const bars = (label: Bilingual, color: string, value: (year: YearBar) => number, top: (year: YearBar) => boolean): BarSeriesOption => ({
-    name: bi(label),
+    name: chartText(label),
     type: 'bar',
     stack: 'value',
     barMaxWidth: 24,
@@ -77,7 +77,7 @@ function projectionOption(years: readonly YearBar[], colors: Colors): Option {
       formatter: (params) => {
         const year = years[dataIndex(params) ?? -1];
         if (!year) return '';
-        return tooltip(`${year.ends} · ${bi({ en: `year ${year.year}`, zh: `第 ${year.year} 年` })}`, [
+        return tooltip(`${year.ends} · ${chartText({ en: `year ${year.year}`, zh: `第 ${year.year} 年` })}`, [
           { value: twd(year.value), label: PLAN_SERIES.value },
           { value: twd(year.growth), label: PLAN_SERIES.growth, key: { color: colors.slots[0], shape: 'rect' } },
           { value: twd(year.contributed), label: PLAN_SERIES.contributed, key: { color: colors.context, shape: 'rect' } },

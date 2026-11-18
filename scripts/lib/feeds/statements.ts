@@ -29,6 +29,10 @@ const INCOME: Partial<Record<Item | 'eps', Match>> = {
   tax: { types: ['TAX', 'IncomeTaxExpense'], names: ['所得稅費用（利益）', '所得稅費用（利益）合計'] },
   netIncome: { types: ['EquityAttributableToOwnersOfParent'], names: ['淨利（淨損）歸屬於母公司業主', '母公司業主（淨利∕損）'] },
   eps: { types: ['EPS'], names: ['基本每股盈餘', '基本每股盈餘（元）'] },
+  // The red-flag indicator's (N3). Taiwan statements give operating expenses, not SG&A alone.
+  grossProfit: { types: ['GrossProfit'], names: ['營業毛利（毛損）', '營業毛利（毛損）淨額'] },
+  cogs: { types: ['CostOfGoodsSold'], names: ['營業成本', '營業成本合計'] },
+  sga: { types: ['OperatingExpenses'], names: ['營業費用', '營業費用合計'] },
 };
 const BALANCE: Partial<Record<Item | 'capital', Match>> = {
   currentAssets: { types: ['CurrentAssets'], names: ['流動資產合計'] },
@@ -36,6 +40,11 @@ const BALANCE: Partial<Record<Item | 'capital', Match>> = {
   cash: { types: ['CashAndCashEquivalents'], names: ['現金及約當現金'] },
   equity: { types: ['EquityAttributableToOwnersOfParent'], names: ['歸屬於母公司業主之權益合計'] },
   capital: { types: ['OrdinaryShare'], names: ['普通股股本'] },
+  receivables: { types: ['AccountsReceivableNet'], names: ['應收帳款淨額'] },
+  ppe: { types: ['PropertyPlantAndEquipment'], names: ['不動產、廠房及設備'] },
+  totalAssets: { types: ['TotalAssets'], names: ['資產總額', '資產總計'] },
+  totalLiabilities: { types: ['Liabilities'], names: ['負債總額', '負債總計'] },
+  retainedEarnings: { types: ['RetainedEarnings'], names: ['保留盈餘合計', '保留盈餘（或累積虧損）合計'] },
 };
 /** Interest-bearing debt, and which of it is due within the year. */
 const DEBT: Array<Match & { current: boolean }> = [

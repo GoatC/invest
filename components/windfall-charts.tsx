@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react';
 import { signedPercent } from '@/lib/format';
 import { bi, type Bilingual } from '@/lib/i18n';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 export interface BacktestPoint {
   /** YYYY-MM. */
@@ -26,7 +26,7 @@ const RULE: Bilingual = { en: 'This rule (pace and acceleration)', zh: '本規�
 const PACE: Bilingual = { en: 'The pace alone', zh: '只依節奏' };
 
 function line(label: Bilingual, color: string, data: Array<[string, number]>, z: number): LineSeriesOption {
-  return { name: bi(label), type: 'line', data, z, showSymbol: false, lineStyle: { width: 1.5, color }, itemStyle: { color }, emphasis: { disabled: true } };
+  return { name: chartText(label), type: 'line', data, z, showSymbol: false, lineStyle: { width: 1.5, color }, itemStyle: { color }, emphasis: { disabled: true } };
 }
 
 function option(points: readonly BacktestPoint[], colors: Colors): Option {
@@ -38,7 +38,7 @@ function option(points: readonly BacktestPoint[], colors: Colors): Option {
       formatter: (params) => {
         const point = points[dataIndex(params) ?? -1];
         if (!point) return '';
-        return tooltip(`${point.start} · ${bi({ en: `${point.tranches} tranches`, zh: `分 ${point.tranches} 批` })}`, [
+        return tooltip(`${point.start} · ${chartText({ en: `${point.tranches} tranches`, zh: `分 ${point.tranches} 批` })}`, [
           { value: signedPercent(point.rule), label: RULE, key: { color: colors.slots[0], shape: 'line' } },
           { value: signedPercent(point.pace), label: PACE, key: { color: colors.context, shape: 'line' } },
         ]);

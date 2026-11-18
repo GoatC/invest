@@ -1,14 +1,47 @@
 /**
- * UI text in English and Traditional Chinese (CLAUDE.md: all UI text bilingual). Pages show both
- * side by side, the way the PRD is written; every string must come with both languages.
+ * UI text in English and Traditional Chinese. Every string is still written in both languages, but
+ * since 2026-11-09 (CLAUDE.md, the Chinese-first rule) a page shows both only for a name: a field,
+ * a column, a figure's label, a button or a link, e.g. "Regular pool 一般投入資金池". A sentence, a
+ * note or a line that carries figures shows in Chinese alone; repeating it in English only doubled
+ * the text. `textMode` decides, so every page follows the same rule.
  */
 export interface Bilingual {
   en: string;
   zh: string;
 }
 
-export function bi(text: Bilingual): string {
-  return text.en === text.zh ? text.en : `${text.en} ${text.zh}`;
+/** How a text shows: both languages (a name), Chinese alone (a sentence or a figure line), or once (the same in both). */
+export type TextMode = 'both' | 'zh' | 'same';
+
+/**
+ * A figure: a percentage, an amount, a decimal, a date, or a number of three or more digits; a
+ * year alone ("2008 global financial crisis") is part of a name, not a figure.
+ */
+const FIGURE = /\d\s?%|NT\$|[$€£¥]\s?\d|\d{1,3}(?:,\d{3})+|\b(?!(?:19|20)\d\d\b)\d{3,}\b|\d\.\d|\d{4}-\d{2}/;
+/** A sentence ends in a full stop, question or exclamation mark, a semicolon or a colon. */
+const SENTENCE_END = /[.!?;:。：；][\s"'”’)\]]*$/;
+/** A name has at most this many words, not counting what is in brackets. */
+const NAME_WORDS = 5;
+
+/**
+ * Whether a text is a name (shown in both languages) or a sentence, a note or a figure line (shown
+ * in Chinese alone). `label` marks a field, column or figure label, which stays bilingual however
+ * long it is.
+ */
+export function textMode(text: Bilingual, label = false): TextMode {
+  if (text.en === text.zh) return 'same';
+  if (label) return 'both';
+  const en = text.en.trim();
+  if (SENTENCE_END.test(en) || FIGURE.test(en)) return 'zh';
+  const words = en.replace(/\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
+  return words > NAME_WORDS ? 'zh' : 'both';
+}
+
+/** A text as one string, by the rule above: "Regular pool 一般投入資金池", or the Chinese alone. */
+export function bi(text: Bilingual, label = false): string {
+  const mode = textMode(text, label);
+  if (mode === 'same') return text.en;
+  return mode === 'zh' ? text.zh : `${text.en} ${text.zh}`;
 }
 
 export const LABELS = {
@@ -36,6 +69,8 @@ export const LABELS = {
   ticker: { en: 'Ticker', zh: '代號' },
   name: { en: 'Name', zh: '名稱' },
   side: { en: 'Buy / sell', zh: '買賣' },
+  direction: { en: 'Direction', zh: '多空方向' },
+  leverage: { en: 'Leverage', zh: '槓桿倍數' },
   qty: { en: 'Quantity', zh: '數量' },
   price: { en: 'Price', zh: '價格' },
   currency: { en: 'Trade currency', zh: '交易幣別' },
@@ -67,12 +102,21 @@ export const LABELS = {
   allocation: { en: 'Allocation', zh: '資產配置' },
   risk: { en: 'Value at Risk', zh: '風險值' },
   calculator: { en: 'Calculator', zh: '複利計算機' },
+  monteCarlo: { en: 'Monte Carlo', zh: '蒙地卡羅' },
+  timeline: { en: 'Life timeline', zh: '人生時間軸' },
+  stress: { en: 'Stress test', zh: '壓力測試' },
+  frontier: { en: 'Efficient frontier', zh: '效率前緣' },
+  attribution: { en: 'Attribution', zh: '績效歸因' },
   costs: { en: 'Costs & tax', zh: '費用與稅務' },
   windfall: { en: 'Windfall', zh: '大額資金' },
   regression: { en: 'Regression', zh: '回歸分析' },
   costOfEquity: { en: 'Cost of equity', zh: '權益成本' },
   valuation: { en: 'Valuation', zh: '估值' },
-  proposals: { en: 'Proposals', zh: '提案' },
+  redFlags: { en: 'Red flags', zh: '紅旗指標' },
+  lookThrough: { en: 'Look-through', zh: '合併透視' },
+  sectors: { en: 'Sectors', zh: '產業熱圖' },
+  volatility: { en: 'Volatility alert', zh: '波動警報' },
+  proposals: { en: 'Rule warnings', zh: '規則警示' },
   rules: { en: 'Rules', zh: '規則' },
   notifications: { en: 'Notifications', zh: '推播' },
   dashboard: { en: 'Dashboard', zh: '儀表板' },
@@ -90,6 +134,23 @@ export const SIDE = {
   buy: { en: 'Buy', zh: '買進' },
   sell: { en: 'Sell', zh: '賣出' },
 } as const satisfies Record<string, Bilingual>;
+
+/** Long profits when the price rises (buy low, sell high); short when it falls (sell high, buy back low). */
+export const DIRECTION = {
+  long: { en: 'Long (buy low, sell high)', zh: '做多（買低賣高）' },
+  short: { en: 'Short (sell high, buy back low)', zh: '做空（賣高買低）' },
+} as const satisfies Record<string, Bilingual>;
+
+/** What a buy or sell does in each direction. */
+export const ACTION = {
+  long: { buy: { en: 'Buy to open', zh: '買進開倉' }, sell: { en: 'Sell to close', zh: '賣出平倉' } },
+  short: { buy: { en: 'Buy to cover', zh: '買進回補' }, sell: { en: 'Sell short', zh: '放空賣出' } },
+} as const satisfies Record<string, Record<string, Bilingual>>;
+
+/** 1.5 → "1.5×". */
+export function leverageText(value: number): string {
+  return `${value.toFixed(1)}×`;
+}
 
 export const POOL = {
   regular: { en: 'Regular', zh: '一般' },
@@ -143,7 +204,13 @@ export const FEED: Record<string, Bilingual> = {
   cbc: { en: 'Central Bank of the ROC', zh: '中央銀行' },
   damodaran: { en: 'Damodaran Online', zh: 'Damodaran Online' },
   sec: { en: 'SEC EDGAR', zh: 'SEC EDGAR' },
+  moenv: { en: 'Ministry of Environment', zh: '環境部' },
+  manual: { en: 'Your entry', zh: '自行登錄' },
+  vanguard: { en: 'Vanguard', zh: 'Vanguard' },
+  fubon: { en: 'Fubon', zh: '富邦投信' },
   demo: { en: 'Demo data', zh: '示範資料' },
+  nasdaq: { en: 'Nasdaq', zh: 'Nasdaq' },
+  adjusted_close: { en: 'Adjusted closes', zh: '還原收盤價' },
 };
 
 /** A windfall tranche's status (F3). */
@@ -214,4 +281,12 @@ export const RUN_STATUS = {
   ok: { en: 'OK', zh: '正常' },
   partial: { en: 'Partly loaded', zh: '部分載入' },
   failed: { en: 'Failed', zh: '失敗' },
+} as const satisfies Record<string, Bilingual>;
+
+/** The four Brinson effects (N2): names shared by the page and its client charts. */
+export const EFFECT = {
+  allocation: { en: 'Allocation', zh: '配置效果' },
+  selection: { en: 'Selection', zh: '選擇效果' },
+  interaction: { en: 'Interaction', zh: '交互效果' },
+  currency: { en: 'Currency', zh: '匯率效果' },
 } as const satisfies Record<string, Bilingual>;

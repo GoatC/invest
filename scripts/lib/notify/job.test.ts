@@ -15,7 +15,7 @@ const INPUT: Omit<PlanInput, 'now'> = {
   names: new Map(),
   weekly: { weekday: 0, minutes: 20 * 60, timeZone: 'Asia/Taipei' },
   weeklyKeys: new Set(),
-  summary: { openProposals: 1, approvedProposals: 0, largestDrift: null, valueTwd: 100_000, weekAgoTwd: 99_000 },
+  summary: { openProposals: 1, largestDrift: null, valueTwd: 100_000, weekAgoTwd: 99_000 },
   health: { latest: undefined, misses: 0, alert: false },
   lastGoodRunId: 3,
   quiet: { start: 23 * 60, end: 8 * 60, timeZone: 'Asia/Taipei' },

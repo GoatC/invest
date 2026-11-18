@@ -1,9 +1,8 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
 import type { Bilingual } from '@/lib/i18n';
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from '@/lib/action-redirect';
 
 export interface SignInState {
   error: Bilingual | null;

@@ -13,12 +13,20 @@ export const NIGHTLY_JOB = 'nightly_prices';
 export const SNAPSHOT_ERROR = 'NAV snapshots';
 /** …and when the snapshots were saved without their N4 VaR. */
 export const RISK_ERROR = 'VaR';
+/** …and when the home-screen widget's figures could not be saved (2026-11-18). */
+export const WIDGET_ERROR = 'Widget figures';
 /** …and when the rules could not be evaluated after the refresh (step 9). */
 export const RULES_ERROR = 'Rules';
 /** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
 export const BETAS_ERROR = 'Betas';
+export const MONTE_CARLO_ERROR = 'Monte Carlo';
+/** The label of an error in the auto-scored assumptions (F6) refresh. */
+export const CMA_ERROR = 'Auto CMA';
+export const ATTRIBUTION_ERROR = 'Attribution';
 /** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
 export const VALUATIONS_ERROR = 'Valuations';
+/** …and when the week's red-flag scan could not be saved (N3, Phase 2 step 5). */
+export const RED_FLAGS_ERROR = 'Red flags';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
 
@@ -51,6 +59,14 @@ export interface RunDetail {
   betas: { saved: number; runDate: string } | null;
   /** The watched stocks valued again after a new filing (F12); null when none was. */
   valued: string[] | null;
+  /** The companies scanned for red flags (N3) and the events the feeds found; null when none. */
+  redFlags: { scanned: string[]; events: number } | null;
+  /** The funds' holdings files read (F14); `latest` is the file's date. Empty before. */
+  holdings: Record<string, Loaded>;
+  /** The analysts' estimates loaded (F12 forward P/E) and those refused; null when none was due. */
+  estimates: { saved: string[]; failed: string[] } | null;
+  /** The holdings' dividends looked up (the dividend prompt): each ticker's source, the rows saved and the lookups that failed; null when none was held. */
+  dividends: { checked: Record<string, string>; saved: number; failed: string[] } | null;
 }
 
 export interface JobRun {
@@ -101,6 +117,10 @@ export function parseRunDetail(value: unknown): RunDetail {
     rules: typeof created === 'number' && typeof closed === 'number' ? { created, closed } : null,
     betas: typeof saved === 'number' && typeof runDate === 'string' ? { saved, runDate } : null,
     valued: Array.isArray(detail['valued']) ? lines(detail['valued']) : null,
+    redFlags: readRedFlagRun(detail['redFlags']),
+    holdings: loadedMap(detail['holdings']),
+    estimates: detail['estimates'] === undefined ? null : { saved: lines(record(detail['estimates'])['saved']), failed: lines(record(detail['estimates'])['failed']) },
+    dividends: readDividendRun(detail['dividends']),
   };
 }
 
@@ -131,4 +151,18 @@ export function dataHealth(runs: readonly JobRun[], threshold: number | null, to
   const nightsWithoutRun = Math.max(0, daysBetween(taipeiToday(new Date(latest.finishedAt)), today) - 1);
   const misses = failedInARow + nightsWithoutRun;
   return { latest, misses, alert: threshold !== null && misses >= threshold };
+}
+
+function readDividendRun(value: unknown): RunDetail['dividends'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const { checked, saved, failed } = value as Record<string, unknown>;
+  if (typeof saved !== 'number') return null;
+  const sources = Object.fromEntries(Object.entries(record(checked)).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  return { checked: sources, saved, failed: lines(failed) };
+}
+
+function readRedFlagRun(value: unknown): RunDetail['redFlags'] {
+  if (typeof value !== 'object' || value === null) return null;
+  const { scanned, events } = value as Record<string, unknown>;
+  return Array.isArray(scanned) && typeof events === 'number' ? { scanned: lines(scanned), events } : null;
 }

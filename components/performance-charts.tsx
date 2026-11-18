@@ -14,7 +14,7 @@ import { signedPercent } from '@/lib/format';
 import { bi, RETURN_SERIES as SERIES, type Bilingual } from '@/lib/i18n';
 import type { CumulativePoint, MonthReturn } from '@/lib/models/performance';
 
-import { axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
+import { chartText, axisPercent, dataIndex, Legend, mount, tooltip, tooltipStyle, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // Cumulative return against the SAA benchmark
@@ -27,7 +27,7 @@ function cumulativeOption(points: readonly CumulativePoint[], colors: Colors): O
   // End labels while the two lines end apart; close together they would collide, and the legend and tooltip carry them.
   const apart = !last || last.benchmark === null || Math.abs(last.twr - last.benchmark) / span > 0.08;
   const line = (label: Bilingual, color: string, data: Array<[string, number | null]>, z: number): LineSeriesOption => ({
-    name: bi(label),
+    name: chartText(label),
     type: 'line',
     data,
     z,
@@ -111,7 +111,7 @@ function monthlyOption(months: readonly MonthReturn[], colors: Colors): Option {
     return { up, down };
   });
   const bars: BarSeriesOption[] = PARTS.map((part, index) => ({
-    name: bi(SERIES[part]),
+    name: chartText(SERIES[part]),
     type: 'bar',
     stack: 'split',
     barMaxWidth: 24,
@@ -124,7 +124,7 @@ function monthlyOption(months: readonly MonthReturn[], colors: Colors): Option {
     })),
   }));
   const total: ScatterSeriesOption = {
-    name: bi(SERIES.total),
+    name: chartText(SERIES.total),
     type: 'scatter',
     z: 5,
     symbolSize: 8,

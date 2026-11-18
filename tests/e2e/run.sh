@@ -108,5 +108,6 @@ wait_for "$APP_PORT"
 
 echo "7/7 browser"
 iconv -f UTF-8 -t BIG5 "$HERE/demo-statement.csv" >"$CSV"
-node "$HERE/drive.mjs"
+# E2E_DRIVER=bench.mjs times the phone tab switches instead (tests/e2e/README.md).
+node "$HERE/${E2E_DRIVER:-drive.mjs}"
 echo "screenshots: $SHOTS"

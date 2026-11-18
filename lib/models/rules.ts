@@ -1,4 +1,4 @@
-import type { Holding } from './valuation';
+import { exposureOf, type Holding } from './valuation';
 import type { AssetClass } from './types';
 
 /** Weights a hair over a cap from floating-point sums are not breaches. */
@@ -72,28 +72,51 @@ export interface CapBreach {
   trimTwd: number;
 }
 
-/** R1: no single stock above max_weight of the regular pool. ETFs are not single stocks. */
+/**
+ * R1: no single stock above max_weight of the regular pool. ETFs are not single stocks. A stock's
+ * weight is its gross exposure, long and short lines of it added as absolute values, over the pool's
+ * own money: a 2× long or a short of a stock counts for what it moves with, not the margin behind it.
+ */
+/** Each single stock's gross exposure in the regular pool, in TWD, by ticker (or label). */
+function stockExposures(pool: PoolView): Map<string, number> {
+  const gross = new Map<string, number>();
+  for (const holding of pool.holdings) {
+    if (holding.productType !== 'stock') continue;
+    const subject = holding.ticker ?? holding.label;
+    gross.set(subject, (gross.get(subject) ?? 0) + Math.abs(exposureOf(holding)));
+  }
+  return gross;
+}
+
+/** The single stock that weighs most in the regular pool (R1's nearest to its cap); undefined with none held. */
+export function largestStock(pool: PoolView): { subject: string; weight: number } | undefined {
+  if (pool.totalTwd <= 0) return undefined;
+  let top: { subject: string; weight: number } | undefined;
+  for (const [subject, valueTwd] of stockExposures(pool)) {
+    const weight = valueTwd / pool.totalTwd;
+    if (!top || weight > top.weight) top = { subject, weight };
+  }
+  return top;
+}
+
 export function singleStockBreaches(pool: PoolView, cap: NonNullable<Caps['singleStock']>): CapBreach[] {
   if (pool.totalTwd <= 0) return [];
-  return pool.holdings
-    .filter((holding) => holding.productType === 'stock')
-    .map((holding) => {
-      const valueTwd = holding.valueTwd ?? 0;
-      return {
-        rule: 'R1' as const,
-        subject: holding.ticker ?? holding.label,
-        valueTwd,
-        weight: valueTwd / pool.totalTwd,
-        limit: cap.maxWeight,
-        trimTwd: valueTwd - cap.maxWeight * pool.totalTwd,
-      };
-    })
+  const gross = stockExposures(pool);
+  return [...gross]
+    .map(([subject, valueTwd]) => ({
+      rule: 'R1' as const,
+      subject,
+      valueTwd,
+      weight: valueTwd / pool.totalTwd,
+      limit: cap.maxWeight,
+      trimTwd: valueTwd - cap.maxWeight * pool.totalTwd,
+    }))
     .filter((breach) => breach.weight - breach.limit > TOLERANCE);
 }
 
-/** The satellite sleeve's value in the regular pool, in TWD. */
+/** The satellite sleeve's gross exposure in the regular pool, in TWD: its value when every line is a plain long. */
 export function satelliteValue(pool: PoolView): number {
-  return pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+  return pool.holdings.filter((holding) => holding.sleeve === 'satellite').reduce((sum, holding) => sum + Math.abs(exposureOf(holding)), 0);
 }
 
 /** R2: when the satellite sleeve rises above trigger_weight of the regular pool, trim it back to target_weight. */
@@ -122,12 +145,15 @@ export interface ClassWeight {
   drift: number;
 }
 
-/** Actual against target weight per asset class, in the regular pool (N5 holdings view, F6). */
+/**
+ * Actual against target weight per asset class, in the regular pool (N5 holdings view, F6): each
+ * class's net exposure (a short subtracts) over the pool's own money, so leverage shows as weight.
+ */
 export function classWeights(pool: PoolView, assetClasses: readonly AssetClass[]): ClassWeight[] {
   return [...assetClasses]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((assetClass) => {
-      const valueTwd = pool.holdings.filter((holding) => holding.assetClassId === assetClass.id).reduce((sum, holding) => sum + (holding.valueTwd ?? 0), 0);
+      const valueTwd = pool.holdings.filter((holding) => holding.assetClassId === assetClass.id).reduce((sum, holding) => sum + exposureOf(holding), 0);
       const weight = pool.totalTwd > 0 ? valueTwd / pool.totalTwd : 0;
       return { assetClass, valueTwd, weight, drift: weight - assetClass.targetWeight };
     });

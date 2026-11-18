@@ -11,6 +11,8 @@ export interface Assumption {
   /** Yearly volatility (standard deviation): 0.15 is 15%. */
   volatility: number;
   source: string;
+  /** Set when the figure was scored from the class's holdings (lib/models/auto-cma.ts), not typed. */
+  auto?: { asOf: string };
 }
 
 /** By asset class id. */

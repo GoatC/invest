@@ -1,4 +1,4 @@
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { HistorySection, LogList } from '@/components/history';
@@ -18,7 +18,7 @@ export default async function TargetsPage() {
     <>
       <section className="card form">
         <h1>
-          <Bi en="Edit targets" zh="修改目標權重" />
+          <Zh en="Edit targets" zh="修改目標權重" />
         </h1>
         <Info>
           <Bi

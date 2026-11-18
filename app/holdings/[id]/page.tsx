@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { History } from '@/components/history';
@@ -35,7 +35,7 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
       <section className="card">
         <div className="row spread">
           <h1>
-            <Bi {...LABELS.editTrade} />
+            <Zh {...LABELS.editTrade} />
           </h1>
           <span className="badge">
             <Bi {...SOURCE[trade.source]} />
@@ -57,6 +57,8 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
             tax: String(trade.tax),
             fxRate: String(trade.fxRate),
             pool: trade.pool,
+            direction: trade.direction ?? 'long',
+            leverage: (trade.leverage ?? 1).toFixed(1),
             note: trade.note ?? '',
           }}
         />

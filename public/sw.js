@@ -28,7 +28,11 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  // Marked as opened by a push, so the page can hand it to the iOS app where Hugo chose so
+  // (components/push-handoff.tsx); the page takes the mark out of the address.
+  const target = new URL(event.notification.data?.url || '/', self.location.origin);
+  target.searchParams.set('via', 'push');
+  const url = target.href;
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

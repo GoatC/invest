@@ -1,0 +1,9 @@
+// A pattern for Local.xcconfig (ios/setup.sh writes the real one; git ignores it).
+
+// The site's host as Vercel serves it: no "https://", no slash.
+SITE_HOST = your-app.vercel.app
+// Your Apple team: ten letters and digits. A free Apple ID has one, the "Personal Team".
+DEVELOPMENT_TEAM = ABCDE12345
+// The app's identifier: any name no other app of yours uses. Keep it the same from week to week,
+// or the phone takes the next install for a new app and you sign in again.
+BUNDLE_ID = app.longview.abcde12345

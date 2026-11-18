@@ -204,15 +204,33 @@ export interface RiskLine {
   label: string;
   productType: ProductType;
   assetClassId: string;
+  /** Own money in the line: what V adds up. */
   valueTwd: number;
+  /** What the line moves with, negative for a short; the value when absent (a plain long). */
+  exposureTwd?: number;
 }
 
-/** The priced holdings, both pools; the rest wait for a price, as on the holdings page. */
+/**
+ * The priced holdings, both pools; the rest wait for a price, as on the holdings page. A plain
+ * long with no value is left out as before; a short or leveraged line stays in while it has
+ * exposure, even when its own money is used up, since that is when its risk matters most.
+ */
 export function holdingLines(holdings: readonly Holding[]): { lines: RiskLine[]; unpriced: Holding[] } {
   const lines: RiskLine[] = [];
   for (const holding of holdings) {
-    if (holding.valueTwd === null || holding.valueTwd <= 0) continue;
-    lines.push({ key: holding.key, ticker: holding.ticker, label: holding.label, productType: holding.productType, assetClassId: holding.assetClassId, valueTwd: holding.valueTwd });
+    if (holding.valueTwd === null) continue;
+    const exposure = holding.exposureTwd ?? holding.valueTwd;
+    const plain = exposure === holding.valueTwd;
+    if (plain ? holding.valueTwd <= 0 : exposure === 0) continue;
+    lines.push({
+      key: holding.key,
+      ticker: holding.ticker,
+      label: holding.label,
+      productType: holding.productType,
+      assetClassId: holding.assetClassId,
+      valueTwd: holding.valueTwd,
+      ...(plain ? {} : { exposureTwd: exposure }),
+    });
   }
   return { lines, unpriced: holdings.filter((holding) => holding.valueTwd === null) };
 }
@@ -268,9 +286,10 @@ export function measure(lines: readonly RiskLine[], benchmarks: ReadonlyMap<stri
   let valueTwd = 0;
   for (const line of lines) {
     valueTwd += line.valueTwd;
-    const holding = { key: line.key, ticker: line.ticker, label: line.label, valueTwd: line.valueTwd, standIn: false };
+    // Each proxy measures the TWD that moves with it: a short's exposure counts against the longs.
+    const holding = { key: line.key, ticker: line.ticker, label: line.label, valueTwd: line.exposureTwd ?? line.valueTwd, standIn: false };
     if (isTwdBalance(line)) {
-      cash.valueTwd += line.valueTwd;
+      cash.valueTwd += holding.valueTwd;
       cash.holdings.push(holding);
       continue;
     }
@@ -282,7 +301,7 @@ export function measure(lines: readonly RiskLine[], benchmarks: ReadonlyMap<stri
       continue;
     }
     const exposure = exposures.get(proxy) ?? { proxy, valueTwd: 0, holdings: [] };
-    exposure.valueTwd += line.valueTwd;
+    exposure.valueTwd += holding.valueTwd;
     exposure.holdings.push({ ...holding, standIn: line.productType === 'theme_etf' && found > 0 });
     exposures.set(proxy, exposure);
   }
@@ -462,12 +481,14 @@ export function riskReport(holdings: readonly Holding[], input: RiskInput, today
 }
 
 /** A day of buildSeries as risk lines: each holding's value at that day's close, both pools. */
-export function dayLines(day: Pick<DayPoint, 'date' | 'held'>, securities: ReadonlyMap<string, Pick<Security, 'productType' | 'assetClassId' | 'name'>>, manual: ReadonlyMap<number, ManualHistory>): RiskLine[] {
+export function dayLines(day: Pick<DayPoint, 'date' | 'held'> & Partial<Pick<DayPoint, 'exposure'>>, securities: ReadonlyMap<string, Pick<Security, 'productType' | 'assetClassId' | 'name'>>, manual: ReadonlyMap<number, ManualHistory>): RiskLine[] {
   const lines: RiskLine[] = [];
   for (const [key, valueTwd] of Object.entries(day.held)) {
-    if (!(valueTwd > 0)) continue;
+    const exposureTwd = day.exposure?.[key];
+    if (exposureTwd === undefined ? !(valueTwd > 0) : exposureTwd === 0) continue;
     const at = key.indexOf(':');
-    const [kind, rest] = [key.slice(0, at), key.slice(at + 1)];
+    // A short's key is pool:ticker:short.
+    const [kind, rest] = [key.slice(0, at), key.slice(at + 1).split(':')[0] ?? ''];
     if (kind === 'manual') {
       const history = manual.get(Number(rest));
       const state = history ? stateOn(history, day.date) : undefined;
@@ -475,7 +496,7 @@ export function dayLines(day: Pick<DayPoint, 'date' | 'held'>, securities: Reado
       continue;
     }
     const security = securities.get(rest);
-    if (security) lines.push({ key, ticker: rest, label: security.name, productType: security.productType, assetClassId: security.assetClassId, valueTwd });
+    if (security) lines.push({ key, ticker: rest, label: security.name, productType: security.productType, assetClassId: security.assetClassId, valueTwd, ...(exposureTwd === undefined ? {} : { exposureTwd }) });
   }
   return lines;
 }
@@ -486,7 +507,7 @@ export function dayLines(day: Pick<DayPoint, 'date' | 'held'>, securities: Reado
  * holding has no proxy with the whole window of weekly prices; nothing at all without settings.
  */
 export function dailyValueAtRisk(
-  days: readonly Pick<DayPoint, 'date' | 'held'>[],
+  days: ReadonlyArray<Pick<DayPoint, 'date' | 'held'> & Partial<Pick<DayPoint, 'exposure'>>>,
   context: { securities: readonly Security[]; manualAssets: readonly ManualHistory[] },
   input: RiskInput,
 ): Map<string, number | null> {

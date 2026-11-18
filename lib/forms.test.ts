@@ -26,13 +26,17 @@ describe('afterSecurityAdded', () => {
     assert.equal(afterSecurityAdded('/holdings/42', 'AAPL'), '/holdings/42');
   });
 
+  it('goes back to the new trade in the iOS shell’s sheet, the ticker filled in', () => {
+    assert.equal(afterSecurityAdded('sheet', '00990A'), '/holdings?sheet=trade&ticker=00990A');
+  });
+
   it('shows the close-this-tab note for the CSV import', () => {
     assert.equal(afterSecurityAdded('tab', 'BRK.B'), '/securities/new?added=BRK.B');
   });
 
   it('opens a new trade in the ticker otherwise, ignoring outside or odd paths', () => {
     for (const next of [undefined, '', '/holdings/new', 'https://example.com', '//example.com', '/holdings/42/../../x']) {
-      assert.equal(afterSecurityAdded(next, 'VT'), '/holdings/new?ticker=VT', String(next));
+      assert.equal(afterSecurityAdded(next, 'VT'), '/holdings?ticker=VT#add-trade', String(next));
     }
   });
 });

@@ -21,6 +21,10 @@ export function holding(overrides: Partial<Holding> = {}): Holding {
     currency: 'USD',
     valueTwd: 0,
     costTwd: 0,
+    direction: 'long',
+    leverage: 1,
+    // Null reads as the value: a plain long's exposure (valuation.exposureOf).
+    exposureTwd: null,
     estimated: false,
     priceDate: '2026-10-20',
     ...overrides,

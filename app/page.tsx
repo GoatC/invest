@@ -1,57 +1,70 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-import { AllocationDonut, DriftChart, type DriftRow } from '@/components/allocation-charts';
-import { Bi } from '@/components/bi';
-import { DataHealthBanner } from '@/components/data-status';
+import { AlertTiles } from '@/components/alert-tiles';
+import { AllocationDonut } from '@/components/allocation-charts';
+import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
+import { NativePosterLine } from '@/components/native-poster-line';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
+import { WarningsPanel } from '@/components/warnings-panel';
+import { RefreshData } from '@/components/refresh-data';
 import { RiskCard } from '@/components/risk-card';
+import { RiskDetails } from '@/components/risk-details';
 import { requireSession } from '@/lib/auth';
 import {
   DataError,
   loadAllocationData,
-  loadJobRuns,
+  loadLastAttribution,
+  loadMarketEvents,
+  loadLastRun,
   loadPlanData,
   loadProposals,
+  loadRedFlagData,
   loadRiskData,
   loadRules,
-  loadValueWeek,
   loadWindfallPlan,
   loadWorkbench,
   orDataError,
   type AllocationData,
   type PlanData,
   type Proposal,
+  type RedFlagData,
   type RiskData,
   type RuleRecord,
   type WindfallPlanRecord,
   type WorkbenchData,
 } from '@/lib/data';
-import { taipeiToday } from '@/lib/dates';
-import { money, percent, points, signedPercent, signedTwd, twd } from '@/lib/format';
-import { DRIFT_ICON, DRIFT_STATUS, LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
+import { addDays, taipeiToday } from '@/lib/dates';
+import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
+import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, sleeveTargets } from '@/lib/models/allocation';
-import { dataHealth } from '@/lib/models/data-health';
-import { orderTotals } from '@/lib/models/engine';
-import { comingWeek, readWeeklyReview, summaryLines, weeklySummary } from '@/lib/models/notify';
-import { buildSeries } from '@/lib/models/performance';
+import { ruleBoard } from '@/lib/rule-text';
+import { comingWeek, readWeeklyReview } from '@/lib/models/notify';
+import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
+import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/value-line';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
-import { proposalTitle } from '@/lib/proposal-text';
+import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
-import { approveProposal, dismissProposal } from './proposals/actions';
+import { Banners } from './banner';
+
+type Params = Record<string, string | string[] | undefined>;
 
 /**
- * The weekly dashboard, the home screen (PRD Section 5, Phase 1 step 10): the weekly review's three
- * lines, then rule status before profit and loss, top to bottom as the spec orders it. Each part
- * reads its own data, so one that fails to load leaves the others in place.
+ * The weekly dashboard, the home screen (PRD Section 5): the poster with the portfolio's value and
+ * the line of its rise and fall at the top, then the Value at Risk (its distribution and make-up
+ * folded under it), the watchlist, the coming week, the allocation, the windfall and the plan, and
+ * the rule warnings last, or second while one stands. Each part reads its own data, so one that
+ * fails to load leaves the others in place.
  */
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
+  const params = await searchParams;
   const today = taipeiToday();
   let data: AllocationData;
   try {
@@ -60,12 +73,10 @@ export default async function Dashboard() {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, value, plan, jobs, settings, windfall, workbench] = await Promise.all([
+  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
-    orDataError(loadValueWeek(supabase, today)),
     orDataError(loadPlanData(supabase, today)),
-    orDataError(loadJobRuns(supabase)),
     orDataError(
       (async () => {
         const { data: rows, error } = await supabase.from('config').select('key, value').in('key', ['dca', 'weekly_review']);
@@ -75,73 +86,257 @@ export default async function Dashboard() {
     ),
     orDataError(loadWindfallPlan(supabase)),
     orDataError(loadWorkbench(supabase, today)),
+    orDataError(loadRedFlagData(supabase, today, undefined, data)),
+    orDataError(loadLastRun(supabase, 'monte_carlo')),
+    orDataError(loadLastAttribution(supabase)),
+    orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
   ]);
   const portfolio = buildPortfolio(data);
   const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
-  const summary = weeklySummary({
-    statuses: list.map((proposal) => proposal.status),
-    classes: portfolio.classes,
-    poolTwd: portfolio.pool.totalTwd,
-    ...(value instanceof DataError ? { valueTwd: null, weekAgoTwd: null } : value),
-  });
+  // The whole portfolio day by day (F18): the poster's line, and the regular pool's month ends against the plan.
+  const days = plan instanceof DataError ? null : buildSeries(plan.input);
+
+  // A standing warning comes second on the page; with none, the warnings section closes it.
+  const waitingFirst = list.some((proposal) => proposal.status === 'open');
+  const panel =
+    proposals instanceof DataError ? (
+      <Unavailable what={{ en: 'rule warnings', zh: '規則警示' }} error={proposals} />
+    ) : (
+      <WarningsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
+    );
+  const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
 
   return (
     <>
-      {!(jobs instanceof DataError) && <DataHealthBanner health={dataHealth(jobs.runs, jobs.threshold, today)} threshold={jobs.threshold} quiet />}
-      <section className="card form" id="this-week">
-        <div className="row spread">
-          <h1>
-            <Bi en="This week" zh="本週" />
-          </h1>
-          <Link href="/notifications">
-            <Bi en="Notifications" zh="推播設定" />
-          </Link>
-        </div>
-        <ul className="summary-lines">
-          {summaryLines(summary).map((line) => (
-            <li key={line.en}>
-              <Bi {...line} />
-            </li>
-          ))}
-        </ul>
-      </section>
-      {proposals instanceof DataError ? <Unavailable what={{ en: 'proposals', zh: '提案' }} error={proposals} /> : <Proposals list={list} rules={rules} />}
-      <Drift data={data} portfolio={portfolio} />
-      {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
-      <Donut data={data} portfolio={portfolio} />
-      <Windfall portfolio={portfolio} plan={windfall} today={today} />
-      {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} />}
-      <ComingWeek
+      <Hero
         today={today}
-        settings={settings}
-        rules={rules}
-        tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
-        filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
-          const due = nextFiling(bench.security.market, bench.series.quarters);
-          return due ? [{ ticker: bench.security.ticker, ...due }] : [];
-        })}
+        regularTwd={portfolio.pool.totalTwd}
+        windfallTwd={windfallTwd}
+        line={days ? valueLine(days) : null}
       />
-      {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} />}
+      <Suspense fallback={null}>
+        <Banners slot="page" />
+      </Suspense>
+      <RuleBoard data={data} portfolio={portfolio} />
+      {waitingFirst && panel}
+      <div className="dash-row">
+        <div className="dash-main">
+          {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
+        </div>
+        <div className="dash-side">
+          {workbench instanceof DataError ? <Unavailable what={{ en: 'the watchlist', zh: '觀察清單' }} error={workbench} /> : <Watchlist data={workbench} flags={flags instanceof DataError ? undefined : flags} />}
+          <ComingWeek
+            today={today}
+            settings={settings}
+            rules={rules}
+            market={marketEvents instanceof DataError ? [] : (marketEvents ?? [])}
+            tranches={windfall instanceof DataError ? [] : (windfall?.tranches ?? [])}
+            filings={workbench instanceof DataError ? [] : workbench.stocks.flatMap((bench) => {
+              const due = nextFiling(bench.security.market, bench.series.quarters);
+              return due ? [{ ticker: bench.security.ticker, ...due }] : [];
+            })}
+          />
+        </div>
+      </div>
+      <div className="dash-row">
+        <div className="dash-main">
+          <Donut data={data} portfolio={portfolio} />
+        </div>
+        <div className="dash-side">
+          <Windfall portfolio={portfolio} plan={windfall} today={today} />
+          {plan instanceof DataError ? <Unavailable what={{ en: 'the plan', zh: '計畫' }} error={plan} /> : <AgainstPlan plan={plan} days={days ?? []} />}
+        </div>
+      </div>
+      {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
+      {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
+      {!waitingFirst && panel}
     </>
   );
 }
 
-/** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12); red flags come with N3. */
-function Watchlist({ data }: { data: WorkbenchData }) {
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+
+/** "2026 年 10 月 29 日 · 週四" for a Taipei date. */
+function longDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+  return `${year} 年 ${month} 月 ${day} 日 · 週${WEEKDAYS[weekday]}`;
+}
+
+/** The line's drawing box; it stretches to the poster's width, the stroke keeping its weight. */
+const LINE = { width: 390, height: 132, pad: 16 };
+
+/** A gain as a chip: the TWD net of the money moved and the return, each in the colour of its own direction. */
+function GainChip({ label, gain }: { label: Bilingual; gain: Gain }) {
+  const tone = (value: number | null) => (value === null || value === 0 ? undefined : value > 0 ? 'up' : 'down');
+  const amount = Math.round(gain.gain);
+  return (
+    <span className="hero-gain">
+      <span className="hero-gain-label">
+        <Bi {...label} />
+      </span>
+      <span className={tone(amount)}>
+        {amount > 0 ? '▲ ' : amount < 0 ? '▼ ' : ''}
+        {signedTwd(amount)}
+      </span>
+      {gain.change !== null && <span className={tone(gain.change)}>{signedPercent(gain.change, 2)}</span>}
+    </span>
+  );
+}
+
+/**
+ * The poster at the top (Hugo, 2026-11-13): the date and the refresh button, the portfolio's value
+ * (both pools) and each pool's, the gain since the start and over seven days as chips, and the
+ * line of the portfolio's rise and fall edge to edge along the foot. No closes' date, legend, ⓘ or
+ * expand button on it (Hugo, 2026-11-15).
+ */
+function Hero({
+  today,
+  regularTwd,
+  windfallTwd,
+  line,
+}: {
+  today: string;
+  regularTwd: number;
+  windfallTwd: number;
+  /** Null until two closes hold a value, or when the history could not be read. */
+  line: ValueLine | null;
+}) {
+  const drawn = line ? linePath(line.points.map((point) => point.change), LINE.width, LINE.height, LINE.pad) : null;
+  const since = line?.points[0]?.date;
+  return (
+    <section className="hero" id="this-week">
+      <div className="hero-body">
+        <div className="hero-head">
+          <span className="hero-date">
+            <span>{longDate(today)}</span>
+          </span>
+          <RefreshData quiet shellAction />
+        </div>
+        <h1>
+          <Zh en="Portfolio value" zh="總市值" />
+        </h1>
+        <strong className="hero-value">{twd(regularTwd + windfallTwd)}</strong>
+        <span className="hero-note">
+          <Bi en={`Regular ${twd(regularTwd)} · windfall ${twd(windfallTwd)}`} zh={`一般 ${twd(regularTwd)} · 大額 ${twd(windfallTwd)}`} />
+        </span>
+        {line && (
+          <div className="hero-gains">
+            <GainChip label={{ en: 'All time', zh: '累計' }} gain={line.total} />
+            {line.week && <GainChip label={{ en: '7 days', zh: '近 7 天' }} gain={line.week} />}
+          </div>
+        )}
+      </div>
+      {drawn && line && (
+        <div className="hero-chart">
+          <svg
+            viewBox={`0 0 ${LINE.width} ${LINE.height}`}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label={`Rise and fall of both pools since ${since}, now ${signedPercent(line.total.change, 2)} 兩個資金池自 ${since} 起的漲跌幅，目前 ${signedPercent(line.total.change, 2)}`}
+          >
+            <line className="hero-zero" x1="0" x2={LINE.width} y1={drawn.zero.toFixed(1)} y2={drawn.zero.toFixed(1)} />
+            <path className="hero-line" d={drawn.path} />
+          </svg>
+          <NativePosterLine changes={line.points.map((point) => point.change)} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 6. The watchlist: each watched stock's distance to its buy and trim zones (F12), and its red-flag light (N3). */
+/** F5's monthly re-run, in the week it updates only (PRD Section 5): the median at the last mark and the chance of the goal. */
+/**
+ * The rules at a glance under the poster (Liquid Glass proposal C05, Hugo 2026-11-15): R1, R2 and
+ * F8's drift as a line's service board, always there with their standing (lib/rule-text.ts).
+ */
+function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portfolio }) {
+  const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
+  if (items.length === 0) return null;
+  const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
+  return (
+    <section className="card form rule-board" id="rule-board">
+      <h2>
+        <Bi en="Rules" zh="規則" />
+      </h2>
+      <AlertTiles items={items} tone={tone} />
+    </section>
+  );
+}
+
+function MonteCarloUpdate({ run, today }: { run: NonNullable<Awaited<ReturnType<typeof loadLastRun>>>; today: string }) {
+  if (run.runDate <= addDays(today, -7)) return null;
+  const mark = run.marks[run.marks.length - 1];
+  if (!mark) return null;
+  return (
+    <section className="card form" id="dashboard-monte-carlo">
+      <h2>
+        <Bi en="Monte Carlo, re-run this month" zh="蒙地卡羅，本月重跑" />
+      </h2>
+      <p>
+        <Bi
+          en={`Year ${mark.year} median ${twd(mark.realMedian)} in today's money${mark.reaching === null ? '' : `; ${percent(mark.reaching, 0)} of paths reach the goal`}.`}
+          zh={`第 ${mark.year} 年中位數 ${twd(mark.realMedian)}（今天幣值）${mark.reaching === null ? '' : `；${percent(mark.reaching, 0)} 的路徑達成目標`}。`}
+        />{' '}
+        <Link href="/monte-carlo">
+          <Bi {...LABELS.monteCarlo} />
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+/** N2's monthly run, in the week it updates only (PRD Section 5): the month's effects, level 1. */
+function AttributionUpdate({ last, today }: { last: NonNullable<Awaited<ReturnType<typeof loadLastAttribution>>>; today: string }) {
+  if (last.savedAt.slice(0, 10) <= addDays(today, -7)) return null;
+  return (
+    <section className="card form" id="dashboard-attribution">
+      <h2>
+        <Bi en="Attribution, updated this month" zh="績效歸因，本月更新" />
+      </h2>
+      <p>
+        <Bi
+          en={`${last.periodEnd.slice(0, 7)} against the benchmark: allocation ${signedPercent(last.allocation, 2)}, selection ${signedPercent(last.selection, 2)}, interaction ${signedPercent(last.interaction, 2)}, currency ${signedPercent(last.fx, 2)}.`}
+          zh={`${last.periodEnd.slice(0, 7)} 相對基準：配置 ${signedPercent(last.allocation, 2)}、選擇 ${signedPercent(last.selection, 2)}、交互 ${signedPercent(last.interaction, 2)}、匯率 ${signedPercent(last.fx, 2)}。`}
+        />{' '}
+        <Link href="/attribution">
+          <Bi {...LABELS.attribution} />
+        </Link>
+      </p>
+    </section>
+  );
+}
+
+function Watchlist({ data, flags }: { data: WorkbenchData; flags: RedFlagData | undefined }) {
   const watched = data.stocks.filter((stock) => stock.watch?.active);
+  const lightOf = new Map((flags?.companies ?? []).map((company) => [company.security.ticker, company.assessment]));
+  const light = (ticker: string) => {
+    const assessment = lightOf.get(ticker);
+    if (!assessment) return null;
+    const icon = LIGHT_ICON[assessment.light ?? 'none'];
+    return (
+      <Link href={`/red-flags?t=${encodeURIComponent(ticker)}`}>
+        <span className={`status-icon ${icon.className}`} aria-hidden="true">
+          {icon.icon}
+        </span>
+        <Bi en={`${lightText(assessment.light).en}, ${Math.round(assessment.coverage)}% covered`} zh={`${lightText(assessment.light).zh}，覆蓋 ${Math.round(assessment.coverage)}%`} />
+      </Link>
+    );
+  };
   return (
     <section className="card form" id="dashboard-watchlist">
       <div className="row spread">
         <h2>
           <Bi en="Watchlist" zh="觀察清單" />
         </h2>
-        <Link href="/valuation">
+        <Link href="/holdings#valuation">
           <Bi en="Valuation" zh="估值" />
         </Link>
       </div>
       {watched.length === 0 ? (
         <p className="muted">
-          <Bi en="No stock watched: add one on the Valuation page." zh="尚無觀察中的個股：請在「估值」頁加入。" />
+          <Bi en="No stock watched: add one under Holdings → Valuation." zh="尚無觀察中的個股：請在「持倉 → 估值」加入。" />
         </p>
       ) : (
         <ul className="summary-lines">
@@ -153,7 +348,7 @@ function Watchlist({ data }: { data: WorkbenchData }) {
             if (!saved || !price || buy === null || trim === null) {
               return (
                 <li key={bench.security.ticker}>
-                  <Bi en={`${bench.security.ticker}: no saved value yet`} zh={`${bench.security.ticker}：尚無已儲存的估值`} />
+                  <Bi en={`${bench.security.ticker}: no saved value yet`} zh={`${bench.security.ticker}：尚無已儲存的估值`} /> {light(bench.security.ticker)}
                 </li>
               );
             }
@@ -168,7 +363,8 @@ function Watchlist({ data }: { data: WorkbenchData }) {
             return (
               <li key={bench.security.ticker}>
                 <Link href={`/valuation?t=${encodeURIComponent(bench.security.ticker)}`}>{bench.security.ticker}</Link>{' '}
-                <Bi en={`${money(price.close, bench.security.currency)} vs ${money(saved.base, bench.security.currency)} (${margin}): ${where.en}`} zh={`${money(price.close, bench.security.currency)} 對 ${money(saved.base, bench.security.currency)}（${margin}）：${where.zh}`} />
+                <Bi en={`${money(price.close, bench.security.currency)} vs ${money(saved.base, bench.security.currency)} (${margin}): ${where.en}`} zh={`${money(price.close, bench.security.currency)} 對 ${money(saved.base, bench.security.currency)}（${margin}）：${where.zh}`} />{' '}
+                {light(bench.security.ticker)}
               </li>
             );
           })}
@@ -189,135 +385,15 @@ function Unavailable({ what, error }: { what: Bilingual; error: DataError }) {
   );
 }
 
-/** 1. Open proposals, with approve and dismiss (a reason can be given on the proposals page). */
-function Proposals({ list, rules }: { list: readonly Proposal[]; rules: readonly RuleRecord[] }) {
-  const open = list.filter((proposal) => proposal.status === 'open');
-  const approved = list.filter((proposal) => proposal.status === 'approved');
-  const byId = new Map(rules.map((rule) => [rule.id, rule]));
-  return (
-    <section className="card form" id="dashboard-proposals">
-      <div className="row spread">
-        <h2>
-          <Bi en={`Open proposals (${open.length})`} zh={`待處理提案（${open.length}）`} />
-        </h2>
-        <Link href="/proposals">
-          <Bi en="All proposals" zh="所有提案" />
-        </Link>
-      </div>
-      {open.length === 0 && (
-        <p className="muted">
-          <Bi en="Nothing to decide." zh="沒有需要決定的事。" />
-        </p>
-      )}
-      {open.map((proposal) => {
-        const rule = byId.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
-        const { sold, bought } = orderTotals(proposal.orders);
-        return (
-          <article key={proposal.id} className="proposal form">
-            <h3>
-              <Bi {...proposalTitle(rule)} />
-            </h3>
-            <p className="muted small">
-              {proposal.orders.length === 0 ? (
-                <Bi en="No orders" zh="無下單" />
-              ) : (
-                <Bi
-                  en={`${proposal.orders.length} order${proposal.orders.length === 1 ? '' : 's'} · out ${twd(sold)} · in ${twd(bought)}`}
-                  zh={`${proposal.orders.length} 筆 · 轉出 ${twd(sold)} · 買進 ${twd(bought)}`}
-                />
-              )}{' '}
-              <Link href={`/proposals#proposal-${proposal.id}`}>
-                <Bi en="Details" zh="詳細" />
-              </Link>
-            </p>
-            <div className="row">
-              <form action={approveProposal}>
-                <input type="hidden" name="id" value={proposal.id} />
-                <button type="submit" className="button primary">
-                  <Bi en="Approve" zh="核准" />
-                </button>
-              </form>
-              <form action={dismissProposal}>
-                <input type="hidden" name="id" value={proposal.id} />
-                <button type="submit" className="button">
-                  <Bi en="Dismiss" zh="略過" />
-                </button>
-              </form>
-            </div>
-          </article>
-        );
-      })}
-      {approved.length > 0 && (
-        <p className="banner info">
-          <Bi en={`${approved.length} approved, waiting for your trades.`} zh={`${approved.length} 份已核准，等待你下單。`} />{' '}
-          <Link href="/proposals">
-            <Bi en="Execution checklist" zh="執行清單" />
-          </Link>
-        </p>
-      )}
-    </section>
-  );
-}
-
-/** 2. SAA drift bars, coloured by the 5/25 rule, each status also with its icon and words. */
-function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio }) {
-  const drifts = classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd);
-  const rows: DriftRow[] = drifts.map((row) => ({
-    id: row.assetClass.id,
-    label: { en: row.assetClass.nameEn, zh: row.assetClass.nameZh },
-    target: row.assetClass.targetWeight,
-    weight: row.weight,
-    drift: row.drift,
-    band: row.band,
-    status: row.status,
-  }));
-  const flagged = drifts.filter((row) => row.status === 'watch' || row.status === 'rebalance');
-  return (
-    <section className="card form">
-      <div className="row spread">
-        <h2>
-          <Bi en="Drift from the targets" zh="與目標權重的偏離" />
-        </h2>
-        <Link href="/allocation">
-          <Bi en="Allocation, with the table" zh="資產配置（含表格）" />
-        </Link>
-      </div>
-      {portfolio.pool.totalTwd <= 0 ? (
-        <p className="muted">
-          <Bi en="The regular pool holds nothing priced yet." zh="一般資金池目前沒有已計價的持有。" />
-        </p>
-      ) : (
-        <>
-          <DriftChart rows={rows} label={{ en: 'Each asset class’s drift from its target, coloured by status; the list below and the Allocation page give the values.', zh: '各資產類別與目標權重的偏離，依狀態上色；下方清單與資產配置頁列出數值。' }} />
-          <ul className="compact-list">
-            {flagged.length === 0 ? (
-              <li>
-                <span className="status-icon ok" aria-hidden="true">
-                  {DRIFT_ICON.ok}
-                </span>{' '}
-                <Bi en="Every core class is within its band." zh="所有核心類別都在門檻內。" />
-              </li>
-            ) : (
-              flagged.map((row) => (
-                <li key={row.assetClass.id}>
-                  <span className={`status-icon ${row.status}`} aria-hidden="true">
-                    {DRIFT_ICON[row.status]}
-                  </span>{' '}
-                  <Bi en={`${row.assetClass.nameEn} ${points(row.drift)}`} zh={`${row.assetClass.nameZh} ${points(row.drift)}`} /> · <Bi {...DRIFT_STATUS[row.status]} />
-                </li>
-              ))
-            )}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
 /** 3. The VaR card. */
 function Risk({ risk, portfolio, today }: { risk: RiskData; portfolio: Portfolio; today: string }) {
   const report = riskReport(portfolio.holdings, risk.input, today);
-  return <RiskCard report={report} line={sparkline(risk.saved, today, report)} details />;
+  const line = sparkline(risk.saved, today, report);
+  return (
+    <RiskCard report={report} line={line}>
+      <RiskDetails report={report} line={line} />
+    </RiskCard>
+  );
 }
 
 /** 4. The allocation donut, regular pool, with its three lenses and the 80/20 target ring. */
@@ -418,10 +494,12 @@ function ComingWeek({
   rules,
   tranches,
   filings,
+  market,
 }: {
   today: string;
   settings: Array<{ key: string; value: unknown }> | DataError;
   rules: readonly RuleRecord[];
+  market: ReadonlyArray<{ date: string; time: string | null; name: Bilingual }>;
   tranches: ReadonlyArray<{ dueDate: string; status: string }>;
   filings: ReadonlyArray<{ ticker: string; date: string; kind: 'deadline' | 'estimate' }>;
 }) {
@@ -430,7 +508,7 @@ function ComingWeek({
   const day = typeof dca?.['day_of_month'] === 'number' ? dca['day_of_month'] : null;
   const annual = rules.find((rule) => rule.condition === 'first_weekend_of_month' && rule.enabled);
   const month = annual ? (annual.threshold as Record<string, unknown> | null)?.['month'] : undefined;
-  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches, filings);
+  const events = comingWeek(today, day, readWeeklyReview(rows.find((row) => row.key === 'weekly_review')?.value), typeof month === 'number' ? month : null, tranches, filings, market);
   return (
     <section className="card form">
       <h2>
@@ -441,7 +519,7 @@ function ComingWeek({
           <Bi en="Nothing scheduled in the next seven days." zh="未來七天沒有排定的事件。" />
         </p>
       ) : (
-        <ul className="compact-list">
+        <ul className="compact-list coming-week">
           {events.map((event) => (
             <li key={`${event.date}${event.what.en}`}>
               <span className="nowrap">
@@ -466,9 +544,9 @@ function ComingWeek({
 }
 
 /** 8. Actual vs projected (F2), against the plan saved on the calculator. */
-function AgainstPlan({ plan: data }: { plan: PlanData }) {
+function AgainstPlan({ plan: data, days }: { plan: PlanData; days: readonly DayPoint[] }) {
   const plan = data.settings ? savedPlan(data.settings) : null;
-  const rows = plan ? againstPlan(monthEnds(buildSeries(data.input), 'regular'), plan.start, plan) : [];
+  const rows = plan ? againstPlan(monthEnds(days, 'regular'), plan.start, plan) : [];
   const latest = rows[rows.length - 1];
   return (
     <section className="card form">

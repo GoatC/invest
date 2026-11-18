@@ -1,14 +1,14 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
+import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingsData, orDataError, transactionColumns } from '@/lib/data';
+import { DataError, loadHoldingsData, orDataError, rescoreQuietly, transactionColumns } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, shortfallMessage, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, previewTrade } from '@/lib/models/portfolio';
 import { buildPositions } from '@/lib/models/positions';
+import { restateTrades } from '@/lib/models/splits';
 import { parseTrade, type FieldErrors, type TradeField } from '@/lib/validation';
 
 export interface TradeFormState {
@@ -26,7 +26,10 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
   const fields = formFields(formData);
   const data = await orDataError(loadHoldingsData(supabase));
   if (data instanceof DataError) return { errors: {}, message: saveFailed(data.detail) };
-  const parsed = parseTrade(fields, new Map(data.securities.map((security) => [security.ticker, security])), taipeiToday());
+  // Editing a trade saved at a leverage above today's maximum keeps that leverage valid.
+  const editing = data.trades.find((trade) => trade.id === parseId(fields['id']));
+  const maxLeverage = Math.max(data.leverage.max, editing?.leverage ?? 1);
+  const parsed = parseTrade(fields, new Map(data.securities.map((security) => [security.ticker, security])), taipeiToday(), maxLeverage);
   if (!parsed.ok) return { errors: parsed.errors, message: ACTION_MESSAGES.checkFields };
 
   const id = parseId(fields['id']);
@@ -43,10 +46,11 @@ export async function saveTrade(_previous: TradeFormState, formData: FormData): 
       ? await supabase.from('transactions').insert({ ...columns, source: 'manual' })
       : await supabase.from('transactions').update(columns).eq('id', id);
   if (error) return { errors: {}, message: saveFailed(error.message) };
-  // A trade recorded from an approved proposal's checklist goes back to it.
-  const proposal = id === undefined ? parseId(fields['proposal']) : undefined;
-  if (proposal !== undefined) redirect(`/proposals?saved=trade#proposal-${proposal}`);
-  redirect(`/holdings?saved=${id === undefined ? 'added' : 'updated'}`);
+  // A trade in a satellite class scores its assumption again (F6 auto), so the frontier counts it now.
+  const tickers = new Set([parsed.value.ticker, ...(editing ? [editing.ticker] : [])]);
+  if (inSatellite(data.securities, tickers)) await rescoreQuietly(supabase, taipeiToday());
+  // The holdings page then offers this ticker's analyses as the next step.
+  redirect(`/holdings?saved=${id === undefined ? 'added' : 'updated'}&t=${encodeURIComponent(parsed.value.ticker)}`);
 }
 
 /** Deletes a trade unless a later sell depends on it; the audit log keeps the deleted row. */
@@ -57,10 +61,19 @@ export async function deleteTrade(_previous: DeleteState, formData: FormData): P
   if (data instanceof DataError) return { message: saveFailed(data.detail) };
   if (id === undefined || !data.trades.some((trade) => trade.id === id)) return { message: ACTION_MESSAGES.notFound };
 
-  const [shortfall] = addedShortfalls(buildPositions(data.trades).shortfalls, buildPositions(data.trades.filter((trade) => trade.id !== id)).shortfalls);
+  const trades = restateTrades(data.trades, data.splits);
+  const [shortfall] = addedShortfalls(buildPositions(trades).shortfalls, buildPositions(trades.filter((trade) => trade.id !== id)).shortfalls);
   if (shortfall) return { message: shortfallMessage(shortfall) };
 
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) return { message: saveFailed(error.message) };
+  const deleted = data.trades.find((trade) => trade.id === id);
+  if (deleted && inSatellite(data.securities, [deleted.ticker])) await rescoreQuietly(supabase, taipeiToday());
   redirect('/holdings?saved=deleted');
+}
+
+/** Whether any of the tickers sits in a satellite class, whose auto-scored assumption reads its holdings. */
+function inSatellite(securities: ReadonlyArray<{ ticker: string; sleeve: string }>, tickers: Iterable<string>): boolean {
+  const wanted = new Set(tickers);
+  return securities.some((security) => wanted.has(security.ticker) && security.sleeve === 'satellite');
 }

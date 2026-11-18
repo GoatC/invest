@@ -212,6 +212,26 @@ describe('covariance', () => {
   });
 });
 
+describe('holdings to proxies: shorts and leverage', () => {
+  it('measures a short against the long it hedges, and a leveraged line by its exposure', () => {
+    const lines = [
+      line({ key: 'regular:VT', valueTwd: 300 }),
+      line({ key: 'regular:VT:short', valueTwd: 100, exposureTwd: -100 }),
+      line({ key: 'regular:AAPL', ticker: 'AAPL', label: 'Apple Inc.', productType: 'stock', assetClassId: 'us_stocks', valueTwd: 50, exposureTwd: 150 }),
+    ];
+    const measured = measure(lines, BENCHMARKS, windowOf({ VT: [0.01, -0.02], VOO: [0.01, -0.02] }));
+    // V is own money: 450. VT nets to 200 of exposure, AAPL's VOO proxy carries 150.
+    assert.equal(measured.valueTwd, 450);
+    assert.deepEqual(
+      measured.exposures.map((row) => [row.proxy, row.valueTwd]),
+      [
+        ['VT', 200],
+        ['VOO', 150],
+      ],
+    );
+  });
+});
+
 describe('holdings to proxies', () => {
   it('measures each holding by its class proxy, both pools together, a TWD balance as cash', () => {
     const lines = [

@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { strToU8, zipSync } from 'fflate';
 import * as XLSX from 'xlsx';
 
+import type { ProfileRecord } from '../../../lib/data.ts';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
+import { readLookThroughSettings } from '../../../lib/models/look-through.ts';
+import { readRedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { fridays, gridStart, type RiskInput } from '../../../lib/models/risk.ts';
+import type { WidgetFigures } from '../../../lib/models/widget.ts';
+import type { DividendPlan } from '../../../lib/models/dividends.ts';
+import type { DividendRow } from '../feeds/dividends.ts';
 import type { IndexClose } from '../feeds/indices.ts';
+import type { FeedEvent } from '../feeds/redflags.ts';
 import { FeedError, type DailyPrice, type DailyRate, type Get, type GetBytes, type MonthlyPoint } from '../feeds/types.ts';
-import { goldInTwd, riskWindowStart, runNightly, windowStart, type FundamentalRow, type JobRun, type Security, type Store } from './job.ts';
+import { goldInTwd, riskWindowStart, runNightly, windowStart, type EstimateRow, type FundamentalRow, type FundFileRow, type JobRun, type Security, type Store } from './job.ts';
 
 const TODAY = '2026-10-21';
 const SECURITIES: Security[] = [
@@ -28,6 +36,7 @@ const REPLIES: Record<string, string> = {
   ]),
   'TaiwanStockDividendResult 0050': ok([{ date: '2026-07-21', before_price: 99.2, after_price: 98.6 }]),
   'USStockPrice VT': ok([{ date: '2026-10-20', Close: 157.8, Adj_Close: 157.8 }]),
+  'USStockPrice XLK': ok([{ date: '2026-10-20', Close: 250.5, Adj_Close: 249.8 }]),
   'TaiwanExchangeRate USD': ok([
     { date: '2026-10-20', spot_buy: 32.58, spot_sell: 32.68, cash_buy: 32.2, cash_sell: 32.9 },
     { date: '2026-10-21', spot_buy: 32.435, spot_sell: 32.535, cash_buy: 32.085, cash_sell: 32.755 },
@@ -57,6 +66,7 @@ const REPLIES: Record<string, string> = {
   MI_INDEX: JSON.stringify([
     { 日期: '1151021', 指數: '發行量加權股價指數', 收盤指數: '46096.23' },
     { 日期: '1151021', 指數: '發行量加權股價報酬指數', 收盤指數: '108,422.07' },
+    { 日期: '1151021', 指數: '半導體類指數', 收盤指數: '1,564.79' },
   ]),
   'id=TB3MS': 'observation_date,TB3MS\n2026-08-01,3.72\n2026-09-01,3.94\n',
   // The cost of equity's inputs (F11): the US 10-year from FRED, else the Treasury, and Taiwan's from the Central Bank.
@@ -70,6 +80,25 @@ const REPLIES: Record<string, string> = {
   'multpl.com': '<table id="datatable"><tr><td>Oct 1, 2026</td><td>40.81</td></tr><tr><td>Sep 1, 2026</td><td>40.42</td></tr></table>',
   // The valuation workbench's filings (F12): SEC's ticker list and a company's facts, FinMind's statements.
   company_tickers: JSON.stringify({ 0: { cik_str: 320193, ticker: 'AAPL', title: 'Apple Inc.' } }),
+  // The red-flag feeds (N3): an auditor change in AAPL's 8-Ks, no going-concern 10-K, 2330's TWSE
+  // profile with a new audit firm, a restatement among the day's announcements, one penalty.
+  'submissions/CIK': JSON.stringify({
+    cik: '320193',
+    sic: '3571',
+    sicDescription: 'Electronic Computers',
+    filings: { recent: { accessionNumber: ['0000320193-26-000100'], filingDate: ['2026-09-02'], reportDate: ['2026-09-01'], form: ['8-K'], items: ['4.01,9.01'], primaryDocument: ['a.htm'] } },
+  }),
+  'efts.sec.gov': JSON.stringify({ hits: { total: { value: 0 }, hits: [] } }),
+  t187ap03_L: JSON.stringify([{ 公司代號: '2330', 產業別: '24', 營利事業統一編號: '22099131', 簽證會計師事務所: 'B 事務所' }]),
+  t187ap04_L: JSON.stringify([{ 發言日期: '1151019', 發言時間: '170000', 公司代號: '2330', '主旨 ': '公告本公司重編財務報告', 說明: '' }]),
+  // The look-through's holdings files (F14): VT's 501 lines over two pages (cut down here), 00692 on Fubon's page.
+  'portfolio-holding/stock.json?start=1&': JSON.stringify({ size: 501, asOfDate: '2026-09-30T00:00:00-04:00', fund: { entity: [
+    { longName: 'Apple Inc.', ticker: 'AAPL', isin: 'US0378331005', percentWeight: '4.0' },
+    { longName: 'Taiwan Semiconductor Manufacturing Co. Ltd.', ticker: '2330', isin: 'TW0002330008', percentWeight: '1.5' },
+  ] } }),
+  'portfolio-holding/stock.json?start=501&': JSON.stringify({ size: 501, fund: { entity: [{ longName: 'Toyota Motor Corp.', ticker: '7203', isin: 'JP3633400001', percentWeight: '0.3' }] } }),
+  'websys.fsit.com.tw': '<p>資料日期：2026/10/28</p><table><tr><td>2330</td><td>台積電</td><td>1,000</td><td>2,000,000</td><td>52.5</td></tr></table>',
+  'data.moenv.gov.tw': JSON.stringify([{ document_no: '40-115-070014', penalty_date: '2026-07-28', penalty_money: '6000', transgress_type: '事業廢棄物', fac_name: '台積電' }]),
   companyfacts: JSON.stringify({
     entityName: 'Apple Inc.',
     facts: {
@@ -89,7 +118,7 @@ const REPLIES: Record<string, string> = {
 };
 
 /** The reply keys that are not FinMind datasets. */
-const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
+const OTHER_FEEDS = new Set(['company_tickers', 'companyfacts', 'portfolio-holding/stock.json?start=1&', 'portfolio-holding/stock.json?start=501&', 'websys.fsit.com.tw', 'submissions/CIK', 'efts.sec.gov', 't187ap03_L', 't187ap04_L', 'data.moenv.gov.tw', 'ishares.com', 'get-fund-document', 'STOCK_DAY_ALL', 'MI_INDEX', 'id=SP500', 'id=TB3MS', 'id=DGS10', 'home.treasury.gov', 'cbc.gov.tw', 'fredgraph', 'alphavantage', 'shillerdata.com', 'multpl.com']);
 const finmindDown = (key: string) => !OTHER_FEEDS.has(key);
 
 /** A fake fetch: `fail` picks the reply keys that answer with an error instead. */
@@ -121,7 +150,20 @@ function erpWorkbook(): Uint8Array {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Start of month', 'S&P 500', 'T.Bond Rate', 'ERP (T12m)'], [44804, 7686.14, 0.0475, 0.0409], [44834, 7652, 0.0529, 0.037]]), 'Historical ERP');
   return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
 }
-const getBytes: GetBytes = async (url) => (url.includes('adamodar') ? erpWorkbook() : shillerWorkbook());
+/** A Select Sector SPDR holdings file: XLK holds AAPL; the others hold nothing the tests ask about. */
+function sectorWorkbook(url: string): Uint8Array {
+  const book = XLSX.utils.book_new();
+  const rows = [['Fund Name:', 'Select Sector SPDR'], [], ['Name', 'Ticker', 'Identifier', 'Weight'], ...(url.includes('-xlk.') ? [['APPLE INC', 'AAPL', '037833100', 14.6]] : [['OTHER', 'ZZZ', '', 1]])];
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'holdings');
+  return new Uint8Array(XLSX.write(book, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer);
+}
+/** A region's Ken French zip with two months: September and October 2026. */
+function frenchZip(url: string): Uint8Array {
+  const name = url.split('/').pop()?.replace(/\.zip$/, '') ?? 'x';
+  const csv = ['Made for the tests.', '', ',Mkt-RF,SMB,HML,RMW,CMA,RF', '202609 ,1.00,-0.50,0.25,0.10,-0.05,0.30', '202610 ,-2.00,0.40,0.30,-0.20,0.10,0.30', '', ' Annual ', '2026,5,5,5,5,5,5', ''].join('\n');
+  return zipSync({ [`${name}.csv`]: strToU8(csv) });
+}
+const getBytes: GetBytes = async (url) => (url.includes('ssga.com') ? sectorWorkbook(url) : url.includes('adamodar') ? erpWorkbook() : url.includes('ken.french') ? frenchZip(url) : shillerWorkbook());
 const bytesDown: GetBytes = async () => {
   throw new FeedError('HTTP 403 from img1.wsimg.com');
 };
@@ -137,6 +179,20 @@ function weeklyHistory(): PriceRow[] {
   });
 }
 
+/** config red_flags as seeded, the parts the job reads. */
+const RED_FLAG_SETTINGS = {
+  lookback_years: 3,
+  scan_days: 7,
+  beneish: { red_above: -1.78 },
+  altman: { z: { red_below: 1.81, amber_below: 2.99 }, z2: { red_below: 1.1, amber_below: 2.6 } },
+  cash_flow_years: 3,
+  governance: { bottom_share: 0.35 },
+  manufacturing: { sic: [[2000, 3999]], tw_industries: ['24'] },
+  financial: { sic: [[6000, 6799]], tw_industries: ['17'] },
+  excluded: { industries: [], tickers: [] },
+  last_verified: null,
+};
+
 class MemoryStore implements Store {
   prices: DailyPrice[] = [];
   fills: DailyPrice[] = [];
@@ -145,6 +201,10 @@ class MemoryStore implements Store {
   indices: IndexClose[] = [];
   indexFills: IndexClose[] = [];
   betaRuns: string[] = [];
+  monteCarloRuns: string[] = [];
+  /** When the satellite classes were scored, and whether the β and F5 had run by then. */
+  cmaRuns: Array<{ today: string; betasRun: boolean; monteCarloRun: boolean }> = [];
+  attributionRuns: string[] = [];
   fundamentals: FundamentalRow[] = [];
   /** When the watched stocks were valued again, and how many quarters were saved by then. */
   revalues: Array<{ today: string; quartersSaved: number }> = [];
@@ -163,14 +223,70 @@ class MemoryStore implements Store {
       failRules?: boolean;
       /** config regression's longest window plus a year (N1); undefined before its migration. */
       regressionYears?: number;
+      historyYears?: number;
+      factorYears?: number;
       failBetas?: boolean;
+      failMonteCarlo?: boolean;
+      failCma?: boolean;
+      failAttribution?: boolean;
       /** Whether config capm exists (F11). */
       capm?: boolean;
       /** The single stocks whose filings to load (F12); undefined before config valuation exists. */
       filings?: Array<{ ticker: string; market: string }>;
       failRevalue?: boolean;
+      /** The companies N3 lights (undefined before config red_flags), with the profile saved for each. */
+      flags?: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }>;
+      /** The look-through's plan (F14); undefined before config look_through. */
+      look?: { due: Array<{ fund: string; source: 'vanguard' | 'fubon'; id: string }>; stocks: Array<{ ticker: string; market: string; sector: string | null }> };
+      /** The sector tab's proxies (N7); undefined before config sectors. */
+      sectors?: Array<{ id: string; market: 'US' | 'TW'; symbol: string; name: string }>;
+      failWidget?: boolean;
+      /** The newest close the valuation reads, as on a weekend or holiday run. */
+      closesUntil?: string;
     } = {},
   ) {}
+  /** The home-screen widget's figures saved (undefined until saved; null clears them). */
+  widget: WidgetFigures | null | undefined;
+  async widgetRedUp() {
+    return true;
+  }
+  async saveWidgetSnapshot(figures: WidgetFigures | null) {
+    if (this.options.failWidget) throw new Error('widget_snapshot: permission denied');
+    this.widget = figures;
+  }
+  async sectorProxies() {
+    return this.options.sectors;
+  }
+  fundFiles: FundFileRow[] = [];
+  sectors: Array<{ ticker: string; market: string; sector: string }> = [];
+  async lookThroughPlan() {
+    const settings = readLookThroughSettings({ sources: {}, fund_country: {}, refresh_days: 28, top_companies: 30, tw_sectors: { '24': 'Information Technology' }, last_verified: null });
+    return this.options.look && settings ? { settings, ...this.options.look } : undefined;
+  }
+  async saveFundFile(file: FundFileRow) {
+    this.fundFiles.push(file);
+  }
+  async saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>) {
+    this.sectors.push(...rows);
+  }
+  profiles: ProfileRecord[] = [];
+  flagEvents: FeedEvent[] = [];
+  /** When the red flags were scanned, and whether the rules had run by then. */
+  scans: Array<{ today: string; tickers: string[]; rulesRun: number }> = [];
+  async redFlagCompanies() {
+    const settings = readRedFlagSettings(RED_FLAG_SETTINGS);
+    return this.options.flags && settings ? { settings, companies: this.options.flags } : undefined;
+  }
+  async saveProfiles(rows: readonly ProfileRecord[]) {
+    this.profiles.push(...rows);
+  }
+  async saveFlagEvents(rows: readonly FeedEvent[]) {
+    this.flagEvents.push(...rows);
+  }
+  async scanRedFlags(today: string, tickers: readonly string[]) {
+    this.scans.push({ today, tickers: [...tickers], rulesRun: this.ruleRuns.length });
+    return { scanned: [...tickers] };
+  }
   async securities() {
     if (this.options.failRead) throw new Error('connection refused');
     return SECURITIES;
@@ -207,6 +323,12 @@ class MemoryStore implements Store {
   async saveSeries(rows: readonly MonthlyPoint[]) {
     this.series.push(...rows);
   }
+  async factorYears() {
+    return this.options.factorYears;
+  }
+  async historyYears() {
+    return this.options.historyYears;
+  }
   async regressionYears() {
     return this.options.regressionYears;
   }
@@ -232,6 +354,21 @@ class MemoryStore implements Store {
     this.betaRuns.push(today);
     return { saved: 4, runDate: today };
   }
+  async refreshAttribution(today: string) {
+    if (this.options.failAttribution) throw new Error('attribution: permission denied');
+    this.attributionRuns.push(today);
+    return { months: 2 };
+  }
+  async refreshCmaEstimates(today: string) {
+    if (this.options.failCma) throw new Error('cma_estimates: permission denied');
+    this.cmaRuns.push({ today, betasRun: this.betaRuns.includes(today), monteCarloRun: this.monteCarloRuns.includes(today) });
+    return { saved: ['tactical_themes'], unscored: ['us_stocks'] };
+  }
+  async refreshMonteCarlo(today: string) {
+    if (this.options.failMonteCarlo) throw new Error('simulation_runs: permission denied');
+    this.monteCarloRuns.push(today);
+    return { runDate: today };
+  }
   /** 10 shares of 0050 bought the day before, valued at the closes this run saved. */
   async performanceInput(end: string): Promise<PerformanceInput> {
     if (this.options.failSnapshots) throw new Error('transactions: permission denied');
@@ -242,7 +379,7 @@ class MemoryStore implements Store {
       manualAssets: [],
       securities: [{ ticker: '0050', name: '元大台灣50', market: 'TW', productType: 'equity_etf', assetClassId: 'tw_market_cap', sleeve: 'core', currency: 'TWD' }],
       benchmark: [],
-      prices: this.prices.map((p) => ({ ticker: p.ticker, date: p.date, close: p.close, adjClose: p.adjClose })),
+      prices: this.prices.filter((p) => !this.options.closesUntil || p.date <= this.options.closesUntil).map((p) => ({ ticker: p.ticker, date: p.date, close: p.close, adjClose: p.adjClose })),
       rates: this.rates.map((r) => ({ pair: r.pair, date: r.date, rate: r.rate })),
     };
   }
@@ -267,7 +404,125 @@ const deps = (get: Get, store: Store, alphaVantageKey?: string, bytes: GetBytes 
   finmindToken: 'token',
   alphaVantageKey,
   today: TODAY,
-  now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++)),
+  // A second later at each call, within the minute however many runs came before.
+  now: () => new Date(Date.UTC(2026, 9, 20, 22, 37, clock++ % 60)),
+});
+
+describe("analysts' estimates (F12 forward P/E)", () => {
+  const plan = [{ ticker: 'AAPL', currency: 'USD' }, { ticker: 'MSFT', currency: 'USD' }];
+  const estimatesReply = JSON.stringify({ estimates: [{ date: '2027-09-30', horizon: 'fiscal year', eps_estimate_average: '8.1', eps_estimate_analyst_count: '38' }] });
+  const overviewReply = JSON.stringify({ Currency: 'USD', AnalystTargetPrice: '255', AnalystRatingBuy: '18' });
+  const avGet = (base: Get): Get => async (url, headers) => {
+    if (url.includes('function=EARNINGS_ESTIMATES')) {
+      if (url.includes('symbol=MSFT')) return JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' });
+      return estimatesReply;
+    }
+    if (url.includes('function=OVERVIEW')) return overviewReply;
+    return base(url, headers);
+  };
+
+  it('loads the stocks due, keeps a refusal out of the status and saves the rest', async () => {
+    const store = new MemoryStore();
+    const saved: EstimateRow[] = [];
+    Object.assign(store, { estimatesPlan: async () => plan, saveEstimates: async (rows: readonly EstimateRow[]) => void saved.push(...rows) });
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(avGet(fakeGet().get), store, 'key'));
+    assert.equal(run.status, before.status);
+    assert.deepEqual(run.detail.estimates?.saved, ['AAPL']);
+    assert.match(run.detail.estimates?.failed[0] ?? '', /^MSFT: Alpha Vantage refused/);
+    assert.deepEqual(saved, [{ ticker: 'AAPL', asOf: TODAY, currency: 'USD', estimates: { years: [{ periodEnd: '2027-09-30', mean: 8.1, analysts: 38 }], targetPrice: 255, ratings: { strongBuy: 0, buy: 18, hold: 0, sell: 0, strongSell: 0 } }, source: 'alphavantage' }]);
+  });
+
+  it('needs an Alpha Vantage key', async () => {
+    const store = new MemoryStore();
+    let asked = false;
+    Object.assign(store, { estimatesPlan: async () => ((asked = true), plan), saveEstimates: async () => undefined });
+    const run = await runNightly(deps(avGet(fakeGet().get), store));
+    assert.equal(asked, false);
+    assert.equal(run.detail.estimates, undefined);
+  });
+});
+
+describe("the holdings' dividends (the dividend prompt)", () => {
+  const plan: DividendPlan = {
+    since: '2026-08-01',
+    holdings: [
+      { ticker: '0050', market: 'TW', currency: 'TWD', etf: true, known: {}, checkedOn: null },
+      { ticker: 'VT', market: 'US', currency: 'USD', etf: true, known: {}, checkedOn: null },
+      { ticker: 'AAPL', market: 'US', currency: 'USD', etf: false, known: {}, checkedOn: null },
+    ],
+  };
+  const replies = (alphaVantage: string): Record<string, string> => ({
+    'dataset=TaiwanStockDividend&': ok([
+      { CashEarningsDistribution: 0.6, CashExDividendTradingDate: '2026-07-21', CashDividendPaymentDate: '2026-08-10' },
+      { CashEarningsDistribution: 1, CashExDividendTradingDate: '2026-10-16', CashDividendPaymentDate: '2026-11-10' },
+    ]),
+    // VT's adjusted close steps on 2026-10-16: 159.22 × (1 − 158.81 ÷ 159.22) = 0.41.
+    'dataset=USStockPrice&data_id=VT': ok([{ date: '2026-10-15', Close: 159.22, Adj_Close: 158.81 }, { date: '2026-10-16', Close: 158.55, Adj_Close: 158.55 }, { date: '2026-10-20', Close: 157.8, Adj_Close: 157.8 }]),
+    'api.nasdaq.com/api/quote/VT/': JSON.stringify({ data: { dividends: { rows: null } }, message: 'Dividend History for Non-Nasdaq symbols is not available', status: { rCode: 200 } }),
+    'api.nasdaq.com/api/quote/AAPL/dividends?assetclass=stocks': JSON.stringify({ data: { dividends: { rows: [{ exOrEffDate: '08/10/2026', type: 'Cash', amount: '$0.27', paymentDate: '08/13/2026' }] } }, status: { rCode: 200 } }),
+    'function=DIVIDENDS&symbol=VT': alphaVantage,
+  });
+  const dividendGet = (base: Get, known: Record<string, string>, asked: string[] = []): Get => async (url, headers) => {
+    const key = Object.keys(known).find((piece) => url.includes(piece));
+    if (key === undefined) return base(url, headers);
+    asked.push(key);
+    return known[key] as string;
+  };
+  const paid = JSON.stringify({ symbol: 'VT', data: [{ ex_dividend_date: '2026-10-16', payment_date: '2026-10-20', amount: '0.4084' }, { ex_dividend_date: '2026-06-18', payment_date: '2026-06-23', amount: '0.5627' }] });
+  const withPlan = (found: DividendPlan, saved: DividendRow[]) => Object.assign(new MemoryStore(), { dividendPlan: async () => found, saveDividends: async (rows: readonly DividendRow[]) => void saved.push(...rows) });
+
+  it('looks up each holding at its source and keeps the ex-dates since the plan’s start', async () => {
+    const saved: DividendRow[] = [];
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(paid)), withPlan(plan, saved), 'key'));
+    assert.equal(run.status, before.status);
+    assert.deepEqual(run.detail.dividends, { checked: { '0050': 'finmind', VT: 'alphavantage', AAPL: 'nasdaq' }, saved: 3, failed: [] });
+    assert.deepEqual(saved, [
+      { ticker: '0050', exDate: '2026-10-16', payDate: '2026-11-10', amount: 1, currency: 'TWD', source: 'finmind' },
+      { ticker: 'VT', exDate: '2026-10-16', payDate: '2026-10-20', amount: 0.4084, currency: 'USD', source: 'alphavantage' },
+      { ticker: 'AAPL', exDate: '2026-08-10', payDate: '2026-08-13', amount: 0.27, currency: 'USD', source: 'nasdaq' },
+    ]);
+  });
+
+  it('keeps the dividend read off the closes when Alpha Vantage refuses, without changing the status', async () => {
+    const saved: DividendRow[] = [];
+    const before = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(JSON.stringify({ Information: 'Our standard API rate limit is 25 requests per day.' }))), withPlan(plan, saved), 'key'));
+    assert.equal(run.status, before.status);
+    assert.equal(run.detail.dividends?.checked['VT'], 'adjusted_close');
+    assert.match(run.detail.dividends?.failed[0] ?? '', /^VT: alphavantage: Alpha Vantage refused/);
+    assert.deepEqual(saved.find((row) => row.ticker === 'VT'), { ticker: 'VT', exDate: '2026-10-16', payDate: null, amount: 0.41, currency: 'USD', source: 'adjusted_close' });
+  });
+
+  it('asks Alpha Vantage once a week, and sooner for a new dividend without its payment date; a saved one is never rewritten from the closes', async () => {
+    const run = async (known: DividendPlan['holdings'][number]['known'], checkedOn: string | null, today = TODAY) => {
+      const saved: DividendRow[] = [];
+      const asked: string[] = [];
+      const marked: string[] = [];
+      const holdings = [{ ticker: 'VT', market: 'US', currency: 'USD', etf: true, known, checkedOn }];
+      const store = Object.assign(withPlan({ since: plan.since, holdings }, saved), { markDividendsChecked: async (tickers: readonly string[], on: string) => void marked.push(...tickers.map((ticker) => `${ticker} ${on}`)) });
+      await runNightly({ ...deps(dividendGet(fakeGet().get, replies(paid), asked), store, 'key'), today });
+      return { saved: saved.map((row) => row.source), alphaVantage: asked.includes('function=DIVIDENDS&symbol=VT'), marked };
+    };
+    const dated = { '2026-10-16': { payDate: '2026-10-20', source: 'alphavantage' } };
+    // Answered three days ago and nothing new: not asked, and the saved row is left alone.
+    assert.deepEqual(await run(dated, '2026-10-18'), { saved: [], alphaVantage: false, marked: [] });
+    // A week on, or never asked: asked, and the day is noted.
+    assert.deepEqual(await run(dated, '2026-10-14'), { saved: ['alphavantage'], alphaVantage: true, marked: ['VT 2026-10-21'] });
+    assert.deepEqual((await run({}, null)).marked, ['VT 2026-10-21']);
+    // Saved from the closes without a payment date: asked at once while it is new.
+    assert.deepEqual(await run({ '2026-10-16': { payDate: null, source: 'adjusted_close' } }, '2026-10-18'), { saved: ['alphavantage'], alphaVantage: true, marked: ['VT 2026-10-21'] });
+  });
+
+  it('does nothing before the migration, and reads the closes without an Alpha Vantage key', async () => {
+    const none = await runNightly(deps(fakeGet().get, new MemoryStore(), 'key'));
+    assert.equal(none.detail.dividends, undefined);
+    const saved: DividendRow[] = [];
+    const run = await runNightly(deps(dividendGet(fakeGet().get, replies(paid)), withPlan(plan, saved)));
+    assert.equal(run.detail.dividends?.checked['VT'], 'adjusted_close');
+    assert.deepEqual(run.detail.dividends?.failed, []);
+  });
 });
 
 describe('filings (F12)', () => {
@@ -322,6 +577,103 @@ describe('filings (F12)', () => {
   });
 });
 
+describe('red flags (N3)', () => {
+  const twProfile: ProfileRecord = { ticker: '2330', industryCode: '24', industry: '半導體業', sic: null, auditor: 'A 事務所', businessId: '22099131', checked: { restatement: { on: '2026-10-19', since: '2026-10-12' } }, source: 'twse' };
+  const flags = [
+    { ticker: 'AAPL', market: 'US', due: true, profile: null },
+    { ticker: '2330', market: 'TW', due: true, profile: twProfile },
+  ];
+
+  it("reads each company's events and profile, then saves the week's scan before the rules", async () => {
+    const store = new MemoryStore({ flags });
+    const run = await runNightly({ ...deps(fakeGet().get, store), secUserAgent: 'LongViewInvest hugo@example.com', moenvKey: 'KEY' });
+    assert.deepEqual(run.detail.errors, []);
+    assert.deepEqual(
+      store.flagEvents.map((event) => [event.ticker, event.indicator, event.source, event.date]).sort(),
+      [
+        ['2330', 'auditor_change', 'twse', TODAY],
+        ['2330', 'environmental_penalties', 'moenv', '2026-07-28'],
+        ['2330', 'restatement', 'twse', '2026-10-19'],
+        ['AAPL', 'auditor_change', 'sec', '2026-09-01'],
+      ],
+    );
+    const [aapl, tw] = [store.profiles.find((row) => row.ticker === 'AAPL'), store.profiles.find((row) => row.ticker === '2330')];
+    assert.deepEqual([aapl?.sic, aapl?.industry, aapl?.source], [3571, 'Electronic Computers', 'sec']);
+    assert.deepEqual(aapl?.checked, { auditor_change: { on: TODAY }, restatement: { on: TODAY }, going_concern: { on: TODAY } });
+    // The announcements reach forward only: since keeps the first night they were read.
+    assert.deepEqual(tw?.checked, { restatement: { on: TODAY, since: '2026-10-12' }, auditor_change: { on: TODAY, since: TODAY }, going_concern: { on: TODAY, since: TODAY }, environmental_penalties: { on: TODAY } });
+    assert.equal(tw?.auditor, 'B 事務所');
+    assert.deepEqual(store.scans, [{ today: TODAY, tickers: ['AAPL', '2330'], rulesRun: 0 }]);
+    assert.deepEqual(run.detail.redFlags, { scanned: ['AAPL', '2330'], events: 4 });
+  });
+
+  it('checks SEC and the penalties only on a scan day, says when the MOENV key is missing, and does nothing before config red_flags', async () => {
+    const store = new MemoryStore({ flags: flags.map((flag) => ({ ...flag, due: flag.ticker === '2330' })) });
+    const { get, urls } = fakeGet();
+    const run = await runNightly({ ...deps(get, store), secUserAgent: 'LongViewInvest hugo@example.com' });
+    assert.ok(!urls.some((url) => url.includes('submissions') || url.includes('moenv')));
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('red flags: MOENV_API_KEY is not set')));
+    assert.deepEqual(store.scans.map((row) => row.tickers), [['2330']]);
+    const before = new MemoryStore();
+    await runNightly(deps(fakeGet().get, before));
+    assert.deepEqual([before.profiles, before.scans], [[], []]);
+  });
+});
+
+describe('look-through (F14)', () => {
+  it("reads each due fund's file from its issuer, page by page, with the sectors of its lines, and the held stocks' sectors", async () => {
+    const store = new MemoryStore({
+      look: {
+        due: [
+          { fund: 'VT', source: 'vanguard', id: 'VT' },
+          { fund: '00692', source: 'fubon', id: '00692' },
+        ],
+        stocks: [
+          { ticker: 'AAPL', market: 'US', sector: null },
+          { ticker: '2330', market: 'TW', sector: 'Information Technology' },
+        ],
+      },
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.ok(!run.detail.errors.some((line) => line.includes('holdings')), JSON.stringify(run.detail.errors));
+    const vt = store.fundFiles.find((file) => file.fund === 'VT');
+    assert.deepEqual(vt?.constituents.map((row) => [row.key, row.sector, row.weight]), [
+      ['US:AAPL', 'Information Technology', 0.04],
+      ['TW:2330', 'Information Technology', 0.015],
+      ['JP:7203', null, 0.003],
+    ]);
+    assert.equal(vt?.asOf, '2026-09-30');
+    assert.deepEqual(store.fundFiles.find((file) => file.fund === '00692')?.constituents.map((row) => [row.key, row.weight]), [['TW:2330', 0.525]]);
+    assert.deepEqual(run.detail.holdings, { VT: { source: 'vanguard', rows: 3, latest: '2026-09-30' }, '00692': { source: 'fubon', rows: 1, latest: '2026-10-28' } });
+    // 2330's sector is already saved; AAPL's is new.
+    assert.deepEqual(store.sectors, [{ ticker: 'AAPL', market: 'US', sector: 'Information Technology' }]);
+  });
+
+  it('reads nothing when no file is due and every held stock has its sector', async () => {
+    const store = new MemoryStore({ look: { due: [], stocks: [{ ticker: '2330', market: 'TW', sector: 'Information Technology' }] } });
+    const { get, urls } = fakeGet();
+    await runNightly(deps(get, store));
+    assert.ok(!urls.some((url) => url.includes('vanguard') || url.includes('fsit')));
+    assert.deepEqual([store.fundFiles, store.sectors], [[], []]);
+  });
+});
+
+describe('sector proxies (N7)', () => {
+  it("loads each Select Sector SPDR fund's and TWSE industry index's closes into the index closes, TWSE's last day filling in for FinMind", async () => {
+    const store = new MemoryStore({
+      sectors: [
+        { id: 'XLK', market: 'US', symbol: 'XLK', name: 'XLK' },
+        { id: 'TW_SEMICONDUCTOR', market: 'TW', symbol: 'Semiconductor', name: '半導體類指數' },
+      ],
+    });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.indices.filter((row) => row.index === 'XLK').map((row) => [row.date, row.close, row.source]), [['2026-10-20', 249.8, 'finmind']]);
+    assert.deepEqual(store.indexFills.filter((row) => row.index === 'TW_SEMICONDUCTOR').map((row) => [row.date, row.close, row.source]), [['2026-10-21', 1564.79, 'twse']]);
+    assert.deepEqual(run.detail.indices?.['XLK'], { source: 'finmind', rows: 1, latest: '2026-10-20' });
+    assert.ok(run.detail.warnings.some((line) => line.startsWith('TW_SEMICONDUCTOR: finmind')), JSON.stringify(run.detail.warnings));
+  });
+});
+
 describe('windowStart', () => {
   it('reaches back the lookback years with two weeks to spare, or to an older first trade', () => {
     assert.equal(windowStart(TODAY, 3), '2023-10-07');
@@ -365,8 +717,8 @@ describe('runNightly', () => {
       '0050 2026-10-21 108.15 108.15 finmind',
       'VT 2026-10-20 157.8 157.8 finmind',
       // The fund download fills AGGU's history, inside the window only.
-      'AGGU 2026-10-20 5.77 5.77 ishares_nav',
       'AGGU 2026-10-19 5.76 5.76 ishares_nav',
+      'AGGU 2026-10-20 5.77 5.77 ishares_nav',
     ]);
     assert.deepEqual(
       store.rates.map((r) => `${r.pair} ${r.date} ${r.rate}`),
@@ -429,6 +781,34 @@ describe('runNightly', () => {
     assert.deepEqual(run.detail.errors, ['NAV snapshots: transactions: permission denied']);
     assert.equal(run.detail.snapshots, undefined);
     assert.ok(store.prices.length > 0);
+  });
+
+  it("saves the home-screen widget's figures from the same series as the snapshots", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(store.widget?.asOf, '2026-10-21');
+    assert.equal(store.widget?.totalTwd, store.snapshots[store.snapshots.length - 1]?.totalTwd);
+    assert.equal(store.widget?.redUp, true);
+    assert.deepEqual(run.detail.widget, { asOf: '2026-10-21' });
+    assert.equal(run.status, 'ok');
+  });
+
+  it("names the newest close in the widget's figures, not the day the job ran", async () => {
+    const store = new MemoryStore({ closesUntil: '2026-10-20' });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(store.snapshots[store.snapshots.length - 1]?.date, '2026-10-21');
+    assert.equal(store.widget?.asOf, '2026-10-20');
+    assert.deepEqual(run.detail.widget, { asOf: '2026-10-20' });
+  });
+
+  it("keeps the snapshots and reports a partial run when the widget's figures fail", async () => {
+    const store = new MemoryStore({ failWidget: true });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(run.status, 'partial');
+    assert.deepEqual(run.detail.errors, ['Widget figures: widget_snapshot: permission denied']);
+    assert.equal(store.snapshots.length, 2);
+    assert.deepEqual(run.detail.snapshots, { days: 2, from: '2026-10-20', to: '2026-10-21', valueAtRisk: 0 });
+    assert.equal(run.detail.widget, undefined);
   });
 
   it('evaluates the rules once the prices and snapshots are saved, and records what they drafted', async () => {
@@ -533,6 +913,59 @@ describe('runNightly', () => {
     const run = await runNightly(deps(fakeGet().get, new MemoryStore({ regressionYears: 6, failBetas: true })));
     assert.equal(run.status, 'partial');
     assert.deepEqual(run.detail.errors, ['Betas: beta_results: permission denied']);
+  });
+
+  it("re-runs F5's Monte Carlo once a night and reports a partial run when it cannot be saved", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.monteCarloRuns, [TODAY]);
+    assert.deepEqual(run.detail.monteCarlo, { runDate: TODAY });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failMonteCarlo: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Monte Carlo: simulation_runs: permission denied']);
+  });
+
+  it("scores the satellite classes after the month's β and before F5 reads them, and reports a partial run when it cannot save", async () => {
+    const store = new MemoryStore({ regressionYears: 6 });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.cmaRuns, [{ today: TODAY, betasRun: true, monteCarloRun: false }]);
+    assert.deepEqual(run.detail.cma, { saved: ['tactical_themes'], unscored: ['us_stocks'] });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failCma: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Auto CMA: cma_estimates: permission denied']);
+  });
+
+  it("loads every security back over the years the Monte Carlo and the frontier read (F5, F7)", async () => {
+    const without = await runNightly(deps(fakeGet().get, new MemoryStore()));
+    const longer = await runNightly(deps(fakeGet().get, new MemoryStore({ historyYears: 11 })));
+    assert.ok(longer.detail.window.start < without.detail.window.start, `${longer.detail.window.start} is before ${without.detail.window.start}`);
+    assert.equal(longer.detail.window.start, windowStart(TODAY, 11));
+  });
+
+  it("saves N2's Brinson months once a night and reports a partial run when it cannot", async () => {
+    const store = new MemoryStore();
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.deepEqual(store.attributionRuns, [TODAY]);
+    assert.deepEqual(run.detail.attribution, { months: 2 });
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ failAttribution: true })));
+    assert.equal(failed.status, 'partial');
+    assert.deepEqual(failed.detail.errors, ['Attribution: attribution: permission denied']);
+  });
+
+  it("keeps Kenneth French's five factors for every region once the factors setting exists (N1), and leaves them alone before", async () => {
+    const store = new MemoryStore({ factorYears: 11 });
+    const run = await runNightly(deps(fakeGet().get, store));
+    for (const region of ['us', 'developed', 'emerging']) {
+      assert.deepEqual(run.detail.series?.[`ff5_${region}`], { source: 'french', rows: 12, latest: '2026-10' });
+      assert.deepEqual(store.series.filter((point) => point.series === `ff5_${region}_mkt`).map((point) => [point.month, point.value]), [['2026-09', 0.01], ['2026-10', -0.02]]);
+    }
+    assert.equal(run.status, 'ok');
+    const without = await runNightly(deps(fakeGet().get, new MemoryStore()));
+    assert.equal(without.detail.series?.['ff5_us'], undefined);
+    const failed = await runNightly(deps(fakeGet().get, new MemoryStore({ factorYears: 11 }), undefined, async () => {
+      throw new FeedError('HTTP 503 from mba.tuck.dartmouth.edu');
+    }));
+    assert.match(failed.detail.errors.join('\n'), /ff5_us: french: HTTP 503/);
   });
 
   it('leaves the indices, the bill rate and the β alone before the Regression Lab migration', async () => {

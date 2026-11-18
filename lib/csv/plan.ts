@@ -229,6 +229,9 @@ function readRow(cells: Record<string, string>, mapping: CsvMapping, options: Im
       tax: String(tax),
       fxRate: String(fxRate),
       pool: options.pool,
+      // Statements carry no direction or leverage: every imported trade is a plain long.
+      direction: 'long',
+      leverage: '1',
       note: cell(mapping.note).slice(0, 500),
     },
     context.securities,

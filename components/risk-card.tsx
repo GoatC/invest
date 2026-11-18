@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 import { twd } from '@/lib/format';
 import type { Bilingual } from '@/lib/i18n';
@@ -32,22 +32,15 @@ function blocker(report: RiskReport): Bilingual | undefined {
 
 /**
  * The N4 card: today's VaR of the whole portfolio with its toggle and 52-week line, or why there
- * is none yet. `details` links to the risk page, where every number is worked out.
+ * is none yet; `children` (the folded distribution and make-up) go at its foot.
  */
-export function RiskCard({ report, line, details = false }: { report: RiskReport | undefined; line: readonly VarPoint[]; details?: boolean }) {
+export function RiskCard({ report, line, children }: { report: RiskReport | undefined; line: readonly VarPoint[]; children?: ReactNode }) {
   const why = report ? blocker(report) : undefined;
   return (
     <section className="card form" id="value-at-risk">
-      <div className="row spread">
-        <h2>
-          <Bi en="Value at Risk, whole portfolio" zh="風險值（整個投資組合）" />
-        </h2>
-        {details && (
-          <Link href="/risk">
-            <Bi en="How it is worked out" zh="計算方式" />
-          </Link>
-        )}
-      </div>
+      <h2>
+        <Bi en="Value at Risk, whole portfolio" zh="風險值（整個投資組合）" />
+      </h2>
       {!report ? (
         <p className="banner warn">
           <Bi
@@ -79,6 +72,7 @@ export function RiskCard({ report, line, details = false }: { report: RiskReport
           )}
         </Info>
       )}
+      {children}
     </section>
   );
 }

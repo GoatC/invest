@@ -18,7 +18,12 @@
     "test:e2e": "bash tests/e2e/run.sh",
     "nightly": "tsx scripts/nightly.ts",
     "notify": "tsx scripts/notify.ts",
-    "vapid-keys": "tsx scripts/vapid_keys.ts"
+    "volatility": "tsx scripts/volatility.ts",
+    "news": "tsx scripts/news.ts",
+    "vapid-keys": "tsx scripts/vapid_keys.ts",
+    "splash-images": "tsx scripts/splash_images.ts",
+    "ios-images": "tsx scripts/ios_images.ts",
+    "ios": "bash ios/install.sh"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

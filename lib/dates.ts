@@ -45,3 +45,8 @@ export function monthsBetween(from: string, to: string): number {
 export function lastDayOf(month: string): string {
   return addDays(`${addMonths(month, 1)}-01`, -1);
 }
+
+/** How many days `to` is after `from`, both YYYY-MM-DD. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}

@@ -17,13 +17,19 @@ const run = (status: JobRun['status'], errors: string[]): JobRun => ({
     errors,
     snapshots: { days: 168, from: '2026-05-07', to: '2026-10-21', valueAtRisk: 161 },
     rules: { created: 2, closed: 1 },
+    widget: { asOf: '2026-10-21' },
   },
 });
 
 describe('nightly summaries', () => {
+  it("says the widget's figures were saved, by date, in a run by hand", () => {
+    assert.ok(fullSummary(run('ok', [])).includes('Widget 小工具: figures as of 2026-10-21 已存入'));
+  });
+
+
   it('prints every ticker and the snapshot days in a run by hand', () => {
     const text = fullSummary(run('partial', ['NVDA: finmind: HTTP 503'])).join('\n');
-    for (const piece of ['2330', 'VT', 'USD/TWD', 'NVDA', '168 days 天, 2026-05-07 → 2026-10-21', 'VaR 含一週風險值: 161 days 天', 'Rules 規則: 2 proposals drafted 新提案, 1 closed 關閉']) assert.ok(text.includes(piece), piece);
+    for (const piece of ['2330', 'VT', 'USD/TWD', 'NVDA', '168 days 天, 2026-05-07 → 2026-10-21', 'VaR 含一週風險值: 161 days 天', 'Rules 規則: 2 warnings raised 新警示, 1 cleared 解除']) assert.ok(text.includes(piece), piece);
   });
 
   it('keeps tickers out of the public Actions log, flagging the run by its status', () => {
@@ -43,6 +49,7 @@ describe('nightly summaries', () => {
         'NAV snapshots: nav_snapshots: permission denied',
         'VaR: weekly_prices: permission denied',
         'Rules: proposals: permission denied',
+        'Widget figures: widget_snapshot: permission denied',
       ]),
     );
     assert.match(lines[0] ?? '', /^::error::Nightly prices: failed/);
@@ -52,6 +59,7 @@ describe('nightly summaries', () => {
       '::error::NAV snapshots: nav_snapshots: permission denied',
       '::error::VaR: weekly_prices: permission denied',
       '::error::Rules: proposals: permission denied',
+      '::error::Widget figures: widget_snapshot: permission denied',
     ]);
   });
 });

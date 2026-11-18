@@ -3,20 +3,22 @@
 import Link from 'next/link';
 import { useActionState, useMemo, useState } from 'react';
 
+import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
 import { RuleMath } from '@/components/rule-math';
+import type { AlertItem } from '@/lib/alerts';
 import type { HoldingsData } from '@/lib/data';
 import { isIsoDate } from '@/lib/dates';
-import { shortfallMessage } from '@/lib/forms';
-import { bi, LABELS, MARKET, POOL, SIDE, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { shortfallAlert } from '@/lib/forms';
+import { ACTION, bi, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { previewTrade } from '@/lib/models/portfolio';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { breachText } from '@/lib/rule-text';
-import { parseTrade, type TradeField } from '@/lib/validation';
+import { breachAlert } from '@/lib/rule-text';
+import { leverageSteps, parseNumber, parseTrade, type TradeField } from '@/lib/validation';
 
 import { saveTrade, type TradeFormState } from './actions';
 
@@ -25,11 +27,15 @@ export type TradeValues = Record<TradeField, string>;
 
 const INITIAL_STATE: TradeFormState = { errors: {}, message: null };
 
+/** The fields a quick entry folds under "More fields": each is filled in from the security, or rarely changes. */
+const MORE_FIELDS: readonly TradeField[] = ['currency', 'fee', 'tax', 'fxRate', 'pool', 'note'];
+
 /** The add-security page, with the ticker typed so far; an edit comes back to its trade afterwards. */
-function addSecurityHref(ticker: string, id: number | undefined): string {
+function addSecurityHref(ticker: string, id: number | undefined, sheet: boolean): string {
   const query = new URLSearchParams();
   if (ticker.trim()) query.set('ticker', ticker.trim().toUpperCase());
   if (id !== undefined) query.set('next', `/holdings/${id}`);
+  else if (sheet) query.set('next', 'sheet');
   const text = query.toString();
   return text ? `/securities/new?${text}` : '/securities/new';
 }
@@ -40,15 +46,18 @@ export function TradeForm({
   today,
   id,
   initial,
-  proposal,
+  compact = false,
+  sheet = false,
 }: {
   data: HoldingsData;
   rates: FxQuote[];
   today: string;
   id?: number;
   initial: TradeValues;
-  /** The approved proposal this trade fills, to return to it once saved. */
-  proposal?: number;
+  /** A quick entry at the top of the holdings page: date, ticker, side, quantity and price in a row, the rest folded. */
+  compact?: boolean;
+  /** In the iOS shell's sheet (proposal G05): adding a missing security comes back to it. */
+  sheet?: boolean;
 }) {
   const [values, setValues] = useState(initial);
   // Fields changed since the last submit: their server errors are stale, their live errors are fresh.
@@ -56,6 +65,7 @@ export function TradeForm({
   // A rate typed by hand, or saved with the trade being edited, is never replaced by a suggestion.
   const [ownRate, setOwnRate] = useState(id !== undefined);
   const [state, formAction, pending] = useActionState(saveTrade, INITIAL_STATE);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const securities = useMemo(() => new Map(data.securities.map((security) => [security.ticker, security])), [data.securities]);
   const fx = useMemo(() => latestFx(data.fx, data.trades), [data.fx, data.trades]);
@@ -79,7 +89,10 @@ export function TradeForm({
     setOwnRate(field === 'fxRate' || (ownRate && !currencyChanged));
   }
 
-  const parsed = parseTrade(values, securities, today);
+  const maxLeverage = Math.max(data.leverage.max, parseNumber(initial.leverage) ?? 1);
+  const parsed = parseTrade(values, securities, today, maxLeverage);
+  const direction = values.direction === 'short' ? 'short' : 'long';
+  const steps = useMemo(() => leverageSteps(data.leverage.max), [data.leverage.max]);
   const preview = parsed.ok ? previewTrade(data, { ...parsed.value, id }, data.caps) : null;
 
   function error(field: TradeField): Bilingual | null {
@@ -93,6 +106,131 @@ export function TradeForm({
   const latestRate = foreign ? fx.get(currency) : undefined;
   const datedRate = foreign && data.fxMaxAgeDays !== null && isIsoDate(values.tradeDate) ? rateOn(history, currency, values.tradeDate, data.fxMaxAgeDays) : undefined;
   const dated = datedRate ? { value: datedRate.rate, date: datedRate.date } : undefined;
+  // A field with an error, or a ticker with no rate to suggest, opens the folded fields.
+  const moreError = compact && (MORE_FIELDS.some((field) => error(field) !== null) || (security !== undefined && values.fxRate.trim() === ''));
+
+  const tradeDateField = (
+    <Field label={LABELS.tradeDate} error={error('tradeDate')}>
+      <input type="date" name="tradeDate" value={values.tradeDate} max={today} required onChange={(e) => change('tradeDate', e.target.value)} />
+    </Field>
+  );
+  const tickerField = (
+    <Field
+      label={LABELS.ticker}
+      error={error('ticker')}
+      hint={
+        security ? (
+          security.name
+        ) : (
+          <Link href={addSecurityHref(values.ticker, id, sheet)}>
+            <Bi en="Not listed? Add a security" zh="找不到？新增證券" />
+          </Link>
+        )
+      }
+    >
+      <input name="ticker" list="ticker-options" autoComplete="off" value={values.ticker} required onChange={(e) => change('ticker', e.target.value)} />
+    </Field>
+  );
+  const datalistField = (
+    <datalist id="ticker-options">
+      {data.securities.map((option) => (
+        <option key={option.ticker} value={option.ticker}>
+          {option.name}
+        </option>
+      ))}
+    </datalist>
+  );
+  const marketField = (
+    <Field label={LABELS.market} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
+      <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
+    </Field>
+  );
+  const directionField = (
+    <Field label={LABELS.direction} error={error('direction')}>
+      <select name="direction" value={direction} onChange={(e) => change('direction', e.target.value)}>
+        <option value="long">{bi(DIRECTION.long)}</option>
+        <option value="short">{bi(DIRECTION.short)}</option>
+      </select>
+    </Field>
+  );
+  const sideField = (
+    <Field label={LABELS.side} error={error('side')}>
+      <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
+        <option value="buy">{bi(ACTION[direction].buy)}</option>
+        <option value="sell">{bi(ACTION[direction].sell)}</option>
+      </select>
+    </Field>
+  );
+  // A saved trade above today's maximum still shows its own leverage, so editing it never changes it silently.
+  const saved = parseNumber(values.leverage);
+  const leverageOptions = saved !== undefined && !steps.some((step) => Math.abs(step - saved) < 1e-9) ? [...steps, saved].sort((a, b) => a - b) : steps;
+  const leverageField = (
+    <Field
+      label={LABELS.leverage}
+      error={error('leverage')}
+      hint={data.leverage.max <= 1 ? <Bi en="Raise config leverage max to offer more" zh="調高 config leverage 的 max 才會出現更多選項" /> : <Bi en="Steps of 0.1×" zh="以 0.1 倍為級距" />}
+    >
+      <select name="leverage" value={saved === undefined ? '1.0' : saved.toFixed(1)} onChange={(e) => change('leverage', e.target.value)}>
+        {leverageOptions.map((step) => (
+          <option key={step} value={step.toFixed(1)}>
+            {leverageText(step)}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+  const qtyField = (
+    <Field label={LABELS.qty} error={error('qty')}>
+      <input name="qty" inputMode="decimal" value={values.qty} required onChange={(e) => change('qty', e.target.value)} />
+    </Field>
+  );
+  const priceField = (
+    <Field label={LABELS.price} error={error('price')} hint={currency ? <Bi en={`In ${currency}`} zh={`以 ${currency} 計`} /> : undefined}>
+      <input name="price" inputMode="decimal" value={values.price} required onChange={(e) => change('price', e.target.value)} />
+    </Field>
+  );
+  const currencyField = (
+    <Field label={LABELS.currency} error={error('currency')}>
+      <input name="currency" maxLength={3} autoCapitalize="characters" value={values.currency} onChange={(e) => change('currency', e.target.value)} />
+    </Field>
+  );
+  const feeField = (
+    <Field label={LABELS.fee} error={error('fee')}>
+      <input name="fee" inputMode="decimal" placeholder="0" value={values.fee} onChange={(e) => change('fee', e.target.value)} />
+    </Field>
+  );
+  const taxField = (
+    <Field label={LABELS.tax} error={error('tax')}>
+      <input name="tax" inputMode="decimal" placeholder="0" value={values.tax} onChange={(e) => change('tax', e.target.value)} />
+    </Field>
+  );
+  const fxRateField = (
+    <Field
+      label={LABELS.fxRate}
+      error={error('fxRate')}
+      hint={<FxRateHint currency={currency} dated={dated} latest={latestRate} />}
+    >
+      <input name="fxRate" inputMode="decimal" value={values.fxRate} readOnly={currency === 'TWD'} required onChange={(e) => change('fxRate', e.target.value)} />
+    </Field>
+  );
+  const sleeveField = (
+    <Field label={LABELS.sleeve} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
+      <input readOnly tabIndex={-1} value={security ? bi(SLEEVE[security.sleeve]) : '—'} />
+    </Field>
+  );
+  const poolField = (
+    <Field label={LABELS.pool} error={error('pool')}>
+      <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
+        <option value="regular">{bi(POOL.regular)}</option>
+        <option value="windfall">{bi(POOL.windfall)}</option>
+      </select>
+    </Field>
+  );
+  const noteField = (
+    <Field label={LABELS.note} error={error('note')}>
+      <input name="note" maxLength={500} value={values.note} onChange={(e) => change('note', e.target.value)} />
+    </Field>
+  );
 
   return (
     <form
@@ -101,79 +239,64 @@ export function TradeForm({
       className="form"
     >
       {id !== undefined && <input type="hidden" name="id" value={id} />}
-      {proposal !== undefined && <input type="hidden" name="proposal" value={proposal} />}
-      <div className="form-grid">
-        <Field label={LABELS.tradeDate} error={error('tradeDate')}>
-          <input type="date" name="tradeDate" value={values.tradeDate} max={today} required onChange={(e) => change('tradeDate', e.target.value)} />
-        </Field>
-        <Field
-          label={LABELS.ticker}
-          error={error('ticker')}
-          hint={
-            security ? (
-              security.name
-            ) : (
-              <Link href={addSecurityHref(values.ticker, id)}>
-                <Bi en="Not listed? Add a security" zh="找不到？新增證券" />
-              </Link>
-            )
-          }
-        >
-          <input name="ticker" list="ticker-options" autoComplete="off" value={values.ticker} required onChange={(e) => change('ticker', e.target.value)} />
-        </Field>
-        <datalist id="ticker-options">
-          {data.securities.map((option) => (
-            <option key={option.ticker} value={option.ticker}>
-              {option.name}
-            </option>
-          ))}
-        </datalist>
-        <Field label={LABELS.market} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-          <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
-        </Field>
-        <Field label={LABELS.side} error={error('side')}>
-          <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
-            <option value="buy">{bi(SIDE.buy)}</option>
-            <option value="sell">{bi(SIDE.sell)}</option>
-          </select>
-        </Field>
-        <Field label={LABELS.qty} error={error('qty')}>
-          <input name="qty" inputMode="decimal" value={values.qty} required onChange={(e) => change('qty', e.target.value)} />
-        </Field>
-        <Field label={LABELS.price} error={error('price')} hint={currency ? <Bi en={`In ${currency}`} zh={`以 ${currency} 計`} /> : undefined}>
-          <input name="price" inputMode="decimal" value={values.price} required onChange={(e) => change('price', e.target.value)} />
-        </Field>
-        <Field label={LABELS.currency} error={error('currency')}>
-          <input name="currency" maxLength={3} autoCapitalize="characters" value={values.currency} onChange={(e) => change('currency', e.target.value)} />
-        </Field>
-        <Field label={LABELS.fee} error={error('fee')}>
-          <input name="fee" inputMode="decimal" placeholder="0" value={values.fee} onChange={(e) => change('fee', e.target.value)} />
-        </Field>
-        <Field label={LABELS.tax} error={error('tax')}>
-          <input name="tax" inputMode="decimal" placeholder="0" value={values.tax} onChange={(e) => change('tax', e.target.value)} />
-        </Field>
-        <Field
-          label={LABELS.fxRate}
-          error={error('fxRate')}
-          hint={<FxRateHint currency={currency} dated={dated} latest={latestRate} />}
-        >
-          <input name="fxRate" inputMode="decimal" value={values.fxRate} readOnly={currency === 'TWD'} required onChange={(e) => change('fxRate', e.target.value)} />
-        </Field>
-        <Field label={LABELS.sleeve} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-          <input readOnly tabIndex={-1} value={security ? bi(SLEEVE[security.sleeve]) : '—'} />
-        </Field>
-        <Field label={LABELS.pool} error={error('pool')}>
-          <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
-            <option value="regular">{bi(POOL.regular)}</option>
-            <option value="windfall">{bi(POOL.windfall)}</option>
-          </select>
-        </Field>
-        <Field label={LABELS.note} error={error('note')}>
-          <input name="note" maxLength={500} value={values.note} onChange={(e) => change('note', e.target.value)} />
-        </Field>
-      </div>
+      {compact ? (
+        <>
+          <div className="form-grid quick-entry">
+            {tradeDateField}
+            {tickerField}
+            {datalistField}
+            {directionField}
+            {sideField}
+            {leverageField}
+            {qtyField}
+            {priceField}
+          </div>
+          <details className="more-fields" open={moreOpen || moreError} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
+            <summary>
+              <Bi en="More fields" zh="更多欄位" />
+              <span className="muted small">
+                {' · '}
+                <Bi
+                  en={`${currency || '—'} · FX ${values.fxRate || '—'} · fee ${values.fee || '0'} · ${POOL[values.pool === 'windfall' ? 'windfall' : 'regular'].en} pool`}
+                  zh={`${currency || '—'} · 匯率 ${values.fxRate || '—'} · 手續費 ${values.fee || '0'} · ${POOL[values.pool === 'windfall' ? 'windfall' : 'regular'].zh}資金池`}
+                />
+              </span>
+            </summary>
+            <div className="form-grid">
+              {marketField}
+              {currencyField}
+              {feeField}
+              {taxField}
+              {fxRateField}
+              {sleeveField}
+              {poolField}
+              {noteField}
+            </div>
+          </details>
+        </>
+      ) : (
+        <div className="form-grid">
+          {tradeDateField}
+          {tickerField}
+          {datalistField}
+          {marketField}
+          {directionField}
+          {sideField}
+          {leverageField}
+          {qtyField}
+          {priceField}
+          {currencyField}
+          {feeField}
+          {taxField}
+          {fxRateField}
+          {sleeveField}
+          {poolField}
+          {noteField}
+        </div>
+      )}
 
       <FxTypoWarning entered={Number(values.fxRate)} reference={dated ?? latestRate} maxGap={data.fxMaxGap} />
+      {parsed.ok && <ExposureNote trade={parsed.value} />}
       <TradeEffect preview={preview} caps={data.caps} pool={values.pool} />
       {state.message && (
         <p className="banner danger" role="alert">
@@ -184,9 +307,11 @@ export function TradeForm({
         <button type="submit" className="button primary" disabled={pending}>
           <Bi {...(pending ? LABELS.saving : LABELS.save)} />
         </button>
-        <Link href="/holdings" className="button">
-          <Bi {...LABELS.cancel} />
-        </Link>
+        {!compact && (
+          <Link href="/holdings" className="button">
+            <Bi {...LABELS.cancel} />
+          </Link>
+        )}
       </div>
     </form>
   );
@@ -198,49 +323,70 @@ function TradeEffect({ preview, caps, pool }: { preview: ReturnType<typeof previ
   const [shortfall] = preview.shortfalls;
   if (shortfall) {
     return (
-      <p className="banner danger" role="alert">
-        <Bi {...shortfallMessage(shortfall)} />
-      </p>
+      <AlertTiles heading={{ en: 'Larger than the holding', zh: '超過持有數量' }} tone="alert" items={[shortfallAlert(shortfall)]} />
     );
   }
   const created = preview.breaches.filter((breach) => breach.isNew);
   const existing = preview.breaches.filter((breach) => !breach.isNew);
   return (
     <div className="form" aria-live="polite">
-      {created.length > 0 && (
-        <div className="banner warn">
-          <Bi en="You can save, but this trade breaks a rule:" zh="可以儲存，但這筆交易會違反規則：" />
-          <ul>
-            {created.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, caps, 'after')} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {existing.length > 0 && (
-        <div className="banner info">
-          <Bi en="Already above a limit before this trade:" zh="這筆交易之前就已超過限制：" />
-          <ul>
-            {existing.map((breach) => (
-              <li key={`${breach.rule}:${breach.subject}`}>
-                <Bi {...breachText(breach, caps, 'after')} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AlertTiles heading={{ en: 'Breaks a rule (can still save)', zh: '會違反規則（仍可儲存）' }} tone="watch" items={created.map((breach) => breachAlert(breach, caps, 'watch'))} />
+      <AlertTiles heading={{ en: 'Already over before this trade', zh: '交易前已超標' }} tone="info" items={existing.map((breach) => breachAlert(breach, caps, 'info'))} />
       <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this trade', zh: '這筆交易後 R1 與 R2 的計算方式' }} />
       {preview.breaches.length === 0 && (caps.singleStock || caps.satellite) && (
         <p className="banner ok">
-          {pool === 'windfall' ? (
-            <Bi en="Windfall money is left out of R1 and R2." zh="大額資金不計入 R1 與 R2。" />
-          ) : (
-            <Bi en="R1 and R2 stay within their limits after this trade." zh="這筆交易後，R1 與 R2 都在限制內。" />
-          )}
+          <span className="status-icon ok" aria-hidden="true">
+            ✓
+          </span>{' '}
+          {pool === 'windfall' ? <Bi en="Windfall: outside R1 / R2." zh="大額資金：不計入 R1、R2" /> : <Bi en="R1 / R2 within limits." zh="R1、R2 皆在限制內" />}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * What a short or a leveraged trade puts at stake: the own money, the exposure, what is borrowed,
+ * and the move that would wipe out the own money. Nothing for a plain long.
+ */
+function ExposureNote({ trade }: { trade: { direction: 'long' | 'short'; leverage: number; side: string; qty: number; price: number; currency: string } }) {
+  if (trade.direction === 'long' && trade.leverage === 1) return null;
+  const exposure = trade.qty * trade.price;
+  const own = exposure / trade.leverage;
+  const amount = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const wipeout = 1 / trade.leverage;
+  const pct = `${(wipeout * 100).toFixed(1)}%`;
+  const opening = trade.direction === 'long' ? trade.side === 'buy' : trade.side === 'sell';
+  if (!opening) {
+    return (
+      <p className="banner info" aria-live="polite">
+        <Bi en="Closes at the opening cost and margin" zh="依開倉成本與保證金平倉" />
+      </p>
+    );
+  }
+  const cur = trade.currency;
+  const chips = [
+    { label: { en: 'Own money', zh: '自有資金' }, value: `${amount(own)} ${cur}` },
+    { label: { en: 'Borrowed', zh: '借入' }, value: `${amount(exposure - own)} ${cur}` },
+    { label: { en: trade.direction === 'long' ? 'Wiped out at a fall of' : 'Wiped out at a rise of', zh: trade.direction === 'long' ? '下跌即虧光' : '上漲即虧光' }, value: pct },
+  ];
+  const items: AlertItem[] = [
+    { key: 'exposure', tone: 'watch', code: leverageText(trade.leverage), title: { en: 'Exposure', zh: '曝險' }, value: `${amount(exposure)} ${cur}`, chips },
+  ];
+  if (trade.direction === 'short') {
+    items.push({
+      key: 'short',
+      tone: 'alert',
+      title: { en: 'Short', zh: '做空' },
+      chips: [
+        { label: { en: 'Loss ceiling', zh: '虧損上限' }, value: '∞' },
+        { label: { en: '複委託 usually cannot short', zh: '複委託多半不能放空' }, value: '!' },
+      ],
+    });
+  }
+  return (
+    <div aria-live="polite">
+      <AlertTiles items={items} tone="watch" />
     </div>
   );
 }

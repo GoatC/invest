@@ -76,6 +76,8 @@ describe('planImport', () => {
       tax: 0,
       fxRate: 32.3,
       pool: 'regular',
+      direction: 'long',
+      leverage: 1,
       note: null,
     });
   });

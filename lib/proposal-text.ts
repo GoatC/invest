@@ -3,9 +3,11 @@
  * figures (design principle 4: explain every number), each draft order as a line, and what the
  * engine found for each rule. Bilingual; the pages and the trade form share them.
  */
+import type { AlertItem } from './alerts';
 import { money, percent, points, quantity, twd } from './format';
 import type { Bilingual } from './i18n';
 import type { Check, ClosedReason, DraftOrder, ProposalDetail, ProposalStatus } from './models/engine';
+import { flagLine } from './red-flag-text';
 
 /** A rule as the text needs it. */
 export interface RuleLike {
@@ -25,7 +27,35 @@ const TITLES: Record<string, Bilingual> = {
   price_at_or_below_value_multiple: { en: 'Buy zone', zh: '進入買入區' },
   price_at_or_above_value_multiple: { en: 'Trim zone', zh: '進入減碼區' },
   value_change_exceeds: { en: 'Valuation updated', zh: '估值更新' },
+  red_flag_worsens: { en: 'Red flag worsens', zh: '紅旗惡化' },
+  satellite_red_flag: { en: 'Red flag turns red', zh: '紅旗轉紅' },
+  volatility_score_crosses: { en: 'Volatility alert', zh: '波動警報' },
+  volatility_score_calm: { en: 'Volatility hedge', zh: '波動避險' },
 };
+
+const BAND: Record<'calm' | 'tense' | 'panic', Bilingual> = {
+  calm: { en: 'calm', zh: '平靜' },
+  tense: { en: 'tense', zh: '緊張' },
+  panic: { en: 'panic', zh: '恐慌' },
+};
+
+/** The volatility rules' first line: the score, the line it crossed and since when. */
+function volatilityLine(detail: ProposalDetail): Bilingual[] {
+  const row = detail.volatility;
+  if (!row) return [];
+  const band = BAND[row.band];
+  const relation = row.band === 'calm' ? '<' : '≥';
+  return [
+    {
+      en: `Volatility score ${row.score.toFixed(1)} on ${row.scoreDate} ${relation} ${row.line} · ${band.en} since ${row.since}`,
+      zh: `波動分數 ${row.score.toFixed(1)}（${row.scoreDate}）${relation} ${row.line} · 自 ${row.since} 起${band.zh}`,
+    },
+    {
+      en: `Budget ${percent(row.share, 0)} of the regular pool, ${twd(row.budgetTwd)} · from strategic cash ${twd(row.fundedTwd)}`,
+      zh: `預算為一般投入資金池的 ${percent(row.share, 0)}，${twd(row.budgetTwd)} · 由戰略現金支應 ${twd(row.fundedTwd)}`,
+    },
+  ];
+}
 
 /** "R1 · Single-stock trim". */
 export function proposalTitle(rule: RuleLike): Bilingual {
@@ -38,18 +68,58 @@ export function stateText(state: string): string {
   return state.split(',').join(', ');
 }
 
+/**
+ * What a proposal fired on, in Chinese for a tile: a volatility band and its date ("緊張 · 2026-11-07"),
+ * else the state as written ("2330, NVDA"); nothing for a state that only repeats the rule.
+ */
+export function stateLabel(state: string): string | undefined {
+  const band = /^(calm|tense|panic):(\d{4}-\d{2}-\d{2})$/.exec(state);
+  if (band) return `${BAND[band[1] as keyof typeof BAND].zh} · ${band[2]}`;
+  if (!state || state === 'satellite' || state === 'over') return undefined;
+  // F8's classes past their band ("global_bonds:under,…") read better from its line than as ids.
+  if (/:(under|over)(,|$)/.test(state)) return undefined;
+  return stateText(state);
+}
+
+/**
+ * A standing rule warning (an open proposal; Hugo, 2026-11-12) as a tile: the rule's name and code,
+ * what it fired on and since when; it opens the warning on the dashboard.
+ */
+export function proposalAlert(proposal: { id: number; ruleId: string; state: string; createdAt: string }, rule: RuleLike | undefined): AlertItem {
+  const title = rule ? (TITLES[rule.condition] ?? { en: proposal.ruleId, zh: proposal.ruleId }) : { en: proposal.ruleId, zh: proposal.ruleId };
+  const fired = stateLabel(proposal.state);
+  return {
+    key: String(proposal.id),
+    tone: 'watch',
+    ...(/^R\d+$/.test(proposal.ruleId) ? { code: proposal.ruleId } : {}),
+    title,
+    value: `#${proposal.id}`,
+    chips: [
+      ...(fired ? [{ label: { en: 'On', zh: '觸發' }, value: fired }] : []),
+      { label: { en: 'Since', zh: '起' }, value: taipeiDay(proposal.createdAt) },
+    ],
+    href: `/#proposal-${proposal.id}`,
+  };
+}
+
+/** An ISO time's day in Taipei, YYYY-MM-DD. */
+function taipeiDay(at: string): string {
+  const time = new Date(at);
+  if (Number.isNaN(time.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(time);
+}
+
 export const STATUS: Record<ProposalStatus, Bilingual> = {
-  open: { en: 'Open', zh: '待處理' },
-  approved: { en: 'Approved: to trade', zh: '已核准：待下單' },
-  dismissed: { en: 'Dismissed', zh: '已略過' },
+  open: { en: 'Standing', zh: '警示中' },
+  dismissed: { en: 'Dismissed', zh: '已忽略' },
   filled: { en: 'Filled', zh: '已成交' },
-  expired: { en: 'Closed', zh: '已關閉' },
+  expired: { en: 'Cleared', zh: '已解除' },
 };
 
 export const CLOSED: Record<ClosedReason, Bilingual> = {
-  timed_out: { en: 'not acted on in time; the rule was checked again', zh: '未在期限內處理；規則已重新檢查' },
+  timed_out: { en: 'timed out (before 2026-11-12)', zh: '逾時關閉（2026-11-12 前）' },
   cleared: { en: 'the rule no longer fires', zh: '規則已不再觸發' },
-  superseded: { en: 'replaced by a newer proposal', zh: '已由較新的提案取代' },
+  superseded: { en: 'replaced by a newer warning', zh: '已由較新的警示取代' },
 };
 
 type Names = ReadonlyMap<string, Bilingual>;
@@ -121,7 +191,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         en: `Satellite: ${percent(detail.weight ?? 0)} of the regular pool (${twd(detail.satelliteTwd ?? 0)} of ${pool}) > ${percent(detail.trigger ?? 0, 0)} · trim ≈ ${twd(detail.trimTwd ?? 0)} → ${percent(detail.target ?? 0, 0)}`,
         zh: `衛星部位：占一般投入資金池 ${percent(detail.weight ?? 0)}（${pool} 中的 ${twd(detail.satelliteTwd ?? 0)}）> ${percent(detail.trigger ?? 0, 0)} · 減碼約 ${twd(detail.trimTwd ?? 0)} → ${percent(detail.target ?? 0, 0)}`,
       });
-      if (detail.countedTwd) lines.push({ en: `R1 already sells ${twd(detail.countedTwd)} of it`, zh: `R1 的提案已賣出其中 ${twd(detail.countedTwd)}` });
+      if (detail.countedTwd) lines.push({ en: `R1 already sells ${twd(detail.countedTwd)} of it`, zh: `R1 的警示已建議賣出其中 ${twd(detail.countedTwd)}` });
       break;
     case 'class_drift_exceeds':
       for (const row of detail.classes ?? []) lines.push(classLine(row, names));
@@ -131,7 +201,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         en: `${twd(detail.contributionTwd ?? 0)} debited on ${detail.dcaDate ?? '—'} → the core classes furthest below target (pool ${pool} before it)`,
         zh: `${detail.dcaDate ?? '—'} 扣款 ${twd(detail.contributionTwd ?? 0)} → 最低於目標的核心類別（投入前資金池 ${pool}）`,
       });
-      if (detail.satelliteShareTwd) lines.push({ en: `${twd(detail.satelliteShareTwd)} of it goes to the buy-zone proposal`, zh: `其中 ${twd(detail.satelliteShareTwd)} 用於買入區提案` });
+      if (detail.satelliteShareTwd) lines.push({ en: `${twd(detail.satelliteShareTwd)} of it goes to the buy-zone warning`, zh: `其中 ${twd(detail.satelliteShareTwd)} 用於買入區警示` });
       break;
     case 'first_weekend_of_month':
       lines.push({ en: `Yearly check of the regular pool, ${pool}`, zh: `一般投入資金池 ${pool} 的年度檢查` });
@@ -198,6 +268,43 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       }
       lines.push({ en: 'Review the assumptions on the Valuation page · No orders drafted', zh: '請到「估值」頁檢視假設 · 不產生下單清單' });
       break;
+    case 'red_flag_worsens':
+      for (const row of detail.flags ?? []) lines.push(flagLine(row));
+      lines.push({ en: 'Review the indicators on the Red flags page · No orders drafted', zh: '請到「紅旗指標」頁檢視指標 · 不產生下單清單' });
+      break;
+    case 'satellite_red_flag':
+      for (const row of detail.flags ?? []) {
+        lines.push(flagLine(row));
+        if (row.soldTwd !== undefined) lines.push({ en: `Exit option: sell ${twd(row.soldTwd)} of ${twd(row.heldTwd ?? 0)}`, zh: `出場選項：賣出 ${twd(row.heldTwd ?? 0)} 中的 ${twd(row.soldTwd)}` });
+      }
+      break;
+    case 'volatility_score_crosses': {
+      lines.push(...volatilityLine(detail));
+      const row = detail.volatility;
+      if (row?.band === 'panic') {
+        if (row.vixSoldTwd) lines.push({ en: `Sell the VIX hedge held: ${twd(row.vixSoldTwd)}`, zh: `賣出持有的 VIX 避險部位：${twd(row.vixSoldTwd)}` });
+        lines.push({ en: '→ the core equity classes, by their targets', zh: '→ 依目標權重買進核心股票類別' });
+      } else {
+        const picks = detail.picks ?? [];
+        if (picks.length === 0) lines.push({ en: 'No watchlist stock near its buy price · No orders drafted', zh: '觀察清單中沒有接近買入價的個股 · 不產生下單清單' });
+        for (const pick of picks) {
+          const where = pick.distance <= 0 ? { en: 'in its buy zone', zh: '已在買入區' } : { en: `${percent(pick.distance)} above its buy price`, zh: `高於買入價 ${percent(pick.distance)}` };
+          lines.push({
+            en: `${pick.ticker}: ${money(pick.price, pick.currency)}, buy price ${money(pick.buyPrice, pick.currency)} · ${where.en}${pick.boughtTwd === undefined ? ' · no room under R1 / R2' : ''}`,
+            zh: `${pick.ticker}：${money(pick.price, pick.currency)}，買入價 ${money(pick.buyPrice, pick.currency)} · ${where.zh}${pick.boughtTwd === undefined ? ' · R1／R2 無空間' : ''}`,
+          });
+        }
+      }
+      if (row && row.fundedTwd < 1 && !(row.vixSoldTwd && row.vixSoldTwd > 0)) lines.push({ en: 'No strategic cash to fund it: add new money, or dismiss', zh: '沒有戰略現金可支應：請投入新資金，或略過' });
+      break;
+    }
+    case 'volatility_score_calm': {
+      lines.push(...volatilityLine(detail));
+      const row = detail.volatility;
+      if (row?.vixHeldTwd) lines.push({ en: `VIX products held: ${twd(row.vixHeldTwd)}`, zh: `已持有 VIX 商品：${twd(row.vixHeldTwd)}` });
+      if (row && row.roomTwd !== undefined && row.roomTwd < row.budgetTwd - 1) lines.push({ en: `Room under the VIX cap and R2: ${twd(row.roomTwd)}`, zh: `VIX 上限與 R2 下的空間：${twd(row.roomTwd)}` });
+      break;
+    }
     default:
       break;
   }
@@ -211,7 +318,7 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
     case 'single_stock_weight_above':
       return [
         { en: 'Trim = the stock\'s value − the cap × the regular pool. The proceeds stay in the regular pool and buy the core classes furthest below their targets.', zh: '減碼金額 = 該股市值 − 上限 × 一般投入資金池。賣出所得留在一般投入資金池，買進最低於目標的核心類別。' },
-        { en: 'When one share costs more than the trim, edit the order to sell less and stay a little over the cap, or let its market trade in fractions on the Rules page.', zh: '一股價格高於減碼金額時，可修改下單清單少賣一些（會略高於上限），或在「規則」頁讓該市場以零股（小數股）下單。' },
+        { en: 'When one share costs more than the trim, sell less and stay a little over the cap, or let its market trade in fractions on the Rules page.', zh: '一股價格高於減碼金額時，可少賣一些（會略高於上限），或在「規則」頁讓該市場以零股（小數股）下單。' },
       ];
     case 'satellite_weight_above':
       return [{ en: 'The trim is pro rata across the satellite holdings, less what R1 already sells; the proceeds buy the core classes furthest below their targets. F8 never buys the satellite.', zh: '依各衛星持股比例減碼，扣除 R1 已賣出的部分；所得買進最低於目標的核心類別。F8 不會買進衛星部位。' }];
@@ -224,7 +331,7 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
     case 'us_situs_value_above':
       return [
         { en: "US-situs assets are US shares and US-domiciled ETFs in both pools. A non-US resident's estate is exempt only up to the limit; above it the US taxes the estate.", zh: '美國資產指兩個資金池中的美股與美國註冊 ETF。非美國居民的遺產只在免稅額內免稅，超過的部分會被課美國遺產稅。' },
-        { en: 'Irish-domiciled equivalents are not US assets: use them for new money first, and for what is held where the sale is worth its fees and tax (a gain abroad is overseas income). The Costs page compares them. Approve when decided; mark filled once done.', zh: '愛爾蘭註冊的同類 ETF 不屬於美國資產：先用於新資金；已持有的部分，若賣出值得其手續費與稅負（海外已實現獲利屬海外所得）再轉換。「費用與稅務」頁有比較。決定後核准，完成後標記為已成交。' },
+        { en: 'Irish-domiciled equivalents are not US assets: use them for new money first, and for what is held where the sale is worth its fees and tax (a gain abroad is overseas income). The Costs page compares them.', zh: '愛爾蘭註冊的同類 ETF 不屬於美國資產：先用於新資金；已持有的部分，若賣出值得其手續費與稅負（海外已實現獲利屬海外所得）再轉換。「費用與稅務」頁有比較。' },
       ];
     case 'tranche_due':
       return [{ en: 'Each tranche deploys the cash still waiting over the tranches still to go, split by the core targets; the satellite takes none of the windfall.', zh: '每一批以「仍在等待的現金 ÷ 剩下的批數」投入，依核心目標權重分配；大額資金不投入衛星部位。' }, ...kept];
@@ -237,10 +344,98 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
       ];
     case 'price_at_or_above_value_multiple':
       return [{ en: 'Selling a share of the holding takes profit while the price is well above value; the proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '股價明顯高於內在價值時賣出部分持股以實現獲利；所得留在一般投入資金池，買進最低於目標的核心類別。' }];
+    case 'red_flag_worsens':
+      return [{ en: "A weekly scan found the stock's light worse than before. A light is display only: check what fired, then dismiss the warning or keep watching.", zh: '每週掃描發現該股燈號比之前差。燈號只供參考：請檢視觸發的指標，再忽略這則警示或持續觀察。' }];
+    case 'satellite_red_flag':
+      return [
+        { en: 'A satellite stock turned red: look at what fired again. The exit is suggested so it is ready; dismiss the warning if the case still holds.', zh: '衛星持股轉為紅燈：請重新檢視觸發的指標。出場建議已先準備好；若投資理由仍成立，忽略這則警示即可。' },
+        { en: 'The proceeds stay in the regular pool and buy the core classes furthest below target.', zh: '賣出所得留在一般投入資金池，買進最低於目標的核心類別。' },
+      ];
+    case 'volatility_score_crosses':
+      return [
+        { en: 'The score crossed its line from below. Tense: the watchlist stocks nearest their buy price, within R1 and R2. Panic: the VIX hedge is sold (it pays in a spike) and the core equity classes bought, as after a crash buying broad markets in stages has paid better than buying volatility.', zh: '分數由下往上穿越門檻。緊張：買進觀察清單中最接近買入價的個股（受 R1／R2 限制）。恐慌：賣出 VIX 避險部位（恐慌時獲利），買進核心股票類別；崩盤後分批買進大盤，歷來比買進波動率商品有利。' },
+        { en: 'A score marks stress, not a bottom: this is one stage, and the next is your call. Funded from strategic cash, the share kept for such days. Once a run: the alert fires again only after the score falls a full reset gap below the line.', zh: '分數代表壓力而非底部：這是其中一批，下一批由你判斷。資金來自戰略現金，即為此保留的部分。每波只觸發一次：分數須先跌破門檻減重設差距，才會再次觸發。' },
+      ];
+    case 'volatility_score_calm':
+      return [
+        { en: 'Protection is cheap while markets are calm. A VIX product loses value while held (its futures roll), so keep it small and sell it into a spike: the panic alert drafts that sale.', zh: '市場平靜時保護成本低。VIX 商品持有期間會因期貨轉倉流失價值，因此部位要小，並在恐慌時賣出：恐慌警報會產生賣出清單。' },
+        { en: 'Never more than the cap of the regular pool in VIX products, and within R2. None while a hedge is held.', zh: 'VIX 商品合計不超過一般投入資金池的上限，並受 R2 限制；已持有避險部位時不再提出。' },
+      ];
     case 'value_change_exceeds':
       return [{ en: 'A new quarter changed the figures the value is worked out from. Check the growth rates and any typed figures still fit, then save the valuation again.', zh: '新一季財報改變了計算內在價值的數字。請確認成長率與自訂數字是否仍合適，再重新儲存估值。' }];
     default:
       return [];
+  }
+}
+
+/** What a warning suggests, in a short line each language: the push's body and the tile's line. */
+export function suggestionLine(condition: string, state: string, detail: ProposalDetail, names: ReadonlyMap<string, Bilingual>): Bilingual {
+  switch (condition) {
+    case 'single_stock_weight_above': {
+      const cap = percent(detail.limit ?? 0, 0);
+      return { en: `Trim ${stateText(state)} back to the ${cap} cap.`, zh: `${stateText(state)} 減碼回 ${cap} 上限。` };
+    }
+    case 'satellite_weight_above': {
+      const from = percent(detail.weight ?? 0);
+      const to = percent(detail.target ?? 0, 0);
+      return { en: `Trim the satellite from ${from} back to ${to}.`, zh: `衛星部位由 ${from} 減碼回 ${to}。` };
+    }
+    case 'class_drift_exceeds': {
+      const classes = (detail.classes ?? []).map((row) => ({ name: names.get(row.id) ?? { en: row.id, zh: row.id }, drift: points(row.weight - row.target) }));
+      return {
+        en: `Rebalance: ${classes.map((row) => `${row.name.en} ${row.drift}`).join(', ')}.`,
+        zh: `再平衡：${classes.map((row) => `${row.name.zh} ${row.drift}`).join('、')}。`,
+      };
+    }
+    case 'day_after_dca':
+      return {
+        en: `Invest the ${twd(detail.contributionTwd ?? 0)} debited on ${detail.dcaDate ?? '—'} in the most underweight classes.`,
+        zh: `把 ${detail.dcaDate ?? '—'} 扣款的 ${twd(detail.contributionTwd ?? 0)} 投入最低配的類別。`,
+      };
+    case 'first_weekend_of_month':
+      return { en: 'The yearly review: rebalance the core to its targets and look over the rules.', zh: '年度檢查：核心類別回到目標，並檢視規則。' };
+    case 'tranche_due':
+      return { en: `Deploy ${twd(detail.cashTwd)} of the windfall: the tranche due ${detail.dueDate ?? '—'}.`, zh: `投入大額資金 ${twd(detail.cashTwd)}：${detail.dueDate ?? '—'} 到期的分批。` };
+    case 'index_drawdown_tier':
+      return {
+        en: `ACWI ${percent(detail.drawdown ?? 0)} below its high: deploy ${twd(detail.cashTwd)} more of the windfall now.`,
+        zh: `ACWI 自高點下跌 ${percent(detail.drawdown ?? 0)}：現在多投入大額資金 ${twd(detail.cashTwd)}。`,
+      };
+    case 'volatility_score_crosses': {
+      const row = detail.volatility;
+      const score = row ? row.score.toFixed(1) : '—';
+      return row?.band === 'panic'
+        ? { en: `Volatility ${score}/10, panic: sell the VIX hedge, buy the core in a first stage.`, zh: `波動分數 ${score}/10，恐慌：賣出 VIX 避險，分批買進核心。` }
+        : { en: `Volatility ${score}/10, tense: the watchlist stocks nearest their buy price.`, zh: `波動分數 ${score}/10，緊張：觀察清單中最接近買入價的個股。` };
+    }
+    case 'volatility_score_calm':
+      return { en: `Volatility ${detail.volatility?.score.toFixed(1) ?? '—'}/10, calm: a small hedge while protection is cheap.`, zh: `波動分數 ${detail.volatility?.score.toFixed(1) ?? '—'}/10，平靜：保護便宜時小量避險。` };
+    case 'us_situs_value_above': {
+      const total = money(detail.situsUsd ?? 0, 'USD', 0);
+      const limit = money(detail.limitUsd ?? 0, 'USD', 0);
+      return { en: `US assets ${total}, above the ${limit} exemption: consider Irish-domiciled ETFs.`, zh: `美國資產 ${total}，超過 ${limit} 免稅額：可考慮愛爾蘭註冊 ETF。` };
+    }
+    case 'price_at_or_below_value_multiple': {
+      const tickers = (detail.zone ?? []).map((row) => row.ticker).join(', ');
+      return { en: `${tickers} in its buy zone: buy within R1 and R2.`, zh: `${tickers} 進入買入區：可在 R1／R2 限制內買進。` };
+    }
+    case 'price_at_or_above_value_multiple': {
+      const tickers = (detail.zone ?? []).map((row) => row.ticker).join(', ');
+      return { en: `${tickers} in its trim zone: sell ${percent(detail.sellShare ?? 0, 0)} of it.`, zh: `${tickers} 進入減碼區：賣出 ${percent(detail.sellShare ?? 0, 0)}。` };
+    }
+    case 'value_change_exceeds': {
+      const tickers = (detail.changes ?? []).map((row) => row.ticker).join(', ');
+      return { en: `${tickers}: the value moved past the threshold; review the valuation.`, zh: `${tickers} 的內在價值變動超過門檻：請重新檢視估值。` };
+    }
+    case 'red_flag_worsens':
+    case 'satellite_red_flag': {
+      const tickers = [...new Set(state.split(',').map((part) => part.split(':')[0]).filter(Boolean))].join(', ');
+      return condition === 'satellite_red_flag'
+        ? { en: `${tickers} turned red: review it, and the exit.`, zh: `${tickers} 轉為紅燈：請重新檢視，考慮出場。` }
+        : { en: `${tickers}: the red-flag light worsened; review it.`, zh: `${tickers} 的紅旗燈號轉差：請重新檢視。` };
+    }
+    default:
+      return { en: 'A rule fired.', zh: '有規則觸發。' };
   }
 }
 
@@ -267,6 +462,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
     case 'quiet':
       return { en: 'Not firing', zh: '未觸發' };
     case 'covered':
+      if (check.why === 'hedge') return { en: 'A hedge is held already', zh: '已持有避險部位' };
       return check.why === 'R1' ? { en: "Covered by R1's trims", zh: '由 R1 的減碼處理' } : { en: 'Covered by the next contribution', zh: '下次每月投入可補足' };
     case 'waiting':
       if (check.why === 'dca_day') return { en: 'Waiting for the DCA debit day', zh: '尚未設定定期定額扣款日' };
@@ -275,6 +471,8 @@ export function checkText(check: Check, condition?: string): Bilingual {
       if (check.why === 'windfall_cash') return { en: "Waiting for the windfall's cash", zh: '尚無大額資金的現金' };
       if (check.why === 'gauge') return { en: "Waiting for ACWI's closes", zh: '等待 ACWI 的收盤價' };
       if (check.why === 'valuation') return { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' };
+      if (check.why === 'red_flags') return { en: 'Waiting for a red-flag scan', zh: '尚無紅旗掃描' };
+      if (check.why === 'volatility') return { en: 'Waiting for a fresh volatility score', zh: '等待最新波動分數' };
       return { en: 'Nothing to measure yet', zh: '尚無可衡量的持股' };
     case 'unreadable':
       return { en: 'Threshold missing or malformed', zh: '門檻缺漏或格式錯誤' };

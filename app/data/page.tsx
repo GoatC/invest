@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Bi } from '@/components/bi';
+import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataHealthBanner, RunStatusBadge } from '@/components/data-status';
 import { DataProblem } from '@/components/data-problem';
@@ -40,7 +40,7 @@ export default async function DataStatusPage() {
     <>
       <section className="card form">
         <h1>
-          <Bi {...LABELS.dataStatus} />
+          <Zh {...LABELS.dataStatus} />
         </h1>
         <Info>
           <Bi
@@ -107,10 +107,10 @@ function LatestRun({ run }: { run: JobRun }) {
         <p className="muted small">
           <Bi
             en={`Checked the rules: ${detail.rules.created} new proposal${detail.rules.created === 1 ? '' : 's'}, ${detail.rules.closed} closed.`}
-            zh={`已檢查規則：新增 ${detail.rules.created} 份提案，關閉 ${detail.rules.closed} 份。`}
+            zh={`已檢查規則：新增 ${detail.rules.created} 則警示，解除 ${detail.rules.closed} 則。`}
           />{' '}
-          <Link href="/proposals">
-            <Bi en="Proposals" zh="提案" />
+          <Link href="/#proposals">
+            <Bi en="Rule warnings" zh="規則警示" />
           </Link>
         </p>
       )}
@@ -122,9 +122,47 @@ function LatestRun({ run }: { run: JobRun }) {
           </Link>
         </p>
       )}
+      {detail.redFlags && (
+        <p className="muted small">
+          <Bi
+            en={`Red flags: scanned ${detail.redFlags.scanned.join(', ') || 'none due'}; ${detail.redFlags.events} event${detail.redFlags.events === 1 ? '' : 's'} read from the feeds.`}
+            zh={`紅旗指標：已掃描 ${detail.redFlags.scanned.join('、') || '（無到期）'}；自資料來源讀到 ${detail.redFlags.events} 件事件。`}
+          />{' '}
+          <Link href="/red-flags">
+            <Bi {...LABELS.redFlags} />
+          </Link>
+        </p>
+      )}
+      {detail.estimates && (
+        <p className="muted small" id="estimates">
+          <Bi
+            en={`Analysts' estimates: loaded ${detail.estimates.saved.join(', ') || 'none'}${detail.estimates.failed.length > 0 ? `; not loaded, keeping the saved ones: ${detail.estimates.failed.join('; ')}` : ''}.`}
+            zh={`分析師預估：已載入 ${detail.estimates.saved.join('、') || '（無）'}${detail.estimates.failed.length > 0 ? `；未能載入、沿用已存資料：${detail.estimates.failed.join('；')}` : ''}。`}
+          />
+        </p>
+      )}
+      {detail.dividends && (
+        <p className="muted small" id="dividends">
+          <Bi
+            en={`Dividends: looked up ${Object.entries(detail.dividends.checked).map(([ticker, source]) => `${ticker} (${feedLabel(source).en})`).join(', ') || 'none'}; ${detail.dividends.saved} saved${detail.dividends.failed.length > 0 ? `; failed: ${detail.dividends.failed.join('; ')}` : ''}.`}
+            zh={`配息：已查詢 ${Object.entries(detail.dividends.checked).map(([ticker, source]) => `${ticker}（${feedLabel(source).zh}）`).join('、') || '（無）'}；存入 ${detail.dividends.saved} 筆${detail.dividends.failed.length > 0 ? `；查詢失敗：${detail.dividends.failed.join('；')}` : ''}。`}
+          />
+        </p>
+      )}
+      {Object.keys(detail.holdings).length > 0 && (
+        <p className="muted small" id="holdings-files">
+          <Bi
+            en={`Holdings files read: ${Object.entries(detail.holdings).map(([fund, loaded]) => `${fund} ${loaded.latest} (${loaded.rows} lines, ${feedLabel(loaded.source).en})`).join(', ')}.`}
+            zh={`已讀取成分股檔案：${Object.entries(detail.holdings).map(([fund, loaded]) => `${fund} ${loaded.latest}（${loaded.rows} 檔，${feedLabel(loaded.source).zh}）`).join('、')}。`}
+          />{' '}
+          <Link href="/look-through">
+            <Bi {...LABELS.lookThrough} />
+          </Link>
+        </p>
+      )}
       {rulesErrors.length > 0 && (
         <div className="banner warn">
-          <Bi en="The rules could not be checked; use Check the rules now on the proposals page:" zh="無法檢查規則；請到提案頁按「立即檢查規則」：" />
+          <Bi en="The rules could not be checked; use Check the rules now under the dashboard's rule warnings:" zh="無法檢查規則；請到儀表板的規則警示按「立即檢查規則」：" />
           <ul>
             {rulesErrors.map((line) => (
               <li key={line}>{line}</li>

@@ -45,7 +45,7 @@ Built phase by phase from [the product spec](docs/PRD.md); a phase starts only a
 | 10. Web Push and the weekly dashboard 推播與每週儀表板 | ✅ [setup 設定](docs/web-push.md) |
 | 11. Fee and tax drag 費用與稅務拖累 | ✅ |
 
-Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code). 第一階段已完成並通過關卡；第二階段依 PRD 第 11 節的順序進行中。
+All three phases are built and their gates have passed: the app is complete. Phase 3 followed [PRD Section 11](docs/PRD.md#11-claude-code-handoff-交付-claude-code)'s order. 三個階段都已建置完成並通過關卡：App 建置完成。第三階段依 PRD 第 11 節的順序建置。
 
 | Phase 2 step 第二階段步驟 | State 狀態 |
 | --- | --- |
@@ -53,38 +53,62 @@ Phase 1 is built and its gate has passed; Phase 2 is under way, in the order of 
 | 2. N1 Regression Lab, single-factor β 回歸分析區（單因子 β） | ✅ |
 | 3. F11 CAPM cost of equity CAPM 權益成本 | ✅ |
 | 4. F12 valuation workbench and alerts 估值工作台與警報 | ✅ |
-| 5. N3 red-flag indicator 紅旗指標 | |
-| 6. F14 combined look-through 核心與衛星合併透視 | |
-| 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | Planned 已規劃 ([spec 規格](docs/PRD.md#module-c--security-analysis-證券分析)) |
+| 5. N3 red-flag indicator 紅旗指標 | ✅ |
+| 6. F14 combined look-through 核心與衛星合併透視 | ✅ |
+| 7. N7 sector heatmap tab: heatmap, treemap, bubble chart 產業熱圖分頁：熱力圖、板塊圖、泡泡圖 | ✅ |
 
-Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress tests, Brinson attribution and the Fama–French five factors. 第三階段加入蒙地卡羅、人生時間軸、效率前緣、壓力測試、Brinson 歸因與 Fama–French 五因子。
+| Phase 3 step 第三階段步驟 | State 狀態 |
+| --- | --- |
+| 1. F5 Monte Carlo simulation 蒙地卡羅模擬 | ✅ |
+| 2. F1 30-year life timeline 30 年人生財務時間軸 | ✅ |
+| 3. F10 stress test and scenario replay 壓力測試與情境回放 | ✅ |
+| 4. F7 efficient frontier and CML 效率前緣與資本市場線 | ✅ |
+| 5. N2 Brinson attribution Brinson 績效歸因 | ✅ |
+| 6. N1 Fama–French five-factor mode 五因子模式 | ✅ |
+
+| N8 volatility alert step (added 2026-11-06) N8 波動警報步驟 | State 狀態 |
+| --- | --- |
+| 1. The score: feeds, twice-daily job, page 波動分數：資料來源、每天兩次的排程、頁面 | ✅ [setup 設定](docs/volatility.md) |
+| 2. Event calendar, reminder two days before 事件日曆與事件前兩天提醒 | ✅ [setup 設定](docs/volatility.md) |
+| 3. Alert, band proposals, shadow log 警報、依區段提案、影子紀錄 | ✅ [setup 設定](docs/volatility.md) |
+| 4. Breaking news, page in few words 前沿新聞、頁面精簡 | ✅ [setup 設定](docs/volatility.md) |
 
 ## What works today 目前的功能
 
-- **Weekly dashboard 每週儀表板** (home): three lines (rules, largest drift, value and weekly change), open proposals to approve or dismiss, drift bars, VaR, allocation donut, windfall progress, the coming week, actual vs plan. 三行摘要、待處理提案、偏離、風險值、配置、大額資金、下週事件、實際對計畫。
-- **Web Push 推播**: only when a decision is due (new proposal, weekly review, data failure), never a price move; quiet hours 23:00–08:00. 只在需要決定時推播；安靜時段暫停。
-- **Holdings and entry 持倉與登錄**: both pools, R1 / R2 status with the trim needed, actual vs target weights, average cost, TWD value and gain; trade entry fills the currency and the trade date's Bank of Taiwan rate and warns on R1 / R2; broker CSV import (UTF-8 or Big5, ROC dates, mapping remembered per broker, dividends as cash flows, duplicates skipped); cash flows, gold in grams and TWD balances; every edit logged. 持倉、交易登錄、CSV 匯入、現金流與非上市資產，修改皆留紀錄。
+- **Weekly dashboard 每週儀表板** (home): a poster in the accent colour with the value of both pools and each pool's, the gain since the start and over seven days, and the line of the portfolio's rise and fall along its foot (time-weighted, so money put in does not bend it), VaR with its distribution and make-up folded under it, the watchlist, the coming week, allocation donut, windfall progress, actual vs plan, and the rule warnings, second on the page while one stands, each kept until you dismiss it or the rule clears. 主色海報（兩個資金池總市值、累計與近 7 天損益、底部的漲跌幅走勢線）、風險值（分布與組成收合）、觀察清單、下週事件、配置、大額資金、實際對計畫；有規則警示時排在第二，會一直顯示直到你忽略或規則解除。
+- **Web Push 推播**: only when a decision is due (new rule warning, weekly review, data failure), never a price move; quiet hours 23:00–08:00. 只在需要決定時推播；安靜時段暫停。
+- **Holdings and entry 持倉與登錄**: both pools, R1 / R2 status with the trim needed, actual vs target weights, average cost, TWD value and gain; trade entry fills the currency and the trade date's Bank of Taiwan rate and warns on R1 / R2; broker CSV import (UTF-8 or Big5, ROC dates, mapping remembered per broker, dividends as cash flows, duplicates skipped); a cash-flow book that counts every buy and sell from the trades (only the windfall, dividends and withdrawals are typed in); each holding's dividend dates looked up nightly, with a prompt to record the cash on the day it is paid; an in-app banner that says what waits and leads there; gold in grams and TWD balances; stock splits on each security's page, so shares bought before one count in the new shares; every edit logged. 持倉、交易登錄、CSV 匯入、現金流帳（買賣自動計入）、配息詢問、App 內橫幅、非上市資產與股票分割，修改皆留紀錄。
 - **Performance 績效**: TWR against the SAA benchmark, XIRR, and the TWD return split into local, currency and cross terms. 時間加權與資金加權報酬、匯率拆解。
-- **Allocation 資產配置**: drift coloured by the 5/25 rule (satellite by R2), targets and capital market assumptions edited in the app, donuts by product type, listing country and active vs passive. 偏離、目標與資本市場假設、三種圓餅圖。
+- **Allocation 資產配置**: drift coloured by the 5/25 rule (satellite by R2), targets and capital market assumptions edited in the app (a satellite class left blank is scored from its stocks and ETFs by CAPM, so the frontier counts it), donuts by product type, listing country and active vs passive. 偏離、目標與資本市場假設（留白的衛星類別依持股以 CAPM 自動評分，讓效率前緣納入）、三種圓餅圖。
 - **Value at Risk 風險值**: 95% 1-week (or 1-month) parametric VaR of the whole portfolio from three years of weekly TWD returns of each class's proxy, with a 52-week line and its distribution. 參數法風險值與走勢、分布。
 - **Calculator 複利計算機**: monthly investing projected in nominal and today's TWD; once saved, the plan against the regular pool each month end. 複利預測與實際對照。
-- **Rules and proposals 規則與提案**: R1, R2, F8's 5/25 drift, the monthly contribution, the January review, US estate tax, windfall tranches, and F12's buy zone, trim zone and valuation updates, evaluated nightly; each proposal explains itself and drafts orders with estimated fees (US shares in fractions); you approve, edit or dismiss, trade at your broker and record the fills (L2: the app never trades). 規則觸發時產生附下單清單的提案，由你決定並自行下單。
+- **Rules and warnings 規則與警示**: R1, R2, F8's 5/25 drift, the monthly contribution, the January review, US estate tax, windfall tranches, and F12's buy zone, trim zone and valuation updates, evaluated nightly; a rule that fires raises a standing warning that explains itself and suggests orders with estimated fees (US shares in fractions); it stays until you dismiss it or the rule clears; you trade at your broker and record the trades (L2: the app never trades). 規則觸發時發出常駐警示（附建議下單），可忽略；由你決定並自行下單。
 - **Costs and tax 費用與稅務**: yearly drag of the holdings, each fund's and 複委託 broker's 30-year cost, the US$60,000 estate-tax check, the minimum tax's overseas-income floor and the 2.11% NHI premium; every threshold is a dated setting. 費用拖累、券商比較與三項稅務檢查。
 - **Windfall planner 大額資金分批** (F3): core classes only, 6 / 12 / 24 monthly tranches by the CAPE percentile, sooner when ACWI falls 15% / 25% / 35%; a backtest since 1900. 依 CAPE 分批、大跌加速、回測。
 - **Regression Lab 回歸分析** (N1): β against the S&P 500 and TAIEX with its interval, Blume's adjustment, α, R², rolling β and a five-ticker comparison; Dimson β for daily returns across markets. β、滾動 β 與比較。
 - **Cost of equity 權益成本** (F11): each single stock's R_f + β (ERP + CRP) in its market's currency. 個股 CAPM 權益成本。
 - **Valuation workbench 估值工作台** (F12): a single stock valued a share, bear / base / bull, by DCF (FCFF at WACC), Gordon's dividend model and P/E, P/B and EV/EBITDA against peers and its own five years, from its SEC or FinMind filings; the margin of safety and the buy (≤ 75%) and trim (≥ 125%) zones, re-run after each filing. 三種模型的內在價值、安全邊際、買入與減碼區，新財報後重算。
+- **Red flags 紅旗指標** (N3): a red / amber / green light per single stock from nine indicators (Beneish M, Altman Z or Z″, cash flow against earnings, auditor changes, going-concern opinions and restatements from SEC 8-Ks and TWSE announcements, Taiwan environmental penalties, the governance tier, your exclusion list), with the share of them data covers; scanned weekly, a holding's worse light prompts a review and a satellite stock turning red drafts its exit. Display only. 九項指標的紅黃綠燈與資料覆蓋率；每週掃描，持股燈號轉差時提醒檢視，衛星持股轉紅時準備出場清單；僅供參考。
+- **Look-through 合併透視** (F14): every fund opened up with its issuer's holdings file (Vanguard, Fubon), so each company's exposure through all the funds and held directly is one line, as a treemap; country, GICS sector and currency splits, each pair of funds' overlap, and each fund's TER, tracking difference and domicile. 以發行商成分股展開各基金，合併計算各公司曝險（矩形樹狀圖）、國家、產業與幣別分布、基金重疊度與費用。
+- **Sectors 產業熱圖** (N7): the 11 GICS sectors, priced by the Select Sector SPDR funds in the US and the TWSE industry indices in Taiwan, as a heatmap of returns over 1 week to 1 year (red up by default, or green up), a treemap of the portfolio's exposure through the look-through coloured by return with each sector's companies, and a bubble chart of 1-year return against volatility with the portfolio's own point. Display only. 以 GICS 11 個產業呈現美股 SPDR 類股 ETF 與證交所類股指數的報酬熱力圖、依穿透曝險繪製的板塊圖（可展開公司）與報酬對波動度的泡泡圖；僅供參考。
+- **Volatility alert 波動警報** (N8, added 2026-11-06): a market-stress score from 1 (calm) to 10 (panic), scored twice on weekdays from free series (the VIX and its 3-month curve, Taiwan's VIX, the S&P 500's and TAIEX's falls, the high-yield spread and the daily policy-uncertainty index from the news), with the last year's line and each component's calm and panic figures as logged settings. An event calendar (FOMC decisions from the Fed, US CPI and jobs reports from FRED, Taiwan's central bank meetings and elections typed in) lists the coming events at Taipei time and pushes a reminder two days before each. Crossing 6 (tense) or 8 (panic) drafts a proposal and pushes it even in the quiet hours: tense buys the watchlist stocks nearest their buy price, panic sells the VIX hedge and buys the core equity, both from strategic cash within R1 and R2; below 4 a 1% hedge in 00677U, at most 5% in VIX products; a shadow log keeps each proposal's return after 5, 20 and 60 sessions and the hit rate. Breaking news: every 30 minutes, a topic (war, the Taiwan Strait, an emergency central-bank move, a crash, a financial crisis, tariffs, a disaster) reported by 10+ outlets in 3 hours, three times its usual count, is pushed with its newest headline. 以免費資料每個平日計分兩次的市場壓力分數（1 平靜到 10 恐慌）：VIX 與期限結構、臺指 VIX、標普與加權指數跌幅、高收益債利差、新聞面的政策不確定性指數；顯示近一年走勢與各成分，數值可修改並留紀錄。事件日曆（聯準會決議、美國 CPI 與非農、央行理監事會議與自行輸入的選舉）以台北時間列出近期事件，並於兩天前推播提醒。分數穿越 6（緊張）或 8（恐慌）時產生提案並推播（安靜時段照送）：緊張買進最接近買入價的觀察清單個股，恐慌賣出 VIX 避險並買進核心股票，資金皆來自戰略現金並受 R1／R2 限制；低於 4 時以 1% 買進 00677U 避險，VIX 商品上限 5%；影子紀錄追蹤每份提案 5、20、60 日後的報酬與命中率。前沿新聞：每 30 分鐘統計各主題（戰爭、台海、央行緊急行動、崩跌、金融危機、關稅、災害）的報導媒體家數，3 小時內 10 家以上且為平常 3 倍時附最新標題推播。
+- **Monte Carlo 蒙地卡羅** (F5): 10,000 possible futures for the saved plan, drawn month by month from how each class's benchmark ETF actually moved (blocks of three real months, so the crashes stay), re-centred on your expected returns; the median, a 10–90% band, the chance of reaching a goal in today's money; the windfall runs as F3 runs it on every path (paced by CAPE, sooner when that path's market falls 15% / 25% / 35%), with its own part of the median and the goal's chance with and without it; re-run monthly. 依各類別基準 ETF 的實際月報酬（連續三個月一組，保留崩跌）抽樣出 10,000 種可能的未來，以你的預期報酬為中心；顯示中位數、10–90% 區間、達成目標（今天幣值）的機率；大額資金在每條路徑上依 F3 規則投入（依 CAPE 分批，該路徑市場下跌 15%／25%／35% 時提前），並列出大額資金占中位數的部分，以及含與不含大額資金時的達成機率；每月重跑。
+- **Life timeline 人生時間軸** (F1): the whole plan on one chart: the plan (F2), the Monte Carlo median and band (F5) and what you actually hold, month end by month end, with the accumulation and windfall phases shaded and your later goals marked, each with the plan's value and the chance of reaching it. 整份計畫在一張圖上：計畫（F2）、蒙地卡羅中位數與區間（F5）與逐月底的實際值，標示累積期與大額資金部署期，並標出你的後續目標及屆時的計畫值與達成機率。
+- **Stress test 壓力測試** (F10): 2008, 2020 and 2022 replayed on what you hold today by asset class, month by month in TWD: the deepest fall in % and NT$, how long the climb back took, and which of the windfall planner's acceleration tiers (15% / 25% / 35%) would have fired; or a shock of your own, with an underwater chart. 把 2008、2020、2022 依資產類別套用在你今天的持股，逐月以台幣計算：最大回撤（百分比與台幣）、爬回所需月數，以及大額資金加速級距（15%／25%／35%）會被觸發的情況；也可自訂衝擊，附回撤圖。
+- **Efficient frontier 效率前緣** (F7): the portfolios your asset classes could make that earn the most for their risk, from your capital market assumptions and ten years of how the classes moved together, with the capital market line, the tangent (best Sharpe) portfolio, your current and target mixes as points, the weights along the curve and a correlation heatmap; weight bounds and the risk-free rate are settings; reference only, it never changes your targets. 依你的資本市場假設與十年的類別連動，畫出各資產類別能組成、風險下報酬最高的配置，附資本市場線、切線（夏普比率最高）組合、你目前與目標配置的位置、沿曲線的權重與相關係數熱力圖；權重上下限與無風險利率可設定；僅供參考，不會改變你的目標。
+- **Attribution 績效歸因** (N2): why the regular pool beat or trailed the benchmark set by your targets, month by month and linked (Carino): allocation, selection, interaction and currency by asset class, a waterfall from the benchmark's return to yours, a quadrant of active weight against relative return, cumulative effects over time, and for the satellite's stocks by sector against the core equity fund's sector weights; saved monthly. 一般投入資金池為什麼勝過或落後你的目標所訂的基準：逐月並連結（Carino），依資產類別拆成配置、選擇、交互與匯率效果，附從基準到你的報酬的瀑布圖、主動權重對相對報酬的象限圖、累積效果走勢，並有衛星個股依產業對照核心股票基金產業權重的第二層；每月存檔。
+- **Five factors 五因子** (N1, Phase 3): what drives each holding's and the whole portfolio's return beyond the market, by the Fama–French five factors (market, size, value, profitability, investment) on Kenneth French's free monthly data: each loading with its t-statistic and 95% interval, alpha, R², over 2 to 10 years; a mode of the Regression Lab. 以 Kenneth French 的免費月資料，用 Fama–French 五因子（市場、規模、價值、獲利能力、投資）說明每檔持股與整體投資組合除了大盤之外的報酬來源：各因子係數附 t 值與 95% 信賴區間、阿爾法、R²，期間 2 到 10 年；為回歸分析區的一個模式。
 - **Nightly data 每夜資料**: GitHub Actions loads prices, FX, gold, the market series, indices, yields and filings, each with a fallback feed, saves each day's NAV and VaR, then checks the rules; the Data status page shows every run, and two missed nights raise an alert. 每夜載入資料、存淨值與風險值、檢查規則；連續兩晚失敗即警示。
 
-![The weekly dashboard with demo data: this week's three lines, the open proposal, drift from the targets](docs/images/dashboard.png)
+![The weekly dashboard with demo data: the poster with the value and the line of its rise and fall, the Value at Risk, the watchlist and the coming week](docs/images/dashboard.png)
 
 ![Performance with demo data: TWR against the SAA benchmark, XIRR and the gain](docs/images/performance.png)
 
 ![Allocation with demo data: drift from the targets, coloured by the 5/25 rule](docs/images/allocation.png)
 
-![Value at Risk with demo holdings: the 1-week figure, its 52-week line, and where it sits among three years of weekly returns](docs/images/risk.png)
+![Value at Risk on the dashboard with demo holdings: the 1-week figure and, opened under it, where it sits among three years of weekly returns](docs/images/risk.png)
 
-![Proposals with demo data: the monthly contribution and a drift rebalance, each explained, with whole-share orders](docs/images/proposals.png)
+![Rule warnings on the dashboard with demo data: R1, a drift rebalance and the monthly contribution, each with its dismiss button and its figures and whole-share orders unfolded](docs/images/proposals.png)
 
 ![Costs and tax with demo data: what each 複委託 broker would cost over the plan, a US$35 minimum fee weighing on a NT$5,000 order](docs/images/costs.png)
 
@@ -95,6 +119,24 @@ Phase 3 adds Monte Carlo, the life timeline, the efficient frontier, stress test
 ![Cost of equity with demo data: each market's 10-year yield and Damodaran's ERP, every stock's β and cost of equity](docs/images/capm.png)
 
 ![Valuation workbench with demo filings: AAPL valued a share by DCF, the dividend model and multiples, against its price](docs/images/valuation.png)
+
+![Red flags with demo data: each company's nine indicators by level, its light and the share covered](docs/images/red-flags.png)
+
+![Look-through with demo holdings: each company's exposure through the funds and held directly, coloured by sector](docs/images/look-through.png)
+
+![Sectors with demo closes: the heatmap of each sector's return by period, US and Taiwan side by side](docs/images/sectors.png)
+
+![Monte Carlo with demo data: the fan of the plan's value over 30 years and where year 30 could land](docs/images/monte-carlo.png)
+
+![Life timeline with demo data: the plan, the Monte Carlo band and the actual value over 30 years, the accumulation phase shaded](docs/images/timeline.png)
+
+![Stress test with demo holdings: the 2008, 2020 and 2022 scenarios on today's mix, the deepest fall, the months to recover and the F3 tiers fired](docs/images/stress.png)
+
+![Efficient frontier with demo data: the curve, the capital market line, the tangent portfolio and the current and target mixes](docs/images/frontier.png)
+
+![Attribution with demo data: the waterfall from the benchmark's return to the portfolio's, effects by asset class](docs/images/attribution.png)
+
+![Five-factor mode with demo holdings on live factors: each holding's and the whole portfolio's loadings with t-statistics, alpha and R², and the 95% intervals](docs/images/five-factors.png)
 
 ![Compounding calculator with demo data: the PRD acceptance case, NT$10,000 a month at 6% for 30 years, year by year](docs/images/calculator.png)
 

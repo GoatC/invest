@@ -5,9 +5,18 @@
 import { isIsoDate, isMonth } from './dates';
 import type { Bilingual } from './i18n';
 import type { Broker, FeeSchedule, FeeSettings, FundCost, TaxSettings } from './models/costs';
-import type { DraftOrder } from './models/engine';
 import type { SavedPlan } from './models/projection';
-import type { AssetClass, CashFlow, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
+import type { LookThroughSettings } from './models/look-through';
+import type { FrontierSettings } from './models/frontier';
+import type { AutoCmaSettings } from './models/auto-cma';
+import type { McSettings } from './models/monte-carlo';
+import { MAX_GOALS, type Goal, type TimelineSettings } from './models/timeline';
+import type { SectorProxy, SectorSettings } from './models/sectors';
+import { EVENT_KINDS, KIND_NAMES, type MarketEvent } from './models/events';
+import type { NewsSettings } from './models/news';
+import { COMPONENT_UNIT, type ComponentSetting, type VolatilitySettings } from './models/volatility';
+import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from './models/red-flags';
+import type { AssetClass, CashFlow, Direction, FlowType, Market, Pool, ProductType, Security, Side } from './models/types';
 
 export type RawForm = Record<string, string | undefined>;
 export type FieldErrors<K extends string> = Partial<Record<K, Bilingual>>;
@@ -35,8 +44,6 @@ export const MESSAGES = {
   stepUp: { en: 'Enter a yearly step-up from 0% to 30%, with at most two decimals.', zh: '請輸入 0% 到 30% 之間的每年調升比例，最多兩位小數。' },
   inflation: { en: 'Enter a yearly inflation from −5% to 20%, with at most two decimals.', zh: '請輸入 −5% 到 20% 之間的年通膨率，最多兩位小數。' },
   years: { en: 'Enter a whole number of years from 1 to 60.', zh: '請輸入 1 到 60 之間的整數年數。' },
-  shares: { en: 'Enter whole shares, 0 or more; 0 drops the order.', zh: '請輸入整數股數（0 或以上）；0 代表刪除這筆。' },
-  wholeTwd: { en: 'Enter whole NT$, 0 or more; 0 drops the order.', zh: '請輸入整數台幣金額（0 或以上）；0 代表刪除這筆。' },
   fraction: { en: 'Enter a number between 0 and 1, e.g. 0.05 for 5%.', zh: '請輸入 0 到 1 之間的數字，例如 5% 填 0.05。' },
   wholeNumber: { en: 'Enter a whole number, 0 or more.', zh: '請輸入 0 或以上的整數。' },
   cooldown: { en: 'Enter whole days from 0 to 365.', zh: '請輸入 0 到 365 的整數天數。' },
@@ -44,6 +51,7 @@ export const MESSAGES = {
   expiryDays: { en: 'Enter whole days from 1 to 365.', zh: '請輸入 1 到 365 的整數天數。' },
   shareDecimals: { en: 'Enter 1 to 4 decimals.', zh: '請輸入 1 到 4 位小數。' },
   clock: { en: 'Enter a time as HH:MM, 24-hour, e.g. 23:00.', zh: '請以 24 小時制 HH:MM 輸入時間，例如 23:00。' },
+  leverage: { en: 'Pick a leverage from the list: 1.0× and up in steps of 0.1×.', zh: '請從清單選擇槓桿：1.0 倍起，以 0.1 倍為級距。' },
   quietSame: { en: 'The quiet hours cannot start and end at the same time.', zh: '安靜時段的開始與結束時間不能相同。' },
   weekday: { en: 'Pick a day of the week.', zh: '請選擇星期幾。' },
   rate: { en: 'Enter a percentage from 0 to 100, with at most four decimals, e.g. 0.1425.', zh: '請輸入 0 到 100 的百分比，最多四位小數，例如 0.1425。' },
@@ -78,6 +86,22 @@ export const MESSAGES = {
   trimMultiple: { en: 'Enter a multiple above 1, e.g. 1.25, or leave it blank.', zh: '請輸入大於 1 的倍數，例如 1.25，或留白。' },
   quarters: { en: 'Enter whole quarters from 1 to 40.', zh: '請輸入 1 到 40 的整數季數。' },
   historyYears: { en: 'Enter whole years from 1 to 10.', zh: '請輸入 1 到 10 的整數年數。' },
+  scanDays: { en: 'Enter whole days from 1 to 90.', zh: '請輸入 1 到 90 的整數天數。' },
+  score: { en: 'Enter a score, e.g. −1.78 or 2.99.', zh: '請輸入分數，例如 −1.78 或 2.99。' },
+  industryCodes: { en: 'List two-digit TWSE industry codes, e.g. 24, 28.', zh: '請列出兩位數的證交所產業別代碼，例如 24、28。' },
+  topCompanies: { en: 'Enter a whole number from 5 to 100.', zh: '請輸入 5 到 100 的整數。' },
+  codeSectors: { en: 'One per line: a TWSE industry code, "=", a GICS sector, e.g. 24 = Information Technology.', zh: '每行一個：證交所產業別代碼、「=」、GICS 產業，例如 24 = 資訊科技。' },
+  indexSectors: { en: 'One per line: an industry index already listed, "=", a GICS sector, e.g. Electronic = Information Technology.', zh: '每行一個：清單中的類股指數、「=」、GICS 產業，例如 Electronic = 資訊科技。' },
+  mcTarget: { en: 'Enter whole NT$ above 0 (in today’s money), or leave it blank.', zh: '請輸入大於 0 的整數台幣金額（以今天幣值計），或留白。' },
+  mcWindfallMonth: { en: 'Enter the month the money arrives as YYYY-MM.', zh: '請以 YYYY-MM 輸入入帳月份。' },
+  mcWindfallAmount: { en: 'Enter whole NT$ above 0, or leave it blank.', zh: '請輸入大於 0 的整數台幣金額，或留白。' },
+  goals: { en: 'One per line: month | amount in today’s money (blank for none) | name, e.g. 2045-06 | 3,000,000 | House.', zh: '每行一個：月份 | 以今天幣值計的金額（留白代表沒有）| 名稱，例如 2045-06 | 3,000,000 | 購屋頭期款。' },
+  goalCount: { en: `At most ${MAX_GOALS} goals.`, zh: `最多 ${MAX_GOALS} 個目標。` },
+  frontierBounds: { en: 'One per line: an asset class id, "=", the minimum and maximum in percent, e.g. us_global_equity = 0 - 50; the minimums must not exceed 100% nor the maximums fall short of it.', zh: '每行一個：資產類別代號、「=」、最小與最大百分比，例如 us_global_equity = 0 - 50；最小值合計不得超過 100%，最大值合計不得低於 100%。' },
+  frontierYears: { en: 'Enter whole years from 1 to 30.', zh: '請輸入 1 到 30 的整數年數。' },
+  autoYears: { en: 'Enter whole years from 1 to 20.', zh: '請輸入 1 到 20 的整數年數。' },
+  autoMonths: { en: 'Enter whole months from 12 up to the years × 12.', zh: '請輸入 12 到「年數 × 12」之間的整數月數。' },
+  fundCountries: { en: 'One per line: a ticker, "=", a two-letter country code, e.g. BIL = US.', zh: '每行一個：代號、「=」、兩個字母的國家代碼，例如 BIL = US。' },
 } as const satisfies Record<string, Bilingual>;
 
 /** "1,234.5" → 1234.5; empty or not a number → undefined. */
@@ -120,12 +144,35 @@ export interface TradeInput {
   tax: number;
   fxRate: number;
   pool: Pool;
+  direction: Direction;
+  leverage: number;
   note: string | null;
 }
 
 export type TradeField = keyof TradeInput;
 
-export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Security>, today: string): Parsed<TradeInput, TradeField> {
+/** The leverage a form may pick, 1.0× to `max` in steps of 0.1×: [1, 1.1, …, max]. */
+export function leverageSteps(max: number): number[] {
+  const top = Math.max(10, Math.min(100, Math.round(max * 10)));
+  return Array.from({ length: top - 9 }, (_, index) => (10 + index) / 10);
+}
+
+/** A typed leverage on the 0.1× grid between 1 and `max`, else undefined. Blank is 1×. */
+export function parseLeverage(raw: string | undefined, max: number): number | undefined {
+  const typed = text(raw);
+  if (typed === '') return 1;
+  const value = parseNumber(typed.replace(/[x×倍]$/i, ''));
+  if (value === undefined) return undefined;
+  const tenths = Math.round(value * 10);
+  if (Math.abs(value * 10 - tenths) > 1e-6) return undefined;
+  return tenths >= 10 && tenths <= Math.round(max * 10) ? tenths / 10 : undefined;
+}
+
+/**
+ * A trade from the form. `maxLeverage` is config leverage's max; before that setting exists every
+ * trade is 1×. A short is a sell that opens and a buy that closes (positions.ts).
+ */
+export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Security>, today: string, maxLeverage = 1): Parsed<TradeInput, TradeField> {
   const errors: FieldErrors<TradeField> = {};
   const tradeDate = text(raw['tradeDate']);
   if (!isIsoDate(tradeDate)) errors.tradeDate = MESSAGES.date;
@@ -157,6 +204,10 @@ export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Securit
 
   const pool = oneOf(raw['pool'] || 'regular', ['regular', 'windfall'] as const);
   if (!pool) errors.pool = MESSAGES.choice;
+  const direction = oneOf(raw['direction'] || 'long', ['long', 'short'] as const);
+  if (!direction) errors.direction = MESSAGES.choice;
+  const leverage = parseLeverage(raw['leverage'], maxLeverage);
+  if (leverage === undefined) errors.leverage = MESSAGES.leverage;
   const note = text(raw['note']);
   if (note.length > 500) errors.note = MESSAGES.tooLong;
 
@@ -171,6 +222,8 @@ export function parseTrade(raw: RawForm, securities: ReadonlyMap<string, Securit
     tax: tax as number,
     fxRate: fxRate as number,
     pool: pool as Pool,
+    direction: direction as Direction,
+    leverage: leverage as number,
     note: note || null,
   }));
 }
@@ -438,37 +491,6 @@ export function parsePlanForm(raw: RawForm): Parsed<SavedPlan, PlanField> {
 }
 
 // ---------------------------------------------------------------------------
-// Proposal orders (edit before approving)
-// ---------------------------------------------------------------------------
-
-/** Field name of an order's size: shares for a trade, NT$ for a balance. */
-export function sizeField(index: number): string {
-  return `size_${index}`;
-}
-
-/** The message for a fractional order's share count. */
-export function fractionalShares(decimals: number): Bilingual {
-  return { en: `Enter shares, 0 or more, with at most ${decimals} decimals; 0 drops the order.`, zh: `請輸入股數（0 或以上），最多 ${decimals} 位小數；0 代表刪除這筆。` };
-}
-
-/** Each order's new size: shares (whole, or to the order's decimals) for a trade, whole NT$ for a balance; 0 drops it. */
-export function parseOrderSizes(raw: RawForm, orders: readonly DraftOrder[]): { sizes: number[]; errors: FieldErrors<string> } {
-  const errors: FieldErrors<string> = {};
-  const sizes = orders.map((order, index) => {
-    const name = sizeField(index);
-    const value = parseNumber(raw[name]);
-    const decimals = order.kind === 'trade' ? (order.decimals ?? 0) : 0;
-    const scaled = value === undefined ? Number.NaN : value * 10 ** decimals;
-    if (value === undefined || value < 0 || Math.abs(scaled - Math.round(scaled)) > 1e-6) {
-      errors[name] = order.kind === 'balance' ? MESSAGES.wholeTwd : decimals > 0 ? fractionalShares(decimals) : MESSAGES.shares;
-      return 0;
-    }
-    return value;
-  });
-  return { sizes, errors };
-}
-
-// ---------------------------------------------------------------------------
 // Rules and the engine's settings (rules page)
 // ---------------------------------------------------------------------------
 
@@ -485,7 +507,7 @@ export interface RuleInput {
 }
 
 /**
- * A rule's edit: on or off, its cooldown, and each number in its threshold. A whole number stays
+ * A rule's edit: on or off, its cooldown, each switch and each number in its threshold. A whole number stays
  * whole, a share (between 0 and 1) stays one, and any other number stays above 0 (a multiple such as 1.25).
  */
 export function parseRuleForm(raw: RawForm, threshold: Record<string, unknown>): Parsed<RuleInput, string> {
@@ -494,6 +516,11 @@ export function parseRuleForm(raw: RawForm, threshold: Record<string, unknown>):
   if (cooldownDays === undefined || !Number.isInteger(cooldownDays) || cooldownDays < 0 || cooldownDays > 365) errors['cooldownDays'] = MESSAGES.cooldown;
   const next: Record<string, unknown> = { ...threshold };
   for (const [key, was] of Object.entries(threshold)) {
+    // A switch (push_in_quiet_hours) is a checkbox: on, or off when left out.
+    if (typeof was === 'boolean') {
+      next[key] = raw[thresholdField(key)] === 'on';
+      continue;
+    }
     if (typeof was !== 'number') continue;
     const name = thresholdField(key);
     const value = parseNumber(raw[name]);
@@ -521,7 +548,7 @@ export interface EngineSettingsInput {
 
 export type EngineSettingsField = keyof EngineSettingsInput;
 
-/** The monthly DCA (config dca), how long a proposal stays open (config proposal_expiry_days) and how orders round shares (config orders). */
+/** The monthly DCA (config dca), how many days after the debit its warning still fires (config proposal_expiry_days) and how orders round shares (config orders). */
 export function parseEngineSettings(raw: RawForm): Parsed<EngineSettingsInput, EngineSettingsField> {
   const errors: FieldErrors<EngineSettingsField> = {};
   const dcaAmountTwd = parseNumber(raw['dcaAmountTwd']);
@@ -1119,4 +1146,530 @@ export function parseValuationSettingsForm(raw: RawForm, markets: readonly strin
     minQuarters: minQuarters ?? 8,
     checked: raw['checked'] === 'on' ? today : previouslyChecked(raw),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// The red-flag indicator (N3, Phase 2 step 5)
+// ---------------------------------------------------------------------------
+
+export interface FlagEntryInput {
+  ticker: string;
+  indicator: ManualIndicator;
+  asOf: string;
+  value: number;
+  note: string;
+}
+
+export type FlagEntryField = keyof FlagEntryInput;
+
+/** An owner's entry: events found as of a date (0 for checked, none), or the governance evaluation tier. */
+export function parseFlagEntryForm(raw: RawForm, tickers: readonly string[], today: string): Parsed<FlagEntryInput, FlagEntryField> {
+  const errors: FieldErrors<FlagEntryField> = {};
+  const ticker = oneOf(raw['ticker'], tickers);
+  if (!ticker) errors.ticker = MESSAGES.choice;
+  const indicator = oneOf(raw['indicator'], MANUAL_INDICATORS);
+  if (!indicator) errors.indicator = MESSAGES.choice;
+  const asOf = text(raw['asOf']);
+  if (!isIsoDate(asOf)) errors.asOf = MESSAGES.date;
+  else if (asOf > today) errors.asOf = MESSAGES.future;
+  const value = parseNumber(raw['value']);
+  if (indicator === 'governance_rating') {
+    if (value === undefined || !(GOVERNANCE_TIERS as readonly number[]).includes(value)) errors.value = MESSAGES.choice;
+  } else if (value === undefined || !Number.isInteger(value) || value < 0 || value > 999) {
+    errors.value = MESSAGES.wholeNumber;
+  }
+  const note = text(raw['note']);
+  if (note.length > 300) errors.note = MESSAGES.tooLong;
+  return finish(errors, () => ({ ticker: ticker as string, indicator: indicator as ManualIndicator, asOf, value: value as number, note }));
+}
+
+/** A list typed one per line or separated by commas, blanks dropped. */
+export function listField(raw: string | undefined): string[] {
+  return [...new Set((raw ?? '').split(/[\n,，、]/).map((entry) => entry.trim()).filter(Boolean))];
+}
+
+export type FlagSettingsField =
+  | 'lookbackYears'
+  | 'scanDays'
+  | 'beneish'
+  | 'zRed'
+  | 'zAmber'
+  | 'z2Red'
+  | 'z2Amber'
+  | 'cashFlowYears'
+  | 'governance'
+  | 'manufacturing'
+  | 'financial'
+  | 'industries'
+  | 'tickers';
+
+function score(raw: string | undefined, min: number, max: number): number | undefined {
+  const value = parseNumber(raw);
+  return value !== undefined && value >= min && value <= max ? Math.round(value * 1000) / 1000 : undefined;
+}
+
+/** config red_flags: thresholds, the Taiwan industries counted as manufacturers and as financial, and the exclusion list. */
+export function parseFlagSettingsForm(raw: RawForm, current: RedFlagSettings, today: string): Parsed<RedFlagSettings, FlagSettingsField> {
+  const errors: FieldErrors<FlagSettingsField> = {};
+  const lookbackYears = wholeIn(raw['lookbackYears'], 1, 10);
+  if (lookbackYears === undefined) errors.lookbackYears = MESSAGES.historyYears;
+  const scanDays = wholeIn(raw['scanDays'], 1, 90);
+  if (scanDays === undefined) errors.scanDays = MESSAGES.scanDays;
+  const beneish = score(raw['beneish'], -10, 10);
+  if (beneish === undefined) errors.beneish = MESSAGES.score;
+  const zone = (redKey: FlagSettingsField, amberKey: FlagSettingsField) => {
+    const [red, amber] = [score(raw[redKey], 0, 10), score(raw[amberKey], 0, 10)];
+    if (red === undefined) errors[redKey] = MESSAGES.score;
+    if (amber === undefined) errors[amberKey] = MESSAGES.score;
+    else if (red !== undefined && amber < red) errors[amberKey] = MESSAGES.ascending;
+    return { redBelow: red ?? 0, amberBelow: amber ?? 0 };
+  };
+  const z = zone('zRed', 'zAmber');
+  const z2 = zone('z2Red', 'z2Amber');
+  const cashFlowYears = wholeIn(raw['cashFlowYears'], 1, 10);
+  if (cashFlowYears === undefined) errors.cashFlowYears = MESSAGES.historyYears;
+  const bottom = percentField(raw['governance'], 1, 99);
+  if (bottom === undefined) errors.governance = MESSAGES.percent;
+  const codes = (key: FlagSettingsField) => {
+    const list = listField(raw[key]).map((code) => code.padStart(2, '0'));
+    if (list.some((code) => !/^\d{2}$/.test(code))) errors[key] = MESSAGES.industryCodes;
+    return list;
+  };
+  const manufacturing = codes('manufacturing');
+  const financial = codes('financial');
+  const industries = listField(raw['industries']);
+  if (industries.some((entry) => entry.length > 60) || industries.length > 50) errors.industries = MESSAGES.tooLong;
+  const tickers = listField(raw['tickers']).map((ticker) => ticker.toUpperCase());
+  if (tickers.some((ticker) => !/^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(ticker))) errors.tickers = MESSAGES.tickerFormat;
+  return finish(errors, () => ({
+    ...current,
+    lookbackYears: lookbackYears as number,
+    scanDays: scanDays as number,
+    beneish: { redAbove: beneish as number },
+    altman: { z, z2 },
+    cashFlowYears: cashFlowYears as number,
+    governanceBottomShare: bottom as number,
+    manufacturing: { ...current.manufacturing, twIndustries: manufacturing },
+    financial: { ...current.financial, twIndustries: financial },
+    excluded: { industries, tickers },
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// The combined look-through (F14, Phase 2 step 6)
+// ---------------------------------------------------------------------------
+
+export type LookThroughField = 'topCompanies' | 'refreshDays' | 'twSectors' | 'fundCountry';
+
+/** "24 = Information Technology", one per line, to {"24": "Information Technology"}; the Chinese sector names are read too. */
+export function parseCodeSectors(raw: string | undefined, sectors: ReadonlyMap<string, string>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^(\d{1,2})\s*[=:：]\s*(.+)$/.exec(line);
+    const sector = match ? sectors.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!match || !sector) return undefined;
+    out[(match[1] as string).padStart(2, '0')] = sector;
+  }
+  return out;
+}
+
+/** "BIL = US", one per line, to {"BIL": "US"}. */
+export function parseFundCountries(raw: string | undefined): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of (raw ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z0-9.-]{1,12})\s*[=:：]\s*([A-Za-z]{2})$/.exec(line);
+    if (!match) return undefined;
+    out[(match[1] as string).toUpperCase()] = (match[2] as string).toUpperCase();
+  }
+  return out;
+}
+
+/** config look_through: companies named, days between holdings files, each TWSE industry's sector, each whole fund's country. */
+export function parseLookThroughForm(raw: RawForm, current: LookThroughSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<LookThroughSettings, LookThroughField> {
+  const errors: FieldErrors<LookThroughField> = {};
+  const topCompanies = wholeIn(raw['topCompanies'], 5, 100);
+  if (topCompanies === undefined) errors.topCompanies = MESSAGES.topCompanies;
+  const refreshDays = wholeIn(raw['refreshDays'], 1, 90);
+  if (refreshDays === undefined) errors.refreshDays = MESSAGES.scanDays;
+  const twSectors = parseCodeSectors(raw['twSectors'], sectorNames);
+  if (!twSectors) errors.twSectors = MESSAGES.codeSectors;
+  const fundCountry = parseFundCountries(raw['fundCountry']);
+  if (!fundCountry) errors.fundCountry = MESSAGES.fundCountries;
+  return finish(errors, () => ({
+    ...current,
+    topCompanies: topCompanies as number,
+    refreshDays: refreshDays as number,
+    twSectors: twSectors as Record<string, string>,
+    fundCountry: fundCountry as Record<string, string>,
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// The sector tab (N7, Phase 2 step 7)
+// ---------------------------------------------------------------------------
+
+export type SectorField = 'colour' | 'tw';
+
+/** config sectors: the colour convention and each Taiwan industry index's GICS sector, "Electronic = Information Technology" per line. */
+export function parseSectorForm(raw: RawForm, current: SectorSettings, sectorNames: ReadonlyMap<string, string>, today: string): Parsed<SectorSettings, SectorField> {
+  const errors: FieldErrors<SectorField> = {};
+  const colour = oneOf(raw['colour'], ['red_up', 'green_up'] as const);
+  if (!colour) errors.colour = MESSAGES.choice;
+  const known = new Map(current.proxies.filter((proxy) => proxy.market === 'TW').map((proxy) => [proxy.symbol.toLowerCase(), proxy]));
+  const tw: SectorProxy[] = [];
+  for (const line of (raw['tw'] ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([A-Za-z]+)\s*[=:：]\s*(.+)$/.exec(line);
+    const proxy = match ? known.get((match[1] as string).toLowerCase()) : undefined;
+    const sector = match ? sectorNames.get((match[2] as string).trim().toLowerCase()) : undefined;
+    if (!proxy || !sector) {
+      errors.tw = MESSAGES.indexSectors;
+      break;
+    }
+    tw.push({ ...proxy, sector });
+  }
+  return finish(errors, () => ({ ...current, colour: colour as SectorSettings['colour'], proxies: [...current.proxies.filter((proxy) => proxy.market === 'US'), ...tw], lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw) }));
+}
+
+// ---------------------------------------------------------------------------
+// Monte Carlo (F5)
+// ---------------------------------------------------------------------------
+
+export type McField = 'target' | 'windfallAmount' | 'windfallMonth' | 'windfallTranches';
+
+/** config monte_carlo's goal in today's money and the expected windfall; the rest of the row stays as it is. */
+export function parseMonteCarloForm(raw: RawForm, current: McSettings): Parsed<McSettings, McField> {
+  const errors: FieldErrors<McField> = {};
+  const blank = (name: string) => text(raw[name]) === '';
+  let target: number | null = null;
+  if (!blank('target')) {
+    const value = wholeTwd(raw['target']);
+    if (value === undefined || value <= 0) errors.target = MESSAGES.mcTarget;
+    else target = value;
+  }
+  let amount: number | null = null;
+  if (!blank('windfallAmount')) {
+    const value = wholeTwd(raw['windfallAmount']);
+    if (value === undefined || value <= 0) errors.windfallAmount = MESSAGES.mcWindfallAmount;
+    else amount = value;
+  }
+  const month = text(raw['windfallMonth']);
+  if (amount !== null && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
+  if (amount === null && month !== '' && !isMonth(month)) errors.windfallMonth = MESSAGES.mcWindfallMonth;
+  // Blank follows F3's pace at today's CAPE percentile.
+  const tranches = blank('windfallTranches') ? null : parseNumber(raw['windfallTranches']);
+  if (tranches !== null && (tranches === undefined || !Number.isInteger(tranches) || tranches < 1 || tranches > 120)) errors.windfallTranches = MESSAGES.trancheCount;
+  return finish(errors, () => ({
+    ...current,
+    targetTwd: target,
+    windfall: { amountTwd: amount, month: isMonth(month) ? month : null, tranches: tranches ?? null },
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Life timeline (F1)
+// ---------------------------------------------------------------------------
+
+export type TimelineField = 'goals';
+
+/** config timeline: "2045-06 | 3,000,000 | House" per line. */
+export function parseTimelineForm(raw: RawForm): Parsed<TimelineSettings, TimelineField> {
+  const errors: FieldErrors<TimelineField> = {};
+  const goals: Goal[] = [];
+  const lines = (raw['goals'] ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length > MAX_GOALS) errors.goals = MESSAGES.goalCount;
+  for (const line of lines) {
+    const [month = '', amount = '', ...rest] = line.split('|').map((part) => part.trim());
+    const name = rest.join('|').trim();
+    const value = amount === '' ? null : wholeTwd(amount);
+    if (!isMonth(month) || value === undefined || value === 0 || name === '' || name.length > 60) {
+      errors.goals = MESSAGES.goals;
+      break;
+    }
+    goals.push({ month, amountTwd: value, name });
+  }
+  return finish(errors, () => ({ goals: goals.sort((a, b) => a.month.localeCompare(b.month)) }));
+}
+
+// ---------------------------------------------------------------------------
+// Efficient frontier (F7)
+// ---------------------------------------------------------------------------
+
+export type FrontierField = 'riskFree' | 'lookbackYears' | 'bounds';
+
+/** config frontier: the risk-free rate, the years of history and each class's weight bounds, "us_global_equity = 0 - 50" per line. */
+export function parseFrontierForm(raw: RawForm, current: FrontierSettings, classIds: readonly string[], today: string): Parsed<FrontierSettings, FrontierField> {
+  const errors: FieldErrors<FrontierField> = {};
+  const riskFree = percentField(raw['riskFree'], -5, 30);
+  if (riskFree === undefined) errors.riskFree = MESSAGES.riskFree;
+  const years = parseNumber(raw['lookbackYears']);
+  if (years === undefined || !Number.isInteger(years) || years < 1 || years > 30) errors.lookbackYears = MESSAGES.frontierYears;
+  const known = new Set(classIds);
+  const bounds: Record<string, [number, number]> = {};
+  for (const line of (raw['bounds'] ?? '').split('\n').map((one) => one.trim()).filter(Boolean)) {
+    const match = /^([a-z0-9_]+)\s*[=:：]\s*([\d.]+)\s*[-–—]\s*([\d.]+)$/.exec(line);
+    const id = match?.[1];
+    const min = match ? percentField(match[2], 0, 100) : undefined;
+    const max = match ? percentField(match[3], 0, 100) : undefined;
+    if (!id || !known.has(id) || min === undefined || max === undefined || min > max) {
+      errors.bounds = MESSAGES.frontierBounds;
+      break;
+    }
+    bounds[id] = [min, max];
+  }
+  const entries = Object.values(bounds);
+  if (!errors.bounds && (entries.length === 0 || entries.reduce((sum, bound) => sum + bound[0], 0) > 1 + 1e-9 || entries.reduce((sum, bound) => sum + bound[1], 0) < 1 - 1e-9)) errors.bounds = MESSAGES.frontierBounds;
+  return finish(errors, () => ({
+    ...current,
+    riskFree: riskFree ?? current.riskFree,
+    lookbackYears: years ?? current.lookbackYears,
+    bounds,
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Auto-scored assumptions (F6, config cma_auto)
+// ---------------------------------------------------------------------------
+
+export type AutoCmaField = 'lookbackYears' | 'minMonths';
+
+/** config cma_auto from its form: on or off, the premium's source, the years and the fewest months; the anchors stay. */
+export function parseAutoCmaForm(raw: RawForm, current: AutoCmaSettings): Parsed<AutoCmaSettings, AutoCmaField> {
+  const errors: FieldErrors<AutoCmaField> = {};
+  const years = parseNumber(raw['lookbackYears']);
+  if (years === undefined || !Number.isInteger(years) || years < 1 || years > 20) errors.lookbackYears = MESSAGES.autoYears;
+  const minMonths = parseNumber(raw['minMonths']);
+  if (minMonths === undefined || !Number.isInteger(minMonths) || minMonths < 12 || (years !== undefined && minMonths > years * 12)) errors.minMonths = MESSAGES.autoMonths;
+  return finish(errors, () => ({
+    ...current,
+    enabled: raw['enabled'] === 'on',
+    premium: raw['premium'] === 'erp' ? ('erp' as const) : ('cma' as const),
+    lookbackYears: years ?? current.lookbackYears,
+    minMonths: minMonths ?? current.minMonths,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Stock splits (N5)
+// ---------------------------------------------------------------------------
+
+export interface SplitInput {
+  ticker: string;
+  exDate: string;
+  ratio: number;
+  note: string | null;
+}
+
+export type SplitField = 'ticker' | 'exDate' | 'oldShares' | 'newShares' | 'note';
+
+export const SPLIT_MESSAGES = {
+  shares: { en: 'Enter a number of shares above 0.', zh: '請輸入大於 0 的股數。' },
+  noChange: { en: 'A split changes the share count: the two numbers cannot be equal.', zh: '分割會改變股數：兩個數字不能相同。' },
+  range: { en: 'A split of more than 1 into 100 is unlikely: check the two numbers.', zh: '分割超過 1 拆 100 不太可能，請檢查兩個數字。' },
+  taken: { en: 'This security already has a split on that date.', zh: '這檔證券在這一天已有分割紀錄。' },
+  future: { en: 'Enter the split once its ex-date arrives: until then the prices are still in old shares.', zh: '請在除權（分割生效）日當天或之後再登錄：在那之前價格仍以舊股計。' },
+};
+
+/**
+ * A split as N old shares become M new ones on its ex-date; ratio M ÷ N. The form names the
+ * security `security`, as the security's own form on the same page holds `ticker`. Not in the future, since
+ * the closes before the ex-date are still in old shares, and one split per security a day.
+ */
+export function parseSplitForm(raw: RawForm, tickers: readonly string[], taken: readonly { ticker: string; exDate: string }[], today: string): Parsed<SplitInput, SplitField> {
+  const errors: FieldErrors<SplitField> = {};
+  const ticker = oneOf(text(raw['security']).toUpperCase(), tickers);
+  if (!ticker) errors.ticker = MESSAGES.unknownTicker;
+  const exDate = text(raw['exDate']);
+  if (!isIsoDate(exDate)) errors.exDate = MESSAGES.date;
+  else if (exDate > today) errors.exDate = SPLIT_MESSAGES.future;
+  else if (ticker && taken.some((split) => split.ticker === ticker && split.exDate === exDate)) errors.exDate = SPLIT_MESSAGES.taken;
+  const oldShares = parseNumber(raw['oldShares']);
+  if (oldShares === undefined || oldShares <= 0) errors.oldShares = SPLIT_MESSAGES.shares;
+  const newShares = parseNumber(raw['newShares']);
+  if (newShares === undefined || newShares <= 0) errors.newShares = SPLIT_MESSAGES.shares;
+  const ratio = oldShares && newShares ? newShares / oldShares : undefined;
+  if (ratio !== undefined && Math.abs(ratio - 1) < 1e-9) errors.newShares = SPLIT_MESSAGES.noChange;
+  else if (ratio !== undefined && (ratio > 100 || ratio < 0.01)) errors.newShares = SPLIT_MESSAGES.range;
+  const note = text(raw['note']);
+  if (note.length > 300) errors.note = MESSAGES.tooLong;
+  return finish(errors, () => ({ ticker: ticker as string, exDate, ratio: ratio as number, note: note === '' ? null : note }));
+}
+
+// ---------------------------------------------------------------------------
+// F12 forward P/E: the analysts' consensus typed in (Taiwan has no free feed)
+// ---------------------------------------------------------------------------
+
+export type EstimatesField = 'fy1_end' | 'fy1_eps' | 'fy1_high' | 'fy1_low' | 'fy2_end' | 'fy2_eps' | 'analysts' | 'target';
+
+export interface EstimatesInput {
+  years: Array<{ periodEnd: string; mean: number; high?: number; low?: number; analysts?: number }>;
+  targetPrice?: number;
+}
+
+const ESTIMATE_MESSAGES = {
+  eps: { en: 'Enter the EPS, e.g. 45.2 (a loss with a minus sign).', zh: '請輸入每股盈餘，例如 45.2（虧損請加負號）。' },
+  order: { en: 'The second fiscal year must end after the first.', zh: '第二個會計年度須在第一個之後結束。' },
+  both: { en: 'Give the second year its end and its EPS, or neither.', zh: '第二個會計年度的結束日與 EPS 請一起填，或都不填。' },
+  range: { en: 'Keep low ≤ mean ≤ high.', zh: '請保持最低 ≤ 平均 ≤ 最高。' },
+  analysts: { en: 'Enter a whole number of analysts from 1 to 200.', zh: '請輸入 1 到 200 之間的整數分析師人數。' },
+} satisfies Record<string, Bilingual>;
+
+/** The consensus form on a stock's Valuation page: one or two fiscal years, the analysts and the target price. */
+export function parseEstimatesForm(raw: RawForm): Parsed<EstimatesInput, EstimatesField> {
+  const errors: FieldErrors<EstimatesField> = {};
+  const text = (key: EstimatesField) => (raw[key] ?? '').trim();
+  const number = (key: EstimatesField, message: Bilingual, check: (n: number) => boolean = Number.isFinite) => {
+    const value = text(key);
+    if (value === '') return undefined;
+    const n = Number(value.replace(/,/g, ''));
+    if (!Number.isFinite(n) || !check(n)) {
+      errors[key] = message;
+      return undefined;
+    }
+    return n;
+  };
+  const date = (key: EstimatesField, required: boolean) => {
+    const value = text(key);
+    if (value === '') {
+      if (required) errors[key] = MESSAGES.required;
+      return undefined;
+    }
+    if (!isIsoDate(value)) {
+      errors[key] = MESSAGES.date;
+      return undefined;
+    }
+    return value;
+  };
+  const fy1End = date('fy1_end', true);
+  const fy1Eps = number('fy1_eps', ESTIMATE_MESSAGES.eps);
+  if (text('fy1_eps') === '') errors.fy1_eps = MESSAGES.required;
+  const high = number('fy1_high', ESTIMATE_MESSAGES.eps);
+  const low = number('fy1_low', ESTIMATE_MESSAGES.eps);
+  if (fy1Eps !== undefined && ((high !== undefined && high < fy1Eps) || (low !== undefined && low > fy1Eps))) errors[high !== undefined && high < fy1Eps ? 'fy1_high' : 'fy1_low'] = ESTIMATE_MESSAGES.range;
+  const fy2End = date('fy2_end', false);
+  const fy2Eps = number('fy2_eps', ESTIMATE_MESSAGES.eps);
+  if ((text('fy2_end') === '') !== (text('fy2_eps') === '')) errors[text('fy2_end') === '' ? 'fy2_end' : 'fy2_eps'] = ESTIMATE_MESSAGES.both;
+  else if (fy1End && fy2End && fy2End <= fy1End) errors.fy2_end = ESTIMATE_MESSAGES.order;
+  const analysts = number('analysts', ESTIMATE_MESSAGES.analysts, (n) => Number.isInteger(n) && n >= 1 && n <= 200);
+  const targetPrice = number('target', MESSAGES.positive, (n) => n > 0);
+  if (Object.keys(errors).length > 0 || !fy1End || fy1Eps === undefined) return { ok: false, errors };
+  const years: EstimatesInput['years'] = [{ periodEnd: fy1End, mean: fy1Eps, ...(high !== undefined ? { high } : {}), ...(low !== undefined ? { low } : {}), ...(analysts !== undefined ? { analysts } : {}) }];
+  if (fy2End && fy2Eps !== undefined) years.push({ periodEnd: fy2End, mean: fy2Eps, ...(analysts !== undefined ? { analysts } : {}) });
+  return { ok: true, value: { years, ...(targetPrice !== undefined ? { targetPrice } : {}) } };
+}
+
+// ---------------------------------------------------------------------------
+// The volatility score (N8)
+// ---------------------------------------------------------------------------
+
+const VOLATILITY_MESSAGES = {
+  figure: { en: 'Enter a number.', zh: '請輸入數字。' },
+  order: { en: 'Panic must be above calm.', zh: '恐慌值必須高於平靜值。' },
+  weight: { en: 'Enter a weight of 0 or more; at least one above 0.', zh: '請輸入 0 或以上的權重，至少一個大於 0。' },
+  maxAge: { en: 'Enter whole days from 1 to 30.', zh: '請輸入 1 到 30 的整數天數。' },
+  coverage: { en: 'Enter a share from 1% to 100%.', zh: '請輸入 1% 到 100% 的比例。' },
+  lead: { en: 'Enter whole days from 1 to 14.', zh: '請輸入 1 到 14 的整數天數。' },
+} as const satisfies Record<string, Bilingual>;
+
+/**
+ * config volatility: each component's calm and panic figures and weight (fields `<id>_calm`,
+ * `<id>_panic`, `<id>_weight`; a fall is typed in percent and kept as a share), the age past which
+ * a figure is left out and the share of the weight a score needs; the rest of the row stays.
+ */
+export function parseVolatilityForm(raw: RawForm, current: VolatilitySettings, today: string): Parsed<VolatilitySettings, string> {
+  const errors: FieldErrors<string> = {};
+  const components: ComponentSetting[] = current.components.map((component) => {
+    const scale = COMPONENT_UNIT[component.id] === 'share' ? 100 : 1;
+    const calm = parseNumber(raw[`${component.id}_calm`]);
+    const panic = parseNumber(raw[`${component.id}_panic`]);
+    const weight = parseNumber(raw[`${component.id}_weight`]);
+    if (calm === undefined) errors[`${component.id}_calm`] = VOLATILITY_MESSAGES.figure;
+    if (panic === undefined) errors[`${component.id}_panic`] = VOLATILITY_MESSAGES.figure;
+    else if (calm !== undefined && panic <= calm) errors[`${component.id}_panic`] = VOLATILITY_MESSAGES.order;
+    if (weight === undefined || weight < 0) errors[`${component.id}_weight`] = VOLATILITY_MESSAGES.weight;
+    const round = (value: number) => Number((value / scale).toFixed(6));
+    return { id: component.id, calm: round(calm ?? 0), panic: round(panic ?? 0), weight: weight ?? 0 };
+  });
+  if (!errors[`${components[0]?.id}_weight`] && components.every((component) => component.weight === 0)) errors[`${components[0]?.id}_weight`] = VOLATILITY_MESSAGES.weight;
+  const maxAge = parseNumber(raw['maxAgeDays']);
+  if (maxAge === undefined || !Number.isInteger(maxAge) || maxAge < 1 || maxAge > 30) errors['maxAgeDays'] = VOLATILITY_MESSAGES.maxAge;
+  const coverage = parseNumber(raw['minCoverage']);
+  if (coverage === undefined || coverage < 1 || coverage > 100) errors['minCoverage'] = VOLATILITY_MESSAGES.coverage;
+  const lead = parseNumber(raw['eventLeadDays']);
+  if (lead === undefined || !Number.isInteger(lead) || lead < 1 || lead > 14) errors['eventLeadDays'] = VOLATILITY_MESSAGES.lead;
+  return finish(errors, () => ({
+    ...current,
+    components,
+    events: { leadDays: lead as number, remind: EVENT_KINDS.filter((kind) => raw[`remind_${kind}`] === 'on') },
+    maxAgeDays: maxAge as number,
+    minCoverage: Number(((coverage as number) / 100).toFixed(4)),
+    lastVerified: raw['checked'] === 'on' ? today : previouslyChecked(raw),
+  }));
+}
+
+export type EventField = 'kind' | 'date' | 'time' | 'name' | 'note';
+
+const EVENT_MESSAGES = {
+  kind: { en: "Choose Taiwan's central bank or another event.", zh: '請選擇央行理監事會議或其他事件。' },
+  time: { en: 'Enter a Taipei time as HH:MM, or leave it blank.', zh: '請以 HH:MM 輸入台北時間，或留空。' },
+  name: { en: 'Enter a name of up to 120 characters.', zh: '請輸入 120 字以內的名稱。' },
+  note: { en: 'Up to 200 characters.', zh: '最多 200 字。' },
+} as const satisfies Record<string, Bilingual>;
+
+/** A typed event (N8 step 2): Taiwan's central bank meeting (its name given) or another event named by Hugo, at a Taipei date and optional time. */
+export function parseEventForm(raw: RawForm): Parsed<MarketEvent, EventField> {
+  const errors: FieldErrors<EventField> = {};
+  const kind = oneOf(raw['kind'], ['cbc', 'other'] as const);
+  if (!kind) errors.kind = EVENT_MESSAGES.kind;
+  const date = text(raw['date']);
+  if (!isIsoDate(date)) errors.date = MESSAGES.date;
+  const time = text(raw['time']);
+  if (time !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) errors.time = EVENT_MESSAGES.time;
+  const name = text(raw['name']);
+  if ((kind === 'other' && name === '') || name.length > 120) errors.name = EVENT_MESSAGES.name;
+  const note = text(raw['note']);
+  if (note.length > 200) errors.note = EVENT_MESSAGES.note;
+  return finish(errors, () => ({
+    kind: kind as 'cbc' | 'other',
+    date,
+    time: time || null,
+    name: name ? { en: name, zh: name } : KIND_NAMES[kind as 'cbc' | 'other'],
+    source: 'typed' as const,
+    note: note || null,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Breaking news (N8 step 4)
+// ---------------------------------------------------------------------------
+
+const NEWS_MESSAGES = {
+  count: { en: 'Enter a whole number from 1 to 500.', zh: '請輸入 1 到 500 的整數。' },
+  spike: { en: 'Enter a number from 1 to 20.', zh: '請輸入 1 到 20 的數字。' },
+  hours: { en: 'Enter whole hours from 1 to 72.', zh: '請輸入 1 到 72 的整數小時。' },
+  terms: { en: 'One term per line, at least one, each under 60 characters.', zh: '每行一個詞，至少一個，每個少於 60 字。' },
+} as const satisfies Record<string, Bilingual>;
+
+/** config news: the outlets needed, the spike, the window, the cooldown, the quiet-hours switch, and each topic's terms (one a line, field `terms_<id>`). */
+export function parseNewsForm(raw: RawForm, current: NewsSettings): Parsed<NewsSettings, string> {
+  const errors: FieldErrors<string> = {};
+  const whole = (name: string, min: number, max: number, message: Bilingual) => {
+    const value = parseNumber(raw[name]);
+    if (value === undefined || !Number.isInteger(value) || value < min || value > max) errors[name] = message;
+    return value ?? 0;
+  };
+  const minSources = whole('minSources', 1, 500, NEWS_MESSAGES.count);
+  const windowHours = whole('windowHours', 1, 72, NEWS_MESSAGES.hours);
+  const cooldownHours = whole('cooldownHours', 1, 72, NEWS_MESSAGES.hours);
+  const spike = parseNumber(raw['spike']);
+  if (spike === undefined || spike < 1 || spike > 20) errors['spike'] = NEWS_MESSAGES.spike;
+  const topics = current.topics.map((topic) => {
+    const name = `terms_${topic.id}`;
+    const terms = (raw[name] ?? '').split('\n').map((term) => term.trim()).filter(Boolean);
+    if (terms.length === 0 || terms.some((term) => term.length >= 60)) errors[name] = NEWS_MESSAGES.terms;
+    return { ...topic, terms };
+  });
+  return finish(errors, () => ({ ...current, topics, minSources, windowHours, cooldownHours, spike: spike as number, pushInQuietHours: raw['pushInQuietHours'] === 'on' }));
 }
