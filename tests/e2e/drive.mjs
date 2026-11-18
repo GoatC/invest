@@ -1761,7 +1761,6 @@ await step("home-screen widget: a key made once on the push page reads the figur
   const wrong = await ask({ authorization: `Bearer ${'x'.repeat(43)}` });
   check(wrong.status === 401, `a wrong key is refused, got ${wrong.status}`);
   // A new key ends the old one at once.
-  page.once('dialog', (dialog) => dialog.accept());
   await section.getByRole('button', { name: /Replace the key/ }).click();
   await page.waitForFunction((old) => document.querySelector('input[aria-label^="Widget key"]')?.value !== old, key);
   const fresh = await field.inputValue();
