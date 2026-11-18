@@ -1687,9 +1687,11 @@ tr.selected td {
   vector-effect: non-scaling-stroke;
 }
 
-/* Today, at the line's end, in the colour of the 7-day move, ringed in the poster's ground. */
+/* Today, at the line's end, in the colour of the 7-day move, ringed in the poster's ground; held just
+   inside the right edge, so it never pushes the page sideways. */
 .hero-dot {
   position: absolute;
+  left: min(var(--x, 100%), calc(100% - 8px));
   width: 10px;
   height: 10px;
   margin: -5px 0 0 -5px;

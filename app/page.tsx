@@ -253,7 +253,7 @@ function Hero({
             <path className="hero-line" d={drawn.path} />
           </svg>
           {/* Today: a dot in the colour of the 7-day move; a box of its own, so the stretched line does not squash it. */}
-          <span className="hero-dot" aria-hidden="true" style={{ left: `${((drawn.end.x / LINE.width) * 100).toFixed(2)}%`, top: `${((drawn.end.y / LINE.height) * 100).toFixed(2)}%` }} />
+          <span className="hero-dot" aria-hidden="true" style={{ '--x': `${((drawn.end.x / LINE.width) * 100).toFixed(2)}%`, top: `${((drawn.end.y / LINE.height) * 100).toFixed(2)}%` } as CSSProperties} />
           <NativePosterLine changes={line.points.map((point) => point.change)} />
         </div>
       )}
