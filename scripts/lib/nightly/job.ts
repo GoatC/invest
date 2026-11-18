@@ -27,7 +27,7 @@ import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
 import { quarterFigures, type Fact, type Figures } from '../../../lib/models/fundamentals.ts';
 import { buildSeries, snapshots, type PerformanceInput, type Snapshot } from '../../../lib/models/performance.ts';
-import { widgetFigures, type WidgetFigures } from '../../../lib/models/widget.ts';
+import { lastClose, widgetFigures, type WidgetFigures } from '../../../lib/models/widget.ts';
 import { dailyValueAtRisk, gridStart, lookbackWeeks, type RiskInput } from '../../../lib/models/risk.ts';
 import { RISK_FREE_SERIES } from '../../../lib/models/regression.ts';
 import { MARKET_SERIES } from '../../../lib/models/windfall.ts';
@@ -886,7 +886,7 @@ export async function runNightly(deps: Deps): Promise<JobRun> {
     // The widget's figures from the same series, so they never disagree with the poster; a failure
     // here leaves the snapshots saved.
     try {
-      const figures = widgetFigures(days, await store.widgetRedUp());
+      const figures = widgetFigures(days, await store.widgetRedUp(), lastClose(input.prices, today));
       await store.saveWidgetSnapshot(figures);
       if (figures) detail.widget = { asOf: figures.asOf };
     } catch (err) {

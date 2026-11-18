@@ -241,6 +241,8 @@ class MemoryStore implements Store {
       /** The sector tab's proxies (N7); undefined before config sectors. */
       sectors?: Array<{ id: string; market: 'US' | 'TW'; symbol: string; name: string }>;
       failWidget?: boolean;
+      /** The newest close the valuation reads, as on a weekend or holiday run. */
+      closesUntil?: string;
     } = {},
   ) {}
   /** The home-screen widget's figures saved (undefined until saved; null clears them). */
@@ -377,7 +379,7 @@ class MemoryStore implements Store {
       manualAssets: [],
       securities: [{ ticker: '0050', name: '元大台灣50', market: 'TW', productType: 'equity_etf', assetClassId: 'tw_market_cap', sleeve: 'core', currency: 'TWD' }],
       benchmark: [],
-      prices: this.prices.map((p) => ({ ticker: p.ticker, date: p.date, close: p.close, adjClose: p.adjClose })),
+      prices: this.prices.filter((p) => !this.options.closesUntil || p.date <= this.options.closesUntil).map((p) => ({ ticker: p.ticker, date: p.date, close: p.close, adjClose: p.adjClose })),
       rates: this.rates.map((r) => ({ pair: r.pair, date: r.date, rate: r.rate })),
     };
   }
@@ -789,6 +791,14 @@ describe('runNightly', () => {
     assert.equal(store.widget?.redUp, true);
     assert.deepEqual(run.detail.widget, { asOf: '2026-10-21' });
     assert.equal(run.status, 'ok');
+  });
+
+  it("names the newest close in the widget's figures, not the day the job ran", async () => {
+    const store = new MemoryStore({ closesUntil: '2026-10-20' });
+    const run = await runNightly(deps(fakeGet().get, store));
+    assert.equal(store.snapshots[store.snapshots.length - 1]?.date, '2026-10-21');
+    assert.equal(store.widget?.asOf, '2026-10-20');
+    assert.deepEqual(run.detail.widget, { asOf: '2026-10-20' });
   });
 
   it("keeps the snapshots and reports a partial run when the widget's figures fail", async () => {

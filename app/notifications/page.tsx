@@ -5,7 +5,7 @@ import { PushHandoffSetting } from '@/components/push-handoff';
 import { ShellReminders } from '@/components/shell-reminders';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadDevices, loadNotifications, type DeviceRecord, type NotificationRecord } from '@/lib/data';
+import { DataError, loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { readQuietHours, readWeeklyReview } from '@/lib/models/notify';
 import { vapidFromEnv } from '@/lib/push';
@@ -45,11 +45,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       loadDevices(supabase),
       loadNotifications(supabase),
       supabase.from('config').select('key, value').in('key', ['quiet_hours', 'weekly_review']),
-      supabase.from('widget_key').select('created_at').maybeSingle(),
+      loadWidgetKeyDate(supabase),
     ]);
     if (config.error) throw new DataError('config', config.error.message);
-    if (widgetKey.error) throw new DataError('widget_key', widgetKey.error.message);
-    widgetKeyMade = (widgetKey.data as { created_at: string } | null)?.created_at ?? null;
+    widgetKeyMade = widgetKey;
     devices = found;
     sent = log;
     settings = (config.data ?? []) as Array<{ key: string; value: unknown }>;

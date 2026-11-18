@@ -6,6 +6,7 @@
  * poster never disagree. Display only: nothing here raises a rule or a push.
  */
 import { addDays } from '../dates';
+import type { PriceRow } from './market';
 import type { DayPoint } from './performance';
 import { sample, valueLine } from './value-line';
 
@@ -25,13 +26,26 @@ export interface WidgetFigures {
   redUp: boolean;
 }
 
-/** The widget's figures from the daily series; null until two closes hold a value. */
-export function widgetFigures(days: readonly DayPoint[], redUp: boolean): WidgetFigures | null {
+/**
+ * The newest market close on or before `end`: the series has a point for every calendar day (the
+ * nightly job runs on weekends too), so its last day is when the job ran, not a close. Null without prices.
+ */
+export function lastClose(prices: readonly PriceRow[], end: string): string | null {
+  let newest: string | null = null;
+  for (const row of prices) if (row.date <= end && (newest === null || row.date > newest)) newest = row.date;
+  return newest;
+}
+
+/**
+ * The widget's figures from the daily series; null until two closes hold a value. `close` is the
+ * date it names (lastClose of the series' prices); without one, the series' last day.
+ */
+export function widgetFigures(days: readonly DayPoint[], redUp: boolean, close: string | null = null): WidgetFigures | null {
   const line = valueLine(days);
   const last = days[days.length - 1];
   if (!line || !last) return null;
   return {
-    asOf: line.to,
+    asOf: close !== null && close <= line.to ? close : line.to,
     totalTwd: Math.round(last.value.all * 100) / 100,
     weekChange: line.week?.change ?? null,
     points: sample(line.points, WIDGET_POINTS).map((point) => Math.round(point.change * 1e4) / 1e4),

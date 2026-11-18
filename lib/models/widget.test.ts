@@ -5,7 +5,7 @@ import type { PriceRow } from './market';
 import { buildSeries, type PerformanceInput } from './performance';
 import { SECURITIES, trade } from './test-helpers';
 import { valueLine } from './value-line';
-import { isStale, WIDGET_POINTS, widgetFigures } from './widget';
+import { isStale, lastClose, WIDGET_POINTS, widgetFigures } from './widget';
 
 function close(ticker: string, date: string, price: number): PriceRow {
   return { ticker, date, close: price, adjClose: price };
@@ -66,6 +66,33 @@ describe('widgetFigures', () => {
     const figures = widgetFigures(young, true);
     assert.equal(figures?.asOf, '2026-01-03');
     assert.equal(figures?.weekChange, null);
+  });
+});
+
+describe('the close the widget names', () => {
+  // A Friday close, the series run on to Sunday: the nightly job runs every day, and the series has a point for each.
+  const prices = [close('0050', '2026-07-02', 100), close('0050', '2026-07-03', 101)];
+  const weekend = buildSeries(
+    input({
+      trades: [trade({ tradeDate: '2026-07-02', ticker: '0050', qty: 1, price: 100, currency: 'TWD', fxRate: 1 })],
+      prices,
+      end: '2026-07-05',
+    }),
+  );
+
+  it('is the newest close on or before the end, not the day the job ran', () => {
+    assert.equal(weekend[weekend.length - 1]?.date, '2026-07-05');
+    assert.equal(lastClose(prices, '2026-07-05'), '2026-07-03');
+    assert.equal(widgetFigures(weekend, true, lastClose(prices, '2026-07-05'))?.asOf, '2026-07-03');
+  });
+
+  it('leaves out closes after the end, and has none without prices', () => {
+    assert.equal(lastClose([...prices, close('0050', '2026-07-06', 102)], '2026-07-05'), '2026-07-03');
+    assert.equal(lastClose([], '2026-07-05'), null);
+  });
+
+  it("falls back to the series' last day without a close (manual assets only)", () => {
+    assert.equal(widgetFigures(weekend, true, null)?.asOf, '2026-07-05');
   });
 });
 
