@@ -4,10 +4,23 @@
  * checked by the database's widget_figures, which answers null for a wrong or replaced key.
  * The names here are what ios/Widget/WidgetFigures.swift decodes.
  */
+import { createHash, randomBytes } from 'node:crypto';
+
 import { isStale } from './models/widget';
 
 /** A key as the push page makes it: 32 random bytes in base64url is 43 characters. */
 const BEARER = /^Bearer ([A-Za-z0-9_-]{43,128})$/;
+
+/** The key's SHA-256 in hex, as widget_key stores it and widget_figures compares it. */
+export function hashWidgetKey(key: string): string {
+  return createHash('sha256').update(key, 'utf8').digest('hex');
+}
+
+/** A new key for the widget (32 random bytes, base64url) and the hash to store; the key is shown once. */
+export function newWidgetKey(): { key: string; hash: string } {
+  const key = randomBytes(32).toString('base64url');
+  return { key, hash: hashWidgetKey(key) };
+}
 
 /** The key in `Authorization: Bearer <key>`, or null when the header is missing or malformed. */
 export function readBearer(header: string | null): string | null {

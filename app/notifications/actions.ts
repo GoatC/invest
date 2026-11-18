@@ -6,6 +6,7 @@ import { DataError, orDataError, sendNotification, type NotificationRecord } fro
 import { ACTION_MESSAGES, formFields, parseId, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { vapidFromEnv } from '@/lib/push';
+import { newWidgetKey } from '@/lib/widget-api';
 import { parseSchedule, parseSubscription, type FieldErrors, type ScheduleField } from '@/lib/validation';
 
 /** Saves this device's push subscription; turning it on again on the same device updates its row. */
@@ -91,4 +92,25 @@ export async function saveSchedule(_previous: ScheduleState, formData: FormData)
     return { errors: {}, message: { en: 'The quiet_hours or weekly_review setting is missing: run npx supabase db push.', zh: '找不到 quiet_hours 或 weekly_review 設定：請執行 npx supabase db push。' } };
   }
   redirect('/notifications?saved=schedule');
+}
+
+export interface WidgetKeyState {
+  /** The key just made, shown once; null otherwise. */
+  key: string | null;
+  message: Bilingual | null;
+  ok: boolean;
+}
+
+/**
+ * Makes the home-screen widget's key (docs/ios-app.md): only its hash is saved, replacing the one
+ * before, so an old key stops at once. The key itself comes back this once, to be pasted into the widget.
+ */
+export async function makeWidgetKey(_previous: WidgetKeyState): Promise<WidgetKeyState> {
+  const { supabase } = await requireSession();
+  const { key, hash } = newWidgetKey();
+  const { error } = await supabase
+    .from('widget_key')
+    .upsert({ singleton: true, key_hash: hash, created_at: new Date().toISOString() }, { onConflict: 'singleton' });
+  if (error) return { key: null, ok: false, message: saveFailed(error.message) };
+  return { key, ok: true, message: null };
 }

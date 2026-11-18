@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { readBearer, widgetReply } from './widget-api';
+import { createHash } from 'node:crypto';
+
+import { hashWidgetKey, newWidgetKey, readBearer, widgetReply } from './widget-api';
 
 describe('readBearer', () => {
   const KEY = `${'A_-9'.repeat(10)}abc`;
@@ -39,5 +41,21 @@ describe('widgetReply', () => {
   it('reads numbers sent as text and a missing 7-day change, and never marks stale without the setting', () => {
     const row = { figures: { as_of: '2026-11-13', total_twd: '1080.5', week_change: null, points: ['0', 0.08], red_up: false }, stale_days: null };
     assert.deepEqual(widgetReply(row, '2026-12-31').body, { figures: { asOf: '2026-11-13', totalTwd: 1080.5, weekChange: null, points: [0, 0.08], redUp: false, stale: false } });
+  });
+});
+
+describe('newWidgetKey', () => {
+  it('makes a 43-character base64url key the route accepts, a new one each time', () => {
+    const { key } = newWidgetKey();
+    assert.match(key, /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(readBearer(`Bearer ${key}`), key);
+    assert.notEqual(newWidgetKey().key, key);
+  });
+
+  it("stores only the key's SHA-256, as the database compares it", () => {
+    const { key, hash } = newWidgetKey();
+    assert.equal(hash, createHash('sha256').update(key, 'utf8').digest('hex'));
+    assert.equal(hashWidgetKey('a'.repeat(43)), createHash('sha256').update('a'.repeat(43)).digest('hex'));
+    assert.match(hash, /^[0-9a-f]{64}$/);
   });
 });
