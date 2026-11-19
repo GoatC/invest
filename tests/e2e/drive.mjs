@@ -833,6 +833,8 @@ await step('capital market assumptions: a source is required, then they show wit
   }
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=assumptions');
+  // The table folds under one row (Ink design): open it first.
+  await page.locator('details.assume-fold > summary').click();
   const card = await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
   // What is folded behind ⓘ is read from the page's text rather than what is drawn.
   const folded = (await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).textContent()) ?? '';
@@ -850,7 +852,12 @@ async function savedEstimates() {
 
 const pctText = (value, digits = 1) => `${(value * 100).toFixed(digits)}%`;
 /** The capital market assumptions card on the allocation page. */
-const assumptionsCard = () => page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
+const assumptionsCard = async () => {
+  // The table folds under one row (Ink design): open it if it is closed.
+  const fold = page.locator('details.assume-fold');
+  if ((await fold.count()) > 0 && !(await fold.evaluate((details) => details.open))) await fold.locator('summary').click();
+  return page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
+};
 const autoCount = (text) => (text.match(/自動評分/g) ?? []).length;
 
 await step('auto-scored assumptions: Taiwan stocks scored from 2330 by CAPM on your own core assumption, US stocks waiting on NVDA\'s history; yours wins once typed; the settings logged (F6)', async () => {

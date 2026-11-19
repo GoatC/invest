@@ -335,7 +335,7 @@ function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio
   const gainTwd = sum(valued.map((holding) => (holding.valueTwd ?? 0) - (holding.costTwd ?? 0)));
   const trigger = data.caps.satellite?.triggerWeight;
   return (
-    <div className="grid-cards">
+    <div className="grid-cards summary-block">
       <Stat label={{ en: 'Regular pool', zh: '一般投入資金池' }} value={twd(pool.totalTwd)} note={{ en: 'What R1, R2 and the targets measure', zh: 'R1、R2 與目標權重的計算基礎' }} />
       <Stat label={{ en: 'Windfall pool', zh: '大額資金池' }} value={twd(windfallTwd)} note={{ en: 'Left out of R1 and R2', zh: '不計入 R1 與 R2' }} />
       <Stat
