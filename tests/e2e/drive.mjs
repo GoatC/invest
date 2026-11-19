@@ -1152,7 +1152,8 @@ await step('warnings: checking the rules raises R1, F8 and the monthly contribut
   await page.waitForURL(/\?saved=checked/);
   check(/已檢查規則：新增 [3-9] 則，解除 0 則。/.test(await body()), `three or more raised, got ${await body()}`);
   const tiles = (await page.locator('#proposals .alert-tile').allInnerTexts()).map((text) => text.replace(/\s+/g, ' '));
-  check(tiles.some((tile) => tile.includes('R1') && tile.includes('Single-stock trim')), `R1 raised, got ${tiles}`);
+  // Named, with no rule code on the tile (Hugo, 2026-11-19).
+  check(tiles.some((tile) => tile.includes('單一個股減碼') && !/\bR1\b/.test(tile)), `R1 raised, got ${tiles}`);
   check(tiles.some((tile) => tile.includes('Drift rebalance')), 'F8 raised');
   check(tiles.some((tile) => tile.includes('Monthly contribution')), 'monthly raised');
   // Nothing to approve, edit or mark filled: one button, to dismiss.
