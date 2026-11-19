@@ -15,9 +15,20 @@ export function NativePosterLine({ changes }: { changes: readonly number[] }) {
     const host = ref.current?.parentElement;
     if (!host || !nativeCharts()) return undefined;
     host.classList.add('native-drawn');
-    // The poster's own text colour (the Ink poster is light; it was white on the old accent poster).
-    const stop = showNative(host, posterLine(changes, getComputedStyle(host).color));
+    // The poster's own text colour (the Ink poster is light; it was white on the old accent poster),
+    // handed over again when the appearance chosen on 帳號 changes it (lib/theme.ts marks <html>).
+    let ink = getComputedStyle(host).color;
+    let stop = showNative(host, posterLine(changes, ink));
+    const theme = new MutationObserver(() => {
+      const now = getComputedStyle(host).color;
+      if (now === ink) return;
+      ink = now;
+      stop();
+      stop = showNative(host, posterLine(changes, ink));
+    });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => {
+      theme.disconnect();
       stop();
       host.classList.remove('native-drawn');
     };

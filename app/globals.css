@@ -4,7 +4,9 @@
    the only action colour. --accent-soft is the "selected / look here" ground; --sky is
    decoration only (under 3:1 on --surface, it never carries text or a figure alone). */
 :root {
-  /* 淺色 by default; 深色 only when chosen on 帳號 (lib/theme.ts marks <html data-theme>), never by the phone alone. */
+  /* 淺色 by default; 深色 only when chosen on 帳號 (lib/theme.ts marks <html data-theme>), never by the phone alone.
+     The dark rules wrap the mark in :where() so they weigh exactly what they did inside the old
+     prefers-color-scheme blocks: the shell's own tokens (html[data-shell]) still win over them. */
   color-scheme: light;
   --bg: #f2f5f3;
   --surface: #fafbfa;
@@ -80,7 +82,7 @@
   --radius-capsule: 16px;
 }
 
-:root[data-theme='dark'] {
+:root:where([data-theme='dark']) {
   color-scheme: dark;
   --bg: #070b09;
   --surface: #101613;
@@ -603,18 +605,18 @@ body::before {
     height: 46px;
   }
 
-  html[data-theme='dark'] .tab-bar {
+  :where(html[data-theme='dark']) .tab-bar {
     --glass-tint: color-mix(in srgb, var(--surface) 62%, transparent);
     --glass-rim: rgba(255, 255, 255, 0.34);
     --glass-rim-low: rgba(255, 255, 255, 0.1);
     --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
-  html[data-theme='dark'] .tab-lens {
+  :where(html[data-theme='dark']) .tab-lens {
     background: color-mix(in srgb, #fff 12%, transparent);
   }
 
-  html[data-theme='dark'] .tab-bar[data-lifted] .tab-lens {
+  :where(html[data-theme='dark']) .tab-bar[data-lifted] .tab-lens {
     background: color-mix(in srgb, #fff 16%, transparent);
   }
 
@@ -4038,7 +4040,7 @@ html[data-shell] {
   --card-border: none;
 }
 
-html[data-shell][data-theme='dark'] {
+html[data-shell]:where([data-theme='dark']) {
   --bg: #000000;
   --surface: #1c1c1e;
   --text: #ffffff;

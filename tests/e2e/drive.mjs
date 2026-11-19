@@ -1859,6 +1859,8 @@ await step('account and search: the poster\'s person and search buttons open 帳
   await page.goto(`${BASE}/`);
   const tools = page.locator('#this-week .hero-tools');
   check((await tools.getByRole('link', { name: /帳號/ }).getAttribute('href')) === '/account' && (await tools.getByRole('link', { name: /搜尋/ }).getAttribute('href')) === '/search', 'the poster links 帳號 and 搜尋');
+  // Lent to the shell as sheets that stay open: a page opened in the sheet without `sheet=` closes it (ios/Shell staysInSheet).
+  for (const name of [/帳號/, /搜尋/]) check(/[?&]sheet=/.test((await tools.getByRole('link', { name }).getAttribute('data-shell-sheet')) ?? ''), `${name} opens a sheet that stays`);
   await page.goto(`${BASE}/account`);
   const account = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
   check(/owner@example\.com/.test(account) && account.includes('家人共用') && account.includes('尚未開放') && account.includes('登出'), `the account page, got ${account}`);
@@ -2693,6 +2695,13 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     await app.waitForFunction(() => window.chartSaid.some((message) => message.op === 'set' && message.spec?.spark), null, { timeout: 15_000 });
     const poster = await app.evaluate(() => window.chartSaid.find((message) => message.op === 'set' && message.spec?.spark));
     check(poster.spec.lineWidth === 3 && poster.spec.series[0]?.values.length > 1 && poster.box?.w > 300, `the poster's line handed over with its place, got ${JSON.stringify(poster.box)}`);
+    // 深色 chosen (帳號, in the shell's sheet): the shell's cards stay plain grouped rows, and the poster's
+    // line is handed over again in the dark poster's ink, not left in the light one.
+    const lineInk = poster.spec.series[0]?.color;
+    await app.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+    check((await app.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--card-border').trim())) === 'none', 'no hairline on the shell\'s cards in dark');
+    await app.waitForFunction((ink) => window.chartSaid.some((message) => message.op === 'set' && message.spec?.spark && message.spec.series[0]?.color !== ink), lineInk, { timeout: 15_000 });
+    await app.evaluate(() => (document.documentElement.dataset.theme = 'light'));
     check((await app.locator('.hero-chart.native-drawn svg').evaluate((svg) => getComputedStyle(svg).visibility)) === 'hidden', 'the page draws no line of its own under it');
     await says(['/', '/']);
     const first = await said();

@@ -210,7 +210,9 @@ final class ShellViewController: UITabBarController {
     /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
-    override var childForStatusBarStyle: UIViewController? { selectedViewController }
+    /// While the opening cover shows, the status bar stays white on its ink (opening screen B): the page
+    /// behind may already have asked for dark text. Once it lifts, the place's page decides again.
+    override var childForStatusBarStyle: UIViewController? { cover.superview == nil ? selectedViewController : nil }
 
     /// The place on screen.
     private var selectedHost: TabHost? { (selectedViewController as? UINavigationController)?.viewControllers.first as? TabHost }
@@ -231,6 +233,7 @@ final class ShellViewController: UITabBarController {
             view.addSubview(layer)
         }
         notice.isHidden = true
+        cover.onGone = { [weak self] in self?.setNeedsStatusBarAppearanceUpdate() }
         Router.shell = self
         // A pull down at the top of the page reads it again (proposal G06); the page says when it is on screen.
         let refresh = UIRefreshControl()

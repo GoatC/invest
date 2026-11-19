@@ -42,7 +42,7 @@ final class CoverView: UIView {
         name.translatesAutoresizingMaskIntoConstraints = false
         name.isAccessibilityElement = false
         addSubview(name)
-        accessibilityLabel = "長期投資 載入中"
+        accessibilityLabel = "長期投資 載入中 Long-View Invest, loading"
         isAccessibilityElement = true
         NSLayoutConstraint.activate([
             mark.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -102,10 +102,16 @@ final class CoverView: UIView {
         UIView.animate(withDuration: 0.5, delay: 0.3, options: [.curveEaseOut]) { self.name.alpha = 1 }
     }
 
+    /// Told once the cover has gone, so the status bar can follow the page again.
+    var onGone: (() -> Void)?
+
     func lift() {
         guard !lifted else { return }
         lifted = true
-        UIView.animate(withDuration: 0.25, animations: { self.alpha = 0 }, completion: { _ in self.removeFromSuperview() })
+        UIView.animate(withDuration: 0.25, animations: { self.alpha = 0 }, completion: { _ in
+            self.removeFromSuperview()
+            self.onGone?()
+        })
     }
 }
 
