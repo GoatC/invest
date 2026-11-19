@@ -98,6 +98,8 @@ final class NextView: UIView, UIContextMenuInteractionDelegate {
         let tint: UIColor
         let tappable: Bool
         let later: Bool
+        /// Something to act on (a rule warning): the capsule takes a touch of amber (Ink design, 2026-11-18).
+        var warning: Bool = false
     }
 
     var onTap: (() -> Void)?
@@ -157,12 +159,21 @@ final class NextView: UIView, UIContextMenuInteractionDelegate {
         count.text = "＋\(new.more)"
         count.isHidden = new.more == 0
         chevron.isHidden = !new.tappable
+        // The accessory's glass is the system's; a faint amber wash under the content marks a warning to act on.
+        backgroundColor = new.warning ? UIColor.systemOrange.withAlphaComponent(0.14) : .clear
         accessibilityLabel = new.more > 0 ? "\(new.text)，還有 \(new.more) 則" : new.text
         accessibilityTraits = new.tappable ? .button : .staticText
         accessibilityCustomActions = new.later ? [UIAccessibilityCustomAction(name: "稍後再說 Later") { [weak self] _ in
             self?.onLater?()
             return true
         }] : nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // The wash follows the accessory's capsule.
+        layer.cornerRadius = bounds.height / 2
+        layer.cornerCurve = .continuous
     }
 
     @objc private func tapped() {
