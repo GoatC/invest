@@ -43,6 +43,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         if let url = connectionOptions.urlContexts.first?.url { Router.handle(url) }
         let window = UIWindow(windowScene: windowScene)
         window.tintColor = UIColor(named: "AccentColor")
+        // The appearance chosen in the app last time (淺色 before any), so the bars are right from the start.
+        window.overrideUserInterfaceStyle = Appearance.stored
         window.rootViewController = ShellViewController()
         window.makeKeyAndVisible()
         self.window = window

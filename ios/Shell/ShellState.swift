@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// One tab of the bar, as the page names it (lib/shell.ts): the path of its page, or "more".
 struct ShellTab: Equatable {
@@ -105,6 +106,8 @@ struct ShellState: Equatable {
     /// False while the app is still opening (every page one tap away being fetched): the launch cover
     /// stays over everything until then. Nil from a page that does not say.
     let opened: Bool?
+    /// The appearance chosen on 帳號: "light", "dark" or "auto" (lib/theme.ts). Nil from a page that does not say.
+    let theme: String?
 
     /// Reads the body of a script message; nil for anything that is not a version 1 state.
     init?(message body: Any) {
@@ -124,7 +127,25 @@ struct ShellState: Equatable {
         self.top = ShellTop(fields["top"])
         self.next = ShellNext(fields["next"])
         self.opened = fields["opened"] as? Bool
+        self.theme = fields["theme"] as? String
     }
+}
+
+/// The appearance chosen in the app (lib/theme.ts), kept for the next launch so the bars are right from
+/// the start: 淺色 unless 深色 or 自動 (the phone's own) was chosen.
+enum Appearance {
+    static let key = "longview.theme"
+
+    static func style(_ choice: String?) -> UIUserInterfaceStyle {
+        switch choice {
+        case "dark": return .dark
+        case "auto": return .unspecified
+        default: return .light
+        }
+    }
+
+    /// The style kept from the last time the page said, 淺色 before it ever has.
+    static var stored: UIUserInterfaceStyle { style(UserDefaults.standard.string(forKey: key)) }
 }
 
 /// Where the site is: the host named in ios/Local.xcconfig (SITE_HOST), which is not in git.
