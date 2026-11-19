@@ -41,17 +41,20 @@ final class TabHost: UIViewController {
         // One line, centred, on every page (Hugo, 2026-11-16): no large title under the buttons' row.
         navigationItem.largeTitleDisplayMode = .never
         // The page lists its controls left to right; the bar fills from the right edge in.
-        navigationItem.rightBarButtonItems = (top?.actions ?? []).reversed().map { action in
+        let button = { (action: ShellAction) -> UIBarButtonItem in
             let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action) })
             item.accessibilityLabel = action.label
             return item
         }
+        let actions = top?.actions ?? []
+        navigationItem.rightBarButtonItems = actions.filter { !$0.leading }.reversed().map(button)
         if top?.back == true {
             let item = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), primaryAction: UIAction { _ in back() })
             item.accessibilityLabel = "返回 Back"
-            navigationItem.leftBarButtonItem = item
+            navigationItem.leftBarButtonItems = [item]
         } else {
-            navigationItem.leftBarButtonItem = nil
+            // A control the page puts at the left edge (the dashboard's 帳號); a back button takes that place when there is one.
+            navigationItem.leftBarButtonItems = actions.filter { $0.leading }.map(button)
         }
         drawSegments(top)
         let light = top?.lightStatusBar ?? true

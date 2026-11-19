@@ -15,7 +15,8 @@ export function NativePosterLine({ changes }: { changes: readonly number[] }) {
     const host = ref.current?.parentElement;
     if (!host || !nativeCharts()) return undefined;
     host.classList.add('native-drawn');
-    const stop = showNative(host, posterLine(changes));
+    // The poster's own text colour (the Ink poster is light; it was white on the old accent poster).
+    const stop = showNative(host, posterLine(changes, getComputedStyle(host).color));
     return () => {
       stop();
       host.classList.remove('native-drawn');

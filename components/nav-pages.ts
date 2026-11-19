@@ -86,6 +86,9 @@ export const GROUPS: readonly Group[] = [
   },
 ];
 
+/** Pages the dashboard's bar buttons open (帳號, 搜尋; Ink design 2026-11-18): fetched with the rest, so they open from memory. */
+export const BAR_PAGES: readonly string[] = ['/account', '/search'];
+
 /** Whether `path` belongs to `page`: the page itself, a page folded into it, or one of its sub-tabs. */
 export function matches(page: Page, path: string): boolean {
   const under = (base: string) => (base === '/' ? path === '/' : path === base || path.startsWith(`${base}/`));
@@ -101,7 +104,7 @@ export function name(label: Bilingual): string {
  * Every page a tap in the navigation can open, the tab bar's first, then their sub-tabs, then the
  * groups': what the preloader fetches when the app opens.
  */
-export const NAV_PATHS: readonly string[] = [...new Set([...MAIN.map((page) => page.href), ...MAIN.flatMap((page) => (page.sub ?? []).map((sub) => sub.href)), ...GROUPS.flatMap((group) => group.pages.map((page) => page.href))])];
+export const NAV_PATHS: readonly string[] = [...new Set([...MAIN.map((page) => page.href), ...MAIN.flatMap((page) => (page.sub ?? []).map((sub) => sub.href)), ...GROUPS.flatMap((group) => group.pages.map((page) => page.href)), ...BAR_PAGES])];
 
 /**
  * The pages one tap away from `path`: the tab bar's four, and the sub-tabs of the tab the page

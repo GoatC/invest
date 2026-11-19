@@ -46,6 +46,8 @@ export interface ShellAction {
   sheet?: string;
   /** The page's ⓘ text, which the shell shows in a sheet of its own (proposals G02 and G05: ⓘ as a glass button). */
   info?: string;
+  /** 'leading': at the bar's left edge instead of its right (`data-shell-placement`; the dashboard's 帳號, Ink design). */
+  placement?: 'leading';
 }
 
 /**
@@ -139,7 +141,7 @@ export function sameTop(a: ShellTop | null, b: ShellTop | null): boolean {
     a.segments?.current === b.segments?.current &&
     (a.segments?.labels ?? []).join('\n') === (b.segments?.labels ?? []).join('\n') &&
     a.actions.length === b.actions.length &&
-    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label && action.sheet === b.actions[index]!.sheet && action.info === b.actions[index]!.info)
+    a.actions.every((action, index) => action.key === b.actions[index]!.key && action.symbol === b.actions[index]!.symbol && action.label === b.actions[index]!.label && action.sheet === b.actions[index]!.sheet && action.info === b.actions[index]!.info && action.placement === b.actions[index]!.placement)
   );
 }
 

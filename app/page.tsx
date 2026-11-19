@@ -8,7 +8,7 @@ import { DataProblem } from '@/components/data-problem';
 import { NativePosterLine } from '@/components/native-poster-line';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
-import { WarningsPanel } from '@/components/warnings-panel';
+import { ProposalHashForward } from '@/components/proposal-hash-forward';
 import { RefreshData } from '@/components/refresh-data';
 import { RiskCard } from '@/components/risk-card';
 import { RiskDetails } from '@/components/risk-details';
@@ -93,18 +93,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
   ]);
   const portfolio = buildPortfolio(data);
-  const [list, rules] = proposals instanceof DataError ? [[], []] : proposals;
+  const rules = proposals instanceof DataError ? [] : proposals[1];
   // The whole portfolio day by day (F18): the poster's line, and the regular pool's month ends against the plan.
   const days = plan instanceof DataError ? null : buildSeries(plan.input);
 
-  // A standing warning comes second on the page; with none, the warnings section closes it.
-  const waitingFirst = list.some((proposal) => proposal.status === 'open');
-  const panel =
-    proposals instanceof DataError ? (
-      <Unavailable what={{ en: 'rule warnings', zh: '規則警示' }} error={proposals} />
-    ) : (
-      <WarningsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
-    );
   const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
   const line = days ? valueLine(days) : null;
   // The poster's glow (Ink design, docs/design-handoff): its colour and strength from the 7-day move, its thresholds from config glow.
@@ -118,7 +110,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Banners slot="page" />
       </Suspense>
       <RuleBoard data={data} portfolio={portfolio} />
-      {waitingFirst && panel}
       <div className="dash-row">
         <div className="dash-main">
           {risk instanceof DataError ? <Unavailable what={{ en: 'Value at Risk', zh: '風險值' }} error={risk} /> : <Risk risk={risk} portfolio={portfolio} today={today} />}
@@ -149,7 +140,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </div>
       {!(simulation instanceof DataError) && simulation && <MonteCarloUpdate run={simulation} today={today} />}
       {!(attribution instanceof DataError) && attribution && <AttributionUpdate last={attribution} today={today} />}
-      {!waitingFirst && panel}
+      {/* The rule warnings themselves have their own page since 2026-11-19 (Hugo): the rules row above is the dashboard's. */}
+      <ProposalHashForward />
     </>
   );
 }
@@ -233,7 +225,28 @@ function Hero({
           <span className="hero-date">
             <span>{longDate(today)}</span>
           </span>
-          <RefreshData quiet shellAction />
+          <span className="hero-tools">
+            {/* Lent to the shell's bar as glass buttons (G02): 帳號 on the left, opened in a sheet, as 搜尋 is (G05). */}
+            <Link href="/account" prefetch className="icon-button" aria-label="帳號 Account" data-shell-action="account" data-shell-symbol="person.crop.circle" data-shell-sheet="/account" data-shell-placement="leading">
+              <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="11" cy="8" r="3.6" />
+                <path d="M4.5 18.5c1.3-3 3.8-4.5 6.5-4.5s5.2 1.5 6.5 4.5" />
+              </svg>
+            </Link>
+            <Link href="/search" prefetch className="icon-button" aria-label="搜尋 Search" data-shell-action="search" data-shell-symbol="magnifyingglass" data-shell-sheet="/search">
+              <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                <circle cx="9.5" cy="9.5" r="6.5" />
+                <path d="M14.5 14.5l5 5" />
+              </svg>
+            </Link>
+            <Link href="/notifications" prefetch className="icon-button" aria-label="推播 Notifications" data-shell-action="notifications" data-shell-symbol="bell">
+              <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 15V10a5 5 0 0110 0v5l1.5 2h-13z" />
+                <path d="M9 19.5a2 2 0 004 0" />
+              </svg>
+            </Link>
+            <RefreshData quiet shellAction />
+          </span>
         </div>
         <h1>
           <Zh en="Portfolio value" zh="總市值" />
@@ -293,6 +306,9 @@ function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portf
           </span>
         </summary>
         <AlertTiles items={items} tone={tone} />
+        <Link href="/proposals" prefetch className="rule-fold-more">
+          規則警示與建議
+        </Link>
       </details>
     </section>
   );

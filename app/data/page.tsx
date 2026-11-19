@@ -109,7 +109,7 @@ function LatestRun({ run }: { run: JobRun }) {
             en={`Checked the rules: ${detail.rules.created} new proposal${detail.rules.created === 1 ? '' : 's'}, ${detail.rules.closed} closed.`}
             zh={`已檢查規則：新增 ${detail.rules.created} 則警示，解除 ${detail.rules.closed} 則。`}
           />{' '}
-          <Link href="/#proposals">
+          <Link href="/proposals">
             <Bi en="Rule warnings" zh="規則警示" />
           </Link>
         </p>

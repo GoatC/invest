@@ -198,9 +198,22 @@ export function readouts(option: Obj, shape: NativeShape, xLabel: (index: number
 
 /**
  * The dashboard poster's line (app/page.tsx) as the shell draws it: the rise and fall of both pools,
- * white on the poster, 3pt, over a dashed line at zero, with no axes and no read-out.
+ * in the poster's text colour (`ink`, an `rgb(…)` the page reads off the poster; white was the old accent poster's), 3pt,
+ * over a dashed line at zero in the same colour faded, with no axes and no read-out.
  */
-export function posterLine(changes: readonly number[]): NativeSpec {
+/** `rgb(r, g, b)` (or `#rrggbb`) as `rgba(r, g, b, alpha)`; any other form comes back as it was. */
+export function faded(ink: string, alpha: number): string {
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(ink.trim());
+  if (rgb) return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`;
+  const hex = /^#([0-9a-f]{6})$/i.exec(ink.trim());
+  if (hex) {
+    const value = parseInt(hex[1]!, 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  }
+  return ink;
+}
+
+export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)'): NativeSpec {
   const low = Math.min(0, ...changes);
   const high = Math.max(0, ...changes);
   const pad = (high - low || 1) * 0.12;
@@ -209,8 +222,8 @@ export function posterLine(changes: readonly number[]): NativeSpec {
     spark: true,
     lineWidth: 3,
     x: { kind: 'category', values: changes.map((_, index) => String(index)) },
-    series: [{ name: '', mark: 'line', color: '#ffffff', values: [...changes], colors: changes.map(() => null), stack: null, dashed: false }],
-    rules: [{ axis: 'y', value: 0, color: 'rgba(255, 255, 255, 0.45)', dashed: true }],
+    series: [{ name: '', mark: 'line', color: ink, values: [...changes], colors: changes.map(() => null), stack: null, dashed: false }],
+    rules: [{ axis: 'y', value: 0, color: faded(ink, 0.45), dashed: true }],
     area: false,
     xTicks: [],
     y: { min: low - pad, max: high + pad, ticks: [] },

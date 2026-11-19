@@ -56,7 +56,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
           </p>
         )}
         <p>
-          <Link href="/#proposals">
+          <Link href="/proposals">
             <Bi en="Go to the rule warnings" zh="前往規則警示" />
           </Link>
         </p>
@@ -141,7 +141,7 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           {live && (
             <>
               {' '}
-              <Link href={`/#proposal-${live.id}`}>
+              <Link href={`/proposals#proposal-${live.id}`}>
                 <Bi en={`Warning #${live.id}`} zh={`警示 #${live.id}`} />
               </Link>
             </>

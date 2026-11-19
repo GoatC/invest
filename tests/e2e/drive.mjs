@@ -1145,7 +1145,7 @@ async function warning(name) {
 
 await step('warnings: checking the rules raises R1, F8 and the monthly contribution as standing warnings, each explained, with whole-share orders', async () => {
   await page.goto(`${BASE}/proposals`);
-  await page.waitForURL(`${BASE}/#proposals`);
+  await page.waitForURL(`${BASE}/proposals`);
   check((await page.locator('#proposals').innerText()).includes('沒有警示'), 'none before a check');
   await page.getByRole('button', { name: /Check the rules now/ }).click();
   await page.waitForURL(/\?saved=checked/);
@@ -1177,7 +1177,7 @@ await step('warnings: checking the rules raises R1, F8 and the monthly contribut
 });
 
 await step('warnings: a trade taken on R1 is recorded as any trade; dismissed, a warning goes to the folded record and its state waits out the cooldown', async () => {
-  await page.goto(`${BASE}/#proposals`);
+  await page.goto(`${BASE}/proposals`);
   const r1 = await warning('Single-stock trim');
   const id = (await r1.getAttribute('id'))?.replace('proposal-', '');
   // R1's first sale is 2330: recorded on the holdings page like any trade, at the latest close, with the Taiwan minimum fee and the 0.3% tax.
@@ -1191,14 +1191,14 @@ await step('warnings: a trade taken on R1 is recorded as any trade; dismissed, a
   await saveTrade();
   await page.waitForURL(/\/holdings\?saved=added/);
   // Still firing or not, the warning is set aside with its button.
-  await page.goto(`${BASE}/#proposals`);
+  await page.goto(`${BASE}/proposals`);
   const live = page.locator(`#proposal-${id}`);
   if (await live.count()) {
     await live.getByRole('button', { name: /忽略/ }).click();
     await page.waitForURL(/\?saved=dismissed/);
   }
   // From a fresh address, so the next redirect is a new one to wait for.
-  await page.goto(`${BASE}/#proposals`);
+  await page.goto(`${BASE}/proposals`);
   await page.locator('#proposals .alert-tile').filter({ hasText: 'Drift rebalance' }).getByRole('button', { name: /忽略/ }).click();
   await page.waitForURL(/\?saved=dismissed/);
   check((await body()).includes('已忽略。'), 'dismissed');
@@ -1736,7 +1736,7 @@ await step('push job: plans the weekly review and the standing warning, sends ea
   const weekly = received.find((push) => push.title === '每週檢視');
   const monthly = received.find((push) => push.title === '每月投入');
   check(weekly && weekly.body.split('\n').length === 3 && weekly.body.startsWith('規則：1 則警示。') && weekly.url === '/', `the weekly review's three lines, got ${JSON.stringify(weekly)}`);
-  check(monthly && /^把 \d{4}-\d{2}-\d{2} 扣款的 NT\$10,000 投入/.test(monthly.body) && /^\/#proposal-\d+$/.test(monthly.url), `the warning names its action, got ${JSON.stringify(monthly)}`);
+  check(monthly && /^把 \d{4}-\d{2}-\d{2} 扣款的 NT\$10,000 投入/.test(monthly.body) && /^\/proposals#proposal-\d+$/.test(monthly.url), `the warning names its action, got ${JSON.stringify(monthly)}`);
   const again = await notify();
   check(/Web Push: 0 planned, 0 sent/.test(again.stdout) && phonePushes().length === before + 2, 'nothing twice');
   await page.reload();
@@ -1810,28 +1810,52 @@ await step('dashboard: the poster with the value of both pools, the 7-day move a
     await fold.locator('summary').click();
   }
   const headings = await page.locator('main h2').allInnerTexts();
-  const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
+  const order = ['Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));
   check(at.every((index, i) => index >= 0 && (i === 0 || index > (at[i - 1] ?? -1))), `the PRD order, got ${headings.join(' | ')}`);
   check(!headings.some((heading) => heading.startsWith('與目標權重的偏離')), 'the drift bars are on Allocation only');
   check(/Deployed [^\n]*NT\$[\d,]+ [\d.]+%/.test(await fact('Deployed')) && /NT\$[\d,]+/.test(await fact('Waiting as cash')), `windfall deployed and waiting, got ${await fact('Deployed')} / ${await fact('Waiting as cash')}`);
   check(text.includes('尚無分批計畫。'), 'no windfall plan, since the demo was put back');
   check(text.includes('Weekly review push'), 'the coming week lists the review');
-  check((await page.locator('#proposals').innerText()).includes('Monthly contribution'), 'the standing warning, with its dismiss button');
+  // The rule warnings left the dashboard on 2026-11-19 (Hugo): only the rules row stays, linking to their page.
+  check((await page.locator('#proposals').count()) === 0 && (await page.locator('#rule-board a[href="/proposals"]').count()) === 1, 'no warnings panel on the dashboard, a link to it from the rules row');
   await snap('dashboard');
   await page.setViewportSize({ width: 1280, height: 1500 });
   await docShot('dashboard', page);
   await page.setViewportSize({ width: 1280, height: 900 });
+  // An old link to a warning on the dashboard goes on to the warnings' own page.
+  await page.goto(`${BASE}/#proposals`);
+  await page.waitForURL(`${BASE}/proposals`);
+  check((await page.locator('#proposals').innerText()).includes('Monthly contribution'), 'the standing warning, with its dismiss button');
   // A standing warning stays: checking the rules again keeps it, with the same number.
   const id = await page.locator('#proposals .alert-tile').first().getAttribute('id');
   await page.locator('#proposals').getByRole('button', { name: /Check the rules now/ }).click();
-  await page.waitForURL(/\?saved=checked/);
+  await page.waitForURL(/\/proposals\?saved=checked/);
   check((await page.locator(`#${id}`).count()) === 1, 'the warning still stands');
+  await page.goto(`${BASE}/`);
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
   await page.locator('.chart-donut svg').waitFor();
   await snap('dashboard-dark');
   await page.emulateMedia({ colorScheme: 'light' });
+});
+
+await step('account and search: the poster\'s person and search buttons open 帳號 and 搜尋; the search finds a page, a holding and the VaR', async () => {
+  await page.goto(`${BASE}/`);
+  const tools = page.locator('#this-week .hero-tools');
+  check((await tools.getByRole('link', { name: /帳號/ }).getAttribute('href')) === '/account' && (await tools.getByRole('link', { name: /搜尋/ }).getAttribute('href')) === '/search', 'the poster links 帳號 and 搜尋');
+  await page.goto(`${BASE}/account`);
+  const account = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
+  check(/owner@example\.com/.test(account) && account.includes('家人共用') && account.includes('尚未開放') && account.includes('登出'), `the account page, got ${account}`);
+  await page.goto(`${BASE}/search`);
+  const field = page.getByRole('searchbox');
+  check(await field.evaluate((input) => document.activeElement === input), 'the field has the keyboard at once');
+  await field.fill('風險');
+  await page.getByRole('link', { name: /風險值（整個投資組合）/ }).waitFor();
+  check((await page.getByRole('link', { name: /壓力測試/ }).count()) > 0, 'risk also finds the stress test');
+  await field.fill('2330');
+  await page.getByRole('link', { name: /2330/ }).first().waitFor();
+  await snap('search');
 });
 
 await step('red flags: every indicator by company, coverage, an entry that scans again and a review prompt, the settings logged (N3)', async () => {

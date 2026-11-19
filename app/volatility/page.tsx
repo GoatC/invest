@@ -239,7 +239,7 @@ function ShadowLog({ rows }: { rows: ShadowRow[] | DataError }) {
                   return (
                     <tr key={row.proposal.id}>
                       <td className="nowrap">
-                        <a href={`/#proposal-${row.proposal.id}`}>{row.proposal.date}</a>
+                        <a href={`/proposals#proposal-${row.proposal.id}`}>{row.proposal.date}</a>
                       </td>
                       <td>
                         {band ? <Bi {...(BAND_TEXT[band.band] ?? { en: band.band, zh: band.band })} /> : '—'} {band?.score.toFixed(1)}

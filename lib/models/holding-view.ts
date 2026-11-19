@@ -107,7 +107,7 @@ export function holdingSignals(input: SignalInput): Signal[] {
   const out: Signal[] = [];
   if (input.breach) {
     const figures = `${percent(input.breach.weight)} / ${percent(input.breach.limit, 0)}`;
-    out.push({ column: 'rule', kind: 'act', label: { en: `Over the single-stock cap ${figures}`, zh: `超過個股上限 ${figures.replace(' / ', '／')}` }, href: '/#proposals' });
+    out.push({ column: 'rule', kind: 'act', label: { en: `Over the single-stock cap ${figures}`, zh: `超過個股上限 ${figures.replace(' / ', '／')}` }, href: '/proposals' });
   }
   if (input.light === 'red') out.push({ column: 'flag', kind: 'act', label: { en: 'Red flag: red', zh: '紅旗紅燈' }, href: `/red-flags?t=${t}` });
   else if (input.light === 'amber') out.push({ column: 'flag', kind: 'watch', label: { en: 'Red flag: amber', zh: '紅旗黃燈' }, href: `/red-flags?t=${t}` });
@@ -129,7 +129,7 @@ export function holdingSignals(input: SignalInput): Signal[] {
     else if (status === 'watch') out.push({ column: 'mix', kind: 'watch', label: side, href: '/allocation' });
     else if (status === 'ok') out.push({ column: 'mix', kind: 'ok', label: { en: 'Class on target', zh: '類別符合目標' }, href: '/allocation' });
   }
-  if (input.proposal) out.push({ column: 'event', kind: 'wait', label: { en: 'Rule warning', zh: '規則警示' }, href: '/#proposals' });
+  if (input.proposal) out.push({ column: 'event', kind: 'wait', label: { en: 'Rule warning', zh: '規則警示' }, href: '/proposals' });
   if (input.filing) out.push({ column: 'event', kind: 'wait', label: { en: `Filing due ${shortDate(input.filing.date)}`, zh: `${shortDate(input.filing.date)} 財報` }, href: `/valuation?t=${t}` });
   return out.sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
 }

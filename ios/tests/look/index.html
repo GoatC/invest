@@ -15,7 +15,7 @@
   html { background: #f2f2f7; }
   body { margin: 0; font: -apple-system-body; color: #000; padding-top: var(--shell-top, 0px); padding-bottom: calc(var(--shell-bottom, 0px) + 40px); }
   body.poster { padding-top: 0; }
-  .hero { background: #34689c; color: #fff; padding: calc(var(--shell-top-inline, 100px) + 40px) 16px 60px; }
+  .hero { background: #fafbfa; color: #141a17; border-bottom: 1px solid #dce3df; padding: calc(var(--shell-top-inline, 100px) + 40px) 16px 60px; }
   .hero b { display: block; font-size: 44px; }
   .card { background: #fff; border-radius: 22px; margin: 12px 16px; padding: 16px; min-height: 90px; }
   .sheet { position: fixed; inset: 0; z-index: 5; background: #f2f2f7; padding: calc(var(--shell-top-inline, 100px) + 12px) 16px 0; }
@@ -34,7 +34,7 @@
     { key: 'more', title: '更多' },
   ];
   const PAGES = {
-    '/': { title: null, poster: true, segments: ['本週', '波動警報'], actions: [{ key: 'refresh', symbol: 'arrow.clockwise', label: '更新最新資料 Refresh' }] },
+    '/': { title: null, poster: true, segments: ['本週', '波動警報'], actions: [{ key: 'account', symbol: 'person.crop.circle', label: '帳號 Account', sheet: '/account', placement: 'leading' }, { key: 'search', symbol: 'magnifyingglass', label: '搜尋 Search', sheet: '/search' }, { key: 'notifications', symbol: 'bell', label: '推播 Notifications' }, { key: 'refresh', symbol: 'arrow.clockwise', label: '更新最新資料 Refresh' }] },
     '/holdings': { title: '持倉', segments: ['總覽', '交易', '現金流', '觀察清單'], actions: [{ key: 'info', symbol: 'info.circle', label: '說明 How it works', info: '最近交易日＝最新收盤對前一個收盤。' }, { key: 'add', symbol: 'plus', label: '新增交易 Add trade', sheet: '/holdings?sheet=trade' }] },
     '/performance': { title: '績效', segments: ['報酬', '歸因', '費用與稅'], actions: [] },
     '/allocation': { title: '資產配置', segments: ['目標', '合併透視', '產業熱圖', '壓力測試', '效率前緣'], actions: [] },
@@ -51,7 +51,7 @@
   function readTop() {
     if (sheet) return { title: '更多', statusBar: 'dark', back: false, actions: [], segments: null };
     const page = PAGES[path];
-    return { title: page.title, statusBar: page.poster && scrollY < 200 ? 'light' : 'dark', back: false, actions: page.actions, segments: { labels: page.segments, current: segment } };
+    return { title: page.title, statusBar: 'dark', back: false, actions: page.actions, segments: { labels: page.segments, current: segment } };
   }
   function post() {
     const state = { v: 1, signedIn: true, path, tab: sheet ? 'more' : path, tabs: TABS, top: readTop(), next: null, opened };
@@ -93,7 +93,7 @@
     const days = Array.from({ length: 40 }, (_, i) => `2026-10-${String((i % 28) + 1).padStart(2, '0')}`);
     const walk = days.map((_, i) => Math.round((Math.sin(i / 4) * 0.012 + i * 0.0006) * 10000) / 10000);
     const specs = {
-      spark: { v: 1, spark: true, lineWidth: 3, x: { kind: 'category', values: days }, series: [{ name: '', mark: 'line', color: '#ffffff', values: walk, colors: [], stack: null, dashed: false }], rules: [{ axis: 'y', value: 0, color: 'rgba(255, 255, 255, 0.45)', dashed: true }], area: false, xTicks: [], y: { min: -0.02, max: 0.04, ticks: [] }, readouts: [] },
+      spark: { v: 1, spark: true, lineWidth: 3, x: { kind: 'category', values: days }, series: [{ name: '', mark: 'line', color: 'rgb(20, 26, 23)', values: walk, colors: [], stack: null, dashed: false }], rules: [{ axis: 'y', value: 0, color: 'rgba(20, 26, 23, 0.45)', dashed: true }], area: false, xTicks: [], y: { min: -0.02, max: 0.04, ticks: [] }, readouts: [] },
       line: { v: 1, spark: false, x: { kind: 'date', values: days }, series: [{ name: 'SAA 基準', mark: 'line', color: '#8a93a0', values: walk.map((v) => v * 0.8), colors: [], stack: null, dashed: false }, { name: '組合', mark: 'line', color: '#4a86c5', values: walk, colors: [], stack: null, dashed: false }], rules: [], area: false, xTicks: [{ at: 0, label: '10-01' }, { at: 20, label: '10-21' }, { at: 39, label: '11-09' }], y: { min: -0.02, max: 0.04, ticks: [-0.02, 0, 0.02, 0.04].map((v) => ({ value: v, label: `${Math.round(v * 100)}%` })) }, readouts: days.map((d, i) => `${d}\n組合 ${(walk[i] * 100).toFixed(2)}%`) },
       bars: { v: 1, spark: false, x: { kind: 'category', values: ['06', '07', '08', '09', '10', '11'] }, series: [{ name: '當地幣別', mark: 'bar', color: '#4a86c5', values: [0.01, 0.012, -0.004, 0.006, 0.014, 0.008], colors: [], stack: 'split', dashed: false }, { name: '匯率', mark: 'bar', color: '#d9693a', values: [0.002, -0.003, 0.004, 0.001, 0.003, -0.002], colors: [], stack: 'split', dashed: false }, { name: '台幣報酬', mark: 'point', color: '#1f2a3a', values: [0.012, 0.009, 0, 0.007, 0.017, 0.006], colors: [], stack: null, dashed: false }], rules: [], area: false, xTicks: ['06', '07', '08', '09', '10', '11'].map((label, at) => ({ at, label: `2026-${label}` })), y: { min: -0.01, max: 0.02, ticks: [-0.01, 0, 0.01, 0.02].map((v) => ({ value: v, label: `${v * 100}%` })) }, readouts: [] },
     };

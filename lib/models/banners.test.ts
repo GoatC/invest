@@ -56,9 +56,9 @@ describe('when a banner is needed', () => {
 
   it('counts the standing warnings and leads to the one, or to all', () => {
     const [one] = guideBanners({ ...quiet, proposals: [{ id: 12 }] }, SETTINGS, '2026-11-12');
-    assert.deepEqual([one?.text.zh, one?.action.href, one?.key], ['1 則規則警示。', '/#proposal-12', 'proposals:open:12']);
+    assert.deepEqual([one?.text.zh, one?.action.href, one?.key], ['1 則規則警示。', '/proposals#proposal-12', 'proposals:open:12']);
     const [many] = guideBanners({ ...quiet, proposals: [{ id: 13 }, { id: 14 }] }, SETTINGS, '2026-11-12');
-    assert.deepEqual([many?.text.zh, many?.action.href, many?.key], ['2 則規則警示。', '/#proposals', 'proposals:open:14']);
+    assert.deepEqual([many?.text.zh, many?.action.href, many?.key], ['2 則規則警示。', '/proposals', 'proposals:open:14']);
   });
 
   it('leads the windfall step by step: its balance first, then its plan, then nothing', () => {
