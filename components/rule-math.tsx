@@ -11,7 +11,7 @@ export function RuleMath({ caps, pool, title }: { caps: Caps; pool?: PoolFigures
   return (
     <details className="small">
       <summary>
-        <Bi {...(title ?? { en: 'How R1 and R2 are worked out', zh: 'R1 與 R2 的計算方式' })} />
+        <Bi {...(title ?? { en: 'How R1 and R2 are worked out', zh: '個股與衛星上限的計算方式' })} />
       </summary>
       <ul>
         {ruleMath(caps, pool).map((line) => (

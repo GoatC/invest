@@ -23,7 +23,7 @@ export default async function TargetsPage() {
         <Info>
           <Bi
             en="Each class's share of the regular-contribution pool, from the Investment Principles. They must add up to 100%. F8 rebalances towards them, and the performance page's benchmark is built from them and the benchmark ETFs."
-            zh="各類別占一般投入資金池的比例，來自投資原則，合計必須是 100%。F8 再平衡以此為目標，績效頁的基準也由這些權重與基準 ETF 組成。"
+            zh="各類別占一般投入資金池的比例，來自投資原則，合計必須是 100%。再平衡以此為目標，績效頁的基準也由這些權重與基準 ETF 組成。"
           />
         </Info>
         <TargetsForm classes={classes} securities={securities} r2Target={caps.satellite?.targetWeight ?? null} />

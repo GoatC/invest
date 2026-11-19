@@ -56,7 +56,7 @@ export default async function StressPage({ searchParams }: { searchParams: Promi
       <Info>
         <Bi
           en="What would a bad stretch from history have done to what you hold today? Each scenario applies the months that really happened (2008, 2020, 2022) to your holdings by asset class, as if you had held them through, and shows the deepest fall in % and NT$, how long the climb back took, and which of the windfall planner's acceleration tiers (F3) would have fired. Or make up a shock of your own. A look at how bad it could get, not a forecast; history does not have to repeat."
-          zh="歷史上的一段壞行情，會讓你今天的持股怎麼樣？每個情境把真實發生過的月份（2008、2020、2022）依資產類別套用在你的持股上，假設一路持有，顯示最深的跌幅（百分比與台幣）、爬回需要多久，以及大額資金分批（F3）的哪些加速級距會被觸發。也可以自訂一個衝擊。這只是了解最壞可能到哪裡，不是預測；歷史不必重演。"
+          zh="歷史上的一段壞行情，會讓你今天的持股怎麼樣？每個情境把真實發生過的月份（2008、2020、2022）依資產類別套用在你的持股上，假設一路持有，顯示最深的跌幅（百分比與台幣）、爬回需要多久，以及大額資金分批的哪些加速級距會被觸發。也可以自訂一個衝擊。這只是了解最壞可能到哪裡，不是預測；歷史不必重演。"
         />
       </Info>
     </>
@@ -172,7 +172,7 @@ function Summary({ rows, custom, total }: { rows: Array<{ scenario: Scenario; re
               <Bi en="To recover" zh="回本" />
             </th>
             <th>
-              <Bi en="F3 tiers fired" zh="觸發的 F3 級距" />
+              <Bi en="F3 tiers fired" zh="觸發的加速投入級距" />
             </th>
           </tr>
         </thead>
@@ -226,7 +226,7 @@ function Detail({ name, shown, isCustom, scenario, tiers, total, names }: { name
             <thead>
               <tr>
                 <th>
-                  <Bi en="F3 tier" zh="F3 級距" />
+                  <Bi en="F3 tier" zh="加速投入級距" />
                 </th>
                 <th>
                   <Bi en="Fires" zh="觸發" />
@@ -414,7 +414,7 @@ function Method({ settings }: { settings: StressSettings }) {
     },
     {
       en: `F3’s tiers are read on the ${settings.series.find((entry) => entry.id === settings.gauge)?.nameEn ?? 'gauge'} month-end closes, as ACWI’s history starts only in 2008: the fall from the high of the rule’s window fires each tier once, a deeper one counting the ones above it, and they reset at a new high. Which tranches that would have moved depends on a plan you did not have then, so only the tiers are shown.`,
-      zh: `F3 級距以「${settings.series.find((entry) => entry.id === settings.gauge)?.nameZh ?? '指標'}」的月底收盤判斷（ACWI 的歷史只從 2008 年開始）：自規則期間高點的跌幅觸發各級距，每級距只觸發一次，較深的級距視為同時觸發較淺者，創新高後重置。實際會提前哪幾批取決於當時並不存在的計畫，因此只顯示級距。`,
+      zh: `加速投入級距以「${settings.series.find((entry) => entry.id === settings.gauge)?.nameZh ?? '指標'}」的月底收盤判斷（ACWI 的歷史只從 2008 年開始）：自規則期間高點的跌幅觸發各級距，每級距只觸發一次，較深的級距視為同時觸發較淺者，創新高後重置。實際會提前哪幾批取決於當時並不存在的計畫，因此只顯示級距。`,
     },
     {
       en: 'Your own shock is one month of returns you type, then each class earns its expected return ÷ 12 from the capital market assumptions until the portfolio regains its starting value. Nothing is saved.',

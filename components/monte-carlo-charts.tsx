@@ -29,7 +29,7 @@ function axisTwd(value: number): string {
 const SERIES = {
   median: { en: 'Median', zh: '中位數' },
   band: { en: 'Band', zh: '區間' },
-  expected: { en: 'Mean path (F2)', zh: '平均路徑（F2）' },
+  expected: { en: 'Mean path (F2)', zh: '平均路徑' },
   putIn: { en: 'Money put in', zh: '投入金額' },
   reaching: { en: 'Reach the goal', zh: '達成目標' },
   short: { en: 'Fall short', zh: '未達目標' },

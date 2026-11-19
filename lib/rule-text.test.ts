@@ -10,8 +10,9 @@ describe('breachAlert', () => {
   it('puts the R1 acceptance case on a tile: the weight against the cap and the sale back to it', () => {
     const tile = breachAlert({ rule: 'R1', subject: 'AAPL', valueTwd: 11_000, weight: 0.055, limit: 0.05, trimTwd: 1_000 }, CAPS);
     assert.deepEqual(
+      // No rule code on the tile (Hugo, 2026-11-19): its name says which rule.
       [tile.code, tile.title.zh, tile.value, tile.gauge, tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`)],
-      ['R1', 'AAPL', '5.5%', { value: 0.055, limit: 0.05 }, ['上限 5%', '賣出 ≈NT$1,000']],
+      [undefined, 'AAPL · 個股上限', '5.5%', { value: 0.055, limit: 0.05 }, ['上限 5%', '賣出 ≈NT$1,000']],
     );
   });
 
@@ -35,7 +36,7 @@ describe('ruleMath', () => {
       lines[2]?.en,
       'R2: satellite weight = satellite value ÷ regular pool = NT$51,000 ÷ NT$200,000 = 25.5%; above 25%, trim = satellite value − 20% × regular pool, back to 20%.',
     );
-    assert.equal(lines[2]?.zh, 'R2：衛星部位權重 = 衛星部位市值 ÷ 一般投入資金池 = NT$51,000 ÷ NT$200,000 = 25.5%；超過 25% 時，減碼金額 = 衛星部位市值 − 20% × 一般投入資金池，回到 20%。');
+    assert.equal(lines[2]?.zh, '衛星上限：衛星部位權重 = 衛星部位市值 ÷ 一般投入資金池 = NT$51,000 ÷ NT$200,000 = 25.5%；超過 25% 時，減碼金額 = 衛星部位市值 − 20% × 一般投入資金池，回到 20%。');
   });
 
   it('states the formulas alone without figures, and skips a rule that is off', () => {
@@ -57,22 +58,23 @@ describe('ruleBoard', () => {
     const view = regularPool(holdings);
     return ruleBoard(holdings, caps, classDrifts(classWeights(view, ASSET_CLASSES), bands ?? undefined, view.totalTwd));
   };
-  const line = (item: ReturnType<typeof ruleBoard>[number]) => `${item.tone} ${item.code} ${item.title.zh} ${item.value} ${item.chips?.map((chip) => `${chip.label.zh} ${chip.value}`).join(', ') ?? ''}`.trim();
+  const line = (item: ReturnType<typeof ruleBoard>[number]) => `${item.tone} ${item.title.zh} ${item.value} ${item.chips?.map((chip) => `${chip.label.zh} ${chip.value}`).join(', ') ?? ''}`.trim();
 
   it('shows R1\'s acceptance breach (AAPL 5.5% of NT$200,000) as its warning, R2 and F8 with their standing', () => {
     const items = board(pool(stock('AAPL', 11_000)));
-    assert.deepEqual(items.map((item) => item.code), ['R1', 'R2', 'F8']);
-    assert.equal(line(items[0]!), 'alert R1 AAPL 5.5% 上限 5%, 賣出 ≈NT$1,000');
+    assert.deepEqual(items.map((item) => item.key.split(':')[0]), ['R1', 'R2', 'F8']);
+    assert.ok(items.every((item) => item.code === undefined), 'no rule code shown (Hugo, 2026-11-19)');
+    assert.equal(line(items[0]!), 'alert AAPL · 個股上限 5.5% 上限 5%, 賣出 ≈NT$1,000');
     assert.equal(items[0]!.href, '/holdings#rules-status');
-    assert.equal(line(items[1]!), 'ok R2 衛星部位 5.5% 觸發 25%');
+    assert.equal(line(items[1]!), 'ok 衛星部位上限 5.5% 觸發 25%');
     assert.deepEqual(items[1]!.gauge, { value: 0.055, limit: 0.25, target: 0.2 });
     assert.equal(items[2]!.href, '/allocation');
   });
 
   it('shows R2\'s acceptance breach (a NT$51,000 satellite, 25.5%) as its warning with the trim back to 20%', () => {
     const items = board(pool(stock('AAPL', 9_000), stock('MSFT', 9_500), stock('2330', 9_800), holding({ key: 'regular:QQQM', ticker: 'QQQM', sleeve: 'satellite', assetClassId: 'tactical_themes', productType: 'theme_etf', valueTwd: 22_700 })));
-    assert.equal(line(items[0]!), 'ok R1 2330 4.9% 上限 5%');
-    assert.equal(line(items[1]!), 'alert R2 衛星部位 25.5% 觸發 25%, 減碼 ≈NT$11,000 → 20%');
+    assert.equal(line(items[0]!), 'ok 2330 · 個股上限 4.9% 上限 5%');
+    assert.equal(line(items[1]!), 'alert 衛星部位上限 25.5% 觸發 25%, 減碼 ≈NT$11,000 → 20%');
   });
 
   it('marks the satellite between its 20% target and 25% trigger as one to watch', () => {
@@ -83,7 +85,8 @@ describe('ruleBoard', () => {
 
   it('names the core class furthest into its F8 band, with its drift and the band', () => {
     const items = board(pool());
-    const f8 = items.find((item) => item.code === 'F8')!;
+    const f8 = items.find((item) => item.key === 'F8')!;
+    assert.match(f8.title.zh, /偏離$/);
     assert.equal(f8.tone, 'alert', 'all in one class: far past its band');
     assert.match(f8.value ?? '', /^\+\d+\.\d pp$/);
     assert.match(f8.chips?.[0]?.value ?? '', /^\d+\.\d pp$/);
@@ -91,6 +94,6 @@ describe('ruleBoard', () => {
 
   it('keeps a row for a rule that is off, with the word for it', () => {
     const items = board(pool(stock('AAPL', 11_000)), { satellite: CAPS.satellite }, null);
-    assert.deepEqual(items.map((item) => `${item.code} ${item.value}`), ['R1 停用', 'R2 5.5%', 'F8 停用']);
+    assert.deepEqual(items.map((item) => `${item.title.zh} ${item.value}`), ['單一個股上限 停用', '衛星部位上限 5.5%', '再平衡偏離 停用']);
   });
 });

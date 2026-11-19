@@ -514,7 +514,7 @@ function Preview({
       {shortfall && (
         <AlertTiles heading={{ en: 'Larger than the holding: add the buy or leave the sell out', zh: '超過持有數量：先補買進或略過此賣出' }} tone="alert" items={[shortfallAlert(shortfall)]} />
       )}
-      {preview && <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this import', zh: '匯入後 R1 與 R2 的計算方式' }} />}
+      {preview && <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this import', zh: '匯入後個股與衛星上限的計算方式' }} />}
       <AlertTiles heading={{ en: 'Breaks a rule (can still import)', zh: '匯入後會違反規則（仍可匯入）' }} tone="watch" items={created.map((breach) => breachAlert(breach, caps, 'watch'))} />
       <div className="table-wrap">
         <table>

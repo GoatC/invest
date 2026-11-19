@@ -158,7 +158,7 @@ export function SecurityForm({
         <p className="banner info">
           <Bi
             en="This re-files every trade in this security: R1 checks only individual stocks, and the asset class decides the sleeve (R2) and the weights."
-            zh="這會改變這檔證券所有交易的歸類：R1 只檢查個股，資產類別決定所屬部位（R2）與權重。"
+            zh="這會改變這檔證券所有交易的歸類：個股上限只檢查個股，資產類別決定所屬部位與權重。"
           />
         </p>
       )}

@@ -104,7 +104,7 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
           <Info>
             <Bi
               en="Drift = actual weight − target, in percentage points (pp). A core class turns amber past half of its F8 band and red past the band itself, where F8 drafts a rebalance: 5 pp, or a quarter of the target if that is smaller (the 5/25 rule). Satellite classes are watched by R2 as a whole."
-              zh="偏離＝實際權重－目標權重，單位為百分點（pp）。核心類別超過 F8 門檻的一半轉為黃色，超過門檻本身轉為紅色，此時 F8 會產生再平衡清單：門檻為 5 個百分點，或目標的四分之一（取較小者，即 5/25 規則）。衛星類別由 R2 以整體衡量。"
+              zh="偏離＝實際權重－目標權重，單位為百分點（pp）。核心類別超過再平衡門檻的一半轉為黃色，超過門檻本身轉為紅色，此時再平衡會產生再平衡清單：門檻為 5 個百分點，或目標的四分之一（取較小者，即 5/25 規則）。衛星類別由衛星上限以整體衡量。"
             />
           </Info>
           {!data.bands && (
@@ -134,7 +134,7 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
                     <Bi {...LABELS.drift} />
                   </th>
                   <th className="num">
-                    <Bi en="F8 band" zh="F8 門檻" />
+                    <Bi en="F8 band" zh="再平衡門檻" />
                   </th>
                   <th>
                     <Bi en="Status" zh="狀態" />
@@ -165,7 +165,7 @@ function Drift({ data, portfolio }: { data: AllocationData; portfolio: Portfolio
                   <tr>
                     <td>
                       <strong>
-                        <Bi en="Satellite sleeve (R2)" zh="衛星部位（R2）" />
+                        <Bi en="Satellite sleeve (R2)" zh="衛星部位" />
                       </strong>
                       <div className="muted small">
                         <Bi en={`Trimmed back to ${percent(satellite.target)} above ${percent(satellite.trigger)}`} zh={`超過 ${percent(satellite.trigger)} 時減碼回 ${percent(satellite.target)}`} />
@@ -288,7 +288,7 @@ function BandBars({ drifts, satellite, total }: { drifts: readonly ClassDrift[];
         </li>
         <li>
           <span className="chart-key rect" style={{ background: 'var(--accent-soft)' }} aria-hidden="true" />
-          <Bi en="F8 band" zh="F8 門檻" />
+          <Bi en="F8 band" zh="再平衡門檻" />
         </li>
       </ul>
     </div>

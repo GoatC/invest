@@ -63,7 +63,7 @@ export default async function EditSecurityPage({ params, searchParams }: { param
         <p className="muted small">
           <Bi
             en="Trades stay as you traded them; from the ex-date on, each share bought before it counts as the new number of shares, so the quantity, average cost a share, value and R1 / R2 stay right. Returns already use adjusted closes."
-            zh="交易維持原本的成交紀錄；自分割生效日起，之前買進的每一股改以新股數計算，因此持有數量、每股平均成本、市值與 R1／R2 都正確。報酬原本就以還原收盤價計算。"
+            zh="交易維持原本的成交紀錄；自分割生效日起，之前買進的每一股改以新股數計算，因此持有數量、每股平均成本、市值與個股與衛星上限都正確。報酬原本就以還原收盤價計算。"
           />
         </p>
         {splits.length === 0 ? (

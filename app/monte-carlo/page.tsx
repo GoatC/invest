@@ -52,7 +52,7 @@ export default async function MonteCarloPage({ searchParams }: { searchParams: P
         <Info>
           <Bi
             en="F2 projects the plan at one steady return; real returns swing. This draws 10,000 possible futures from the way each asset class actually moved month to month, and shows where the regular pool (and the windfall) could end up: the middle outcome, a range around it, and the chance of reaching your goal. A picture of the spread, not a forecast."
-            zh="F2 以固定報酬預測計畫，但實際報酬會起伏。這裡依各資產類別過去每月的實際漲跌，抽樣出 10,000 種可能的未來，顯示一般投入資金池（與大額資金）可能的結果：中間值、周圍的區間，以及達成目標的機率。呈現的是分布範圍，不是預言。"
+            zh="複利計算機以固定報酬預測計畫，但實際報酬會起伏。這裡依各資產類別過去每月的實際漲跌，抽樣出 10,000 種可能的未來，顯示一般投入資金池（與大額資金）可能的結果：中間值、周圍的區間，以及達成目標的機率。呈現的是分布範圍，不是預言。"
           />
         </Info>
         {params['saved'] === 'settings' && (
@@ -161,10 +161,10 @@ function Report({ run, basis, names, lastRun }: { run: Ok; basis: Basis; names: 
   };
   const windfallNote: Bilingual =
     run.windfall.source === 'plan'
-      ? { en: 'The windfall follows the saved F3 plan’s remaining tranches.', zh: '大額資金依已儲存 F3 計畫的剩餘各批。' }
+      ? { en: 'The windfall follows the saved F3 plan’s remaining tranches.', zh: '大額資金依已儲存分批計畫的剩餘各批。' }
       : run.windfall.source === 'expected'
         ? { en: `An expected windfall is included, in ${run.windfall.tranches?.count ?? '—'} tranches.`, zh: `已納入預期的大額資金，分 ${run.windfall.tranches?.count ?? '—'} 批。` }
-        : { en: 'No windfall is included (no F3 plan, no expected windfall).', zh: '未納入大額資金（沒有 F3 計畫，也沒有預期大額資金）。' };
+        : { en: 'No windfall is included (no F3 plan, no expected windfall).', zh: '未納入大額資金（沒有分批計畫，也沒有預期大額資金）。' };
   return (
     <>
       <section className="card form">
@@ -235,7 +235,7 @@ function Marks({ run, basis }: { run: Ok; basis: Basis }) {
               </th>
               <th className="num">{Math.round(settings.band[1] * 100)}%</th>
               <th className="num">
-                <Bi en="Mean path (F2)" zh="平均路徑（F2）" />
+                <Bi en="Mean path (F2)" zh="平均路徑" />
               </th>
               <th className="num">
                 <Bi en="Put in" zh="投入" />
@@ -352,11 +352,11 @@ function Method() {
     },
     {
       en: 'The windfall waits in cash and moves into the core classes only (never the satellite) as its tranches fall due, from the saved F3 plan, else the expected windfall below, paced as F3 would pace it today (6, 12 or 24 tranches by the CAPE percentile) unless you set a count. The last tranche takes whatever cash is left, interest included.',
-      zh: '大額資金先以現金等待，每批到期時才轉入核心類別（不含衛星），依已儲存的 F3 計畫，否則依下方的預期大額資金；除非自行設定批數，否則依 F3 今天的節奏（依 CAPE 百分位分 6、12 或 24 批）。最後一批投入剩下的全部現金（含利息）。',
+      zh: '大額資金先以現金等待，每批到期時才轉入核心類別（不含衛星），依已儲存的分批計畫，否則依下方的預期大額資金；除非自行設定批數，否則依分批規則今天的節奏（依 CAPE 百分位分 6、12 或 24 批）。最後一批投入剩下的全部現金（含利息）。',
     },
     {
       en: 'F3’s acceleration runs on every path: the global equity class stands for ACWI, and its fall from the highest month end of the last twelve fires the tiers on the cash still waiting (15%: the next tranche now; 25%: half; 35%: all of it), each once per drawdown, as the rules engine does live. Month ends are smoother than days, so the tiers fire a little less often than they would live; the stress test replays them on real crashes.',
-      zh: 'F3 的加速投入在每條路徑上執行：以全球股票類別代表 ACWI，當它自近 12 個月底最高點回落時，對仍在等待的現金觸發級距（15%：下一批提前；25%：一半；35%：全部），同一波下跌每個級距只觸發一次，與規則引擎實際運作相同。月底資料比每日平滑，因此觸發次數會比實際略少；壓力測試會以真實崩盤回放。',
+      zh: '分批規則的加速投入在每條路徑上執行：以全球股票類別代表 ACWI，當它自近 12 個月底最高點回落時，對仍在等待的現金觸發級距（15%：下一批提前；25%：一半；35%：全部），同一波下跌每個級距只觸發一次，與規則引擎實際運作相同。月底資料比每日平滑，因此觸發次數會比實際略少；壓力測試會以真實崩盤回放。',
     },
     {
       en: 'The mean path is the plan with every month at its expected return, on the same engine. The median sits below it because losses weigh more than equal gains: the volatility drag. The numbers change when the month, the plan or an assumption changes, and are re-run monthly by the nightly job.',
@@ -409,11 +409,11 @@ function WindfallCard({ run, basis, names, capePercentile }: { run: Ok; basis: B
     ? windfall.tranches.from === 'cape'
       ? {
           en: `${windfall.tranches.count} monthly tranches: F3’s pace at today’s CAPE percentile (${capePercentile === null ? '—' : capePercentile.toFixed(0)}).`,
-          zh: `分 ${windfall.tranches.count} 個月：F3 依今天 CAPE 百分位（${capePercentile === null ? '—' : capePercentile.toFixed(0)}）的節奏。`,
+          zh: `分 ${windfall.tranches.count} 個月：分批規則依今天 CAPE 百分位（${capePercentile === null ? '—' : capePercentile.toFixed(0)}）的節奏。`,
         }
       : windfall.tranches.from === 'setting'
         ? { en: `${windfall.tranches.count} monthly tranches, as set below.`, zh: `分 ${windfall.tranches.count} 個月（下方設定）。` }
-        : { en: `${windfall.tranches.count} monthly tranches: F3’s middle pace, as no CAPE is loaded yet.`, zh: `分 ${windfall.tranches.count} 個月：尚未載入 CAPE，採 F3 的中間節奏。` }
+        : { en: `${windfall.tranches.count} monthly tranches: F3’s middle pace, as no CAPE is loaded yet.`, zh: `分 ${windfall.tranches.count} 個月：尚未載入 CAPE，採分批規則的中間節奏。` }
     : null;
   const gauge = names.find((entry) => entry.id === windfall.gaugeClass);
   const off: Bilingual | null =

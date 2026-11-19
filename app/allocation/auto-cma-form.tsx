@@ -35,7 +35,7 @@ export function AutoCmaForm({ settings }: { settings: AutoCmaSettings }) {
         </label>
         <label className="row">
           <input type="radio" name="premium" value="erp" defaultChecked={settings.premium === 'erp'} />
-          <Bi en="F11 ERP + country premium" zh="F11 風險溢酬 ＋ 國家溢酬" />
+          <Bi en="F11 ERP + country premium" zh="風險溢酬 ＋ 國家溢酬" />
         </label>
       </fieldset>
       <div className="form-grid">

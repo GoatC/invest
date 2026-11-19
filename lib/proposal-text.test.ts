@@ -11,8 +11,8 @@ const NAMES = new Map([
 
 describe('proposal text', () => {
   it('titles a proposal by its rule', () => {
-    assert.deepEqual(proposalTitle({ id: 'R1', condition: 'single_stock_weight_above' }), { en: 'R1 · Single-stock trim', zh: 'R1 · 單一個股減碼' });
-    assert.deepEqual(proposalTitle({ id: 'X', condition: 'something_new' }), { en: 'X · something_new', zh: 'X · something_new' });
+    assert.deepEqual(proposalTitle({ id: 'R1', condition: 'single_stock_weight_above' }), { en: 'Single-stock trim', zh: '單一個股減碼' });
+    assert.deepEqual(proposalTitle({ id: 'X', condition: 'something_new' }), { en: 'something_new', zh: 'something_new' });
   });
 
   it('explains R1 with the PRD figures: NT$11,000 of NT$200,000 is 5.5%, NT$1,000 over the cap', () => {
@@ -92,7 +92,7 @@ describe('proposal text', () => {
       NAMES,
     );
     assert.equal(moved[0]?.en, 'AAPL: 200.00 (2026-08-01) → 230.00 (2026-10-31), +15.0%');
-    assert.deepEqual(proposalTitle({ id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple' }), { en: 'BUY_ZONE · Buy zone', zh: 'BUY_ZONE · 進入買入區' });
+    assert.deepEqual(proposalTitle({ id: 'BUY_ZONE', condition: 'price_at_or_below_value_multiple' }), { en: 'Buy zone', zh: '進入買入區' });
     assert.deepEqual(checkText({ ruleId: 'BUY_ZONE', outcome: 'waiting', why: 'valuation' }), { en: 'Waiting for a saved valuation', zh: '尚無已儲存的估值' });
   });
 
@@ -110,7 +110,7 @@ describe('proposal text', () => {
     );
     assert.equal(exit[0]?.en, '2330: first scan → red since 2026-10-21 · Going-concern opinion');
     assert.equal(exit[1]?.en, 'Exit option: sell NT$8,000 of NT$8,000');
-    assert.deepEqual(proposalTitle({ id: 'RED_FLAG_RED', condition: 'satellite_red_flag' }), { en: 'RED_FLAG_RED · Red flag turns red', zh: 'RED_FLAG_RED · 紅旗轉紅' });
+    assert.deepEqual(proposalTitle({ id: 'RED_FLAG_RED', condition: 'satellite_red_flag' }), { en: 'Red flag turns red', zh: '紅旗轉紅' });
     assert.equal(checkText({ ruleId: 'RED_FLAG_RED', outcome: 'waiting', why: 'red_flags' }).en, 'Waiting for a red-flag scan');
   });
 
@@ -178,9 +178,10 @@ describe('proposalAlert', () => {
     assert.equal(tile.href, '/proposals#proposal-12');
   });
 
-  it('keeps a short rule code', () => {
+  it('shows no rule code, only the warning’s name (Hugo, 2026-11-19)', () => {
     const tile = proposalAlert({ id: 3, ruleId: 'R1', state: '2330,NVDA', createdAt: '2026-11-01T01:00:00.000Z' }, { id: 'R1', condition: 'single_stock_weight_above' });
-    assert.equal(tile.code, 'R1');
+    assert.equal(tile.code, undefined);
+    assert.ok(!/R1/.test(tile.title.zh));
     assert.deepEqual(tile.chips?.map((chip) => chip.value), ['2330, NVDA', '2026-11-01']);
     assert.equal(stateLabel('satellite'), undefined);
     assert.equal(stateLabel('global_bonds:under,strategic_cash:over'), undefined);

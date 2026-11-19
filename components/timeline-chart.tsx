@@ -52,9 +52,9 @@ function axisTwd(value: number): string {
 }
 
 const SERIES = {
-  median: { en: 'Median (F5)', zh: '中位數（F5）' },
-  band: { en: 'Band (F5)', zh: '區間（F5）' },
-  plan: { en: 'Plan (F2)', zh: '計畫（F2）' },
+  median: { en: 'Median (F5)', zh: '中位數' },
+  band: { en: 'Band (F5)', zh: '區間' },
+  plan: { en: 'Plan (F2)', zh: '計畫' },
   actual: { en: 'Actual', zh: '實際' },
 } as const satisfies Record<string, Bilingual>;
 
@@ -174,7 +174,7 @@ export function TimelineChart({
         items={[
           { label: SERIES.actual, color: 'var(--chart-2)', shape: 'line' },
           { label: SERIES.median, color: 'var(--chart-1)', shape: 'line' },
-          { label: { en: `Band ${bandText} (F5)`, zh: `區間 ${bandText}（F5）` }, color: 'var(--chart-1)', shape: 'rect' },
+          { label: { en: `Band ${bandText} (F5)`, zh: `區間 ${bandText}` }, color: 'var(--chart-1)', shape: 'rect' },
           { label: SERIES.plan, color: 'var(--chart-context)', shape: 'line' },
         ]}
       />

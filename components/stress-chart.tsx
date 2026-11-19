@@ -25,7 +25,7 @@ export interface UnderwaterPoint {
 
 const SERIES = {
   portfolio: { en: 'Your portfolio', zh: '你的投資組合' },
-  gauge: { en: 'Gauge (F3)', zh: '指標（F3）' },
+  gauge: { en: 'Gauge (F3)', zh: '指標' },
 } as const satisfies Record<string, Bilingual>;
 
 function option(points: readonly UnderwaterPoint[], tiers: readonly number[], colors: Colors): Option {
@@ -49,7 +49,7 @@ function option(points: readonly UnderwaterPoint[], tiers: readonly number[], co
       symbol: 'none',
       lineStyle: { color: colors.muted, width: 1, type: 'dashed' },
       label: { color: colors.muted, formatter: (info) => String(info.name), position: 'insideEndTop' },
-      data: showGauge ? tiers.map((tier) => ({ name: chartText({ en: `F3 tier ${Math.round(tier * 100)}%`, zh: `F3 級距 ${Math.round(tier * 100)}%` }), yAxis: -tier })) : [],
+      data: showGauge ? tiers.map((tier) => ({ name: chartText({ en: `F3 tier ${Math.round(tier * 100)}%`, zh: `加速投入級距 ${Math.round(tier * 100)}%` }), yAxis: -tier })) : [],
     },
   };
   return {

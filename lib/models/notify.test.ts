@@ -104,7 +104,7 @@ describe('messages', () => {
     assert.deepEqual(proposalMessage(r1, new Map()), {
       kind: 'proposal',
       key: '7',
-      title: 'R1 · 單一個股減碼',
+      title: '單一個股減碼',
       body: '2330, NVDA 減碼回 5% 上限。',
       url: '/proposals#proposal-7',
     });

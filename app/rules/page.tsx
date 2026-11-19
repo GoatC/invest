@@ -96,7 +96,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
           <ul className="form">
             {changes.map((change) => (
               <li key={change.id}>
-                <strong>{change.ruleId}</strong> <TaipeiTime at={change.changedAt} />
+                <strong>{(() => { const rule = rules.find((row) => row.id === change.ruleId); return rule ? proposalTitle(rule).zh : '規則'; })()}</strong> <TaipeiTime at={change.changedAt} />
                 <ChangeList changes={change.changes} />
               </li>
             ))}
@@ -121,7 +121,8 @@ const ICON: Record<Check['outcome'], [string, string]> = {
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
   const evaluated = check && check.outcome !== 'later';
   const live = proposals.find((proposal) => proposal.status === 'open');
-  const title: Bilingual = evaluated ? proposalTitle(rule) : { en: `${rule.id} · ${rule.feature}`, zh: `${rule.id} · ${rule.feature}` };
+  // The rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19).
+  const title: Bilingual = proposalTitle(rule);
   return (
     <article id={`rule-${rule.id}`} className="rule-row form">
       <div className="row spread">

@@ -415,7 +415,7 @@ final class ShellViewController: UITabBarController {
         var content: NextView.Content?
         if let next = next {
             nextPath = next.href
-            content = NextView.Content(text: next.text, more: next.more, symbol: next.act ? "exclamationmark.circle.fill" : "info.circle.fill", tint: next.act ? .systemOrange : .tintColor, tappable: true, later: next.later)
+            content = NextView.Content(text: next.text, more: next.more, symbol: next.act ? "exclamationmark.circle.fill" : "info.circle.fill", tint: next.act ? .systemOrange : .tintColor, tappable: true, later: next.later, warning: next.act)
         } else {
             nextPath = nil
             if signedIn, let expiry = Reminders.expiry, expiry > Date(), expiry.timeIntervalSinceNow < 24 * 60 * 60 {
@@ -431,7 +431,17 @@ final class ShellViewController: UITabBarController {
         }
         nextView.show(content)
         if bottomAccessory == nil { bottomAccessory = UITabAccessory(contentView: nextView) }
+        // One light tap the first time a warning to act on appears (Ink design, docs/design-handoff/03-ios-shell.md);
+        // never again for the same warning, across launches too, so it never nags while it stands.
+        if content.warning, UserDefaults.standard.string(forKey: Self.buzzedKey) != content.text {
+            UserDefaults.standard.set(content.text, forKey: Self.buzzedKey)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
+
+    /// The warning text the light tap was last given for.
+    private static let buzzedKey = "next.buzzed"
+
 
     /// The page at its top again after a new page: the large title comes out, and the bar's room is measured.
     private func scrolled(to y: CGFloat) {

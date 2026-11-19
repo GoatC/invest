@@ -52,7 +52,7 @@ export default async function TimelinePage({ searchParams }: { searchParams: Pro
         <Info>
           <Bi
             en="The whole plan on one chart: the years of building up the regular pool, the windfall's deployment, and the goals you mark further out. The dashed line is the calculator's plan (F2), the band the Monte Carlo's range around its median (F5), and the line in colour what you actually hold, month end by month end. Where it runs inside the band it is within what the market could ordinarily do; the chart says how things stand, not what to do."
-            zh="整份計畫在一張圖上：累積一般投入資金池的年月、大額資金的部署，以及你標在更遠處的目標。虛線是計算機的計畫（F2），區間是蒙地卡羅中位數周圍的範圍（F5），彩色線是你實際持有的價值（逐月底）。落在區間內，代表仍在市場通常會有的範圍；圖只說明現況，不告訴你該怎麼做。"
+            zh="整份計畫在一張圖上：累積一般投入資金池的年月、大額資金的部署，以及你標在更遠處的目標。虛線是計算機的計畫，區間是蒙地卡羅中位數周圍的範圍，彩色線是你實際持有的價值（逐月底）。落在區間內，代表仍在市場通常會有的範圍；圖只說明現況，不告訴你該怎麼做。"
           />
         </Info>
         {params['saved'] === 'goals' && (
@@ -145,7 +145,7 @@ function Report({
   const stats: Array<{ label: Bilingual; value: string; note?: Bilingual }> = [];
   if (latest) stats.push({ label: { en: 'Actual now', zh: '目前實際' }, value: twd(latest.value), note: { en: `${windfallIncluded ? 'Both pools' : 'Regular pool'}, ${latest.date}`, zh: `${windfallIncluded ? '兩個資金池' : '一般投入資金池'}，${latest.date}` } });
   if (now) {
-    stats.push({ label: { en: 'Plan this month (F2)', zh: '本月計畫（F2）' }, value: twd(now.expected), note: { en: `Month ${monthsBetween(plan.start, thisMonth) + 1} of the plan`, zh: `計畫第 ${monthsBetween(plan.start, thisMonth) + 1} 個月` } });
+    stats.push({ label: { en: 'Plan this month (F2)', zh: '本月計畫' }, value: twd(now.expected), note: { en: `Month ${monthsBetween(plan.start, thisMonth) + 1} of the plan`, zh: `計畫第 ${monthsBetween(plan.start, thisMonth) + 1} 個月` } });
     if (latest) stats.push({ label: { en: latest.value >= now.expected ? 'Ahead of the plan' : 'Behind the plan', zh: latest.value >= now.expected ? '超前計畫' : '落後計畫' }, value: signedTwd(latest.value - now.expected) });
     if (ok) stats.push({ label: { en: `Band this month (${bandText})`, zh: `本月區間（${bandText}）` }, value: `${twd(now.low)} – ${twd(now.high)}`, note: latest ? { en: latest.value < now.low ? 'You are below it' : latest.value > now.high ? 'You are above it' : 'You are inside it', zh: latest.value < now.low ? '目前低於區間' : latest.value > now.high ? '目前高於區間' : '目前在區間內' } : undefined });
   }
@@ -300,7 +300,7 @@ function Method() {
   const notes: Bilingual[] = [
     {
       en: 'The plan is the calculator’s saved plan on F2’s engine; when a windfall is included (the saved F3 plan, else the expected one on the Monte Carlo page) the plan’s line and the Monte Carlo band both carry it, and the actual line then counts both pools.',
-      zh: '計畫為計算機儲存的計畫，使用 F2 引擎；納入大額資金時（已儲存的 F3 計畫，否則為蒙地卡羅頁的預期大額資金），計畫線與蒙地卡羅區間都包含它，實際線也改為合計兩個資金池。',
+      zh: '計畫為計算機儲存的計畫，使用複利計算機的算法；納入大額資金時（已儲存的分批計畫，否則為蒙地卡羅頁的預期大額資金），計畫線與蒙地卡羅區間都包含它，實際線也改為合計兩個資金池。',
     },
     {
       en: 'The band and the median are the Monte Carlo’s at each year end of the plan, joined by straight lines; the plan’s year 1 ends twelve months after its first month. The same run as the Monte Carlo page: it holds all month, and the nightly job saves it monthly.',

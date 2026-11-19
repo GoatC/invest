@@ -272,7 +272,7 @@ export const DRIFT_STATUS = {
   ok: { en: 'On target', zh: '符合目標' },
   watch: { en: 'Watch', zh: '留意' },
   rebalance: { en: 'Rebalance', zh: '需再平衡' },
-  unchecked: { en: 'Left to R2', zh: '由 R2 管理' },
+  unchecked: { en: 'Left to R2', zh: '由衛星上限管理' },
 } as const satisfies Record<string, Bilingual>;
 
 export const DRIFT_ICON = { ok: '✓', watch: '!', rebalance: '✕', unchecked: '–' } as const;

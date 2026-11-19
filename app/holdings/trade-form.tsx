@@ -332,13 +332,13 @@ function TradeEffect({ preview, caps, pool }: { preview: ReturnType<typeof previ
     <div className="form" aria-live="polite">
       <AlertTiles heading={{ en: 'Breaks a rule (can still save)', zh: '會違反規則（仍可儲存）' }} tone="watch" items={created.map((breach) => breachAlert(breach, caps, 'watch'))} />
       <AlertTiles heading={{ en: 'Already over before this trade', zh: '交易前已超標' }} tone="info" items={existing.map((breach) => breachAlert(breach, caps, 'info'))} />
-      <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this trade', zh: '這筆交易後 R1 與 R2 的計算方式' }} />
+      <RuleMath caps={caps} pool={preview.after} title={{ en: 'How R1 and R2 are worked out after this trade', zh: '這筆交易後個股與衛星上限的計算方式' }} />
       {preview.breaches.length === 0 && (caps.singleStock || caps.satellite) && (
         <p className="banner ok">
           <span className="status-icon ok" aria-hidden="true">
             ✓
           </span>{' '}
-          {pool === 'windfall' ? <Bi en="Windfall: outside R1 / R2." zh="大額資金：不計入 R1、R2" /> : <Bi en="R1 / R2 within limits." zh="R1、R2 皆在限制內" />}
+          {pool === 'windfall' ? <Bi en="Windfall: outside R1 / R2." zh="大額資金：不計入個股與衛星上限" /> : <Bi en="R1 / R2 within limits." zh="個股與衛星上限皆在限制內" />}
         </p>
       )}
     </div>

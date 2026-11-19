@@ -174,7 +174,7 @@ function Overview({ data, settings, saved, missing }: { data: RedFlagData; setti
           <p>
             <Bi
               en="The light is worked out now from the saved filings, events and your entries. Once a week the nightly job reads each company's 8-K items and going-concern search (SEC) or its environmental penalties (Ministry of Environment), and saves the scan the two N3 rules compare: a held stock whose light worsens prompts a review; a satellite stock turning red drafts its exit. No free source gives full ESG scores, so coverage shows the share of the indicators that apply which data covers."
-              zh="燈號依已存的財報、事件與你的紀錄即時計算。每夜排程每週讀取一次各公司的 8-K 項目與繼續經營全文搜尋（SEC）或環境裁罰（環境部），並存下兩條 N3 規則比較用的掃描：持股燈號轉差時提醒檢視；衛星持股轉紅時產生出場清單。沒有免費來源提供完整 ESG 評分，因此覆蓋率顯示有資料的適用指標比例。"
+              zh="燈號依已存的財報、事件與你的紀錄即時計算。每夜排程每週讀取一次各公司的 8-K 項目與繼續經營全文搜尋（SEC）或環境裁罰（環境部），並存下兩條紅旗指標規則比較用的掃描：持股燈號轉差時提醒檢視；衛星持股轉紅時產生出場清單。沒有免費來源提供完整 ESG 評分，因此覆蓋率顯示有資料的適用指標比例。"
             />
           </p>
         </Info>

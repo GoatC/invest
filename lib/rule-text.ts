@@ -17,8 +17,7 @@ export function breachAlert(breach: CapBreach, caps: Caps, tone: AlertTone = 'al
     return {
       key: `R1:${breach.subject}`,
       tone,
-      code: 'R1',
-      title: { en: breach.subject, zh: breach.subject },
+      title: { en: `${breach.subject} · single-stock cap`, zh: `${breach.subject} · 個股上限` },
       value: percent(breach.weight),
       gauge: { value: breach.weight, limit: breach.limit },
       chips: [
@@ -31,8 +30,7 @@ export function breachAlert(breach: CapBreach, caps: Caps, tone: AlertTone = 'al
   return {
     key: 'R2:satellite',
     tone,
-    code: 'R2',
-    title: { en: 'Satellite', zh: '衛星部位' },
+    title: { en: 'Satellite cap', zh: '衛星部位上限' },
     value: percent(breach.weight),
     gauge: { value: breach.weight, limit: breach.limit, ...(target === undefined ? {} : { target }) },
     chips: [
@@ -58,7 +56,7 @@ export function ruleMath(caps: Caps, pool?: PoolFigures): Bilingual[] {
     const most = pool ? twd(caps.singleStock.maxWeight * pool.totalTwd) : undefined;
     lines.push({
       en: `R1: a stock's weight = its value ÷ regular pool; above ${cap}, trim = its value − ${cap} × regular pool.${most ? ` One stock may hold up to ${most}.` : ''}`,
-      zh: `R1：個股權重 = 該股市值 ÷ 一般投入資金池；超過 ${cap} 時，減碼金額 = 該股市值 − ${cap} × 一般投入資金池。${most ? `單一個股最多可持有 ${most}。` : ''}`,
+      zh: `單一個股上限：個股權重 = 該股市值 ÷ 一般投入資金池；超過 ${cap} 時，減碼金額 = 該股市值 − ${cap} × 一般投入資金池。${most ? `單一個股最多可持有 ${most}。` : ''}`,
     });
   }
   if (caps.satellite) {
@@ -68,7 +66,7 @@ export function ruleMath(caps: Caps, pool?: PoolFigures): Bilingual[] {
       pool && pool.totalTwd > 0 ? ` = ${twd(pool.satelliteTwd)} ÷ ${twd(pool.totalTwd)} = ${percent(pool.satelliteTwd / pool.totalTwd)}` : '';
     lines.push({
       en: `R2: satellite weight = satellite value ÷ regular pool${now}; above ${trigger}, trim = satellite value − ${target} × regular pool, back to ${target}.`,
-      zh: `R2：衛星部位權重 = 衛星部位市值 ÷ 一般投入資金池${now}；超過 ${trigger} 時，減碼金額 = 衛星部位市值 − ${target} × 一般投入資金池，回到 ${target}。`,
+      zh: `衛星上限：衛星部位權重 = 衛星部位市值 ÷ 一般投入資金池${now}；超過 ${trigger} 時，減碼金額 = 衛星部位市值 − ${target} × 一般投入資金池，回到 ${target}。`,
     });
   }
   lines.push({
@@ -83,9 +81,9 @@ export const BOARD_HREF = { rules: '/holdings#rules-status', drift: '/allocation
 
 const TONE: Record<DriftStatus, AlertTone> = { ok: 'ok', watch: 'watch', rebalance: 'alert', unchecked: 'ok' };
 
-/** A rule that is turned off: its code and name, and the word for it. */
+/** A rule that is turned off: its name and the word for it (the code stays only in the key, never shown; Hugo 2026-11-19). */
 function off(code: string, title: Bilingual, href: string): AlertItem {
-  return { key: code, tone: 'watch', code, title, value: '停用', href };
+  return { key: code, tone: 'watch', title, value: '停用', href };
 }
 
 /**
@@ -103,15 +101,14 @@ export function ruleBoard(holdings: readonly Holding[], caps: Caps, drifts: read
 
   const stockCap = caps.singleStock?.maxWeight;
   const overCap = breaches.filter((breach) => breach.rule === 'R1');
-  if (stockCap === undefined) items.push(off('R1', { en: 'Single stock', zh: '單一個股' }, BOARD_HREF.rules));
+  if (stockCap === undefined) items.push(off('R1', { en: 'Single-stock cap', zh: '單一個股上限' }, BOARD_HREF.rules));
   else if (overCap.length > 0) items.push(...overCap.map((breach) => ({ ...breachAlert(breach, caps), href: BOARD_HREF.rules })));
   else {
     const top = largestStock(pool);
     items.push({
       key: 'R1',
       tone: 'ok',
-      code: 'R1',
-      title: top ? { en: top.subject, zh: top.subject } : { en: 'Single stock', zh: '單一個股' },
+      title: top ? { en: `${top.subject} · single-stock cap`, zh: `${top.subject} · 個股上限` } : { en: 'Single-stock cap', zh: '單一個股上限' },
       value: percent(top?.weight),
       ...(top ? { gauge: { value: top.weight, limit: stockCap } } : {}),
       chips: [{ label: { en: 'Cap', zh: '上限' }, value: percent(stockCap, 0) }],
@@ -121,14 +118,13 @@ export function ruleBoard(holdings: readonly Holding[], caps: Caps, drifts: read
 
   const satellite = breaches.find((breach) => breach.rule === 'R2');
   const check = satelliteCheck(pool, caps);
-  if (!check) items.push(off('R2', { en: 'Satellite', zh: '衛星部位' }, BOARD_HREF.rules));
+  if (!check) items.push(off('R2', { en: 'Satellite cap', zh: '衛星部位上限' }, BOARD_HREF.rules));
   else if (satellite) items.push({ ...breachAlert(satellite, caps), href: BOARD_HREF.rules });
   else {
     items.push({
       key: 'R2',
       tone: TONE[check.status],
-      code: 'R2',
-      title: { en: 'Satellite', zh: '衛星部位' },
+      title: { en: 'Satellite cap', zh: '衛星部位上限' },
       value: percent(check.weight),
       gauge: { value: check.weight, limit: check.trigger, target: check.target },
       chips: [{ label: { en: 'Trigger', zh: '觸發' }, value: percent(check.trigger, 0) }],
@@ -140,16 +136,15 @@ export function ruleBoard(holdings: readonly Holding[], caps: Caps, drifts: read
   const checked = drifts.filter((row): row is ClassDrift & { band: number } => row.band !== null && row.status !== 'unchecked');
   const furthest = checked.reduce<(ClassDrift & { band: number }) | undefined>((best, row) => (!best || Math.abs(row.drift) / row.band > Math.abs(best.drift) / best.band ? row : best), undefined);
   if (!furthest) {
-    if (!drifts.some((row) => row.band !== null)) items.push(off('F8', { en: 'Drift', zh: '偏離' }, BOARD_HREF.drift));
+    if (!drifts.some((row) => row.band !== null)) items.push(off('F8', { en: 'Rebalance drift', zh: '再平衡偏離' }, BOARD_HREF.drift));
   } else {
     items.push({
       key: 'F8',
       tone: TONE[furthest.status],
-      code: 'F8',
-      title: { en: furthest.assetClass.nameEn, zh: furthest.assetClass.nameZh },
+      title: { en: `${furthest.assetClass.nameEn} drift`, zh: `${furthest.assetClass.nameZh}偏離` },
       value: points(furthest.drift),
       gauge: { value: Math.abs(furthest.drift), limit: furthest.band },
-      chips: [{ label: { en: 'F8 band', zh: 'F8 門檻' }, value: `${(furthest.band * 100).toFixed(1)} pp` }],
+      chips: [{ label: { en: 'F8 band', zh: '再平衡門檻' }, value: `${(furthest.band * 100).toFixed(1)} pp` }],
       href: BOARD_HREF.drift,
     });
   }

@@ -50,7 +50,7 @@ export function SecuritiesMaster({ data, saved }: { data: HoldingsData; saved: s
             <Info>
               <Bi
                 en="The product type and asset class decide how a security counts: R1 checks individual stocks only, and the asset class sets its sleeve and target weight. The analyses pick up a new ticker once the nightly job has loaded its prices."
-                zh="產品類別與資產類別決定證券如何計算：R1 只檢查個股，資產類別決定所屬部位與目標權重。新代號在每夜排程載入價格後，各分析頁才會列入。"
+                zh="產品類別與資產類別決定證券如何計算：個股上限只檢查個股，資產類別決定所屬部位與目標權重。新代號在每夜排程載入價格後，各分析頁才會列入。"
               />
             </Info>
             <Link href="/securities/new" className="button primary">
