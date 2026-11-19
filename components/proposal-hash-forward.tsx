@@ -10,8 +10,14 @@ import { useEffect } from 'react';
 export function ProposalHashForward() {
   const router = useRouter();
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash === '#proposals' || /^#proposal-\d+$/.test(hash)) router.replace(`/proposals${hash === '#proposals' ? '' : hash}`);
+    const forward = () => {
+      const hash = window.location.hash;
+      if (hash === '#proposals' || /^#proposal-\d+$/.test(hash)) router.replace(`/proposals${hash === '#proposals' ? '' : hash}`);
+    };
+    forward();
+    // Also when only the hash changes on a dashboard already open (a link tapped from inside the app).
+    window.addEventListener('hashchange', forward);
+    return () => window.removeEventListener('hashchange', forward);
   }, [router]);
   return null;
 }
