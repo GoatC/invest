@@ -1124,7 +1124,8 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await page.waitForURL('**/rules?saved=R1*');
   check((await page.locator('#rule-R1').innerText()).includes('Not firing'), 'with a 50% cap R1 stops firing');
   const log = (await page.locator('section', { hasText: 'Edit history of the rules' }).textContent()) ?? '';
-  check(/R1[\s\S]*max_weight[\s\S]*0\.05[\s\S]*0\.5/.test(log), `the edit is logged, got ${log}`);
+  // The log names the rule, not its code (Hugo, 2026-11-19).
+  check(/單一個股減碼[\s\S]*max_weight[\s\S]*0\.05[\s\S]*0\.5/.test(log), `the edit is logged, got ${log}`);
   // From a fresh address, so the redirect after saving is a new one to wait for.
   await page.goto(`${BASE}/rules`);
   await page.locator('#rule-R1 summary', { hasText: 'Thresholds' }).click();
@@ -2125,7 +2126,7 @@ await step('volatility alert: a score crossing 8 raises the panic warning, expla
     const rules = await body();
     // Each rule's form is folded under it: its switch is there, ticked, though not on screen.
     const quietSwitch = page.locator('input[name=threshold_push_in_quiet_hours]');
-    check(rules.includes('VOLATILITY_ALERT') && rules.includes('VOLATILITY_HEDGE') && (await quietSwitch.count()) === 1 && (await quietSwitch.isChecked()), 'the two rules and the quiet-hours switch on the Rules page');
+    check(rules.includes('波動警報') && rules.includes('波動避險') && (await quietSwitch.count()) === 1 && (await quietSwitch.isChecked()), 'the two rules and the quiet-hours switch on the Rules page');
     // The alert record follows it from today.
     await page.goto(`${BASE}/volatility#shadow`);
     await page.locator('#shadow summary', { hasText: 'Warnings' }).click();
@@ -2180,7 +2181,7 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.locator('#windfall').getByText(/預期大額資金：NT\$/).waitFor();
   const windfall = await page.locator('#windfall').innerText();
   check(/預期大額資金：NT\$1,200,000/.test(windfall), `the expected windfall named, got ${windfall.slice(0, 300)}`);
-  check(/分 \d+ 個月：(F3 依今天 CAPE 百分位|尚未載入 CAPE)/.test(windfall), `paced by F3, got ${windfall.slice(0, 400)}`);
+  check(/分 \d+ 個月：(分批規則依今天 CAPE 百分位|尚未載入 CAPE)/.test(windfall), `paced by the windfall plan's rule, got ${windfall.slice(0, 400)}`);
   check(/Paths where the 15% tier fired/.test(windfall) || /未加速/.test(windfall), 'acceleration shown, or why it is off');
   check(windfall.includes('Without the windfall') && windfall.includes('不含大額資金'), 'the goal without the windfall');
   await snap('monte-carlo-windfall');
