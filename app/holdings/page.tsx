@@ -336,12 +336,12 @@ function Summary({ data, portfolio }: { data: HoldingsData; portfolio: Portfolio
   const trigger = data.caps.satellite?.triggerWeight;
   return (
     <div className="grid-cards summary-block">
-      <Stat label={{ en: 'Regular pool', zh: '一般投入資金池' }} value={twd(pool.totalTwd)} note={{ en: 'What R1, R2 and the targets measure', zh: 'R1、R2 與目標權重的計算基礎' }} />
-      <Stat label={{ en: 'Windfall pool', zh: '大額資金池' }} value={twd(windfallTwd)} note={{ en: 'Left out of R1 and R2', zh: '不計入 R1 與 R2' }} />
+      <Stat label={{ en: 'Regular pool', zh: '一般投入資金池' }} value={twd(pool.totalTwd)} note={{ en: 'What R1, R2 and the targets measure', zh: '個股與衛星上限與目標權重的計算基礎' }} />
+      <Stat label={{ en: 'Windfall pool', zh: '大額資金池' }} value={twd(windfallTwd)} note={{ en: 'Left out of R1 and R2', zh: '不計入個股與衛星上限' }} />
       <Stat
         label={{ en: 'Satellite share', zh: '衛星部位占比' }}
         value={percent(satelliteShare)}
-        note={trigger === undefined ? { en: 'R2 is turned off', zh: 'R2 未啟用' } : { en: `R2 trigger ${percent(trigger, 0)}`, zh: `R2 觸發點 ${percent(trigger, 0)}` }}
+        note={trigger === undefined ? { en: 'R2 is turned off', zh: '衛星上限未啟用' } : { en: `R2 trigger ${percent(trigger, 0)}`, zh: `衛星上限 ${percent(trigger, 0)}` }}
       />
       <Stat
         label={{ en: 'Unrealised gain, listed holdings', zh: '上市持股未實現損益' }}
@@ -358,11 +358,11 @@ function rulesOk(data: HoldingsData, portfolio: Portfolio): Fact[] {
   const share = portfolio.pool.totalTwd > 0 ? satelliteValue(portfolio.pool) / portfolio.pool.totalTwd : 0;
   return [
     singleStock
-      ? { label: { en: 'R1 single stock', zh: 'R1 單一個股' }, value: `≤ ${percent(singleStock.maxWeight, 0)}`, tone: 'ok' }
-      : { label: { en: 'R1', zh: 'R1' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
+      ? { label: { en: 'R1 single stock', zh: '單一個股上限' }, value: `≤ ${percent(singleStock.maxWeight, 0)}`, tone: 'ok' }
+      : { label: { en: 'R1', zh: '個股上限' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
     satellite
-      ? { label: { en: 'R2 satellite', zh: 'R2 衛星部位' }, value: `${percent(share)} / ${percent(satellite.triggerWeight, 0)}`, tone: 'ok' }
-      : { label: { en: 'R2', zh: 'R2' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
+      ? { label: { en: 'R2 satellite', zh: '衛星部位上限' }, value: `${percent(share)} / ${percent(satellite.triggerWeight, 0)}`, tone: 'ok' }
+      : { label: { en: 'R2', zh: '衛星上限' }, value: <Bi en="off" zh="停用" />, tone: 'watch' },
   ];
 }
 
@@ -372,7 +372,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
   return (
     <section className="card form" id="rules-status">
       <h2>
-        <Bi en="Rules R1 and R2" zh="規則 R1 與 R2" />
+        <Bi en="Rules R1 and R2" zh="個股與衛星上限規則" />
       </h2>
       {breaches.length > 0 ? (
         <div className="form">

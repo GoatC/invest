@@ -160,8 +160,8 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
   const text = await body();
   // Seed: seven ETFs and stocks at the demo closes and USD/TWD 32.40, plus NT$20,000 savings.
   check(text.includes('NT$79,203'), 'regular pool NT$79,203');
-  check((await alertTile('R1 AAPL')).includes('9.7%') && (await alertTile('R1 AAPL')).includes('上限 5% 賣出 ≈NT$3,686'), `R1 AAPL with trim, got ${await alertTile('R1 AAPL')}`);
-  check((await alertTile('R1 2330')).includes('9.1%') && (await alertTile('R1 2330')).includes('上限 5% 賣出 ≈NT$3,255'), `R1 2330 with trim, got ${await alertTile('R1 2330')}`);
+  check((await alertTile('AAPL · 個股上限')).includes('9.7%') && (await alertTile('AAPL · 個股上限')).includes('上限 5% 賣出 ≈NT$3,686'), `R1 AAPL with trim, got ${await alertTile('AAPL · 個股上限')}`);
+  check((await alertTile('2330 · 個股上限')).includes('9.1%') && (await alertTile('2330 · 個股上限')).includes('上限 5% 賣出 ≈NT$3,255'), `R1 2330 with trim, got ${await alertTile('2330 · 個股上限')}`);
   check(text.includes('18.8%'), 'satellite share 18.8%');
   check((await alertTile('Gold bar (demo)')).includes('尚未估值'), 'gold bar listed as not valued');
   check(text.includes('持倉') && text.includes('上市持股'), 'Chinese labels');
@@ -170,7 +170,7 @@ await step('holdings: demo pool total, R1 breaches with trims, satellite share, 
 });
 
 await step('holdings: R1 and R2 are worked out on screen with the demo figures', async () => {
-  await page.getByText('R1 與 R2 的計算方式', { exact: true }).click();
+  await page.getByText('個股與衛星上限的計算方式', { exact: true }).click();
   const text = await body();
   // 5% of NT$79,203.12; the satellite is 2330 (NT$7,215) plus AAPL (NT$7,646.40).
     check(text.includes('NT$14,861 ÷ NT$79,203 = 18.8%'), 'R2 inputs');
@@ -611,7 +611,7 @@ await step('securities: an edit is logged; one in use cannot be deleted, an unus
 await step('splits: a split restates the shares bought before it, so R1 sees twice the AAPL; deleting it puts R1 back and the edit history keeps it (N5)', async () => {
   const r1 = async () => {
     await page.goto(`${BASE}/holdings`);
-    return alertTile('R1 AAPL');
+    return alertTile('AAPL · 個股上限');
   };
   const share = (line) => Number(/AAPL\D*?([\d.]+)%/.exec(line)?.[1]);
   const before = await r1();
@@ -632,7 +632,7 @@ await step('splits: a split restates the shares bought before it, so R1 sees twi
   await page.goto(`${BASE}/securities/AAPL`);
   await page.locator('#splits').getByRole('button', { name: /Delete/ }).click();
   await page.waitForURL('**/securities/AAPL?saved=split-deleted#splits');
-  check((await r1()) === before, `R1 AAPL back where it was, got ${await alertTile('R1 AAPL')}`);
+  check((await r1()) === before, `R1 AAPL back where it was, got ${await alertTile('AAPL · 個股上限')}`);
   await page.goto(`${BASE}/history`);
   check((await body()).includes(`AAPL 自 ${today} 起分割 ×2`), 'the deleted split stays in the edit history');
 });

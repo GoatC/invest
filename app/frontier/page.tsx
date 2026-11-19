@@ -295,7 +295,7 @@ function Method() {
     },
     {
       en: 'Sharpe = (E[Rp] − Rf) ÷ σp. The tangent portfolio has the highest Sharpe ratio on the frontier; the capital market line runs from the risk-free rate through it. Your current mix is the regular pool’s actual class weights, the target mix the F6 targets, both re-weighted to the classes used.',
-      zh: '夏普比率 = (E[Rp] − Rf) ÷ σp。切線組合是前緣上夏普比率最高的配置；資本市場線從無風險利率出發通過它。目前配置為一般投入資金池的實際類別權重，目標配置為 F6 的目標，兩者都重新加權為所用類別的 100%。',
+      zh: '夏普比率 = (E[Rp] − Rf) ÷ σp。切線組合是前緣上夏普比率最高的配置；資本市場線從無風險利率出發通過它。目前配置為一般投入資金池的實際類別權重，目標配置為 配置的目標，兩者都重新加權為所用類別的 100%。',
     },
     {
       en: 'Reference only: nothing here writes to your targets, and an optimiser that is told a class earns more will put more in it. Use it to see how far your mix is from efficient, not as the mix to hold.',

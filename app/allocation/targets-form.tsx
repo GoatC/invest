@@ -107,12 +107,11 @@ export function TargetsForm({ classes, securities, r2Target }: { classes: AssetC
             {
               key: 'r2',
               tone: 'info',
-              code: 'R2',
               title: { en: 'Satellite targets', zh: '衛星目標合計' },
               value: percent(sleeveTotal('satellite')),
               chips: [
-                { label: { en: 'R2 trims back to', zh: 'R2 減碼回' }, value: percent(r2Target) },
-                { label: { en: 'Change R2 too', zh: '一併修改' }, value: 'R2' },
+                { label: { en: 'R2 trims back to', zh: '衛星上限減碼回' }, value: percent(r2Target) },
+                { label: { en: 'Change the satellite cap too', zh: '一併修改' }, value: '衛星上限' },
               ],
               href: '/rules#rule-R2',
             },

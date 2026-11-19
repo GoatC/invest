@@ -57,10 +57,9 @@ function volatilityLine(detail: ProposalDetail): Bilingual[] {
   ];
 }
 
-/** "R1 · Single-stock trim". */
+/** "Single-stock trim": the rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19). */
 export function proposalTitle(rule: RuleLike): Bilingual {
-  const title = TITLES[rule.condition] ?? { en: rule.condition, zh: rule.condition };
-  return { en: `${rule.id} · ${title.en}`, zh: `${rule.id} · ${title.zh}` };
+  return TITLES[rule.condition] ?? { en: rule.condition, zh: rule.condition };
 }
 
 /** What a proposal fired on, readable and able to wrap: "2330, NVDA". */
@@ -91,7 +90,6 @@ export function proposalAlert(proposal: { id: number; ruleId: string; state: str
   return {
     key: String(proposal.id),
     tone: 'watch',
-    ...(/^R\d+$/.test(proposal.ruleId) ? { code: proposal.ruleId } : {}),
     title,
     value: `#${proposal.id}`,
     chips: [
@@ -191,7 +189,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
         en: `Satellite: ${percent(detail.weight ?? 0)} of the regular pool (${twd(detail.satelliteTwd ?? 0)} of ${pool}) > ${percent(detail.trigger ?? 0, 0)} · trim ≈ ${twd(detail.trimTwd ?? 0)} → ${percent(detail.target ?? 0, 0)}`,
         zh: `衛星部位：占一般投入資金池 ${percent(detail.weight ?? 0)}（${pool} 中的 ${twd(detail.satelliteTwd ?? 0)}）> ${percent(detail.trigger ?? 0, 0)} · 減碼約 ${twd(detail.trimTwd ?? 0)} → ${percent(detail.target ?? 0, 0)}`,
       });
-      if (detail.countedTwd) lines.push({ en: `R1 already sells ${twd(detail.countedTwd)} of it`, zh: `R1 的警示已建議賣出其中 ${twd(detail.countedTwd)}` });
+      if (detail.countedTwd) lines.push({ en: `R1 already sells ${twd(detail.countedTwd)} of it`, zh: `個股上限的警示已建議賣出其中 ${twd(detail.countedTwd)}` });
       break;
     case 'class_drift_exceeds':
       for (const row of detail.classes ?? []) lines.push(classLine(row, names));
@@ -243,7 +241,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
     }
     case 'price_at_or_below_value_multiple':
       for (const row of detail.zone ?? []) {
-        const room = row.roomTwd !== undefined && row.roomTwd < (detail.satelliteShareTwd ?? 0) ? { en: ` · R1 / R2 room ${twd(row.roomTwd)}`, zh: ` · R1／R2 可容納 ${twd(row.roomTwd)}` } : { en: '', zh: '' };
+        const room = row.roomTwd !== undefined && row.roomTwd < (detail.satelliteShareTwd ?? 0) ? { en: ` · R1 / R2 room ${twd(row.roomTwd)}`, zh: ` · 個股與衛星上限可容納 ${twd(row.roomTwd)}` } : { en: '', zh: '' };
         lines.push({
           en: `${row.ticker}: ${money(row.price, row.currency)} ≤ ${percent(row.multiple, 0)} of its ${money(row.value, row.currency)} value (${money(row.value * row.multiple, row.currency)})${room.en}`,
           zh: `${row.ticker}：${money(row.price, row.currency)} ≤ 內在價值 ${money(row.value, row.currency)} 的 ${percent(row.multiple, 0)}（${money(row.value * row.multiple, row.currency)}）${room.zh}`,
@@ -291,7 +289,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
           const where = pick.distance <= 0 ? { en: 'in its buy zone', zh: '已在買入區' } : { en: `${percent(pick.distance)} above its buy price`, zh: `高於買入價 ${percent(pick.distance)}` };
           lines.push({
             en: `${pick.ticker}: ${money(pick.price, pick.currency)}, buy price ${money(pick.buyPrice, pick.currency)} · ${where.en}${pick.boughtTwd === undefined ? ' · no room under R1 / R2' : ''}`,
-            zh: `${pick.ticker}：${money(pick.price, pick.currency)}，買入價 ${money(pick.buyPrice, pick.currency)} · ${where.zh}${pick.boughtTwd === undefined ? ' · R1／R2 無空間' : ''}`,
+            zh: `${pick.ticker}：${money(pick.price, pick.currency)}，買入價 ${money(pick.buyPrice, pick.currency)} · ${where.zh}${pick.boughtTwd === undefined ? ' · 個股與衛星上限無空間' : ''}`,
           });
         }
       }
@@ -302,7 +300,7 @@ export function whyLines(rule: RuleLike, detail: ProposalDetail, names: Names): 
       lines.push(...volatilityLine(detail));
       const row = detail.volatility;
       if (row?.vixHeldTwd) lines.push({ en: `VIX products held: ${twd(row.vixHeldTwd)}`, zh: `已持有 VIX 商品：${twd(row.vixHeldTwd)}` });
-      if (row && row.roomTwd !== undefined && row.roomTwd < row.budgetTwd - 1) lines.push({ en: `Room under the VIX cap and R2: ${twd(row.roomTwd)}`, zh: `VIX 上限與 R2 下的空間：${twd(row.roomTwd)}` });
+      if (row && row.roomTwd !== undefined && row.roomTwd < row.budgetTwd - 1) lines.push({ en: `Room under the VIX cap and R2: ${twd(row.roomTwd)}`, zh: `VIX 上限與衛星上限下的空間：${twd(row.roomTwd)}` });
       break;
     }
     default:
@@ -321,7 +319,7 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
         { en: 'When one share costs more than the trim, sell less and stay a little over the cap, or let its market trade in fractions on the Rules page.', zh: '一股價格高於減碼金額時，可少賣一些（會略高於上限），或在「規則」頁讓該市場以零股（小數股）下單。' },
       ];
     case 'satellite_weight_above':
-      return [{ en: 'The trim is pro rata across the satellite holdings, less what R1 already sells; the proceeds buy the core classes furthest below their targets. F8 never buys the satellite.', zh: '依各衛星持股比例減碼，扣除 R1 已賣出的部分；所得買進最低於目標的核心類別。F8 不會買進衛星部位。' }];
+      return [{ en: 'The trim is pro rata across the satellite holdings, less what R1 already sells; the proceeds buy the core classes furthest below their targets. F8 never buys the satellite.', zh: '依各衛星持股比例減碼，扣除個股上限已賣出的部分；所得買進最低於目標的核心類別。再平衡不會買進衛星部位。' }];
     case 'class_drift_exceeds':
       return [{ en: 'Classes past their band sell back to target; the proceeds buy the ones under their band first, then the others furthest below target.', zh: '超過門檻的類別賣回目標，所得優先買進低於門檻的類別，其次是其他最低於目標的類別。' }];
     case 'day_after_dca':
@@ -339,7 +337,7 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
       return [{ en: 'Each tier fires once per drawdown; after a partial deployment, the tranches left deploy the rest at the usual pace.', zh: '每個級距在同一波下跌中只觸發一次；部分投入後，其餘依原節奏由剩下的批次投入。' }, ...kept];
     case 'price_at_or_below_value_multiple':
       return [
-        { en: "While a watched stock is in its buy zone, up to the contribution's satellite share (MONTHLY_CONTRIBUTION) goes to it each month, split over the stocks in the zone; the month's contribution puts the rest into the core. Each buy stays within R1's cap and R2's 20% target.", zh: '觀察清單個股在買入區期間，每月投入中最多衛星比例（MONTHLY_CONTRIBUTION）的金額可投入，多檔時平分；當月其餘投入核心類別。每筆買進都受 R1 上限與 R2 的 20% 目標限制。' },
+        { en: "While a watched stock is in its buy zone, up to the contribution's satellite share (MONTHLY_CONTRIBUTION) goes to it each month, split over the stocks in the zone; the month's contribution puts the rest into the core. Each buy stays within R1's cap and R2's 20% target.", zh: '觀察清單個股在買入區期間，每月投入中最多衛星比例（MONTHLY_CONTRIBUTION）的金額可投入，多檔時平分；當月其餘投入核心類別。每筆買進都受個股上限上限與衛星上限的 20% 目標限制。' },
         { en: 'The value is the base case of the model its alerts use, as last saved on the Valuation page.', zh: '內在價值為警報所用模型的基本情境，取「估值」頁最後儲存的數值。' },
       ];
     case 'price_at_or_above_value_multiple':
@@ -353,13 +351,13 @@ export function howLines(rule: RuleLike, detail: ProposalDetail): Bilingual[] {
       ];
     case 'volatility_score_crosses':
       return [
-        { en: 'The score crossed its line from below. Tense: the watchlist stocks nearest their buy price, within R1 and R2. Panic: the VIX hedge is sold (it pays in a spike) and the core equity classes bought, as after a crash buying broad markets in stages has paid better than buying volatility.', zh: '分數由下往上穿越門檻。緊張：買進觀察清單中最接近買入價的個股（受 R1／R2 限制）。恐慌：賣出 VIX 避險部位（恐慌時獲利），買進核心股票類別；崩盤後分批買進大盤，歷來比買進波動率商品有利。' },
+        { en: 'The score crossed its line from below. Tense: the watchlist stocks nearest their buy price, within R1 and R2. Panic: the VIX hedge is sold (it pays in a spike) and the core equity classes bought, as after a crash buying broad markets in stages has paid better than buying volatility.', zh: '分數由下往上穿越門檻。緊張：買進觀察清單中最接近買入價的個股（受個股與衛星上限限制）。恐慌：賣出 VIX 避險部位（恐慌時獲利），買進核心股票類別；崩盤後分批買進大盤，歷來比買進波動率商品有利。' },
         { en: 'A score marks stress, not a bottom: this is one stage, and the next is your call. Funded from strategic cash, the share kept for such days. Once a run: the alert fires again only after the score falls a full reset gap below the line.', zh: '分數代表壓力而非底部：這是其中一批，下一批由你判斷。資金來自戰略現金，即為此保留的部分。每波只觸發一次：分數須先跌破門檻減重設差距，才會再次觸發。' },
       ];
     case 'volatility_score_calm':
       return [
         { en: 'Protection is cheap while markets are calm. A VIX product loses value while held (its futures roll), so keep it small and sell it into a spike: the panic alert drafts that sale.', zh: '市場平靜時保護成本低。VIX 商品持有期間會因期貨轉倉流失價值，因此部位要小，並在恐慌時賣出：恐慌警報會產生賣出清單。' },
-        { en: 'Never more than the cap of the regular pool in VIX products, and within R2. None while a hedge is held.', zh: 'VIX 商品合計不超過一般投入資金池的上限，並受 R2 限制；已持有避險部位時不再提出。' },
+        { en: 'Never more than the cap of the regular pool in VIX products, and within R2. None while a hedge is held.', zh: 'VIX 商品合計不超過一般投入資金池的上限，並受衛星上限限制；已持有避險部位時不再提出。' },
       ];
     case 'value_change_exceeds':
       return [{ en: 'A new quarter changed the figures the value is worked out from. Check the growth rates and any typed figures still fit, then save the valuation again.', zh: '新一季財報改變了計算內在價值的數字。請確認成長率與自訂數字是否仍合適，再重新儲存估值。' }];
@@ -417,7 +415,7 @@ export function suggestionLine(condition: string, state: string, detail: Proposa
     }
     case 'price_at_or_below_value_multiple': {
       const tickers = (detail.zone ?? []).map((row) => row.ticker).join(', ');
-      return { en: `${tickers} in its buy zone: buy within R1 and R2.`, zh: `${tickers} 進入買入區：可在 R1／R2 限制內買進。` };
+      return { en: `${tickers} in its buy zone: buy within R1 and R2.`, zh: `${tickers} 進入買入區：可在個股與衛星上限限制內買進。` };
     }
     case 'price_at_or_above_value_multiple': {
       const tickers = (detail.zone ?? []).map((row) => row.ticker).join(', ');
@@ -463,7 +461,7 @@ export function checkText(check: Check, condition?: string): Bilingual {
       return { en: 'Not firing', zh: '未觸發' };
     case 'covered':
       if (check.why === 'hedge') return { en: 'A hedge is held already', zh: '已持有避險部位' };
-      return check.why === 'R1' ? { en: "Covered by R1's trims", zh: '由 R1 的減碼處理' } : { en: 'Covered by the next contribution', zh: '下次每月投入可補足' };
+      return check.why === 'R1' ? { en: "Covered by R1's trims", zh: '由個股上限的減碼處理' } : { en: 'Covered by the next contribution', zh: '下次每月投入可補足' };
     case 'waiting':
       if (check.why === 'dca_day') return { en: 'Waiting for the DCA debit day', zh: '尚未設定定期定額扣款日' };
       if (check.why === 'usd') return { en: 'Waiting for a USD/TWD rate', zh: '等待美元匯率' };

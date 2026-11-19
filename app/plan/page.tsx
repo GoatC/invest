@@ -49,7 +49,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         <Info>
           <Bi
             en="Where monthly investing could take the regular pool (F2): the value year by year in nominal TWD and in today's money, what you put in against what it grows, and how the pool is doing against the plan you save. A projection at one steady return, not a forecast: real returns swing, and the Monte Carlo page shows how widely."
-            zh="每月定期投入可以讓一般投入資金池成長到多少（F2）：逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長，以及資金池與已儲存計畫的對照。這是以固定報酬計算的預測，不是預言：實際報酬會起伏，「蒙地卡羅」頁會顯示起伏的範圍。"
+            zh="每月定期投入可以讓一般投入資金池成長到多少：逐年的名目台幣與換算今天幣值的資產、累計投入與累計成長，以及資金池與已儲存計畫的對照。這是以固定報酬計算的預測，不是預言：實際報酬會起伏，「蒙地卡羅」頁會顯示起伏的範圍。"
           />
         </Info>
         {params['saved'] === 'plan' && (
@@ -268,7 +268,7 @@ function Method() {
     },
     {
       en: 'Actual vs plan follows the regular pool, where the monthly contributions go; the windfall has its own plan (F3). Money put in is counted from the trades, as for the money-weighted return: buys in, sales and recorded dividends out, changes to non-listed assets in or out. So money counts once it is invested, as the value does, and a contribution still waiting in the bank is not yet behind the plan.',
-      zh: '實際與計畫對照以一般投入資金池為準（每月投入的資金池）；大額資金依 F3 自己的計畫。投入金額依交易計算（與資金加權報酬相同）：買進為投入、賣出與已記錄的股利為取回，非上市資產的變動為投入或取回。因此資金在投入市場後才計入，與市值一致；還在銀行等待投入的資金不會被算成落後。',
+      zh: '實際與計畫對照以一般投入資金池為準（每月投入的資金池）；大額資金依分批規則自己的計畫。投入金額依交易計算（與資金加權報酬相同）：買進為投入、賣出與已記錄的股利為取回，非上市資產的變動為投入或取回。因此資金在投入市場後才計入，與市值一致；還在銀行等待投入的資金不會被算成落後。',
     },
     {
       en: 'The gap at each month end splits into money (actual minus planned contributions, the starting value included) and growth (the rest). The starting value is the pool’s value at the end of the month before the plan starts; a different PV in the plan shows as money.',

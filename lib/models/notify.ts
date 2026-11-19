@@ -162,10 +162,9 @@ export interface ProposalForPush {
   detail: ProposalDetail;
 }
 
-/** A rule's Chinese name; a short code (R1, R2) stays in front, a long one (US_ESTATE_TAX) is dropped. */
+/** A rule's Chinese name, without its code (R1, US_ESTATE_TAX…): codes are never shown (Hugo, 2026-11-19). */
 export function ruleTitle(ruleId: string, title: string): string {
-  const name = title.replace(`${ruleId} · `, '');
-  return /^R\d+$/.test(ruleId) ? `${ruleId} · ${name}` : name;
+  return title.replace(`${ruleId} · `, '');
 }
 
 /** A new proposal: the rule that fired and what it proposes; it opens the proposal. */

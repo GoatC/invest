@@ -31,7 +31,7 @@ export function MonteCarloForm({ settings }: { settings: McSettings }) {
       </Field>
       <Field
         label={{ en: 'Expected windfall, NT$', zh: '預期大額資金，台幣' }}
-        hint={<Bi en="Used until an F3 plan is saved on the Windfall page, which then takes over. Blank for none." zh="在大額資金頁儲存 F3 計畫前使用，儲存後改用該計畫。留白代表沒有。" />}
+        hint={<Bi en="Used until an F3 plan is saved on the Windfall page, which then takes over. Blank for none." zh="在大額資金頁儲存分批計畫前使用，儲存後改用該計畫。留白代表沒有。" />}
         error={error('windfallAmount')}
       >
         <input name="windfallAmount" inputMode="numeric" defaultValue={settings.windfall.amountTwd ?? ''} />
@@ -44,7 +44,7 @@ export function MonteCarloForm({ settings }: { settings: McSettings }) {
         hint={
           <Bi
             en="Blank follows F3's pace: 6, 12 or 24 by today's CAPE percentile. Equal tranches from the month it arrives; the waiting cash earns the windfall cash return, and a fall in the market brings tranches forward as F3 would."
-            zh="留白則依 F3 的節奏：依今天 CAPE 百分位分 6、12 或 24 批。自入帳月份起等額分批；等待中的現金以大額資金的現金報酬計算，市場下跌時依 F3 規則提前投入。"
+            zh="留白則依分批規則的節奏：依今天 CAPE 百分位分 6、12 或 24 批。自入帳月份起等額分批；等待中的現金以大額資金的現金報酬計算，市場下跌時依分批規則規則提前投入。"
           />
         }
         error={error('windfallTranches')}

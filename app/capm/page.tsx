@@ -109,7 +109,7 @@ export default async function CapmPage({ searchParams }: { searchParams: Promise
         <Info>
           <Bi
             en="The return a stock's holders should ask for the market risk it carries (CAPM): the 10-year government yield of its market, plus its β times the equity risk premium. For single stocks only; asset classes take their returns from the capital market assumptions. F12's valuations will discount at it."
-            zh="持有一檔個股時，承擔其市場風險應要求的報酬（CAPM）：該市場的 10 年期公債殖利率，加上 β 乘以股票風險溢酬。只用於個股；資產類別的預期報酬取自資本市場假設。F12 估值將以此折現。"
+            zh="持有一檔個股時，承擔其市場風險應要求的報酬（CAPM）：該市場的 10 年期公債殖利率，加上 β 乘以股票風險溢酬。只用於個股；資產類別的預期報酬取自資本市場假設。估值估值將以此折現。"
           />
         </Info>
       </section>

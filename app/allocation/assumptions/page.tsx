@@ -43,7 +43,7 @@ export default async function AssumptionsPage({ searchParams }: { searchParams: 
         <Info>
           <Bi
             en="Your own long-run expectation for each class: the yearly return and how much it swings (volatility, one standard deviation), with where it comes from. The compounding calculator (F2), Monte Carlo (F5) and the efficient frontier (F7) read them. Leave a class blank to set it later; a satellite class left blank is scored from its holdings below."
-            zh="你對各類別的長期預期：每年報酬與波動程度（波動度，一個標準差），並註明來源。複利計算機（F2）、蒙地卡羅（F5）與效率前緣（F7）都會使用。尚未決定的類別可以先留白；留白的衛星類別會依下方持股自動評分。"
+            zh="你對各類別的長期預期：每年報酬與波動程度（波動度，一個標準差），並註明來源。複利計算機、蒙地卡羅與效率前緣都會使用。尚未決定的類別可以先留白；留白的衛星類別會依下方持股自動評分。"
           />
         </Info>
         {saved === undefined ? (
@@ -108,7 +108,7 @@ function AutoScores({ classes, saved, note }: { classes: AssetClassSettings[]; s
           <span className="status-icon idle" aria-hidden="true">
             …
           </span>{' '}
-          <Bi en="Off: blank satellite classes stay out of F2, F5 and F7." zh="已關閉：未設定的衛星類別不納入 F2、F5、F7。" />
+          <Bi en="Off: blank satellite classes stay out of F2, F5 and F7." zh="已關閉：未設定的衛星類別不納入複利計算機、蒙地卡羅與效率前緣。" />
         </p>
       ) : (
         <>
@@ -157,13 +157,13 @@ function AutoScores({ classes, saved, note }: { classes: AssetClassSettings[]; s
           <li>
             <Bi
               en="Each stock or ETF: CAPM, E = R_f + β × P. β is F11’s (Blume-adjusted), against the index that explains it best, the higher R² of the S&P 500 and TAIEX, so a Taiwan-listed fund of US stocks reads the S&P 500. R_f is that market’s 10-year yield."
-              zh="每檔個股或 ETF：CAPM，E = R_f + β × P。β 取自 F11（Blume 調整），對照最能解釋它的指數（標普 500 與加權指數中 R² 較高者），因此投資美股的台灣 ETF 會對照標普 500。R_f 為該市場的 10 年期殖利率。"
+              zh="每檔個股或 ETF：CAPM，E = R_f + β × P。β 取自權益成本頁（Blume 調整），對照最能解釋它的指數（標普 500 與加權指數中 R² 較高者），因此投資美股的台灣 ETF 會對照標普 500。R_f 為該市場的 10 年期殖利率。"
             />
           </li>
           <li>
             <Bi
               en="P, the market premium: your assumption for US / global equity (US) or Taiwan market-cap equity (TW) less R_f, so β 1 expects what you expect of that market; F11’s ERP + country premium when that class is blank or chosen below."
-              zh="P（市場溢酬）：你對美股／全球大盤（美國）或台股市值型（台灣）的假設減 R_f，因此 β 為 1 時的預期報酬等於你對該市場的預期；該類別未設定或下方選擇時，改用 F11 的風險溢酬加國家溢酬。"
+              zh="P（市場溢酬）：你對美股／全球大盤（美國）或台股市值型（台灣）的假設減 R_f，因此 β 為 1 時的預期報酬等於你對該市場的預期；該類別未設定或下方選擇時，改用權益成本的風險溢酬加國家溢酬。"
             />
           </li>
           <li>
