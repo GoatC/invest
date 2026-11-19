@@ -1,6 +1,6 @@
 /**
- * Draws the iPhone launch images into public/splash (lib/splash.ts lists them): the opening
- * screen's mark, dead centre on the poster's colour, at each screen's exact size, light and dark.
+ * Draws the iPhone launch images into public/splash (lib/splash.ts lists them): opening screen B's
+ * first still, at each screen's exact size, light and dark alike.
  * Run it again only when the mark, the colour or the list of screens changes:
  * `npm run splash-images`. It needs a Chromium for playwright-core (CHROMIUM names it; Claude Code
  * cloud sessions have one at /opt/pw-browsers/chromium). Hugo does not need to run it.
@@ -16,11 +16,15 @@ import { LAUNCH_IMAGES, SPLASH_GROUND } from '../lib/splash.ts';
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const executablePath = process.env['CHROMIUM'] ?? '/opt/pw-browsers/chromium';
 
-/** The mark as components/splash.tsx draws it: 88 points wide, a white tile with the rising line in the ground's colour. */
-const page = (ground: string) => `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:${ground}">
-<svg width="88" height="88" viewBox="0 0 64 64" style="border-radius:21px;box-shadow:0 10px 30px rgba(11,26,43,.28)">
-<rect width="64" height="64" rx="15" fill="#fff"/>
-<polyline points="12,44 26,32 36,38 52,20" fill="none" stroke="${ground}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+/**
+ * Opening screen B's first still, as components/splash.tsx draws it before anything moves: the ink
+ * ground, the glow from the top right, the mark (120 points, dead centre) with its faint track; the page
+ * then draws the line along it. The glow is drawn here at full strength, where the page fades it in.
+ */
+const page = (ground: string) => `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:${ground};background-image:radial-gradient(110% 70% at 100% -6%,rgba(111,163,219,.62) 0%,rgba(52,104,156,.28) 40%,rgba(7,11,9,0) 74%)">
+<svg width="120" height="120" viewBox="0 0 64 64">
+<rect x="1.5" y="1.5" width="61" height="61" rx="15" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+<polyline points="12,44 26,32 36,38 52,20" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg></body></html>`;
 
 const browser = await chromium.launch(existsSync(executablePath) ? { executablePath } : {});

@@ -2156,57 +2156,99 @@ details.ticker-menu a:hover {
   background: var(--accent-soft);
 }
 
-/* The opening screen (components/splash.tsx): the mark and the name on the poster's colour, over
-   everything, while the app fetches its pages (components/preload.tsx fills the bar and adds
-   .leaving). Hidden at once on a reload within a visit (data-opened, set before the first paint).
-   Should no script ever run, it fades by itself after twelve seconds. */
+/* The opening screen, B (components/splash.tsx; Hugo, 2026-11-19): ink black in light and dark alike,
+   over everything while the app fetches its pages (components/preload.tsx fills the hairline and adds
+   .leaving). A glow from the top right fades in and the mark's line draws along its track, once each.
+   Fixed colours: it reads no theme token. Hidden at once on a reload within a visit (data-opened, set
+   before the first paint); should no script ever run, it fades by itself after twelve seconds. */
 .splash {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
   place-items: center;
-  background: var(--hero-bg);
-  color: var(--hero-text);
+  overflow: hidden;
+  background: #070b09;
+  color: #ffffff;
+  /* Nothing under it moves or answers a finger while it shows. */
+  touch-action: none;
+  overscroll-behavior: none;
   animation: splash-failsafe 400ms 12s both;
+}
+
+html:has(#splash:not(.leaving)):not([data-opened]) {
+  overflow: hidden;
 }
 
 html[data-opened] .splash {
   display: none;
 }
 
-/* The mark dead centre, as on the launch image (scripts/splash_images.ts draws the same), so it
-   does not move when the page takes over; the name comes in under it. */
+/* The glow, from the top-right corner, as on the launch image; it arrives once. */
+.splash-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(110% 70% at 100% -6%, rgba(111, 163, 219, 0.62) 0%, rgba(52, 104, 156, 0.28) 40%, rgba(7, 11, 9, 0) 74%);
+  animation: splash-glow 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The mark dead centre, as on the launch image (scripts/splash_images.ts draws the same), so it does
+   not move when the page takes over; the name sits under it. */
 .splash-mark {
   position: relative;
   display: grid;
 }
 
-.splash-mark span {
-  position: absolute;
-  top: calc(100% + 0.9rem);
-  left: 50%;
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-  transform: translateX(-50%);
+.splash-mark svg {
+  display: block;
 }
 
-.splash-mark svg {
-  border-radius: 21px;
-  box-shadow: 0 10px 30px rgba(11, 26, 43, 0.28);
+.splash-tile {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1.5;
+}
+
+.splash-track,
+.splash-line {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.splash-track {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+/* The rising line, drawn once along its track: its length in the mark's 64-unit box is about 54.2. */
+.splash-line {
+  stroke: #ffffff;
+  stroke-dasharray: 56;
+  animation: splash-draw 700ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.splash-mark span {
+  position: absolute;
+  top: calc(100% + 1.25rem);
+  left: 50%;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: splash-name 500ms 300ms ease-out both;
 }
 
 .splash-progress {
   position: absolute;
   left: 50%;
   bottom: calc(15% + var(--safe-bottom));
-  width: 8.5rem;
-  height: 4px;
+  width: 7.5rem;
+  height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--hero-text) 24%, transparent);
+  background: rgba(157, 176, 198, 0.22);
   transform: translateX(-50%);
 }
 
@@ -2214,13 +2256,13 @@ html[data-opened] .splash {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--hero-text);
+  background: #8db8ea;
   transform: scaleX(max(0.06, var(--progress, 0)));
   transform-origin: left;
   transition: transform 260ms ease-out;
 }
 
-/* Lifted: the mark comes forward and the ground clears, onto the poster of the same colour. */
+/* Lifted: the mark comes forward and the ground clears onto the page. */
 .splash.leaving {
   opacity: 0;
   pointer-events: none;
@@ -2228,8 +2270,29 @@ html[data-opened] .splash {
 }
 
 .splash.leaving .splash-mark {
-  transform: scale(1.12);
+  transform: scale(1.08);
   transition: transform 360ms ease-out;
+}
+
+@keyframes splash-glow {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes splash-draw {
+  from {
+    stroke-dashoffset: 56;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes splash-name {
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes splash-failsafe {
@@ -2239,7 +2302,18 @@ html[data-opened] .splash {
   }
 }
 
+/* Reduce Motion: the line is drawn and the glow there from the start, a short fade at most. */
 @media (prefers-reduced-motion: reduce) {
+  .splash-line {
+    animation: none;
+  }
+
+  .splash-glow,
+  .splash-mark span {
+    animation-duration: 150ms;
+    animation-delay: 0ms;
+  }
+
   .splash.leaving,
   .splash.leaving .splash-mark,
   .splash-progress > span {

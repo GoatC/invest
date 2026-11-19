@@ -2608,6 +2608,15 @@ await step('opening the app: the mark while every tab is fetched, then each tab 
     check((await splash.locator('svg').count()) === 1 && (await splash.innerText()).includes('長期投資'), 'the mark and the name');
     const cover = await splash.boundingBox();
     check(cover && cover.width === 390 && cover.height === 844, `it covers the screen, got ${JSON.stringify(cover)}`);
+    // Opening screen B (Hugo, 2026-11-19): ink black in light and dark alike, and nothing under it scrolls.
+    const ground = () => splash.evaluate((node) => getComputedStyle(node).backgroundColor);
+    check((await ground()) === 'rgb(7, 11, 9)', `the ink ground, got ${await ground()}`);
+    await app.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+    check((await ground()) === 'rgb(7, 11, 9)', 'the same ground in dark');
+    await app.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+    check((await app.evaluate(() => getComputedStyle(document.documentElement).overflow)) === 'hidden', 'the page under it is held still');
+    await app.mouse.wheel(0, 600);
+    check((await app.evaluate(() => window.scrollY)) === 0, 'a scroll does not move the page under it');
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-opening.png` });
     // It lifts once the pages one tap away have arrived: the tab bar's and the dashboard's sub-tab.
     await app.waitForFunction(() => document.documentElement.hasAttribute('data-opened'), null, { timeout: 30_000 });

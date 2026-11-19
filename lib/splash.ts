@@ -1,6 +1,6 @@
 /**
- * The launch images an iPhone shows while the app starts: the opening screen's mark on its ground
- * (components/splash.tsx), one per screen size, light and dark. iOS takes the one whose size
+ * The launch images an iPhone shows while the app starts: opening screen B's first still (components/splash.tsx),
+ * one per screen size, light and dark alike. iOS takes the one whose size
  * matches the phone exactly, and keeps it from the day the app is added to the home screen.
  * scripts/splash_images.ts draws the files into public/splash; app/layout.tsx links them.
  */
@@ -20,8 +20,8 @@ export const IPHONE_SCREENS: ReadonlyArray<readonly [width: number, height: numb
   [375, 667, 2],
 ];
 
-/** The poster's ground, --hero-bg in app/globals.css, light and dark. */
-export const SPLASH_GROUND = { light: '#34689c', dark: '#1f4f86' } as const;
+/** Opening screen B's ink black (Hugo, 2026-11-19): the same in light and dark (globals.css .splash). */
+export const SPLASH_GROUND = { light: '#070b09', dark: '#070b09' } as const;
 
 export type SplashScheme = keyof typeof SPLASH_GROUND;
 
