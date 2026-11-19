@@ -2,11 +2,13 @@ import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
+import { PageGlow } from '@/components/page-glow';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadPerformanceInput, loadSectorSettings, orDataError } from '@/lib/data';
+import { DataError, loadGlowSettings, loadPerformanceInput, loadSectorSettings, orDataError } from '@/lib/data';
+import { pageGlowOf, type GlowSettings } from '@/lib/models/glow';
 import { taipeiToday } from '@/lib/dates';
 import { points, signedPercent, signedTwd, twd } from '@/lib/format';
 import { LABELS, POOL, RETURN_SERIES as SERIES, type Bilingual } from '@/lib/i18n';
@@ -98,13 +100,14 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   }
   const days = buildSeries(input);
   // Price moves follow the colour convention set on the sector page (Taiwan's red up by default).
-  const sectors = await orDataError(loadSectorSettings(supabase));
+  const [sectors, glowRead] = await Promise.all([orDataError(loadSectorSettings(supabase)), orDataError(loadGlowSettings(supabase))]);
   const redUp = sectors instanceof DataError || !sectors || sectors.colour === 'red_up';
+  const glow = glowRead instanceof DataError ? undefined : glowRead;
 
   return (
     <>
       <Header scope={scope} range={range} view={view} />
-      {days.length === 0 ? <Empty /> : <Report input={input} days={days} scope={scope} range={range} view={view} end={end} redUp={redUp} />}
+      {days.length === 0 ? <Empty /> : <Report input={input} days={days} scope={scope} range={range} view={view} end={end} redUp={redUp} glow={glow} />}
       <Method input={input} />
     </>
   );
@@ -177,7 +180,7 @@ function Empty() {
   );
 }
 
-function Report({ input, days, scope, range, view, end, redUp }: { input: PerformanceInput; days: DayPoint[]; scope: Scope; range: Period; view: View; end: string; redUp: boolean }) {
+function Report({ input, days, scope, range, view, end, redUp, glow }: { input: PerformanceInput; days: DayPoint[]; scope: Scope; range: Period; view: View; end: string; redUp: boolean; glow: GlowSettings | undefined }) {
   const first = days[0]?.date ?? end;
   const from = periodStart(range, end, first);
   const result = periodReturn(days, scope, from, end);
@@ -194,7 +197,7 @@ function Report({ input, days, scope, range, view, end, redUp }: { input: Perfor
   if (view === 'each') {
     return (
       <>
-        <Headline result={result} from={from} />
+        <Headline result={result} from={from} glow={glow} />
         <Contributions parts={contributions(days, scope, from, end)} twr={result.twr} input={input} redUp={redUp} />
         <Splits splits={holdingSplits({ ...input, trades }, from, end)} />
       </>
@@ -207,7 +210,7 @@ function Report({ input, days, scope, range, view, end, redUp }: { input: Perfor
   );
   return (
     <>
-      <Headline result={result} from={from} />
+      <Headline result={result} from={from} glow={glow} />
       <section className="card form">
         <h2>
           <Bi en="Cumulative return against the SAA benchmark" zh="累積報酬與 SAA 基準" />
@@ -257,12 +260,15 @@ function Report({ input, days, scope, range, view, end, redUp }: { input: Perfor
   );
 }
 
-function Headline({ result, from }: { result: PeriodReturn; from: string }) {
+function Headline({ result, from, glow }: { result: PeriodReturn; from: string; glow: GlowSettings | undefined }) {
   const shown = asReported(result);
   const sinceFirstBuy = result.from > from;
   const difference = shown.twr !== null && shown.benchmark !== null ? shown.twr - shown.benchmark : null;
+  // The wash takes the tone of the difference against the benchmark (Ink design), in percentage points.
+  const wash = pageGlowOf(difference === null ? null : difference * 100, 'performance', glow);
   return (
-    <section className="card form">
+    <section className={`card form${wash ? ' has-glow' : ''}`}>
+      <PageGlow glow={wash} />
       <p className="muted small">
         <Bi
           en={`${result.from}${sinceFirstBuy ? ' (first purchase)' : ''} → ${result.to} · ${result.days} days`}

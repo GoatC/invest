@@ -2441,6 +2441,13 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
       wide.push(`${path} by ${overflow}px (${culprits.join(', ')})`);
     }
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
+    // The tab headline washes (Ink design): Holdings' summary toned by its last session, Performance's headline by the
+    // difference against the benchmark, each at its strength from config glow; Allocation has none.
+    if (path === '/holdings' || path === '/performance') {
+      const wash = await page.locator('.has-glow > .glow.page').evaluateAll((nodes) => nodes.map((node) => `${node.dataset.tone}:${getComputedStyle(node).opacity}`));
+      check(wash.length === 1 && /^(up|down|flat):0\.(45|5)$/.test(wash[0] ?? ''), `${path} wash: ${wash.join(', ') || 'none'}`);
+    }
+    if (path === '/allocation') check((await page.locator('.glow.page').count()) === 0, 'allocation has a wash');
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
     if (path === '/') await page.locator('.chart-donut svg').waitFor();

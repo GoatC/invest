@@ -1509,6 +1509,35 @@ tr.selected td {
   background: radial-gradient(78% 92% at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
 }
 
+/* A tab headline's wash (Ink design; components/page-glow.tsx): the poster's glow, smaller, from the
+   card's top-right corner, under the card's content and over its ground. Holdings' summary and
+   Performance's headline carry one; Allocation's headline has no direction, so none. */
+.has-glow {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glow.page {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--glow-k, 0);
+}
+
+.glow.page[data-tone='up'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-up-core) 0%, var(--glow-up-edge) 46%, transparent 100%);
+}
+
+.glow.page[data-tone='down'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-down-core) 0%, var(--glow-down-edge) 46%, transparent 100%);
+}
+
+.glow.page[data-tone='flat'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
+}
+
 /* A grain too faint to see, so the glow never bands into rings on an 8-bit screen. */
 .hero-grain {
   position: absolute;

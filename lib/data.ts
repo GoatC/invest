@@ -3,6 +3,7 @@ import { cache } from 'react';
 
 import { MAPPING_PREFIX, parseSavedMapping, type SavedMapping } from './csv/mapping';
 import { addDays, addMonths } from './dates';
+import { readGlowSettings, type GlowSettings } from './models/glow';
 import { estimatesDue, readEstimates, readPeCheckSettings, type Estimates, type PeCheckSettings } from './models/forward-pe';
 import { dataHealth, failureThreshold, NIGHTLY_JOB, parseRunDetail, type JobRun, type RunStatus } from './models/data-health';
 import { GOLD } from './models/fx';
@@ -3459,3 +3460,9 @@ export const loadAssumptions = cache(loadAssumptionsUncached);
 export const loadCaps = cache(loadCapsUncached);
 export const loadJobRuns = cache(loadJobRunsUncached);
 export const loadBanners = cache(loadBannersUncached);
+
+/** config glow, read for the dashboard poster and the tab headline washes; undefined before its migration. */
+export async function loadGlowSettings(supabase: SupabaseClient): Promise<GlowSettings | undefined> {
+  const found = await rows<{ key: string; value: unknown }>('config', supabase.from('config').select('key, value').eq('key', 'glow'));
+  return readGlowSettings(found[0]?.value);
+}

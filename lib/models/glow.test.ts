@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { glowOf, milestoneOf, readGlowSettings } from './glow';
+import { glowOf, milestoneOf, pageGlowOf, readGlowSettings } from './glow';
 
 // The seeded config glow (supabase/migrations/20261121100000_glow.sql).
 const SETTINGS = readGlowSettings({ flat_band_pct: 0.3, full_at_pct: 5, k_min: 0.4, k_flat: 0.55, milestone_step_twd: 100000 });
@@ -18,6 +18,30 @@ describe('readGlowSettings', () => {
     assert.equal(readGlowSettings({ flat_band_pct: 5, full_at_pct: 5, k_min: 0.4, k_flat: 0.55, milestone_step_twd: 100000 }), undefined);
     assert.equal(readGlowSettings(null), undefined);
     assert.equal(readGlowSettings([]), undefined);
+  });
+});
+
+describe('pageGlowOf', () => {
+  // 02-components.md: Holdings at 0.45, toned by the last session; Performance at 0.5, by the difference against the benchmark.
+  const withPages = readGlowSettings({ flat_band_pct: 0.3, full_at_pct: 5, k_min: 0.4, k_flat: 0.55, milestone_step_twd: 100000, page_k: { holdings: 0.45, performance: 0.5 } });
+
+  it('reads each page’s strength, and leaves out one that is missing or out of range', () => {
+    assert.deepEqual(withPages?.pageK, { holdings: 0.45, performance: 0.5 });
+    assert.deepEqual(readGlowSettings({ flat_band_pct: 0.3, full_at_pct: 5, k_min: 0.4, k_flat: 0.55, milestone_step_twd: 100000, page_k: { holdings: 1.5, performance: 0.5 } })?.pageK, { performance: 0.5 });
+    assert.equal(readGlowSettings({ flat_band_pct: 0.3, full_at_pct: 5, k_min: 0.4, k_flat: 0.55, milestone_step_twd: 100000, page_k: [] })?.pageK, undefined);
+  });
+
+  it('tones the wash like the poster but keeps the page’s fixed strength', () => {
+    assert.deepEqual(pageGlowOf(1.23, 'holdings', withPages), { tone: 'up', k: 0.45 });
+    assert.deepEqual(pageGlowOf(-6.8, 'holdings', withPages), { tone: 'down', k: 0.45 });
+    assert.deepEqual(pageGlowOf(0.7, 'performance', withPages), { tone: 'up', k: 0.5 });
+    assert.deepEqual(pageGlowOf(0.08, 'performance', withPages), { tone: 'flat', k: 0.5 });
+    assert.deepEqual(pageGlowOf(null, 'performance', withPages), { tone: 'flat', k: 0.5 });
+  });
+
+  it('draws no wash without a strength in config', () => {
+    assert.equal(pageGlowOf(1.23, 'holdings', SETTINGS), undefined);
+    assert.equal(pageGlowOf(1.23, 'holdings', undefined), undefined);
   });
 });
 

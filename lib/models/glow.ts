@@ -22,7 +22,13 @@ export interface GlowSettings {
   kFlat: number;
   /** The total value is celebrated each time it passes a new multiple of this (TWD). */
   milestoneStepTwd: number;
+  /** The fixed strength of each tab headline's smaller wash; a page without one has no wash. */
+  pageK?: Partial<Record<PageGlowName, number>>;
 }
+
+/** The tab headlines that carry a wash (02-components.md: Allocation's headline has no direction, so none). */
+export type PageGlowName = 'holdings' | 'performance';
+const PAGE_GLOWS: readonly PageGlowName[] = ['holdings', 'performance'];
 
 /** config glow; undefined before its migration or when malformed. */
 export function readGlowSettings(value: unknown): GlowSettings | undefined {
@@ -36,7 +42,17 @@ export function readGlowSettings(value: unknown): GlowSettings | undefined {
   const milestoneStepTwd = number(row['milestone_step_twd'], 1, 1e12);
   if (flatBandPct === undefined || fullAtPct === undefined || kMin === undefined || kFlat === undefined || milestoneStepTwd === undefined) return undefined;
   if (fullAtPct <= flatBandPct) return undefined;
-  return { flatBandPct, fullAtPct, kMin, kFlat, milestoneStepTwd };
+  const settings: GlowSettings = { flatBandPct, fullAtPct, kMin, kFlat, milestoneStepTwd };
+  const pages = row['page_k'];
+  if (typeof pages === 'object' && pages !== null && !Array.isArray(pages)) {
+    const pageK: Partial<Record<PageGlowName, number>> = {};
+    for (const page of PAGE_GLOWS) {
+      const k = number((pages as Record<string, unknown>)[page], 0, 1);
+      if (k !== undefined) pageK[page] = k;
+    }
+    if (Object.keys(pageK).length > 0) settings.pageK = pageK;
+  }
+  return settings;
 }
 
 export interface Glow {
@@ -56,6 +72,16 @@ export function glowOf(movePct: number | null | undefined, settings: GlowSetting
   const share = (size - settings.flatBandPct) / (settings.fullAtPct - settings.flatBandPct);
   const k = Math.min(1, settings.kMin + (1 - settings.kMin) * share);
   return { tone: movePct > 0 ? 'up' : 'down', k: Math.round(k * 1000) / 1000 };
+}
+
+/**
+ * A tab headline's wash (the smaller glow of ink-theme.css `.glow.page`): toned like the poster by its own move in
+ * percent, at the page's fixed strength from config. Undefined when config gives the page no strength.
+ */
+export function pageGlowOf(movePct: number | null | undefined, page: PageGlowName, settings: GlowSettings | undefined): Glow | undefined {
+  const k = settings?.pageK?.[page];
+  if (settings === undefined || k === undefined) return undefined;
+  return { tone: glowOf(movePct, settings).tone, k };
 }
 
 export interface Milestone {

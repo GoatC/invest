@@ -6,13 +6,13 @@ import { Facts } from '@/components/facts';
 import { Info } from '@/components/info';
 import { TickerMark } from '@/components/ticker-mark';
 import type { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingCloses, loadRedFlagData, loadSectorSettings, loadWorkbench, orDataError, type AllocationData, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, loadRedFlagData, loadSectorSettings, loadWorkbench, orDataError, type AllocationData, type Proposal, type RuleRecord } from '@/lib/data';
 import { addDays } from '@/lib/dates';
 import { percent, signedTwd, twd } from '@/lib/format';
 import { DIRECTION, leverageText, POOL, type Bilingual } from '@/lib/i18n';
 import { classDrifts } from '@/lib/models/allocation';
 import { maxBuyClasses } from '@/lib/models/engine';
-import { cellSignal, closesSince, costStrip, holdingSignals, lastMove, nextBuyClasses, SIGNAL_COLUMNS, treemap, type CostStrip, type Move, type Signal, type SignalColumn, type SignalKind } from '@/lib/models/holding-view';
+import { cellSignal, closesSince, costStrip, holdingSignals, lastMove, nextBuyClasses, sessionMove, SIGNAL_COLUMNS, treemap, type CostStrip, type Move, type Signal, type SignalColumn, type SignalKind } from '@/lib/models/holding-view';
 import { zoneOf } from '@/lib/models/intrinsic';
 import type { Portfolio } from '@/lib/models/portfolio';
 import { positionKey } from '@/lib/models/positions';
@@ -54,7 +54,8 @@ const KIND: Array<{ kind: SignalKind; label: Bilingual }> = [
 ];
 
 /** How far back the closes are read (the 52-week range), and how much of it a card draws. */
-const RANGE_DAYS = 366;
+/** How far back the page loads each holding's closes (app/holdings/page.tsx). */
+export const RANGE_DAYS = 366;
 const CARD_DAYS = 92;
 /** A filing this many days ahead or nearer is named on the holding. */
 const FILING_DAYS = 7;
@@ -91,11 +92,10 @@ function tone(value: number | null): string {
  * TWD, then one of five views of the listed holdings, picked by `view` in the address. Every signal
  * comes from a rule the app already runs; a part that cannot be read leaves its signals out.
  */
-export async function HoldingsOverview({ supabase, data, portfolio, today, view, proposals, rules }: { supabase: Supabase; data: AllocationData; portfolio: Portfolio; today: string; view: View; proposals: readonly Proposal[]; rules: readonly RuleRecord[] }) {
+export async function HoldingsOverview({ supabase, data, portfolio, closes, today, view, proposals, rules }: { supabase: Supabase; data: AllocationData; portfolio: Portfolio; closes: Map<string, ClosePoint[]> | DataError; today: string; view: View; proposals: readonly Proposal[]; rules: readonly RuleRecord[] }) {
   const listed = portfolio.holdings.filter((holding): holding is Holding & { ticker: string } => holding.ticker !== null);
   if (listed.length === 0) return null;
-  const [closes, workbench, flags, sectors] = await Promise.all([
-    orDataError(loadHoldingCloses(supabase, listed.map((holding) => holding.ticker), addDays(today, -RANGE_DAYS))),
+  const [workbench, flags, sectors] = await Promise.all([
     orDataError(loadWorkbench(supabase, today)),
     orDataError(loadRedFlagData(supabase, today)),
     orDataError(loadSectorSettings(supabase)),
@@ -154,10 +154,7 @@ export async function HoldingsOverview({ supabase, data, portfolio, today, view,
   });
 
   // The last session in TWD: each line's value now against its value a session ago, the currencies held still.
-  const moved = rows.filter((row) => row.move && row.holding.valueTwd !== null);
-  const dayTwd = moved.reduce((sum, row) => sum + (row.holding.valueTwd ?? 0) * (1 - 1 / (1 + (row.move?.change ?? 0))), 0);
-  const base = moved.reduce((sum, row) => sum + (row.holding.valueTwd ?? 0), 0) - dayTwd;
-  const newest = moved.map((row) => row.move?.date ?? '').sort().pop();
+  const session = sessionMove(rows.map((row) => ({ valueTwd: row.holding.valueTwd, move: row.move })));
   const nameOf = (ticker: string) => securities.get(ticker)?.name ?? ticker;
 
   return (
@@ -174,13 +171,13 @@ export async function HoldingsOverview({ supabase, data, portfolio, today, view,
           ))}
         </div>
       </div>
-      {moved.length > 0 && (
+      {session && (
         <Facts
           facts={[
             {
               label: { en: 'Last session', zh: '最近交易日' },
-              value: <span className={tone(base > 0 ? dayTwd / base : null)}>{signedTwd(dayTwd)}</span>,
-              note: { en: `${moveText(base > 0 ? dayTwd / base : null)} · ${newest ?? ''}`, zh: `${moveText(base > 0 ? dayTwd / base : null)} · ${newest ?? ''} 收盤` },
+              value: <span className={tone(session.change)}>{signedTwd(session.dayTwd)}</span>,
+              note: { en: `${moveText(session.change)} · ${session.date ?? ''}`, zh: `${moveText(session.change)} · ${session.date ?? ''} 收盤` },
             },
           ]}
         />

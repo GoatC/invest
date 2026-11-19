@@ -25,6 +25,27 @@ export function lastMove(closes: readonly ClosePoint[]): Move | null {
   return { date: last.date, previous: before.date, change: last.close / before.close - 1 };
 }
 
+export interface SessionMove {
+  /** What the lines gained or lost in TWD over their last session. */
+  dayTwd: number;
+  /** dayTwd against their value a session earlier (0.012 is +1.2%); null with nothing to compare. */
+  change: number | null;
+  /** The newest close among them. */
+  date: string | undefined;
+}
+
+/**
+ * The last session across the holdings in TWD: each line's value now against its value a session ago, the currencies
+ * held still. Null when no line has both a value and a move.
+ */
+export function sessionMove(lines: readonly { valueTwd: number | null; move: Move | null }[]): SessionMove | null {
+  const moved = lines.filter((line): line is { valueTwd: number; move: Move } => line.move !== null && line.valueTwd !== null);
+  if (moved.length === 0) return null;
+  const dayTwd = moved.reduce((sum, line) => sum + line.valueTwd * (1 - 1 / (1 + line.move.change)), 0);
+  const base = moved.reduce((sum, line) => sum + line.valueTwd, 0) - dayTwd;
+  return { dayTwd, change: base > 0 ? dayTwd / base : null, date: moved.map((line) => line.move.date).sort().pop() };
+}
+
 /** The closes on or after a date. */
 export function closesSince(closes: readonly ClosePoint[], from: string): ClosePoint[] {
   return closes.filter((point) => point.date >= from);
