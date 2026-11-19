@@ -17,14 +17,19 @@ export function NativePosterLine({ changes }: { changes: readonly number[] }) {
     host.classList.add('native-drawn');
     // The poster's own text colour (the Ink poster is light; it was white on the old accent poster),
     // handed over again when the appearance chosen on 帳號 changes it (lib/theme.ts marks <html>).
+    // Today's dot takes the colour the page's own (hidden) dot has: up, down or flat (Ink design).
+    const dot = () => {
+      const mark = host.querySelector<HTMLElement>('.hero-dot');
+      return mark ? getComputedStyle(mark).backgroundColor : undefined;
+    };
     let ink = getComputedStyle(host).color;
-    let stop = showNative(host, posterLine(changes, ink));
+    let stop = showNative(host, posterLine(changes, ink, dot()));
     const theme = new MutationObserver(() => {
       const now = getComputedStyle(host).color;
       if (now === ink) return;
       ink = now;
       stop();
-      stop = showNative(host, posterLine(changes, ink));
+      stop = showNative(host, posterLine(changes, ink, dot()));
     });
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => {

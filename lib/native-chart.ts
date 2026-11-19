@@ -213,7 +213,7 @@ export function faded(ink: string, alpha: number): string {
   return ink;
 }
 
-export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)'): NativeSpec {
+export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)', dot?: string): NativeSpec {
   const low = Math.min(0, ...changes);
   const high = Math.max(0, ...changes);
   const pad = (high - low || 1) * 0.12;
@@ -222,7 +222,11 @@ export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)
     spark: true,
     lineWidth: 3,
     x: { kind: 'category', values: changes.map((_, index) => String(index)) },
-    series: [{ name: '', mark: 'line', color: ink, values: [...changes], colors: changes.map(() => null), stack: null, dashed: false }],
+    series: [
+      { name: '', mark: 'line', color: ink, values: [...changes], colors: changes.map(() => null), stack: null, dashed: false },
+      // Today's dot at the line's end, in the colour of the 7-day move (Ink design), as the page draws it.
+      ...(dot ? [{ name: '', mark: 'point' as const, color: dot, values: changes.map((value, index) => (index === changes.length - 1 ? value : null)), colors: changes.map(() => null), stack: null, dashed: false }] : []),
+    ],
     rules: [{ axis: 'y', value: 0, color: faded(ink, 0.45), dashed: true }],
     area: false,
     xTicks: [],

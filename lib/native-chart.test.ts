@@ -126,4 +126,11 @@ describe('posterLine', () => {
     assert.deepEqual(spec.rules, [{ axis: 'y', value: 0, color: 'rgba(20, 26, 23, 0.45)', dashed: true }]);
     assert.equal(faded('#ecf0ee', 0.45), 'rgba(236, 240, 238, 0.45)');
   });
+
+  it('ends in today’s dot, in the colour it is given, on the last point only', () => {
+    const spec = posterLine([0, 0.02, 0.01], 'rgb(20, 26, 23)', 'rgb(194, 58, 67)');
+    assert.equal(spec.series.length, 2);
+    assert.deepEqual(spec.series[1], { name: '', mark: 'point', color: 'rgb(194, 58, 67)', values: [null, null, 0.01], colors: [null, null, null], stack: null, dashed: false });
+    assert.equal(posterLine([0, 0.02], 'rgb(20, 26, 23)').series.length, 1);
+  });
 });
