@@ -133,4 +133,9 @@ describe('posterLine', () => {
     assert.deepEqual(spec.series[1], { name: '', mark: 'point', color: 'rgb(194, 58, 67)', values: [null, null, 0.01], colors: [null, null, null], stack: null, dashed: false });
     assert.equal(posterLine([0, 0.02], 'rgb(20, 26, 23)').series.length, 1);
   });
+
+  it('draws itself in only when the opening sequence asks', () => {
+    assert.equal(posterLine([0, 0.02], 'rgb(20, 26, 23)', undefined, true).reveal, true);
+    assert.equal('reveal' in posterLine([0, 0.02], 'rgb(20, 26, 23)'), false);
+  });
 });

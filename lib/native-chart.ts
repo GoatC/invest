@@ -46,6 +46,8 @@ export interface NativeSpec extends NativeShape {
   v: 1;
   /** The lines' width in points: Swift Charts' 2 unless said (the poster's line is 3). */
   lineWidth?: number;
+  /** Draws itself left to right as it appears (the poster's opening sequence, docs/design-handoff/04-motion.md). */
+  reveal?: boolean;
   /** The x values that carry a label, by index, with the label ECharts gives them. */
   xTicks: Array<{ at: number; label: string }>;
   y: { min: number | null; max: number | null; ticks: Array<{ value: number; label: string }> };
@@ -213,7 +215,7 @@ export function faded(ink: string, alpha: number): string {
   return ink;
 }
 
-export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)', dot?: string): NativeSpec {
+export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)', dot?: string, reveal = false): NativeSpec {
   const low = Math.min(0, ...changes);
   const high = Math.max(0, ...changes);
   const pad = (high - low || 1) * 0.12;
@@ -221,6 +223,7 @@ export function posterLine(changes: readonly number[], ink = 'rgb(255, 255, 255)
     v: 1,
     spark: true,
     lineWidth: 3,
+    ...(reveal ? { reveal: true } : {}),
     x: { kind: 'category', values: changes.map((_, index) => String(index)) },
     series: [
       { name: '', mark: 'line', color: ink, values: [...changes], colors: changes.map(() => null), stack: null, dashed: false },

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { refreshPages } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { activeRun, dispatch, githubConfig, listRuns, runState, type RefreshState } from '@/lib/refresh';
+import { loadMilestoneStep } from '@/lib/data';
 import { createClient } from '@/lib/supabase/server';
 
 export async function signOut(): Promise<void> {
@@ -43,4 +44,17 @@ export async function refreshStatus(since: string): Promise<RefreshState> {
     // A failed look at GitHub is not a failed run: keep waiting.
     return { phase: 'running', since, detail: err instanceof Error ? err.message : 'GitHub' };
   }
+}
+
+/**
+ * Keeps the milestone step the poster has reached (docs/design-handoff/04-motion.md): after its ring has played, or,
+ * the first time, where the value already stands. Only ever raises it, so a fall below a step and a rise past it again
+ * celebrates nothing, and no other phone plays it again.
+ */
+export async function keepMilestone(step: number): Promise<void> {
+  const { supabase } = await requireSession();
+  if (typeof step !== 'number' || !Number.isFinite(step) || step < 0) return;
+  const kept = await loadMilestoneStep(supabase).catch(() => undefined);
+  if (kept === undefined || (kept !== null && step <= kept)) return;
+  await supabase.from('app_state').upsert({ key: 'milestone', value: { step } });
 }

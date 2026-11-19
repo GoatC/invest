@@ -38,7 +38,8 @@ const KEY_MISSING = '23503';
 // (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
 // analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
 // F6's auto-scored assumptions add cma_estimates; the dividend prompt and the in-app banner (2026-11-12)
-// add dividend_events and banner_dismissals; the home-screen widget (2026-11-18) widget_snapshot and widget_key.
+// add dividend_events and banner_dismissals; the home-screen widget (2026-11-18) widget_snapshot and widget_key;
+// the poster's milestone ring (Ink design, 2026-11-19) app_state.
 const EXPECTED_TABLES = [
   'asset_classes', 'securities', 'transactions', 'cash_flows', 'prices', 'fx_rates', 'nav_snapshots',
   'rules', 'rule_changes', 'proposals', 'windfall_tranches', 'valuations', 'beta_results', 'red_flags',
@@ -46,7 +47,7 @@ const EXPECTED_TABLES = [
   'job_runs', 'notifications', 'market_series', 'index_prices', 'fundamentals',
   'company_profiles', 'red_flag_events', 'red_flag_entries', 'fund_holdings', 'simulation_runs', 'splits',
   'analyst_estimates', 'volatility_scores', 'market_events', 'news_counts', 'news_alerts', 'cma_estimates',
-  'dividend_events', 'banner_dismissals', 'widget_snapshot', 'widget_key',
+  'dividend_events', 'banner_dismissals', 'widget_snapshot', 'widget_key', 'app_state',
 ].sort();
 
 type Queryable = Pick<Transaction, 'query'>;
@@ -66,7 +67,7 @@ after(async () => {
 });
 
 describe('migrations', () => {
-  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events, banner_dismissals, widget_snapshot and widget_key', async () => {
+  it('create the 19 PRD Section 7 tables plus push_subscriptions, audit_log, job_runs, notifications, market_series, index_prices, fundamentals, company_profiles, red_flag_events, red_flag_entries, fund_holdings, simulation_runs, splits, analyst_estimates, volatility_scores, market_events, news_counts, news_alerts, cma_estimates, dividend_events, banner_dismissals, widget_snapshot, widget_key and app_state', async () => {
     assert.deepEqual([...publicTables()].sort(), EXPECTED_TABLES);
     const { rows } = await db.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public' order by tablename`);
     assert.deepEqual(
@@ -1233,6 +1234,18 @@ describe('dividend prompts and the in-app banner (2026-11-12)', () => {
     assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(`insert into public.banner_dismissals (key, until) values ('first_trade', '2026-11-19')`))), DENIED);
     await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.banner_dismissals'), 0));
     await db.query('delete from public.banner_dismissals');
+  });
+
+  it('keeps the last milestone celebrated, for the owner only', async () => {
+    await as(db, 'owner', async (tx) => {
+      await tx.query(`insert into public.app_state (key, value) values ('milestone', '{"step": 100000}') on conflict (key) do update set value = excluded.value`);
+      await tx.query(`insert into public.app_state (key, value) values ('milestone', '{"step": 200000}') on conflict (key) do update set value = excluded.value`);
+      assert.equal(await scalar(tx, `select (value->>'step')::int from public.app_state where key = 'milestone'`), 200000);
+    });
+    assert.equal(await errorCode(as(db, 'owner', (tx) => tx.query(`insert into public.app_state (key, value) values ('', '{}')`))), CHECK_FAILED);
+    assert.equal(await errorCode(as(db, 'stranger', (tx) => tx.query(`insert into public.app_state (key, value) values ('other', '{}')`))), DENIED);
+    await as(db, 'stranger', async (tx) => assert.equal(await scalar(tx, 'select count(*) from public.app_state'), 0));
+    await db.query('delete from public.app_state');
   });
 
   it('lets the push job plan a dividend push, once', async () => {

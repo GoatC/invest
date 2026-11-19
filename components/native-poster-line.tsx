@@ -23,7 +23,9 @@ export function NativePosterLine({ changes }: { changes: readonly number[] }) {
       return mark ? getComputedStyle(mark).backgroundColor : undefined;
     };
     let ink = getComputedStyle(host).color;
-    let stop = showNative(host, posterLine(changes, ink, dot()));
+    // The opening sequence (components/poster-motion.tsx marks the poster first): Swift Charts draws the line in.
+    const reveal = host.closest('.hero')?.hasAttribute('data-intro') === true;
+    let stop = showNative(host, posterLine(changes, ink, dot(), reveal));
     const theme = new MutationObserver(() => {
       const now = getComputedStyle(host).color;
       if (now === ink) return;
