@@ -37,6 +37,21 @@ const results = [];
 let shot = 0;
 // Not-found responses the scenario asks for on purpose (a deleted trade's page).
 let expectedNotFound = 0;
+/**
+ * The appearance as 帳號 sets it (lib/theme.ts): kept in localStorage and marked on <html> at once, so
+ * the page in front turns dark without a reload. The app no longer follows the phone's setting alone.
+ */
+async function chooseTheme(theme, target = page) {
+  await target.evaluate((value) => {
+    try {
+      localStorage.setItem('theme', value);
+    } catch {
+      // A page without storage still turns now.
+    }
+    document.documentElement.dataset.theme = value;
+  }, theme);
+}
+
 async function snap(name, target = page, fullPage = true) {
   shot += 1;
   await target.screenshot({ path: `${SHOTS}/${String(shot).padStart(2, '0')}-${name}.png`, fullPage });
@@ -748,11 +763,11 @@ await step('performance: the windfall pool alone, year to date, and dark mode', 
   await page.goto(`${BASE}/performance?range=ytd&scope=regular`);
   await page.locator('.chart svg').nth(1).waitFor();
   check((await page.locator('.segmented a[aria-current=true]').allInnerTexts()).join(' ').includes('Year to date'), 'year to date selected');
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await chooseTheme('dark');
   await page.goto(`${BASE}/performance`);
   await page.locator('.chart svg').nth(1).waitFor();
   await snap('performance-dark');
-  await page.emulateMedia({ colorScheme: 'light' });
+  await chooseTheme('light');
 });
 
 await step('allocation: drift from the targets coloured by the 5/25 rule, satellite left to R2', async () => {
@@ -988,10 +1003,10 @@ await step('risk details on the dashboard: the histogram with its cutoff, the we
   for (const summary of await page.getByText('Show as a table').all()) await summary.click();
   await page.getByText('代理 ETF 週報酬的相關係數').click();
   check(/beyond the VaR/.test(await body()), 'the table marks the bins beyond the VaR');
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await chooseTheme('dark');
   await openRiskDetails();
   await snap('risk-dark');
-  await page.emulateMedia({ colorScheme: 'light' });
+  await chooseTheme('light');
 });
 
 /** The figure a stat tile on the calculator shows, in NT$. */
@@ -1086,11 +1101,11 @@ await step('calculator: saving the plan compares the regular pool with it at eac
   await page.locator('.chart svg').first().waitFor();
   await docShot('calculator', page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await chooseTheme('dark');
   await page.goto(`${BASE}/plan`);
   await page.locator('#actual-vs-plan .chart svg').waitFor();
   await snap('calculator-dark');
-  await page.emulateMedia({ colorScheme: 'light' });
+  await chooseTheme('light');
 });
 
 /** Yesterday in Taipei, YYYY-MM-DD: a DCA debit then makes the monthly rule fire today. */
@@ -1218,10 +1233,10 @@ await step('holdings: the standing warnings come first; dark mode and the warnin
   await page.goto(`${BASE}/holdings`);
   const banner = await page.locator('#open-proposals').innerText();
   check(banner.includes('規則警示') && banner.includes('每月投入'), `warning tiles, got ${banner}`);
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await chooseTheme('dark');
   await page.goto(`${BASE}/proposals`);
   await snap('proposals-dark');
-  await page.emulateMedia({ colorScheme: 'light' });
+  await chooseTheme('light');
 });
 
 await step('costs: the yearly drag, each fund and broker over the plan, the Taiwan tax checks; choosing a broker prices the orders', async () => {
@@ -1833,11 +1848,11 @@ await step('dashboard: the poster with the value of both pools, the 7-day move a
   await page.waitForURL(/\/proposals\?saved=checked/);
   check((await page.locator(`#${id}`).count()) === 1, 'the warning still stands');
   await page.goto(`${BASE}/`);
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await chooseTheme('dark');
   await page.reload();
   await page.locator('.chart-donut svg').waitFor();
   await snap('dashboard-dark');
-  await page.emulateMedia({ colorScheme: 'light' });
+  await chooseTheme('light');
 });
 
 await step('account and search: the poster\'s person and search buttons open 帳號 and 搜尋; the search finds a page, a holding and the VaR', async () => {
@@ -1856,6 +1871,41 @@ await step('account and search: the poster\'s person and search buttons open 帳
   await field.fill('2330');
   await page.getByRole('link', { name: /2330/ }).first().waitFor();
   await snap('search');
+});
+
+await step('appearance: 淺色 by default whatever the phone, 深色 and 自動 from 帳號, kept across a reload, the browser bar coloured', async () => {
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+  const barColour = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')?.getAttribute('content'));
+  const ground = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.evaluate(() => localStorage.removeItem('theme'));
+  // A dark phone no longer turns the app dark by itself.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${BASE}/account`);
+  const group = page.getByRole('group', { name: /外觀/ });
+  await group.waitFor();
+  check((await theme()) === 'light' && (await group.getByRole('button', { name: /^淺色/ }).getAttribute('aria-pressed')) === 'true', `light by default on a dark phone, got ${await theme()}`);
+  const light = await ground();
+  await group.getByRole('button', { name: /^深色/ }).click();
+  check((await theme()) === 'dark' && (await ground()) !== light && (await barColour()) === '#101613', `dark at once, got ${await theme()} ${await barColour()}`);
+  // Marked before the first paint on the next load: the earliest look at <html> already says dark.
+  await page.reload({ waitUntil: 'commit' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme !== undefined);
+  check((await theme()) === 'dark', 'still dark after a reload, from the first paint');
+  await group.waitFor();
+  check((await group.getByRole('button', { name: /^深色/ }).getAttribute('aria-pressed')) === 'true', 'the switch shows the choice');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await snap('account-dark-phone', page, false);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // 自動 follows the phone, both ways, without a reload.
+  await group.getByRole('button', { name: /^自動/ }).click();
+  check((await theme()) === 'dark', 'auto on a dark phone is dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await group.getByRole('button', { name: /^淺色/ }).click();
+  check((await theme()) === 'light' && (await barColour()) === '#fafbfa', 'back to light');
+  await page.emulateMedia({ colorScheme: 'light' });
 });
 
 await step('red flags: every indicator by company, coverage, an entry that scans again and a review prompt, the settings logged (N3)', async () => {

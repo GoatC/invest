@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useTransition } from 'react';
 
 import { REMINDER_PREFS_KEY, reminderPrefs, remindersMessage, sameNext, sameTop, shellBack, shellMove, shellState, sitePath, type RemindersMessage, type RemindersStatus, type ShellAction, type ShellNext, type ShellReminder, type ShellState, type ShellTop } from '@/lib/shell';
+import { applyTheme, chosenTheme, storedTheme } from '@/lib/theme';
+
 import { coverNative } from './native-charts';
 
 /**
@@ -38,7 +40,7 @@ interface Handler<T> {
 
 interface ShellWindow {
   webkit?: { messageHandlers?: { shell?: Handler<ShellState>; reminders?: Handler<RemindersMessage>; haptic?: Handler<'success' | 'warning'> } };
-  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void; segment(index: number): void; refresh(): Promise<void> };
+  longview?: { select(key: string): void; open(path: string): void; remindersStatus(status: RemindersStatus): void; action(key: string): void; later(): void; segment(index: number): void; refresh(): Promise<void>; theme(): void };
   longviewReminders?: { status?: RemindersStatus; pushDevices?: number };
 }
 
@@ -189,7 +191,8 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
     let told: ShellTop | null = inShell ? readTop(path, sheet) : null;
     let waiting: ShellNext | null = inShell ? readNext() : null;
     let ready = opened();
-    post(inShell ? shellState(path, sheet, true, told ?? undefined, waiting, ready) : shellState(path, sheet, true));
+    let chosen = chosenTheme();
+    post(inShell ? shellState(path, sheet, true, told ?? undefined, waiting, ready, chosen) : shellState(path, sheet, true));
     if (!inShell) return undefined;
     let frame = 0;
     const check = () => {
@@ -197,11 +200,13 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       const top = readTop(path, sheet);
       const next = readNext();
       const now = opened();
-      if (sameTop(told, top) && sameNext(waiting, next) && now === ready) return;
+      const theme = chosenTheme();
+      if (sameTop(told, top) && sameNext(waiting, next) && now === ready && theme === chosen) return;
       told = top;
       waiting = next;
       ready = now;
-      post(shellState(path, sheet, true, top, next, now));
+      chosen = theme;
+      post(shellState(path, sheet, true, top, next, now, theme));
     };
     const soon = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -210,7 +215,7 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
     const changes = new MutationObserver(soon);
     changes.observe(document.body, { childList: true, subtree: true, characterData: true });
     // The opening screen lifting marks <html> (components/preload.tsx).
-    changes.observe(document.documentElement, { attributes: true, attributeFilter: ['data-opened'] });
+    changes.observe(document.documentElement, { attributes: true, attributeFilter: ['data-opened', 'data-theme', 'data-theme-choice'] });
     window.addEventListener('scroll', soon, { passive: true });
     return () => {
       changes.disconnect();
@@ -250,6 +255,11 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
       },
       segment(index) {
         segmentItems()[index]?.click();
+      },
+      // The appearance was changed elsewhere (帳號 in the shell's sheet shares this device's storage):
+      // show the stored choice here too; the state message that follows tells the shell.
+      theme() {
+        applyTheme(storedTheme());
       },
       refresh() {
         return new Promise<void>((done) => {

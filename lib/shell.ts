@@ -1,4 +1,5 @@
 import { GROUPS, MAIN, matches, NAV_PATHS } from '@/components/nav-pages';
+import type { ThemeChoice } from '@/lib/theme';
 
 /**
  * What the web app and its iOS shell tell each other (ios/, docs/ios-app.md; PRD Section 5, "Native
@@ -105,9 +106,14 @@ export interface ShellState {
    * 2026-11-15). Left out by a page from before, and the shell lifts the cover when the page speaks.
    */
   opened?: boolean;
+  /**
+   * The appearance chosen on 帳號 (lib/theme.ts): the shell themes its own bars with it and keeps it for
+   * the next launch, 自動 following the phone. Left out by a page from before, and the shell keeps its own.
+   */
+  theme?: ThemeChoice;
 }
 
-export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop, next?: ShellNext | null, opened?: boolean): ShellState {
+export function shellState(path: string, sheet: boolean, signedIn: boolean, top?: ShellTop, next?: ShellNext | null, opened?: boolean, theme?: ThemeChoice): ShellState {
   return {
     v: 1,
     signedIn,
@@ -117,6 +123,7 @@ export function shellState(path: string, sheet: boolean, signedIn: boolean, top?
     ...(top ? { top } : {}),
     ...(next !== undefined ? { next } : {}),
     ...(opened !== undefined ? { opened } : {}),
+    ...(theme ? { theme } : {}),
   };
 }
 

@@ -42,6 +42,12 @@ export function storedTheme(): ThemeChoice {
   }
 }
 
+/** The choice this page shows: the mark applyTheme left on <html>, else the stored one. */
+export function chosenTheme(): ThemeChoice {
+  const marked = document.documentElement.dataset.themeChoice;
+  return marked ? readTheme(marked) : storedTheme();
+}
+
 function paint(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -57,6 +63,9 @@ export function applyTheme(choice: ThemeChoice): void {
   } catch {
     // Private mode: the choice holds until the page closes.
   }
+  // The choice itself, beside the theme it shows: 自動 on a light phone changes no colour, but the
+  // iOS shell must still hear of it (components/shell-bridge.tsx watches this mark).
+  document.documentElement.dataset.themeChoice = choice;
   if (follow) follow.query.removeEventListener('change', follow.listener);
   follow = null;
   const query = window.matchMedia(DARK_QUERY);

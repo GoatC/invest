@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { ThemeSwitch } from '@/components/theme-switch';
 import { requireSession } from '@/lib/auth';
 
 import { signOut } from '../actions';
@@ -35,6 +36,9 @@ export default async function AccountPage() {
       <section className="card form account-group" aria-labelledby="account-prefs">
         <h2 id="account-prefs">偏好</h2>
         <ul className="link-rows">
+          <li>
+            <ThemeSwitch />
+          </li>
           <li>
             <Link href="/sectors#settings" prefetch>
               <span>漲跌顏色</span>

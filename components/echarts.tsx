@@ -128,7 +128,6 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     if (gone) return;
     const chart = init(element);
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const dark = window.matchMedia('(prefers-color-scheme: dark)');
     let narrow = element.clientWidth < NARROW;
     // Inside a shell that draws charts, on the main tabs, a chart Swift Charts can draw is handed to
     // it (components/native-charts.ts); ECharts still lays it out, out of sight, for its axis labels.
@@ -152,7 +151,9 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     };
     draw();
     ready?.(chart);
-    dark.addEventListener('change', draw);
+    // The appearance chosen on 帳號 (lib/theme.ts) marks <html data-theme>; a change redraws in the new colours.
+    const theme = new MutationObserver(draw);
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     const resize = new ResizeObserver(() => {
       chart.resize();
       if (element.clientWidth < NARROW !== narrow) {
@@ -162,7 +163,7 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     });
     resize.observe(element);
     stop = () => {
-      dark.removeEventListener('change', draw);
+      theme.disconnect();
       resize.disconnect();
       unNative?.();
       chart.dispose();
