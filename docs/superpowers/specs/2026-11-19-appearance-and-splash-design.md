@@ -97,7 +97,7 @@ Hugo 想要好看一點的載入畫面，並且自己決定 App 是淺色還是�
 
 ### 6.4 iOS App
 
-- `lib/shell.ts` 的 `ShellState` 加 `theme?: 'light' | 'dark'`（已經解析過「自動」的結果），由 `components/shell-bridge.tsx` 每次回報時送出；`ios/Shell/ShellState.swift` 讀它（沒送時視為不變）。
+- `lib/shell.ts` 的 `ShellState` 加 `theme?: 'light' | 'dark' | 'auto'`（傳的是選擇本身：「自動」若先換算成淺色或深色，外殼會把網頁視窗固定在那個顏色，之後手機切換也不會跟；外殼把「自動」對應到 `.unspecified`），由 `components/shell-bridge.tsx` 每次回報時送出；`ios/Shell/ShellState.swift` 讀它（沒送時視為不變）。
 - `ShellViewController` 收到後設定 `view.window?.overrideUserInterfaceStyle`（`.light`／`.dark`），原生列、sheet、Swift Charts 都跟著換，並存進 `UserDefaults`。`SceneDelegate` 建立視窗時先讀它（預設 `.light`），所以下次啟動一開始就是對的。
 - sheet 裡的頁面改了外觀時，外殼除了套用，還要讓主網頁視窗重新讀取外觀（例如執行 `window.longview.theme()`，或重新掛上 `data-theme`）。
 - 啟動畫面與封面改成 B：
