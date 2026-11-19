@@ -227,13 +227,13 @@ function Hero({
           </span>
           <span className="hero-tools">
             {/* Lent to the shell's bar as glass buttons (G02): 帳號 on the left, opened in a sheet, as 搜尋 is (G05). */}
-            <Link href="/account" prefetch className="icon-button" aria-label="帳號 Account" data-shell-action="account" data-shell-symbol="person.crop.circle" data-shell-sheet="/account" data-shell-placement="leading">
+            <Link href="/account" prefetch className="icon-button" aria-label="帳號 Account" data-shell-action="account" data-shell-symbol="person.crop.circle" data-shell-sheet="/account?sheet=account" data-shell-placement="leading">
               <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <circle cx="11" cy="8" r="3.6" />
                 <path d="M4.5 18.5c1.3-3 3.8-4.5 6.5-4.5s5.2 1.5 6.5 4.5" />
               </svg>
             </Link>
-            <Link href="/search" prefetch className="icon-button" aria-label="搜尋 Search" data-shell-action="search" data-shell-symbol="magnifyingglass" data-shell-sheet="/search">
+            <Link href="/search" prefetch className="icon-button" aria-label="搜尋 Search" data-shell-action="search" data-shell-symbol="magnifyingglass" data-shell-sheet="/search?sheet=search">
               <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
                 <circle cx="9.5" cy="9.5" r="6.5" />
                 <path d="M14.5 14.5l5 5" />

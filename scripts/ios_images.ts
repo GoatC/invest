@@ -14,8 +14,6 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright-core';
 
-import { SPLASH_GROUND } from '../lib/splash.ts';
-
 const assets = join(dirname(fileURLToPath(import.meta.url)), '..', 'ios', 'Shell', 'Assets.xcassets');
 const executablePath = process.env['CHROMIUM'] ?? '/opt/pw-browsers/chromium';
 
@@ -40,11 +38,15 @@ const ICONS = [
   { file: 'icon-1024-tinted.png', html: icon(['#2a2a2a', '#000000'], '#ffffff', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.06)') },
 ] as const;
 
-/** 88 points wide on a clear ground, with room for its shadow: the launch screen centres it on the colour. */
-const mark = (ground: string) => `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:transparent">
-<svg width="88" height="88" viewBox="0 0 64 64" style="border-radius:21px;box-shadow:0 10px 30px rgba(11,26,43,.28)">
-<rect width="64" height="64" rx="15" fill="#fff"/>
-<polyline points="12,44 26,32 36,38 52,20" fill="none" stroke="${ground}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+/**
+ * The opening screen B's mark (Hugo, 2026-11-19), 120 points wide on a clear ground in a 168-point square:
+ * a white hairline tile and the faint track of the rising line. The launch screen centres it on the ink
+ * ground; the shell's cover (ios/Shell/Screens.swift CoverView) then draws the white line along the track.
+ */
+const mark = () => `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:transparent">
+<svg width="120" height="120" viewBox="0 0 64 64">
+<rect x="1.5" y="1.5" width="61" height="61" rx="15" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+<polyline points="12,44 26,32 36,38 52,20" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg></body></html>`;
 
 const browser = await chromium.launch(existsSync(executablePath) ? { executablePath } : {});
@@ -58,6 +60,6 @@ const draw = async (html: string, size: number, ratio: number, file: string, cle
 };
 for (const { file, html } of ICONS) await draw(html, 1024, 1, `AppIcon.appiconset/${file}`, false);
 for (const scheme of ['light', 'dark'] as const) {
-  for (const ratio of [2, 3]) await draw(mark(SPLASH_GROUND[scheme]), 168, ratio, `LaunchMark.imageset/mark${scheme === 'dark' ? '-dark' : ''}@${ratio}x.png`, true);
+  for (const ratio of [2, 3]) await draw(mark(), 168, ratio, `LaunchMark.imageset/mark${scheme === 'dark' ? '-dark' : ''}@${ratio}x.png`, true);
 }
 await browser.close();

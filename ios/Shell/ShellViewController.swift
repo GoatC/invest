@@ -210,7 +210,9 @@ final class ShellViewController: UITabBarController {
     /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
-    override var childForStatusBarStyle: UIViewController? { selectedViewController }
+    /// While the opening cover shows, the status bar stays white on its ink (opening screen B): the page
+    /// behind may already have asked for dark text. Once it lifts, the place's page decides again.
+    override var childForStatusBarStyle: UIViewController? { cover.superview == nil ? selectedViewController : nil }
 
     /// The place on screen.
     private var selectedHost: TabHost? { (selectedViewController as? UINavigationController)?.viewControllers.first as? TabHost }
@@ -231,6 +233,7 @@ final class ShellViewController: UITabBarController {
             view.addSubview(layer)
         }
         notice.isHidden = true
+        cover.onGone = { [weak self] in self?.setNeedsStatusBarAppearanceUpdate() }
         Router.shell = self
         // A pull down at the top of the page reads it again (proposal G06); the page says when it is on screen.
         let refresh = UIRefreshControl()
@@ -518,6 +521,8 @@ final class ShellViewController: UITabBarController {
             presentation.detents = [.medium(), .large()]
             presentation.prefersGrabberVisible = true
         }
+        // A swipe down closes it too: the page behind then shows any appearance chosen in it.
+        sheet.presentationController?.delegate = self
         sheetWeb = page
         page.load(URLRequest(url: url))
         present(sheet, animated: true)
@@ -552,7 +557,24 @@ final class ShellViewController: UITabBarController {
     private func closeSheet() {
         guard sheetWeb != nil else { return }
         sheetWeb = nil
-        dismiss(animated: true)
+        dismiss(animated: true) { [weak self] in self?.retheme() }
+    }
+
+    /// The appearance the page chose (lib/theme.ts): the window's style, so the bars, sheets and Swift
+    /// Charts follow it (自動: the phone's own), kept for the next launch (SceneDelegate reads it).
+    private func theme(_ choice: String?) {
+        guard let choice else { return }
+        if UserDefaults.standard.string(forKey: Appearance.key) != choice {
+            UserDefaults.standard.set(choice, forKey: Appearance.key)
+        }
+        let style = Appearance.style(choice)
+        if view.window?.overrideUserInterfaceStyle != style { view.window?.overrideUserInterfaceStyle = style }
+    }
+
+    /// 帳號 opens in a sheet, a web view of its own on the same storage: once it closes, the page behind
+    /// shows the appearance chosen there, and its next state message brings the bars along.
+    private func retheme() {
+        web.evaluateJavaScript("window.longview&&window.longview.theme&&window.longview.theme()", completionHandler: nil)
     }
 
     /// Whether a page belongs in the sheet: the sheet's own page (`sheet=` in its address), or adding a
@@ -578,6 +600,7 @@ final class ShellViewController: UITabBarController {
 
     private func heard(_ new: ShellState) {
         state = new
+        theme(new.theme)
         settleGround()
         show(tabs: new.tabs, choose: new.tab)
         drawTop(new.top)
@@ -810,6 +833,13 @@ extension ShellViewController: WKNavigationDelegate {
 }
 
 // MARK: - Dialogs and new windows
+
+extension ShellViewController: UIAdaptivePresentationControllerDelegate {
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        sheetWeb = nil
+        retheme()
+    }
+}
 
 extension ShellViewController: WKUIDelegate {
     /// `window.confirm` (deleting a row): without this a web view answers "no" without asking.

@@ -4,6 +4,10 @@
    the only action colour. --accent-soft is the "selected / look here" ground; --sky is
    decoration only (under 3:1 on --surface, it never carries text or a figure alone). */
 :root {
+  /* 淺色 by default; 深色 only when chosen on 帳號 (lib/theme.ts marks <html data-theme>), never by the phone alone.
+     The dark rules wrap the mark in :where() so they weigh exactly what they did inside the old
+     prefers-color-scheme blocks: the shell's own tokens (html[data-shell]) still win over them. */
+  color-scheme: light;
   --bg: #f2f5f3;
   --surface: #fafbfa;
   --text: #141a17;
@@ -78,61 +82,60 @@
   --radius-capsule: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #070b09;
-    --surface: #101613;
-    --text: #ecf0ee;
-    --muted: #9aa59f;
-    --border: #1d2622;
-    --accent: #8db8ea;
-    --accent-text: #070b09;
-    --ok-bg: #14301f;
-    --ok-text: #8fd6a6;
-    --warn-bg: #2a2111;
-    --warn-text: #f6d58d;
-    --danger-bg: #3a1a1a;
-    --danger-text: #f5a8a0;
-    --info-bg: #1d3149;
-    --info-text: #a9cdf2;
-    --chart-1: #3987e5;
-    --chart-2: #d95926;
-    --chart-3: #199e70;
-    --chart-4: #c98500;
-    --chart-5: #d55181;
-    --chart-6: #008300;
-    --chart-7: #9085e9;
-    --chart-8: #e66767;
-    --chart-context: #898781;
-    --status-good: #4cbf7a;
-    --status-warning: #e3b341;
-    --status-critical: #ec7a72;
-    /* Ink night: cards ruled by a hairline, no shadow, as in the light theme. */
-    --border-strong: #5e6b65;
-    --accent-soft: #1d3149;
-    --sky: #6fa3db;
-    /* The dark accent is a light blue made for text; as a ground the poster takes a deeper one. */
-    --hero-bg: #1f4f86;
-    --shadow-soft: none;
-    --card-border: 1px solid var(--border);
-    --move-red: #ff6b70;
-    --move-green: #34d36a;
-    --flat: #8db8ea;
-    --move-red-soft: #f3f5f9;
-    --move-red-on-soft: #bc2431;
-    --move-green-soft: #f3f5f9;
-    --move-green-on-soft: #17703a;
-    --flat-soft: #f3f5f9;
-    --flat-on-soft: #2b5f96;
-    --glow-red-core: rgba(255, 86, 92, 0.62);
-    --glow-red-edge: rgba(200, 16, 46, 0.28);
-    --glow-green-core: rgba(52, 211, 106, 0.52);
-    --glow-green-edge: rgba(31, 122, 53, 0.28);
-    --glow-flat-core: rgba(111, 163, 219, 0.5);
-    --glow-flat-edge: rgba(52, 104, 156, 0.28);
-    --glow-warn-core: rgba(242, 179, 64, 0.4);
-    --glow-warn-edge: rgba(120, 80, 10, 0.26);
-  }
+:root:where([data-theme='dark']) {
+  color-scheme: dark;
+  --bg: #070b09;
+  --surface: #101613;
+  --text: #ecf0ee;
+  --muted: #9aa59f;
+  --border: #1d2622;
+  --accent: #8db8ea;
+  --accent-text: #070b09;
+  --ok-bg: #14301f;
+  --ok-text: #8fd6a6;
+  --warn-bg: #2a2111;
+  --warn-text: #f6d58d;
+  --danger-bg: #3a1a1a;
+  --danger-text: #f5a8a0;
+  --info-bg: #1d3149;
+  --info-text: #a9cdf2;
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-context: #898781;
+  --status-good: #4cbf7a;
+  --status-warning: #e3b341;
+  --status-critical: #ec7a72;
+  /* Ink night: cards ruled by a hairline, no shadow, as in the light theme. */
+  --border-strong: #5e6b65;
+  --accent-soft: #1d3149;
+  --sky: #6fa3db;
+  /* The dark accent is a light blue made for text; as a ground the poster takes a deeper one. */
+  --hero-bg: #1f4f86;
+  --shadow-soft: none;
+  --card-border: 1px solid var(--border);
+  --move-red: #ff6b70;
+  --move-green: #34d36a;
+  --flat: #8db8ea;
+  --move-red-soft: #f3f5f9;
+  --move-red-on-soft: #bc2431;
+  --move-green-soft: #f3f5f9;
+  --move-green-on-soft: #17703a;
+  --flat-soft: #f3f5f9;
+  --flat-on-soft: #2b5f96;
+  --glow-red-core: rgba(255, 86, 92, 0.62);
+  --glow-red-edge: rgba(200, 16, 46, 0.28);
+  --glow-green-core: rgba(52, 211, 106, 0.52);
+  --glow-green-edge: rgba(31, 122, 53, 0.28);
+  --glow-flat-core: rgba(111, 163, 219, 0.5);
+  --glow-flat-edge: rgba(52, 104, 156, 0.28);
+  --glow-warn-core: rgba(242, 179, 64, 0.4);
+  --glow-warn-edge: rgba(120, 80, 10, 0.26);
 }
 
 *,
@@ -602,22 +605,21 @@ body::before {
     height: 46px;
   }
 
-  @media (prefers-color-scheme: dark) {
-    .tab-bar {
-      --glass-tint: color-mix(in srgb, var(--surface) 62%, transparent);
-      --glass-rim: rgba(255, 255, 255, 0.34);
-      --glass-rim-low: rgba(255, 255, 255, 0.1);
-      --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-    }
-
-    .tab-lens {
-      background: color-mix(in srgb, #fff 12%, transparent);
-    }
-
-    .tab-bar[data-lifted] .tab-lens {
-      background: color-mix(in srgb, #fff 16%, transparent);
-    }
+  :where(html[data-theme='dark']) .tab-bar {
+    --glass-tint: color-mix(in srgb, var(--surface) 62%, transparent);
+    --glass-rim: rgba(255, 255, 255, 0.34);
+    --glass-rim-low: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
+
+  :where(html[data-theme='dark']) .tab-lens {
+    background: color-mix(in srgb, #fff 12%, transparent);
+  }
+
+  :where(html[data-theme='dark']) .tab-bar[data-lifted] .tab-lens {
+    background: color-mix(in srgb, #fff 16%, transparent);
+  }
+
 
   /* Where the system grants a page its own glass material, the bar takes that in place of the
      blur above. Today WebKit keeps it for native apps; a page asking for it is simply not heard. */
@@ -2156,57 +2158,99 @@ details.ticker-menu a:hover {
   background: var(--accent-soft);
 }
 
-/* The opening screen (components/splash.tsx): the mark and the name on the poster's colour, over
-   everything, while the app fetches its pages (components/preload.tsx fills the bar and adds
-   .leaving). Hidden at once on a reload within a visit (data-opened, set before the first paint).
-   Should no script ever run, it fades by itself after twelve seconds. */
+/* The opening screen, B (components/splash.tsx; Hugo, 2026-11-19): ink black in light and dark alike,
+   over everything while the app fetches its pages (components/preload.tsx fills the hairline and adds
+   .leaving). A glow from the top right fades in and the mark's line draws along its track, once each.
+   Fixed colours: it reads no theme token. Hidden at once on a reload within a visit (data-opened, set
+   before the first paint); should no script ever run, it fades by itself after twelve seconds. */
 .splash {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: grid;
   place-items: center;
-  background: var(--hero-bg);
-  color: var(--hero-text);
+  overflow: hidden;
+  background: #070b09;
+  color: #ffffff;
+  /* Nothing under it moves or answers a finger while it shows. */
+  touch-action: none;
+  overscroll-behavior: none;
   animation: splash-failsafe 400ms 12s both;
+}
+
+html:has(#splash:not(.leaving)):not([data-opened]) {
+  overflow: hidden;
 }
 
 html[data-opened] .splash {
   display: none;
 }
 
-/* The mark dead centre, as on the launch image (scripts/splash_images.ts draws the same), so it
-   does not move when the page takes over; the name comes in under it. */
+/* The glow, from the top-right corner, as on the launch image; it arrives once. */
+.splash-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(110% 70% at 100% -6%, rgba(111, 163, 219, 0.62) 0%, rgba(52, 104, 156, 0.28) 40%, rgba(7, 11, 9, 0) 74%);
+  animation: splash-glow 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The mark dead centre, as on the launch image (scripts/splash_images.ts draws the same), so it does
+   not move when the page takes over; the name sits under it. */
 .splash-mark {
   position: relative;
   display: grid;
 }
 
-.splash-mark span {
-  position: absolute;
-  top: calc(100% + 0.9rem);
-  left: 50%;
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-  transform: translateX(-50%);
+.splash-mark svg {
+  display: block;
 }
 
-.splash-mark svg {
-  border-radius: 21px;
-  box-shadow: 0 10px 30px rgba(11, 26, 43, 0.28);
+.splash-tile {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1.5;
+}
+
+.splash-track,
+.splash-line {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.splash-track {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+/* The rising line, drawn once along its track: its length in the mark's 64-unit box is about 54.2. */
+.splash-line {
+  stroke: #ffffff;
+  stroke-dasharray: 56;
+  animation: splash-draw 700ms 100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.splash-mark span {
+  position: absolute;
+  top: calc(100% + 1.25rem);
+  left: 50%;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: splash-name 500ms 300ms ease-out both;
 }
 
 .splash-progress {
   position: absolute;
   left: 50%;
   bottom: calc(15% + var(--safe-bottom));
-  width: 8.5rem;
-  height: 4px;
+  width: 7.5rem;
+  height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--hero-text) 24%, transparent);
+  background: rgba(157, 176, 198, 0.22);
   transform: translateX(-50%);
 }
 
@@ -2214,13 +2258,13 @@ html[data-opened] .splash {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--hero-text);
+  background: #8db8ea;
   transform: scaleX(max(0.06, var(--progress, 0)));
   transform-origin: left;
   transition: transform 260ms ease-out;
 }
 
-/* Lifted: the mark comes forward and the ground clears, onto the poster of the same colour. */
+/* Lifted: the mark comes forward and the ground clears onto the page. */
 .splash.leaving {
   opacity: 0;
   pointer-events: none;
@@ -2228,8 +2272,29 @@ html[data-opened] .splash {
 }
 
 .splash.leaving .splash-mark {
-  transform: scale(1.12);
+  transform: scale(1.08);
   transition: transform 360ms ease-out;
+}
+
+@keyframes splash-glow {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes splash-draw {
+  from {
+    stroke-dashoffset: 56;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes splash-name {
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes splash-failsafe {
@@ -2239,7 +2304,18 @@ html[data-opened] .splash {
   }
 }
 
+/* Reduce Motion: the line is drawn and the glow there from the start, a short fade at most. */
 @media (prefers-reduced-motion: reduce) {
+  .splash-line {
+    animation: none;
+  }
+
+  .splash-glow,
+  .splash-mark span {
+    animation-duration: 150ms;
+    animation-delay: 0ms;
+  }
+
   .splash.leaving,
   .splash.leaving .splash-mark,
   .splash-progress > span {
@@ -3964,15 +4040,13 @@ html[data-shell] {
   --card-border: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html[data-shell] {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --text: #ffffff;
-    --muted: #98989f;
-    --border: #38383a;
-    --border-strong: #545458;
-  }
+html[data-shell]:where([data-theme='dark']) {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --text: #ffffff;
+  --muted: #98989f;
+  --border: #38383a;
+  --border-strong: #545458;
 }
 
 /* The holdings as one group of rows split by hairlines, as an iOS list, in place of a card each. */
@@ -4498,6 +4572,51 @@ html[data-shell] .page > :empty {
 
 .link-row-off {
   color: var(--muted);
+}
+
+/* 外觀 on 帳號 (components/theme-switch.tsx): the name, then three choices in one pill on the same line. */
+.theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: var(--tap-min);
+  padding: 0.35rem 0;
+}
+
+.theme-choice {
+  display: flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.theme-choice button {
+  min-width: 3.4rem;
+  min-height: var(--tap-min);
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.theme-choice button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+.theme-choice button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* 帳號 (app/account/page.tsx). */

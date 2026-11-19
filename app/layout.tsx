@@ -11,12 +11,14 @@ import { ShellSignedOut } from '@/components/shell-bridge';
 import { SiteNav, SubNav } from '@/components/site-nav';
 import { Splash } from '@/components/splash';
 import { TableCards } from '@/components/table-cards';
+import { ThemeFollow } from '@/components/theme-switch';
 import { VersionWatch } from '@/components/version-watch';
 import { requireSession, signedInUser } from '@/lib/auth';
 import { DataError, loadJobRuns, loadSectorSettings, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
 import { dataHealth } from '@/lib/models/data-health';
 import { LAUNCH_IMAGES } from '@/lib/splash';
+import { THEME_COLOR, THEME_SCRIPT } from '@/lib/theme';
 import { siteVersion } from '@/lib/version';
 
 import { signOut } from './actions';
@@ -39,12 +41,11 @@ export const viewport: Viewport = {
   // The page reaches every edge of the screen; globals.css keeps what matters clear of the notch
   // and the home indicator with the safe-area insets.
   viewportFit: 'cover',
-  colorScheme: 'light dark',
+  // 淺色 unless 深色 or 自動 is chosen on 帳號 (lib/theme.ts), whatever the phone's setting.
+  colorScheme: 'light',
   // The poster's ground (--surface in globals.css since the Ink design), light and dark, for the browser's bars.
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fafbfa' },
-    { media: '(prefers-color-scheme: dark)', color: '#101613' },
-  ],
+  // The light head's ground; THEME_SCRIPT sets the dark one before the first paint when chosen.
+  themeColor: THEME_COLOR.light,
 };
 
 // Every page depends on the signed-in session; nothing may be cached or prerendered.
@@ -83,7 +84,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="zh-Hant" suppressHydrationWarning>
+      <head>
+        {/* The appearance chosen on this device, before anything is painted (lib/theme.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className={signedIn ? 'signed-in' : undefined}>
+        <ThemeFollow />
         <Splash show={signedIn} />
         <header className="site-header">
           <div className="site-header-inner">

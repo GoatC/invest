@@ -45,7 +45,7 @@ Opened by the dashboard's person button, in a sheet in the shell (the G05 sheet 
 
 - Head: initial avatar (84 px, `--accent-soft` / `--accent`), display name, signed-in email (from Supabase Auth, never stored in git), a chip 「擁有者 · 單人帳號」.
 - 帳號: 顯示名稱, 登入方式 (「Email 登入連結」), 這台裝置 (last sign-in time).
-- 偏好: 外觀 (自動／淺色／深色), 漲跌顏色 (紅漲綠跌／綠漲紅跌; writes config `sectors`, which the existing `body:has(#green-up)` switch reads), 推播設定 → `/notifications`.
+- 偏好: 外觀 (淺色／深色／自動; built 2026-11-19: 淺色 by default whatever the phone, kept per device, `components/theme-switch.tsx`, `lib/theme.ts`), 漲跌顏色 (紅漲綠跌／綠漲紅跌; writes config `sectors`, which the existing `body:has(#green-up)` switch reads), 推播設定 → `/notifications`.
 - 家人共用: one dimmed row 「邀請家人」 with a chip 「尚未開放」 and the note 「目前是單人帳號。開放後每位家人有自己的帳號與資料，彼此看不到。」 No invite flow yet: sharing is a later phase that changes CLAUDE.md's single-user rule and needs per-person rows under RLS.
 - 資料: 資料狀態 (✓ last nightly run), 匯入 CSV.
 - 登出 as a full-width row in `--danger-text`.

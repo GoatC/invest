@@ -203,7 +203,7 @@ App 不能收推播，所以「可以事先知道」的提醒改由手機自己�
 
 外殼是在沒有 Xcode 的環境寫的：能不能編譯已由 GitHub 上的 Xcode 檢查過，但下面這些只有實機看得到。請逐項試，有問題告訴 Claude。
 
-1. 啟動畫面：藍底白色標誌，接著同一個畫面出現進度條，沒有閃白。
+1. 啟動畫面（B，淺色深色都一樣）：墨綠黑底，中間是白色細框的標誌，右上角的藍色光暈淡入，標誌裡那條上升的線畫出來一次，下面出現「長期投資」；沒有閃白，也滑不動、點不到底下的頁面。
 2. 登入頁沒有分頁列；登入後底部出現玻璃分頁列，順序為 持倉、績效、儀表板、配置、更多，儀表板被選取。
 3. 點每個分頁：頁面立刻出現，分頁列的選取跟著移動。
 4. 在績效頁點「歸因」子分頁：分頁列仍選在績效。
@@ -232,6 +232,7 @@ App 不能收推播，所以「可以事先知道」的提醒改由手機自己�
 27. 主畫面小工具（第 9.5 節）：貼上鑰匙後幾秒內出現總市值、近 7 天漲跌與走勢線，右上角是昨天（或上一個交易日）的收盤日期；數字和儀表板海報一樣。
 28. 鎖定手機後，從鎖定畫面往右滑到小工具頁：數字被遮住；解鎖後才顯示。
 29. 點小工具：打開 App 並停在儀表板。按「換一把鑰匙」後，舊鑰匙的小工具顯示「鑰匙已失效」。
+30. 外觀（帳號 → 偏好）：預設淺色，手機是深色模式也一樣。點「深色」後頁面、分頁列、導覽列與圖表一起變深色；把 App 滑掉重開仍是深色。點「自動」後跟著手機的淺色／深色模式走。在帳號 sheet 裡切換後，關掉 sheet（按 ✕ 或往下滑），後面的頁面也跟著變。
 
 ## 11. 回報問題時請附上
 
@@ -269,3 +270,5 @@ App 不能收推播，所以「可以事先知道」的提醒改由手機自己�
 - App 內提醒：`lib/models/local-reminders.ts` 決定未來 14 天要排哪些（與推播同一套設定與文字），`app/shell/reminders` 提供給 App 內的網頁，`components/shell-bridge.tsx` 依這台手機的選擇（`components/shell-reminders.tsx`）交給原生端，`ios/Shell/Reminders.swift` 排程並加上到期提醒（讀 App 內的 `embedded.mobileprovision`）。
 - 從推播跳進 App：`public/sw.js` 在點推播開啟的網址加上 `via=push`，`components/push-handoff.tsx` 依這台裝置的選擇改開 `longview://open?path=…`，`ios/Shell/Reminders.swift` 的 `Router` 只接受站內路徑。
 - 主畫面小工具（`ios/Widget/`，App 的延伸 target `LongViewWidget`，識別碼 `$(BUNDLE_ID).widget`，不要求任何 capability）：每夜排程（`scripts/lib/nightly/job.ts`）用 `lib/models/widget.ts` 從儀表板同一份每日序列算出數字，存進 `widget_snapshot`；`/shell/widget`（`app/shell/widget/route.ts`，不經登入檢查，見 `proxy.ts`）帶著小工具的 `Authorization: Bearer` 鑰匙呼叫資料庫的 `widget_figures`，鑰匙只存 SHA-256（`widget_key`，由 更多 → 推播 產生）。小工具把鑰匙存在自己的設定（App Intent），上一次的數字存在自己的 UserDefaults。`FiguresView.swift` 也編進 App，讓 `ios/tests/look.sh` 的 `14-widget` 截得到它。
+- 外觀：`lib/theme.ts` 決定淺色／深色／自動（存在這台裝置的 localStorage，預設淺色），`<head>` 最前面的 `THEME_SCRIPT` 在畫面出來前掛上 `<html data-theme>`；`app/globals.css` 的深色只看 `data-theme`，不再看手機設定。開關在 `components/theme-switch.tsx`（帳號頁）。頁面在狀態訊息裡告訴外殼選擇（`lib/shell.ts` `theme`），外殼設定 `overrideUserInterfaceStyle`（自動＝`.unspecified`）並存進 UserDefaults，下次啟動一開始就是對的（`ios/Shell/ShellState.swift` `Appearance`）。
+- 啟動畫面 B：網頁版 `components/splash.tsx`／`.splash`，外殼 `ios/Shell/Screens.swift` `CoverView`；iPhone 第一張不會動的圖分別由 `npm run splash-images`（網頁版）與 `npm run ios-images` 的 `LaunchMark`（外殼）畫出，都是 B 的第一格：只有淡淡的線軌，線由頁面或封面畫出來。

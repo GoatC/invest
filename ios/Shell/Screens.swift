@@ -1,22 +1,55 @@
 import UIKit
 
-/// The ground of the launch screen and of the web app's opening screen (lib/splash.ts SPLASH_GROUND).
-let launchGround = UIColor(named: "LaunchGround") ?? .systemBlue
+/// The ground of the launch screen and of the web app's opening screen (lib/splash.ts SPLASH_GROUND):
+/// opening screen B's ink black (Hugo, 2026-11-19), in light and dark alike.
+let launchGround = UIColor(named: "LaunchGround") ?? UIColor(red: 0x07 / 255, green: 0x0B / 255, blue: 0x09 / 255, alpha: 1)
 
-/// The launch screen again, kept over the web view until the page has drawn its own opening screen
-/// (components/splash.tsx), which looks the same: the three read as one screen.
+/// Opening screen B (Hugo, 2026-11-19; components/splash.tsx draws the same for the web app), kept over
+/// the web view until the page has opened: the launch screen's mark on its ink ground, then a
+/// forget-me-not glow from the top right fades in and the mark's rising line is drawn along its track,
+/// once each. With Reduce Motion both are simply there. Nothing under it can be touched or scrolled.
 final class CoverView: UIView {
     private var lifted = false
+    private let mark = UIImageView(image: UIImage(named: "LaunchMark"))
+    private let glow = CAGradientLayer()
+    private let line = CAShapeLayer()
+    private let name = UILabel()
+    private var played = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = launchGround
-        let mark = UIImageView(image: UIImage(named: "LaunchMark"))
+        glow.type = .radial
+        glow.colors = [
+            UIColor(red: 0x6F / 255, green: 0xA3 / 255, blue: 0xDB / 255, alpha: 0.66).cgColor,
+            UIColor(red: 0x34 / 255, green: 0x68 / 255, blue: 0x9C / 255, alpha: 0.30).cgColor,
+            UIColor(red: 0x07 / 255, green: 0x0B / 255, blue: 0x09 / 255, alpha: 0).cgColor,
+        ]
+        glow.locations = [0, 0.38, 1]
+        // The centre at the top-right corner, reaching most of the way across the screen.
+        glow.startPoint = CGPoint(x: 1, y: 0)
+        glow.endPoint = CGPoint(x: 0.05, y: 0.62)
+        layer.addSublayer(glow)
         mark.translatesAutoresizingMaskIntoConstraints = false
         addSubview(mark)
+        line.fillColor = nil
+        line.strokeColor = UIColor.white.cgColor
+        line.lineCap = .round
+        line.lineJoin = .round
+        layer.addSublayer(line)
+        // 20-point bold with 0.14em between the characters, as on the web app's opening screen.
+        name.attributedText = NSAttributedString(string: "長期投資", attributes: [.kern: 2.8, .font: UIFont.systemFont(ofSize: 20, weight: .bold), .foregroundColor: UIColor.white])
+        name.translatesAutoresizingMaskIntoConstraints = false
+        name.isAccessibilityElement = false
+        addSubview(name)
+        accessibilityLabel = "長期投資 載入中 Long-View Invest, loading"
+        isAccessibilityElement = true
         NSLayoutConstraint.activate([
             mark.centerXAnchor.constraint(equalTo: centerXAnchor),
             mark.centerYAnchor.constraint(equalTo: centerYAnchor),
+            name.centerXAnchor.constraint(equalTo: centerXAnchor),
+            // The image is a 168-point square around the 120-point mark: the name sits 20 points below the mark.
+            name.topAnchor.constraint(equalTo: mark.bottomAnchor, constant: -4),
         ])
     }
 
@@ -25,10 +58,60 @@ final class CoverView: UIView {
         fatalError("not used")
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        glow.frame = bounds
+        // The mark's 64-unit box is 120 points, centred in the 168-point image.
+        let unit = 120.0 / 64
+        let origin = CGPoint(x: mark.frame.midX - 60, y: mark.frame.midY - 60)
+        let path = UIBezierPath()
+        let points: [(CGFloat, CGFloat)] = [(12, 44), (26, 32), (36, 38), (52, 20)]
+        for (index, point) in points.enumerated() {
+            let at = CGPoint(x: origin.x + point.0 * unit, y: origin.y + point.1 * unit)
+            if index == 0 { path.move(to: at) } else { path.addLine(to: at) }
+        }
+        line.path = path.cgPath
+        line.lineWidth = 5 * unit
+        CATransaction.commit()
+        play()
+    }
+
+    /// The glow and the line, once, when the cover is first laid out.
+    private func play() {
+        guard !played, bounds.width > 0 else { return }
+        played = true
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let ease = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+        let draw = CABasicAnimation(keyPath: "strokeEnd")
+        draw.fromValue = 0
+        draw.toValue = 1
+        draw.duration = 0.7
+        draw.beginTime = CACurrentMediaTime() + 0.1
+        draw.fillMode = .backwards
+        draw.timingFunction = ease
+        line.add(draw, forKey: "draw")
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.7
+        fade.timingFunction = ease
+        glow.add(fade, forKey: "fade")
+        name.alpha = 0
+        UIView.animate(withDuration: 0.5, delay: 0.3, options: [.curveEaseOut]) { self.name.alpha = 1 }
+    }
+
+    /// Told once the cover has gone, so the status bar can follow the page again.
+    var onGone: (() -> Void)?
+
     func lift() {
         guard !lifted else { return }
         lifted = true
-        UIView.animate(withDuration: 0.25, animations: { self.alpha = 0 }, completion: { _ in self.removeFromSuperview() })
+        UIView.animate(withDuration: 0.25, animations: { self.alpha = 0 }, completion: { _ in
+            self.removeFromSuperview()
+            self.onGone?()
+        })
     }
 }
 

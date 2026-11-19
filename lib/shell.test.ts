@@ -40,6 +40,12 @@ describe('the iOS shell: what the page tells it and does for it', () => {
     assert.deepEqual(shellState('/attribution', false, true), { v: 1, signedIn: true, path: '/attribution', tab: '/performance', tabs: SHELL_TABS });
   });
 
+  it('tells the shell the appearance chosen, and nothing of it when not given', () => {
+    assert.equal(shellState('/', false, true, undefined, undefined, true, 'auto').theme, 'auto');
+    assert.equal(shellState('/', false, true, undefined, undefined, true, 'dark').theme, 'dark');
+    assert.equal('theme' in shellState('/', false, true), false);
+  });
+
   it('opens a tab from another page, from its own sub-page and from under the list', () => {
     assert.deepEqual(shellMove('/holdings', '/', false), { do: 'open', href: '/holdings' });
     assert.deepEqual(shellMove('/', '/volatility', false), { do: 'open', href: '/' });
