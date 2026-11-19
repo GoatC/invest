@@ -171,6 +171,66 @@ await step('the nightly job status slides in when the app loads, stays about thr
   await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
 });
 
+await step('the poster’s motion: the opening sequence once per new data, the milestone ring once per NT$100,000 step, both cut by Reduce Motion', async () => {
+  const rest = (path, init = {}) => fetch(`http://127.0.0.1:${GATEWAY_PORT}/rest/v1/${path}`, { ...init, headers: { apikey: SECRET_KEY, 'content-type': 'application/json', ...(init.headers ?? {}) } });
+  const kept = async () => (await (await rest('app_state?key=eq.milestone&select=value')).json())[0]?.value?.step ?? null;
+  const until = async (want) => {
+    for (let tries = 0; tries < 40 && (await kept()) !== want; tries++) await page.waitForTimeout(250);
+    return kept();
+  };
+  // Once React has hydrated the poster (its fibers on the node), the motion's layout effect has run.
+  const open = async () => {
+    await page.goto(`${BASE}/`);
+    await page.waitForFunction(() => {
+      const hero = document.querySelector('.hero');
+      return hero !== null && Object.keys(hero).some((key) => key.startsWith('__reactFiber'));
+    });
+    await page.waitForTimeout(150);
+  };
+  const marks = () => page.locator('.hero').evaluate((hero) => ({ intro: hero.hasAttribute('data-intro'), milestone: hero.hasAttribute('data-milestone'), ring: hero.querySelector('.hero-ring') !== null }));
+  const glow = (await (await rest('config?key=eq.glow&select=value')).json())[0].value;
+  try {
+    // The first open after signing in kept the step the poster's value stands at, celebrating nothing.
+    await open();
+    const total = Number((await page.locator('.hero-value').innerText()).replace(/[^0-9.]/g, ''));
+    const step = Math.floor(total / 100000) * 100000;
+    check((await until(step)) === step, `milestone kept: ${await kept()}, the value ${total}`);
+    // New data on this device: the sequence plays once, and not on the next open.
+    await page.evaluate(() => localStorage.removeItem('longview.intro.date'));
+    await open();
+    let seen = await marks();
+    check(seen.intro && !seen.milestone && !seen.ring, `first open after new data: ${JSON.stringify(seen)}`);
+    await open();
+    check(!(await marks()).intro, 'the sequence played again on the next open');
+    // A step not celebrated yet (config's step halved, so the demo value has passed one more): the ring plays once and
+    // the step is kept, so neither this phone nor another plays it again.
+    const half = glow.milestone_step_twd / 2;
+    await rest('config?key=eq.glow', { method: 'PATCH', body: JSON.stringify({ value: { ...glow, milestone_step_twd: half } }) });
+    const next = Math.floor(total / half) * half;
+    check(next > step, `the halved step leaves nothing to cross: ${next}`);
+    await open();
+    seen = await marks();
+    check(seen.milestone && seen.ring, `new step: ${JSON.stringify(seen)}`);
+    check((await until(next)) === next, `milestone kept after the ring: ${await kept()}`);
+    await page.evaluate(() => localStorage.removeItem('longview.milestone.played'));
+    await open();
+    seen = await marks();
+    check(!seen.milestone && !seen.ring, `the ring played twice: ${JSON.stringify(seen)}`);
+    // Reduce Motion: the sequence still marks the poster but runs in a blink.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.evaluate(() => localStorage.removeItem('longview.intro.date'));
+    await open();
+    const blink = await page.locator('.hero-value').evaluate((value) => getComputedStyle(value).animationDuration);
+    check(blink === '0.001s', `Reduce Motion: ${blink}`);
+  } finally {
+    await rest('config?key=eq.glow', { method: 'PATCH', body: JSON.stringify({ value: glow }) });
+    await page.emulateMedia({ reducedMotion: null });
+    // Back where the next step expects the browser.
+    await page.goto(`${BASE}/holdings`);
+    await page.getByRole('heading', { name: /Listed holdings/ }).waitFor();
+  }
+});
+
 await step('holdings: demo pool total, R1 breaches with trims, satellite share, gold not valued yet', async () => {
   const text = await body();
   // Seed: seven ETFs and stocks at the demo closes and USD/TWD 32.40, plus NT$20,000 savings.
@@ -2441,6 +2501,13 @@ await step('phone width: no page scrolls sideways (wide tables scroll inside the
       wide.push(`${path} by ${overflow}px (${culprits.join(', ')})`);
     }
     if (path === '/performance') await page.locator('.chart svg').nth(1).waitFor();
+    // The tab headline washes (Ink design): Holdings' summary toned by its last session, Performance's headline by the
+    // difference against the benchmark, each at its strength from config glow; Allocation has none.
+    if (path === '/holdings' || path === '/performance') {
+      const wash = await page.locator('.has-glow > .glow.page').evaluateAll((nodes) => nodes.map((node) => `${node.dataset.tone}:${getComputedStyle(node).opacity}`));
+      check(wash.length === 1 && /^(up|down|flat):0\.(45|5)$/.test(wash[0] ?? ''), `${path} wash: ${wash.join(', ') || 'none'}`);
+    }
+    if (path === '/allocation') check((await page.locator('.glow.page').count()) === 0, 'allocation has a wash');
     if (path === '/allocation') await page.locator('.chart-donut svg').waitFor();
     if (path === '/plan') await page.locator('#actual-vs-plan .chart svg').waitFor();
     if (path === '/') await page.locator('.chart-donut svg').waitFor();

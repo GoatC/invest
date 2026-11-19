@@ -1509,6 +1509,35 @@ tr.selected td {
   background: radial-gradient(78% 92% at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
 }
 
+/* A tab headline's wash (Ink design; components/page-glow.tsx): the poster's glow, smaller, from the
+   card's top-right corner, under the card's content and over its ground. Holdings' summary and
+   Performance's headline carry one; Allocation's headline has no direction, so none. */
+.has-glow {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glow.page {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--glow-k, 0);
+}
+
+.glow.page[data-tone='up'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-up-core) 0%, var(--glow-up-edge) 46%, transparent 100%);
+}
+
+.glow.page[data-tone='down'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-down-core) 0%, var(--glow-down-edge) 46%, transparent 100%);
+}
+
+.glow.page[data-tone='flat'] {
+  background: radial-gradient(300px 280px at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
+}
+
 /* A grain too faint to see, so the glow never bands into rings on an 8-bit screen. */
 .hero-grain {
   position: absolute;
@@ -1709,15 +1738,154 @@ tr.selected td {
   margin: -5px 0 0 -5px;
   border-radius: 50%;
   background: var(--flat);
+  color: var(--flat);
   box-shadow: 0 0 0 2.5px var(--hero-bg);
 }
 
 .hero[data-tone='up'] .hero-dot {
   background: var(--up);
+  color: var(--up);
 }
 
 .hero[data-tone='down'] .hero-dot {
   background: var(--down);
+  color: var(--down);
+}
+
+/* The poster's motion (Ink design, docs/design-handoff/04-motion.md; components/poster-motion.tsx).
+   Each plays once and stops. The opening sequence runs under [data-intro], set only on the first open
+   after new data; the milestone ring under [data-milestone], once per NT$100,000 step. Both wait,
+   paused, while the opening screen is up, and Reduce Motion cuts them to nothing. */
+@keyframes lvGlow {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: var(--glow-k, 1);
+  }
+}
+
+@keyframes lvRise {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The line drawing in from the left: a clip that opens, the same look as a dash offset, but true to a
+   stroke that keeps its weight as the line stretches (vector-effect: non-scaling-stroke). */
+@keyframes lvDraw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes lvDot {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* One ripple from today's dot: a ring from r 5 to r 22 that fades. */
+@keyframes lvRipple {
+  0% {
+    opacity: 0.55;
+    inset: 0;
+  }
+  100% {
+    opacity: 0;
+    inset: -17px;
+  }
+}
+
+@keyframes lvRing {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+.hero[data-intro] .hero-glow {
+  animation: lvGlow 700ms cubic-bezier(0.2, 0.7, 0.2, 1) 80ms both;
+}
+
+.hero[data-intro] .hero-value {
+  animation: lvRise 560ms cubic-bezier(0.2, 0.7, 0.2, 1) 140ms both;
+}
+
+.hero[data-intro] .hero-decimals {
+  display: inline-block;
+  animation: lvRise 560ms cubic-bezier(0.2, 0.7, 0.2, 1) 200ms both;
+}
+
+.hero[data-intro] .hero-chart > svg {
+  animation: lvDraw 900ms cubic-bezier(0.3, 0.6, 0.2, 1) 260ms both;
+}
+
+.hero[data-intro] .hero-dot {
+  animation: lvDot 240ms cubic-bezier(0.2, 0.7, 0.2, 1) 1100ms both;
+}
+
+.hero-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* forwards, not both (04-motion.md): nothing shows before it starts. */
+.hero[data-intro] .hero-dot::after {
+  animation: lvRipple 1200ms cubic-bezier(0.2, 0.7, 0.2, 1) 1150ms forwards;
+}
+
+/* The milestone ring around the value: forget-me-not, 2px, out from the value and gone. */
+.hero-value:has(.hero-ring) {
+  position: relative;
+}
+
+.hero-ring {
+  position: absolute;
+  inset: -0.3em -0.4em;
+  border: 2px solid var(--flat);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hero[data-milestone] .hero-ring {
+  animation: lvRing 1400ms cubic-bezier(0.2, 0.7, 0.2, 1) 900ms forwards;
+}
+
+html:has(#splash:not(.leaving)) .hero *,
+html:has(#splash:not(.leaving)) .hero *::after {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero *,
+  .hero *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
 }
 
 /* Inside the shell Swift Charts draws the line, so the page's dot steps aside with it. */

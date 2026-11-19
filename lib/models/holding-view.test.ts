@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { cellSignal, closesSince, costStrip, holdingSignals, lastMove, nextBuyClasses, treemap } from './holding-view';
+import { cellSignal, closesSince, costStrip, holdingSignals, lastMove, nextBuyClasses, sessionMove, treemap } from './holding-view';
 
 const closes = [
   { date: '2026-11-05', close: 100 },
@@ -93,5 +93,24 @@ describe('holdings overview (PRD Section 5, phone redesign step 3)', () => {
     near(tiles[0]!.width, 150, 1e-6);
     near(tiles[0]!.height, 200, 1e-6);
     assert.deepEqual(treemap([], 300, 200), []);
+  });
+});
+
+describe('sessionMove', () => {
+  it('adds each line’s move in TWD and sets it against their value a session ago', () => {
+    // 110 now after +10% was 100; 95 now after −5% was 100: +10 − 5 = +5 on 200.
+    const move = sessionMove([
+      { valueTwd: 110, move: { date: '2026-11-18', previous: '2026-11-17', change: 0.1 } },
+      { valueTwd: 95, move: { date: '2026-11-17', previous: '2026-11-16', change: -0.05 } },
+      { valueTwd: 50, move: null },
+      { valueTwd: null, move: { date: '2026-11-18', previous: '2026-11-17', change: 0.2 } },
+    ]);
+    assert.ok(move && Math.abs(move.dayTwd - 5) < 1e-9 && Math.abs((move.change ?? 0) - 0.025) < 1e-12);
+    assert.equal(move?.date, '2026-11-18');
+  });
+
+  it('is null with nothing that moved', () => {
+    assert.equal(sessionMove([{ valueTwd: 50, move: null }]), null);
+    assert.equal(sessionMove([]), null);
   });
 });

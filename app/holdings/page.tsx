@@ -5,16 +5,19 @@ import { Bi, Zh } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
+import { PageGlow } from '@/components/page-glow';
 import { PhoneTabs } from '@/components/phone-tabs';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
-import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadDividendView, loadFxHistory, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type DividendView, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
-import { taipeiToday } from '@/lib/dates';
+import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadDividendView, loadFxHistory, loadGlowSettings, loadHoldingCloses, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type DividendView, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
+import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, signedTwd, twd } from '@/lib/format';
 import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
 import { LEDGER_FILTERS } from '@/lib/models/cash-flows';
+import { pageGlowOf } from '@/lib/models/glow';
+import { lastMove, sessionMove } from '@/lib/models/holding-view';
 import { buildPortfolio, poolFigures, type Portfolio } from '@/lib/models/portfolio';
 import { positionKey } from '@/lib/models/positions';
 import { capBreaches, satelliteValue, type CapBreach } from '@/lib/models/rules';
@@ -29,7 +32,7 @@ import { breachAlert } from '@/lib/rule-text';
 import { SecuritiesMaster } from '../securities/master';
 import { ValuationOverview } from '../valuation/overview';
 import { CashBook } from './cash-book';
-import { HoldingsOverview, VIEWS } from './overview';
+import { HoldingsOverview, RANGE_DAYS, VIEWS } from './overview';
 import { tickerLinks } from './ticker-links';
 import { TradeForm } from './trade-form';
 import { tradeInitial } from './trade-initial';
@@ -104,6 +107,16 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   const saved = savedMessage(params);
   const empty = data.trades.length === 0 && data.manualAssets.length === 0;
   const priced = new Set(data.prices.map((price) => price.ticker));
+  // Each listed holding's closes: the overview's cards and sparklines, and the last session that tones the summary's
+  // wash (Ink design). A failed read of either only leaves them out.
+  const tickers = portfolio.holdings.flatMap((holding) => (holding.ticker === null ? [] : [holding.ticker]));
+  const [closes, glowSettings] = await Promise.all([
+    orDataError(tickers.length > 0 ? loadHoldingCloses(supabase, tickers, addDays(today, -RANGE_DAYS)) : Promise.resolve(new Map<string, Array<{ date: string; close: number }>>())),
+    orDataError(loadGlowSettings(supabase)),
+  ]);
+  const session =
+    closes instanceof DataError ? null : sessionMove(portfolio.holdings.flatMap((holding) => (holding.ticker === null ? [] : [{ valueTwd: holding.valueTwd, move: lastMove(closes.get(holding.ticker) ?? []) }])));
+  const summaryGlow = pageGlowOf(session?.change === null || session?.change === undefined ? null : session.change * 100, 'holdings', glowSettings instanceof DataError ? undefined : glowSettings);
   const savedTicker = param(params, 'saved') === 'added' || param(params, 'saved') === 'updated' ? data.securities.find((security) => security.ticker === param(params, 't')) : undefined;
   // A trade in a satellite class was just scored into its class's assumption (F6 auto): show the figure.
   const savedClass = savedTicker?.sleeve === 'satellite' ? data.assetClasses.find((assetClass) => assetClass.id === savedTicker.assetClassId) : undefined;
@@ -195,10 +208,11 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
             tab: 'overview',
             content: !empty && (
               <>
-                <section className="card form" aria-label="Summary 總覽">
+                <section className={`card form${summaryGlow ? ' has-glow' : ''}`} aria-label="Summary 總覽">
+                  <PageGlow glow={summaryGlow} />
                   <Summary data={data} portfolio={portfolio} />
                 </section>
-                <HoldingsOverview supabase={supabase} data={data} portfolio={portfolio} today={today} view={view} proposals={proposals instanceof DataError ? [] : proposals[0]} rules={proposals instanceof DataError ? [] : proposals[1]} />
+                <HoldingsOverview supabase={supabase} data={data} portfolio={portfolio} closes={closes} today={today} view={view} proposals={proposals instanceof DataError ? [] : proposals[0]} rules={proposals instanceof DataError ? [] : proposals[1]} />
                 <RulesStatus data={data} portfolio={portfolio} />
                 <ListedHoldings data={data} portfolio={portfolio} priced={priced} />
               </>

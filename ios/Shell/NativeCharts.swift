@@ -37,6 +37,8 @@ struct NativeChartSpec {
     let readouts: [String]
     let area: Bool
     let lineWidth: CGFloat
+    /// Draws itself left to right as it appears: the poster's opening sequence (docs/design-handoff/04-motion.md).
+    let reveal: Bool
 
     init?(_ body: Any?) {
         guard let fields = body as? [String: Any], (fields["v"] as? Int) == 1,
@@ -77,6 +79,7 @@ struct NativeChartSpec {
         readouts = fields["readouts"] as? [String] ?? []
         area = fields["area"] as? Bool ?? false
         lineWidth = CGFloat(fields["lineWidth"] as? Double ?? 2)
+        reveal = fields["reveal"] as? Bool ?? false
     }
 
     /// Half the gap between neighbouring xs: a bar's half width.
@@ -115,6 +118,23 @@ struct NativeChartSpec {
     }
 }
 
+/// A chart drawing itself in, left to right: a mask that widens from the leading edge. Only on a chart that asks, so
+/// no other chart is clipped; the mask reaches past the edges, so today's dot at the end is never cut.
+private struct Reveal: ViewModifier {
+    let drawn: CGFloat
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content.mask(alignment: .leading) {
+                Rectangle().padding(-24).scaleEffect(x: drawn, y: 1, anchor: .leading)
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// One point to draw, with what Swift Charts needs to tell the series and the bars apart.
 private struct Plot: Identifiable {
     let id: String
@@ -132,6 +152,14 @@ private struct Plot: Identifiable {
 struct NativeChartView: View {
     let spec: NativeChartSpec
     @State private var selected: Int?
+    /// How much of the chart shows, left to right: 0 → 1 as a revealed chart appears, else 1 throughout. A chart set
+    /// again in place (a theme change) keeps its state, so it does not draw in twice.
+    @State private var drawn: CGFloat
+
+    init(spec: NativeChartSpec) {
+        self.spec = spec
+        _drawn = State(initialValue: spec.reveal && !UIAccessibility.isReduceMotionEnabled ? 0 : 1)
+    }
 
     private var plots: [Plot] {
         let ranges = spec.barRanges()
@@ -150,6 +178,16 @@ struct NativeChartView: View {
     private var base: Double { spec.yMin ?? min(0, spec.series.flatMap { $0.values.compactMap { $0 } }.min() ?? 0) }
 
     var body: some View {
+        drawing
+            .modifier(Reveal(drawn: drawn, on: spec.reveal))
+            .onAppear {
+                guard drawn < 1 else { return }
+                // 04-motion.md row 3: 900 ms after 260 ms, cubic-bezier(.3, .6, .2, 1).
+                withAnimation(.timingCurve(0.3, 0.6, 0.2, 1, duration: 0.9).delay(0.26)) { drawn = 1 }
+            }
+    }
+
+    @ViewBuilder private var drawing: some View {
         let plots = self.plots
         let half = spec.halfBar
         let chart = Chart {

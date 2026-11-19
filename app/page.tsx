@@ -6,6 +6,7 @@ import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { NativePosterLine } from '@/components/native-poster-line';
+import { PosterMotion, type PosterMilestone } from '@/components/poster-motion';
 import { Facts } from '@/components/facts';
 import { AgainstPlanChart } from '@/components/plan-charts';
 import { ProposalHashForward } from '@/components/proposal-hash-forward';
@@ -18,6 +19,7 @@ import {
   loadAllocationData,
   loadLastAttribution,
   loadMarketEvents,
+  loadMilestoneStep,
   loadLastRun,
   loadPlanData,
   loadProposals,
@@ -46,7 +48,7 @@ import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
-import { glowOf, readGlowSettings, type Glow } from '@/lib/models/glow';
+import { glowOf, milestoneOf, readGlowSettings, type Glow } from '@/lib/models/glow';
 import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/value-line';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
@@ -74,7 +76,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
     throw err;
   }
-  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents] = await Promise.all([
+  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents, lastStep] = await Promise.all([
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadPlanData(supabase, today)),
@@ -91,6 +93,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     orDataError(loadLastRun(supabase, 'monte_carlo')),
     orDataError(loadLastAttribution(supabase)),
     orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
+    orDataError(loadMilestoneStep(supabase)),
   ]);
   const portfolio = buildPortfolio(data);
   const rules = proposals instanceof DataError ? [] : proposals[1];
@@ -102,10 +105,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   // The poster's glow (Ink design, docs/design-handoff): its colour and strength from the 7-day move, its thresholds from config glow.
   const glowSettings = settings instanceof DataError ? undefined : readGlowSettings(settings.find((row) => row.key === 'glow')?.value);
   const glow = glowSettings ? glowOf(line?.week?.change === null || line?.week?.change === undefined ? null : line.week.change * 100, glowSettings) : null;
+  // The milestone ring (04-motion.md): the total passing a new multiple of config glow's step, kept on the server.
+  const totalTwd = portfolio.pool.totalTwd + windfallTwd;
+  const reached = glowSettings && !(lastStep instanceof DataError) ? milestoneOf(totalTwd, lastStep, glowSettings) : null;
+  const milestone: PosterMilestone | null = reached && !(lastStep instanceof DataError) ? { ...reached, record: lastStep === null || reached.celebrate } : null;
 
   return (
     <>
-      <Hero today={today} totalTwd={portfolio.pool.totalTwd + windfallTwd} line={line} glow={glow} />
+      <Hero today={today} totalTwd={totalTwd} line={line} glow={glow} milestone={milestone} />
       <Suspense fallback={null}>
         <Banners slot="page" />
       </Suspense>
@@ -159,7 +166,7 @@ function longDate(date: string): string {
 const LINE = { width: 390, height: 132, pad: 16 };
 
 /** The total as the poster shows it: a small currency sign, the whole dollars, the cents faded. */
-function PosterValue({ twdValue }: { twdValue: number }) {
+function PosterValue({ twdValue, ring }: { twdValue: number; ring: boolean }) {
   const cents = Math.round(Math.abs(twdValue) * 100);
   const whole = Math.floor(cents / 100).toLocaleString('en-US');
   const decimals = String(cents % 100).padStart(2, '0');
@@ -168,6 +175,8 @@ function PosterValue({ twdValue }: { twdValue: number }) {
       <span className="hero-currency">{twdValue < 0 ? '−NT$' : 'NT$'}</span>
       {whole}
       <span className="hero-decimals">.{decimals}</span>
+      {/* A new NT$100,000 step: the ring that plays once around the value (components/poster-motion.tsx). */}
+      {ring && <span className="hero-ring" aria-hidden="true" />}
     </strong>
   );
 }
@@ -199,9 +208,12 @@ function Hero({
   totalTwd,
   line,
   glow,
+  milestone,
 }: {
   today: string;
   totalTwd: number;
+  /** Null before config glow or app_state exist. */
+  milestone: PosterMilestone | null;
   /** Null until two closes hold a value, or when the history could not be read. */
   line: ValueLine | null;
   /** Null before config glow exists. */
@@ -251,7 +263,8 @@ function Hero({
         <h1>
           <Zh en="Portfolio value" zh="總市值" />
         </h1>
-        <PosterValue twdValue={totalTwd} />
+        <PosterValue twdValue={totalTwd} ring={milestone?.celebrate === true} />
+        <PosterMotion dataDate={line?.points[line.points.length - 1]?.date ?? today} milestone={milestone} />
         {line?.week && <WeekCapsule gain={line.week} tone={tone} />}
       </div>
       {drawn && line && (
