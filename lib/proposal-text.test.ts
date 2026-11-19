@@ -175,7 +175,7 @@ describe('proposalAlert', () => {
     assert.equal(tile.tone, 'watch');
     assert.deepEqual(tile.title, { en: 'Volatility alert', zh: '波動警報' });
     assert.deepEqual(tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`), ['觸發 緊張 · 2026-11-07', '起 2026-11-08']);
-    assert.equal(tile.href, '/#proposal-12');
+    assert.equal(tile.href, '/proposals#proposal-12');
   });
 
   it('keeps a short rule code', () => {

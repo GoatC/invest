@@ -377,7 +377,7 @@ function RulesStatus({ data, portfolio }: { data: HoldingsData; portfolio: Portf
       {breaches.length > 0 ? (
         <div className="form">
           <AlertTiles items={breaches.map((breach) => breachAlert(breach, data.caps))} tone="alert" />
-          <Link href="/#proposals">
+          <Link href="/proposals">
             <Bi en="The rules engine raises the trim as a warning" zh="規則引擎會把減碼列為警示" />
           </Link>
         </div>

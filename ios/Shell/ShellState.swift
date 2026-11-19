@@ -42,6 +42,8 @@ struct ShellAction: Equatable {
     let sheet: String?
     /// The page's ⓘ text, shown in a sheet of the shell's own (proposals G02 and G05).
     let info: String?
+    /// At the bar's left edge instead of its right (the dashboard's 帳號, Ink design 2026-11-18).
+    let leading: Bool
 }
 
 /// The top of the page, which the navigation bar draws (lib/shell.ts `ShellTop`; proposal G02).
@@ -62,7 +64,7 @@ struct ShellTop: Equatable {
         back = fields["back"] as? Bool ?? false
         actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap { action in
             guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
-            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String, info: action["info"] as? String)
+            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String, info: action["info"] as? String, leading: (action["placement"] as? String) == "leading")
         }
         let row = fields["segments"] as? [String: Any]
         segments = row?["labels"] as? [String] ?? []

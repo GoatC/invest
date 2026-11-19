@@ -98,7 +98,7 @@ export function proposalAlert(proposal: { id: number; ruleId: string; state: str
       ...(fired ? [{ label: { en: 'On', zh: '觸發' }, value: fired }] : []),
       { label: { en: 'Since', zh: '起' }, value: taipeiDay(proposal.createdAt) },
     ],
-    href: `/#proposal-${proposal.id}`,
+    href: `/proposals#proposal-${proposal.id}`,
   };
 }
 

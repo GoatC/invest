@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { nativeShape, posterLine, readouts } from './native-chart';
+import { faded, nativeShape, posterLine, readouts } from './native-chart';
 
 const PALETTE = ['#4a86c5', '#d9693a', '#1f9a74'];
 
@@ -118,5 +118,12 @@ describe('posterLine', () => {
     assert.deepEqual(spec.series[0]?.values, [0, 0.02, -0.01]);
     assert.deepEqual(spec.rules, [{ axis: 'y', value: 0, color: 'rgba(255, 255, 255, 0.45)', dashed: true }]);
     assert.ok(Math.abs((spec.y.min ?? 0) - -0.0136) < 1e-12 && Math.abs((spec.y.max ?? 0) - 0.0236) < 1e-12);
+  });
+
+  it('takes the poster’s text colour for the line and, faded, for the zero rule (the Ink poster is light)', () => {
+    const spec = posterLine([0, 0.02], 'rgb(20, 26, 23)');
+    assert.equal(spec.series[0]?.color, 'rgb(20, 26, 23)');
+    assert.deepEqual(spec.rules, [{ axis: 'y', value: 0, color: 'rgba(20, 26, 23, 0.45)', dashed: true }]);
+    assert.equal(faded('#ecf0ee', 0.45), 'rgba(236, 240, 238, 0.45)');
   });
 });

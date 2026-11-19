@@ -163,7 +163,7 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
               const ruleRecord = rulesById.get(proposal.ruleId) ?? { id: proposal.ruleId, condition: '' };
               return (
                 <li key={proposal.id}>
-                  <Link href={`/#proposal-${proposal.id}`}>
+                  <Link href={`/proposals#proposal-${proposal.id}`}>
                     <Bi {...proposalTitle(ruleRecord)} />
                   </Link>{' '}
                   <span className="muted small">
@@ -278,7 +278,7 @@ function Schedule({ plan, proposals }: { plan: NonNullable<WindfallData['plan']>
                   {proposal && (
                     <>
                       {' '}
-                      <Link href={`/#proposal-${proposal.id}`} className="small">
+                      <Link href={`/proposals#proposal-${proposal.id}`} className="small">
                         #{proposal.id}
                       </Link>
                     </>

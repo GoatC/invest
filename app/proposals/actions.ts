@@ -10,8 +10,8 @@ import { formFields, parseId } from '@/lib/forms';
 export async function checkRules(): Promise<void> {
   const { supabase } = await requireSession();
   const result = await orDataError(runRules(supabase, taipeiToday(), new Date().toISOString()));
-  if (result instanceof DataError) redirect(`/?failed=${encodeURIComponent(result.message)}#proposals`);
-  redirect(`/?saved=checked&created=${result.created}&closed=${result.closed}#proposals`);
+  if (result instanceof DataError) redirect(`/proposals?failed=${encodeURIComponent(result.message)}`);
+  redirect(`/proposals?saved=checked&created=${result.created}&closed=${result.closed}`);
 }
 
 /**
@@ -22,13 +22,13 @@ export async function checkRules(): Promise<void> {
 export async function dismissProposal(formData: FormData): Promise<void> {
   const { supabase } = await requireSession();
   const id = parseId(formFields(formData)['id']);
-  if (id === undefined) redirect('/?saved=stale#proposals');
+  if (id === undefined) redirect('/proposals?saved=stale');
   const { data, error } = await supabase.from('proposals').update({ status: 'dismissed', decided_at: new Date().toISOString() }).eq('id', id).eq('status', 'open').select('id');
-  if (error) redirect(`/?failed=${encodeURIComponent(error.message)}#proposals`);
-  if (!data || data.length === 0) redirect('/?saved=stale#proposals');
+  if (error) redirect(`/proposals?failed=${encodeURIComponent(error.message)}`);
+  if (!data || data.length === 0) redirect('/proposals?saved=stale');
   const failed = await settleTranches(supabase, id);
-  if (failed) redirect(`/?failed=${encodeURIComponent(failed)}#proposals`);
-  redirect('/?saved=dismissed#proposals');
+  if (failed) redirect(`/proposals?failed=${encodeURIComponent(failed)}`);
+  redirect('/proposals?saved=dismissed');
 }
 
 /**

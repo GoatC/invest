@@ -67,7 +67,8 @@ function lentActions(): ShellAction[] {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const sheet = control.dataset.shellSheet;
-    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}) });
+    const leading = control.dataset.shellPlacement === 'leading';
+    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}), ...(leading ? { placement: 'leading' as const } : {}) });
   }
   // The page's own ⓘ (in its title's card) goes to the bar as a glass ⓘ, which opens its text in a sheet (proposals G02, G05).
   const info = pageInfo();

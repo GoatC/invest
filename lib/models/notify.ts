@@ -175,7 +175,7 @@ export function proposalMessage(proposal: ProposalForPush, names: ReadonlyMap<st
     key: String(proposal.id),
     title: ruleTitle(proposal.ruleId, proposal.title.zh),
     body: both(suggestionLine(proposal.condition, proposal.state, proposal.detail, names)),
-    url: `/#proposal-${proposal.id}`,
+    url: `/proposals#proposal-${proposal.id}`,
   };
 }
 

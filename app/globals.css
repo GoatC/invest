@@ -1613,6 +1613,28 @@ tr.selected td {
   color: inherit;
 }
 
+/* The poster's own buttons (Ink design): 帳號, 搜尋, 推播 and the refresh; inside the shell they are lent to
+   its bar as glass buttons and hidden here. */
+.hero-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: 50%;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.icon-button:hover {
+  background: var(--accent-soft);
+}
+
 /* The 7-day move: one capsule in the colour of its direction, always with ▲, ▼ or 持平. */
 .hero-move {
   display: inline-flex;
@@ -2597,6 +2619,13 @@ html[data-opened] .splash {
 
 .rule-fold[open] > .alert-group {
   margin-top: 0.75rem;
+}
+
+.rule-fold-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  margin-top: 0.25rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4417,4 +4446,174 @@ html[data-shell] .sheet-group a.current {
 html[data-shell-segmented] .phone-tabs-top,
 html[data-shell] .page > :empty {
   display: none;
+}
+
+
+/* Text only a screen reader reads. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Rows that open a page: a hairline between them, a chevron at the end (帳號, 搜尋). */
+.link-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.link-rows > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.link-rows a,
+.link-row-off {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: var(--tap-min);
+  padding: 0.35rem 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.link-rows a::after {
+  content: '';
+  flex: none;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-top: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  transform: rotate(45deg);
+}
+
+.link-rows a > span:first-child {
+  margin-right: auto;
+}
+
+.link-row-off {
+  color: var(--muted);
+}
+
+/* 帳號 (app/account/page.tsx). */
+.account-head {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding-block: 1.25rem;
+  text-align: center;
+}
+
+.account-head h1 {
+  margin: 0.25rem 0 0;
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0 0.6rem;
+  border-radius: var(--radius-capsule);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.account-group h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.account-signout {
+  padding: 0;
+}
+
+.account-signout button {
+  width: 100%;
+  min-height: var(--tap-min);
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-weight: 600;
+}
+
+/* 搜尋 (app/search): the field like iOS's, results grouped, the matched characters bold. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap-min);
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--muted);
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+  outline: none;
+}
+
+.search-box {
+  display: grid;
+  gap: 1rem;
+}
+
+.search-group h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.search-group .link-rows a {
+  flex-wrap: wrap;
+}
+
+.search-name b {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.search-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.search-recent button {
+  min-height: var(--tap-min);
+  padding: 0 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font: inherit;
 }

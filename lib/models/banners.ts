@@ -126,7 +126,7 @@ export function guideBanners(input: BannerInput, settings: BannerSettings, today
       kind: 'proposals',
       tone: 'act',
       text: { en: `${open.length} rule warning${open.length === 1 ? '' : 's'}.`, zh: `${open.length} 則規則警示。` },
-      action: { label: { en: 'See', zh: '查看' }, href: open.length === 1 ? `/#proposal-${open[0]?.id}` : '/#proposals' },
+      action: { label: { en: 'See', zh: '查看' }, href: open.length === 1 ? `/proposals#proposal-${open[0]?.id}` : '/proposals' },
       hideOn: ['/', '/holdings', '/proposals'],
     });
   }
