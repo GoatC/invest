@@ -99,31 +99,10 @@
   }
 }
 
-/* 綠漲紅跌: the setting swaps the pairs here, never in components (the page sets data-move on <html>) */
-html[data-move='green-up'] {
-  --up: #1b7a4b;
-  --down: #c23a43;
-  --up-soft: #e2f3ea;
-  --up-on-soft: #1b6b42;
-  --down-soft: #fbe8e6;
-  --down-on-soft: #a02f27;
-  --glow-up-core: rgba(104, 200, 152, 0.62);
-  --glow-up-edge: rgba(219, 241, 229, 0.6);
-  --glow-down-core: rgba(240, 140, 140, 0.62);
-  --glow-down-edge: rgba(251, 224, 222, 0.6);
-}
-@media (prefers-color-scheme: dark) {
-  html[data-move='green-up'] {
-    --up: #34d36a;
-    --down: #ff6b70;
-    --up-on-soft: #17703a;
-    --down-on-soft: #bc2431;
-    --glow-up-core: rgba(52, 211, 106, 0.52);
-    --glow-up-edge: rgba(31, 122, 53, 0.28);
-    --glow-down-core: rgba(255, 86, 92, 0.62);
-    --glow-down-edge: rgba(200, 16, 46, 0.28);
-  }
-}
+/* 綠漲紅跌: as built (app/globals.css), :root names the red and green sets by colour (--move-red, --move-green,
+   their -soft / -on-soft pairs, --glow-red-*, --glow-green-*), and the app's existing switch (body, .red-up /
+   body:has(#green-up), .green-up) maps them to --up*, --down* and --glow-up-* / --glow-down-*. The --up / --down
+   values above show the default 紅漲綠跌 mapping. */
 
 /* the glow layer: one per screen */
 .glow {

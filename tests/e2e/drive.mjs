@@ -833,6 +833,8 @@ await step('capital market assumptions: a source is required, then they show wit
   }
   await page.click('main button[type=submit]');
   await page.waitForURL('**/allocation?saved=assumptions');
+  // The table folds under one row (Ink design): open it first.
+  await page.locator('details.assume-fold > summary').click();
   const card = await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
   // What is folded behind ⓘ is read from the page's text rather than what is drawn.
   const folded = (await page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).textContent()) ?? '';
@@ -850,7 +852,12 @@ async function savedEstimates() {
 
 const pctText = (value, digits = 1) => `${(value * 100).toFixed(digits)}%`;
 /** The capital market assumptions card on the allocation page. */
-const assumptionsCard = () => page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
+const assumptionsCard = async () => {
+  // The table folds under one row (Ink design): open it if it is closed.
+  const fold = page.locator('details.assume-fold');
+  if ((await fold.count()) > 0 && !(await fold.evaluate((details) => details.open))) await fold.locator('summary').click();
+  return page.locator('section').filter({ has: page.getByRole('heading', { name: /^Capital market assumptions/ }) }).innerText();
+};
 const autoCount = (text) => (text.match(/自動評分/g) ?? []).length;
 
 await step('auto-scored assumptions: Taiwan stocks scored from 2330 by CAPM on your own core assumption, US stocks waiting on NVDA\'s history; yours wins once typed; the settings logged (F6)', async () => {
@@ -1772,16 +1779,18 @@ await step("home-screen widget: a key made once on the push page reads the figur
   await page.setViewportSize({ width: 1280, height: 900 });
 });
 
-await step('dashboard: the poster with the value of both pools, the gains and the line of its rise and fall, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
+await step('dashboard: the poster with the value of both pools, the 7-day move and the line of its rise and fall, the standing warning next, then VaR, watchlist, coming week, donut, windfall and actual vs plan, in that order', async () => {
   await page.goto(`${BASE}/`);
   await page.locator('.chart-donut svg').waitFor();
   const text = await body();
   const poster = page.locator('#this-week');
   const band = (await poster.innerText()).replace(/\s+/g, ' ');
-  check(band.includes('總市值') && /一般 NT\$[\d,]+ · 大額 NT\$[\d,]+/.test(band), `the poster with the value of both pools and each pool's, got ${band}`);
+  // The value of both pools, its cents faded; the pools themselves are on Holdings (Ink design, 2026-11-18).
+  check(/總市值 NT\$[\d,]+\.\d{2}/.test(band) && !/一般 NT\$[\d,]+ · 大額/.test(band), `the poster with the value of both pools and no pools line, got ${band}`);
   check(new RegExp(`${taipeiToday.slice(0, 4)} 年 \\d+ 月 \\d+ 日 · 週`).test(band), `today's date, got ${band}`);
-  // The gain since the start and over seven days, each with its amount net of the money put in and its return.
-  check(/累計 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band) && /近 7 天 (?:[▲▼] )?[+−]?NT\$[\d,]+ [+−]?\d+\.\d{2}%/.test(band), `the gains as chips, got ${band}`);
+  // The 7-day move as one capsule: ▲, ▼ or 持平, its return and its amount net of the money put in; no 累計 chip.
+  check(/(?:▲|▼|持平) ?\d+\.\d{2}% [+−]?NT\$[\d,]+ · 近 7 天/.test(band) && !band.includes('累計'), `the 7-day move as one capsule, got ${band}`);
+  check(['up', 'down', 'flat'].includes((await poster.getAttribute('data-tone')) ?? ''), 'the poster glows in the colour of the 7-day move');
   // The poster carries no rule or drift line any more (Hugo, 2026-11-13): the warnings sit right under it, the drift on Allocation.
   check(!/規則：|最大偏離|推播設定/.test(band) && (await poster.getByRole('link', { name: /warning/ }).count()) === 0, `no rules or drift line on the poster, got ${band}`);
   // It offers the refresh and draws the line of both pools' rise and fall; no closes' date, legend, ⓘ or expand button (Hugo, 2026-11-15).
@@ -1789,8 +1798,17 @@ await step('dashboard: the poster with the value of both pools, the gains and th
   check((await poster.locator('details.info, .hero-expand').count()) === 0, 'no ⓘ or expand button on the poster');
   check(!(await poster.locator('.refresh-data p').isVisible()), 'the refresh note waits until a run is asked for');
   const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
-  check(lineName && band.includes(`累計`) && band.includes(/now ([+−]?\d+\.\d{2}%)/.exec(lineName)?.[1] ?? 'none'), `the line ends at the return the chip shows, got ${lineName}`);
+  check(Boolean(lineName) && (await poster.locator('.hero-dot').count()) === 1, `the line names the return since the start and ends in today's dot, got ${lineName}`);
   check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
+  // The rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge and count; a tap opens the tiles.
+  const fold = page.locator('#rule-board details.rule-fold');
+  if ((await fold.count()) > 0) {
+    const summary = (await fold.locator('summary').innerText()).replace(/\s+/g, ' ');
+    check(!(await fold.evaluate((details) => details.open)) && /規則 ?(?:\d+ 項需處理|\d+ 項注意|全部正常)/.test(summary), `the rules folded to one row, got ${summary}`);
+    await fold.locator('summary').click();
+    check(await fold.locator('.alert-tile').first().isVisible(), 'a tap opens the rule tiles');
+    await fold.locator('summary').click();
+  }
   const headings = await page.locator('main h2').allInnerTexts();
   const order = ['Rule warnings', 'Value at Risk', 'Watchlist', 'Coming week', 'Allocation, regular pool', 'Windfall progress', 'Actual vs plan'];
   const at = order.map((heading) => headings.findIndex((text) => text.startsWith(heading)));

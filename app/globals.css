@@ -51,22 +51,23 @@
   --status-warning: #b07600;
   --status-critical: #c8453d;
   /* Direction (docs/design-handoff/01-tokens.md): colour only when a figure has a direction, always with
-     ▲ ▼ or 持平. Red up, green down by default; html[data-move='green-up'] swaps them. */
-  --up: #c23a43;
-  --down: #1b7a4b;
+     ▲ ▼ or 持平. The red and green sets are named by colour here; the colour convention below (body,
+     .red-up / .green-up) maps them to --up and --down. */
+  --move-red: #c23a43;
+  --move-green: #1b7a4b;
   --flat: #34689c;
-  --up-soft: #fbe8e6;
-  --up-on-soft: #a02f27;
-  --down-soft: #e2f3ea;
-  --down-on-soft: #1b6b42;
+  --move-red-soft: #fbe8e6;
+  --move-red-on-soft: #a02f27;
+  --move-green-soft: #e2f3ea;
+  --move-green-on-soft: #1b6b42;
   --flat-soft: #e2edf8;
   --flat-on-soft: #2c5d93;
   /* The one glow a screen may carry, from its top-right corner; its layer's opacity is the strength
      lib/models/glow.ts works out from config glow. */
-  --glow-up-core: rgba(240, 140, 140, 0.62);
-  --glow-up-edge: rgba(251, 224, 222, 0.6);
-  --glow-down-core: rgba(104, 200, 152, 0.62);
-  --glow-down-edge: rgba(219, 241, 229, 0.6);
+  --glow-red-core: rgba(240, 140, 140, 0.62);
+  --glow-red-edge: rgba(251, 224, 222, 0.6);
+  --glow-green-core: rgba(104, 200, 152, 0.62);
+  --glow-green-edge: rgba(219, 241, 229, 0.6);
   --glow-flat-core: rgba(141, 180, 226, 0.75);
   --glow-flat-edge: rgba(220, 233, 247, 0.6);
   --glow-warn-core: rgba(242, 179, 64, 0.5);
@@ -114,50 +115,23 @@
     --hero-bg: #1f4f86;
     --shadow-soft: none;
     --card-border: 1px solid var(--border);
-    --up: #ff6b70;
-    --down: #34d36a;
+    --move-red: #ff6b70;
+    --move-green: #34d36a;
     --flat: #8db8ea;
-    --up-soft: #f3f5f9;
-    --up-on-soft: #bc2431;
-    --down-soft: #f3f5f9;
-    --down-on-soft: #17703a;
+    --move-red-soft: #f3f5f9;
+    --move-red-on-soft: #bc2431;
+    --move-green-soft: #f3f5f9;
+    --move-green-on-soft: #17703a;
     --flat-soft: #f3f5f9;
     --flat-on-soft: #2b5f96;
-    --glow-up-core: rgba(255, 86, 92, 0.62);
-    --glow-up-edge: rgba(200, 16, 46, 0.28);
-    --glow-down-core: rgba(52, 211, 106, 0.52);
-    --glow-down-edge: rgba(31, 122, 53, 0.28);
+    --glow-red-core: rgba(255, 86, 92, 0.62);
+    --glow-red-edge: rgba(200, 16, 46, 0.28);
+    --glow-green-core: rgba(52, 211, 106, 0.52);
+    --glow-green-edge: rgba(31, 122, 53, 0.28);
     --glow-flat-core: rgba(111, 163, 219, 0.5);
     --glow-flat-edge: rgba(52, 104, 156, 0.28);
     --glow-warn-core: rgba(242, 179, 64, 0.4);
     --glow-warn-edge: rgba(120, 80, 10, 0.26);
-  }
-}
-
-/* 綠漲紅跌: the setting swaps the direction colours here, never in components (data-move on <html>). */
-html[data-move='green-up'] {
-  --up: #1b7a4b;
-  --down: #c23a43;
-  --up-soft: #e2f3ea;
-  --up-on-soft: #1b6b42;
-  --down-soft: #fbe8e6;
-  --down-on-soft: #a02f27;
-  --glow-up-core: rgba(104, 200, 152, 0.62);
-  --glow-up-edge: rgba(219, 241, 229, 0.6);
-  --glow-down-core: rgba(240, 140, 140, 0.62);
-  --glow-down-edge: rgba(251, 224, 222, 0.6);
-}
-
-@media (prefers-color-scheme: dark) {
-  html[data-move='green-up'] {
-    --up: #34d36a;
-    --down: #ff6b70;
-    --up-on-soft: #17703a;
-    --down-on-soft: #bc2431;
-    --glow-up-core: rgba(52, 211, 106, 0.52);
-    --glow-up-edge: rgba(31, 122, 53, 0.28);
-    --glow-down-core: rgba(255, 86, 92, 0.62);
-    --glow-down-edge: rgba(200, 16, 46, 0.28);
   }
 }
 
@@ -795,6 +769,20 @@ body::before {
      rather than spreading its lines down the extra height. */
   align-content: start;
   gap: 0.25rem;
+}
+
+/* Holdings' summary (app/holdings/page.tsx): one block ruled by hairlines, not separate tiles (Ink design). */
+.grid-cards.summary-block {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.summary-block > .stat {
+  padding: 0.7rem 0.9rem;
+  background: var(--surface);
 }
 
 .stat .value {
@@ -1481,20 +1469,57 @@ tr.selected td {
 
 /* The weekly dashboard (app/page.tsx) */
 
-/* The poster at the top (Hugo, 2026-11-13): one block of the accent colour, its text and its line
-   in the colour that reads on it; the value large, the gains as chips, and the line of the
-   portfolio's rise and fall edge to edge along the foot. */
+/* The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/): the page's
+   surface with one glow from the top-right corner in the colour of the 7-day move (--glow-k, its
+   strength, from lib/models/glow.ts), the value large, the move as one capsule, and the line of the
+   portfolio's rise and fall edge to edge along the foot. --hero-bg and --hero-text are set here, for
+   the poster alone: the tab bar's raised button keeps the accent. */
 .hero {
+  --hero-bg: var(--surface);
+  --hero-text: var(--text);
+  --hero-quiet: var(--muted);
   position: relative;
   overflow: hidden;
   display: grid;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--hero-bg);
   color: var(--hero-text);
-  --hero-quiet: color-mix(in srgb, var(--hero-text) 88%, var(--hero-bg));
+}
+
+/* The one glow, from the top-right corner; a flat week glows forget-me-not, faintly. */
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--glow-k, 0);
+}
+
+.hero[data-tone='up'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-up-core) 0%, var(--glow-up-edge) 46%, transparent 100%);
+}
+
+.hero[data-tone='down'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-down-core) 0%, var(--glow-down-edge) 46%, transparent 100%);
+}
+
+.hero[data-tone='flat'] .hero-glow {
+  background: radial-gradient(78% 92% at 100% 0%, var(--glow-flat-core) 0%, var(--glow-flat-edge) 46%, transparent 100%);
+}
+
+/* A grain too faint to see, so the glow never bands into rings on an 8-bit screen. */
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
 }
 
 .hero-body {
+  position: relative;
   display: grid;
   justify-items: start;
   gap: 0.2rem;
@@ -1511,8 +1536,7 @@ tr.selected td {
   min-height: var(--tap-min);
 }
 
-.hero-date,
-.hero-note {
+.hero-date {
   font-size: 0.85rem;
   color: var(--hero-quiet);
 }
@@ -1529,12 +1553,29 @@ tr.selected td {
   font-weight: 600;
 }
 
+/* The value: the whole dollars large and heavy, the currency sign small and the cents faded, all one run. */
 .hero-value {
-  font-size: 2.6rem;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  margin-top: 0.35rem;
+  font-size: 2.875rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hero-currency {
+  margin-right: 0.2rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--hero-quiet);
+}
+
+.hero-decimals {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--hero-quiet);
 }
 
 /* The refresh button, quiet on the poster: an outline in the text's colour. Its note shows once a
@@ -1572,31 +1613,38 @@ tr.selected td {
   color: inherit;
 }
 
-/* A gain: a chip on the page's own ground, so the figure wears the colour of its direction. */
-.hero-gains {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-}
-
-.hero-gain {
+/* The 7-day move: one capsule in the colour of its direction, always with ▲, ▼ or 持平. */
+.hero-move {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 650;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  margin-top: 0.75rem;
+  padding: 0 0.8rem;
+  border-radius: var(--radius-capsule);
+  font-size: 0.95rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.hero-gain-label {
-  color: var(--muted);
-  font-size: 0.8rem;
+.hero-move > span:last-child {
   font-weight: 600;
+}
+
+.hero-move[data-tone='up'] {
+  background: var(--up-soft);
+  color: var(--up-on-soft);
+}
+
+.hero-move[data-tone='down'] {
+  background: var(--down-soft);
+  color: var(--down-on-soft);
+}
+
+.hero-move[data-tone='flat'] {
+  background: var(--flat-soft);
+  color: var(--flat-on-soft);
 }
 
 .hero-chart {
@@ -1627,6 +1675,32 @@ tr.selected td {
   vector-effect: non-scaling-stroke;
 }
 
+/* Today, at the line's end, in the colour of the 7-day move, ringed in the poster's ground; held just
+   inside the right edge, so it never pushes the page sideways. */
+.hero-dot {
+  position: absolute;
+  left: min(var(--x, 100%), calc(100% - 8px));
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--flat);
+  box-shadow: 0 0 0 2.5px var(--hero-bg);
+}
+
+.hero[data-tone='up'] .hero-dot {
+  background: var(--up);
+}
+
+.hero[data-tone='down'] .hero-dot {
+  background: var(--down);
+}
+
+/* Inside the shell Swift Charts draws the line, so the page's dot steps aside with it. */
+.hero-chart.native-drawn .hero-dot {
+  display: none;
+}
+
 /* On a phone the poster is the top of the screen (Hugo, 2026-11-13): edge to edge, up under the
    status bar, with no header over it; the dashboard's sub-tabs ride on it, and the banner comes
    under it (app/page.tsx). Other pages keep their header. */
@@ -1654,6 +1728,7 @@ tr.selected td {
     overflow: visible;
     margin: 0 -1rem;
     border-radius: 0;
+    border-width: 0 0 1px;
     /* Clear of the status bar and of the sub-tabs laid over its top. */
     padding-top: calc(var(--safe-top) + var(--tap-min) + 1.4rem);
   }
@@ -1679,16 +1754,17 @@ tr.selected td {
     padding-top: 0.6rem;
   }
 
+  /* On the poster's own surface (Ink design): quiet chips, the current one in the selection colours. */
   body:has(.page > .hero) .sub-nav a {
     border: none;
-    background: color-mix(in srgb, var(--hero-text) 16%, transparent);
+    background: color-mix(in srgb, var(--text) 7%, transparent);
     box-shadow: none;
-    color: var(--hero-text);
+    color: var(--text);
   }
 
   body:has(.page > .hero) .sub-nav a.current {
-    background: var(--hero-text);
-    color: var(--hero-bg);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
   .hero-body {
@@ -2416,6 +2492,7 @@ html[data-opened] .splash {
   font-size: 0.85rem;
 }
 
+/* The state badges (Ink design): red ✕ 需處理, amber ! 留意, ✓ 正常; each sign in the colour that reads on its badge. */
 .alert-icon {
   display: inline-grid;
   place-items: center;
@@ -2424,21 +2501,108 @@ html[data-opened] .splash {
   border-radius: 50%;
   font-size: 0.7rem;
   font-weight: 800;
-  color: #fff;
+  color: var(--surface);
   background: var(--info-text);
   flex: none;
 }
 
 .alert-icon.alert {
-  background: var(--danger-text);
+  background: var(--status-critical);
 }
 
 .alert-icon.watch {
-  background: var(--warn-text);
+  color: var(--warn-badge-ink);
+  background: var(--warn-badge);
 }
 
 .alert-icon.ok {
   background: var(--ok-text);
+}
+
+/* The dashboard's rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge, the count,
+   which rules fire; open, the tiles. */
+.rule-fold > summary {
+  display: flex;
+  align-items: center;
+  color: var(--text);
+  gap: 0.75rem;
+  min-height: var(--tap-min);
+  cursor: pointer;
+  list-style: none;
+}
+
+.rule-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rule-fold > summary::after {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.rule-fold[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.rule-fold > summary .alert-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 0.95rem;
+}
+
+.rule-fold-text {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.rule-fold-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.rule-fold-head h2 {
+  margin: 0;
+}
+
+.rule-fold-count {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ok-text);
+}
+
+.rule-fold-count.alert {
+  color: var(--danger-text);
+}
+
+.rule-fold-count.watch {
+  color: var(--warn-text);
+}
+
+.rule-fold-which {
+  overflow: hidden;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rule-fold[open] > .alert-group {
+  margin-top: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rule-fold > summary::after {
+    transition: none;
+  }
 }
 
 .alert-code {
@@ -2684,22 +2848,38 @@ html[data-opened] .splash {
 /* The holdings at a glance (app/holdings/overview.tsx): a card per holding, the gain ranking, the
    cost scale, the map and the signal matrix. Price moves take --up and --down from the colour
    convention (config sectors: Taiwan's red up by default), always beside ▲ or ▼; a status keeps
-   its own icon. */
+   its own icon. The Ink red and green sets (:root --move-*) feed it, capsules and glows included. */
 body,
 .red-up {
-  --up: var(--status-critical);
-  --down: var(--status-good);
-  --up-text: var(--danger-text);
-  --down-text: var(--ok-text);
+  --up: var(--move-red);
+  --down: var(--move-green);
+  --up-text: var(--move-red);
+  --down-text: var(--move-green);
+  --up-soft: var(--move-red-soft);
+  --up-on-soft: var(--move-red-on-soft);
+  --down-soft: var(--move-green-soft);
+  --down-on-soft: var(--move-green-on-soft);
+  --glow-up-core: var(--glow-red-core);
+  --glow-up-edge: var(--glow-red-edge);
+  --glow-down-core: var(--glow-green-core);
+  --glow-down-edge: var(--glow-green-edge);
 }
 
 /* Green up, chosen on the Sectors page: the layout leaves a mark once the setting is read. */
 body:has(#green-up),
 .green-up {
-  --up: var(--status-good);
-  --down: var(--status-critical);
-  --up-text: var(--ok-text);
-  --down-text: var(--danger-text);
+  --up: var(--move-green);
+  --down: var(--move-red);
+  --up-text: var(--move-green);
+  --down-text: var(--move-red);
+  --up-soft: var(--move-green-soft);
+  --up-on-soft: var(--move-green-on-soft);
+  --down-soft: var(--move-red-soft);
+  --down-on-soft: var(--move-red-on-soft);
+  --glow-up-core: var(--glow-green-core);
+  --glow-up-edge: var(--glow-green-edge);
+  --glow-down-core: var(--glow-red-core);
+  --glow-down-edge: var(--glow-red-edge);
 }
 
 /* A gain or a loss anywhere in the app (components/stat.tsx `move`, a holding's page). */
@@ -3217,7 +3397,7 @@ body:has(#green-up),
 }
 
 .band-track .fill.ok {
-  background: var(--status-good);
+  background: var(--accent);
 }
 
 .band-track .fill.watch {
@@ -3226,6 +3406,46 @@ body:has(#green-up),
 
 .band-track .fill.rebalance {
   background: var(--status-critical);
+}
+
+/* The drift bars' states as badges (Ink design): ✓ in forget-me-not, ! amber outline (留意), red ✕ (需再平衡). */
+.bands .status-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  vertical-align: -0.25em;
+}
+
+.bands .status-icon.ok {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.bands .status-icon.watch {
+  background: var(--warn-bg);
+  box-shadow: inset 0 0 0 1.5px var(--status-warning);
+  color: var(--warn-text);
+}
+
+.bands .status-icon.rebalance {
+  background: var(--status-critical);
+  color: var(--surface);
+}
+
+/* 資本市場假設 as one row (Ink design): the name and when it was reviewed; the table folds below. */
+.assume-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.assume-head h2 {
+  margin: 0;
 }
 
 .band-track .tick {
@@ -4101,7 +4321,7 @@ html[data-shell] .rule-board {
   gap: 0.5rem;
 }
 
-html[data-shell] .rule-board > h2 {
+html[data-shell] .rule-fold > summary {
   padding: 0 0.25rem;
 }
 

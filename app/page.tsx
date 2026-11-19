@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { Suspense } from 'react';
+import { Suspense, type CSSProperties } from 'react';
 
-import { AlertTiles } from '@/components/alert-tiles';
+import { AlertTiles, ICON } from '@/components/alert-tiles';
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
@@ -46,6 +46,7 @@ import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
 import { riskReport, sparkline } from '@/lib/models/risk';
+import { glowOf, readGlowSettings, type Glow } from '@/lib/models/glow';
 import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/value-line';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
 import { nextFiling, savedFor } from '@/lib/models/workbench';
@@ -79,7 +80,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     orDataError(loadPlanData(supabase, today)),
     orDataError(
       (async () => {
-        const { data: rows, error } = await supabase.from('config').select('key, value').in('key', ['dca', 'weekly_review']);
+        const { data: rows, error } = await supabase.from('config').select('key, value').in('key', ['dca', 'weekly_review', 'glow']);
         if (error) throw new DataError('config', error.message);
         return (rows ?? []) as Array<{ key: string; value: unknown }>;
       })(),
@@ -105,15 +106,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <WarningsPanel supabase={supabase} params={params} proposals={list} rules={rules} names={new Map(data.assetClasses.map((assetClass) => [assetClass.id, { en: assetClass.nameEn, zh: assetClass.nameZh }]))} />
     );
   const windfallTwd = portfolio.holdings.filter((holding) => holding.pool === 'windfall').reduce((total, holding) => total + (holding.valueTwd ?? 0), 0);
+  const line = days ? valueLine(days) : null;
+  // The poster's glow (Ink design, docs/design-handoff): its colour and strength from the 7-day move, its thresholds from config glow.
+  const glowSettings = settings instanceof DataError ? undefined : readGlowSettings(settings.find((row) => row.key === 'glow')?.value);
+  const glow = glowSettings ? glowOf(line?.week?.change === null || line?.week?.change === undefined ? null : line.week.change * 100, glowSettings) : null;
 
   return (
     <>
-      <Hero
-        today={today}
-        regularTwd={portfolio.pool.totalTwd}
-        windfallTwd={windfallTwd}
-        line={days ? valueLine(days) : null}
-      />
+      <Hero today={today} totalTwd={portfolio.pool.totalTwd + windfallTwd} line={line} glow={glow} />
       <Suspense fallback={null}>
         <Banners slot="page" />
       </Suspense>
@@ -166,46 +166,68 @@ function longDate(date: string): string {
 /** The line's drawing box; it stretches to the poster's width, the stroke keeping its weight. */
 const LINE = { width: 390, height: 132, pad: 16 };
 
-/** A gain as a chip: the TWD net of the money moved and the return, each in the colour of its own direction. */
-function GainChip({ label, gain }: { label: Bilingual; gain: Gain }) {
-  const tone = (value: number | null) => (value === null || value === 0 ? undefined : value > 0 ? 'up' : 'down');
-  const amount = Math.round(gain.gain);
+/** The total as the poster shows it: a small currency sign, the whole dollars, the cents faded. */
+function PosterValue({ twdValue }: { twdValue: number }) {
+  const cents = Math.round(Math.abs(twdValue) * 100);
+  const whole = Math.floor(cents / 100).toLocaleString('en-US');
+  const decimals = String(cents % 100).padStart(2, '0');
   return (
-    <span className="hero-gain">
-      <span className="hero-gain-label">
-        <Bi {...label} />
+    <strong className="hero-value">
+      <span className="hero-currency">{twdValue < 0 ? '−NT$' : 'NT$'}</span>
+      {whole}
+      <span className="hero-decimals">.{decimals}</span>
+    </strong>
+  );
+}
+
+/** The 7-day move as one capsule in the colour of its direction: ▲ or ▼ with the return and the TWD, or 持平. */
+function WeekCapsule({ gain, tone }: { gain: Gain; tone: Glow['tone'] }) {
+  const amount = Math.round(gain.gain);
+  const change = gain.change === null ? null : Math.abs(gain.change * 100).toFixed(2);
+  return (
+    <span className="hero-move" data-tone={tone}>
+      {tone === 'flat' ? '持平' : tone === 'up' ? '▲' : '▼'}
+      {change !== null && <span>{change}%</span>}
+      <span>
+        {signedTwd(amount)} · 近 7 天
       </span>
-      <span className={tone(amount)}>
-        {amount > 0 ? '▲ ' : amount < 0 ? '▼ ' : ''}
-        {signedTwd(amount)}
-      </span>
-      {gain.change !== null && <span className={tone(gain.change)}>{signedPercent(gain.change, 2)}</span>}
     </span>
   );
 }
 
 /**
- * The poster at the top (Hugo, 2026-11-13): the date and the refresh button, the portfolio's value
- * (both pools) and each pool's, the gain since the start and over seven days as chips, and the
- * line of the portfolio's rise and fall edge to edge along the foot. No closes' date, legend, ⓘ or
- * expand button on it (Hugo, 2026-11-15).
+ * The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/02-components.md): the date
+ * and the refresh button, the portfolio's value (both pools), the 7-day move as one capsule, and the line of the
+ * portfolio's rise and fall edge to edge along the foot, ending in today's dot. One glow from the top-right corner in
+ * the colour of the 7-day move, its strength the size of the move. No closes' date, legend, ⓘ or expand button on it
+ * (Hugo, 2026-11-15). The pools and the gain since the start live on Holdings.
  */
 function Hero({
   today,
-  regularTwd,
-  windfallTwd,
+  totalTwd,
   line,
+  glow,
 }: {
   today: string;
-  regularTwd: number;
-  windfallTwd: number;
+  totalTwd: number;
   /** Null until two closes hold a value, or when the history could not be read. */
   line: ValueLine | null;
+  /** Null before config glow exists. */
+  glow: Glow | null;
 }) {
   const drawn = line ? linePath(line.points.map((point) => point.change), LINE.width, LINE.height, LINE.pad) : null;
   const since = line?.points[0]?.date;
+  const tone = glow?.tone ?? 'flat';
   return (
-    <section className="hero" id="this-week">
+    <section className="hero" id="this-week" data-tone={tone} style={{ '--glow-k': glow?.k ?? 0 } as CSSProperties}>
+      <div className="hero-glow" aria-hidden="true" />
+      <svg className="hero-grain" aria-hidden="true" focusable="false">
+        <filter id="hero-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} stitchTiles="stitch" />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#hero-grain)" />
+      </svg>
       <div className="hero-body">
         <div className="hero-head">
           <span className="hero-date">
@@ -216,16 +238,8 @@ function Hero({
         <h1>
           <Zh en="Portfolio value" zh="總市值" />
         </h1>
-        <strong className="hero-value">{twd(regularTwd + windfallTwd)}</strong>
-        <span className="hero-note">
-          <Bi en={`Regular ${twd(regularTwd)} · windfall ${twd(windfallTwd)}`} zh={`一般 ${twd(regularTwd)} · 大額 ${twd(windfallTwd)}`} />
-        </span>
-        {line && (
-          <div className="hero-gains">
-            <GainChip label={{ en: 'All time', zh: '累計' }} gain={line.total} />
-            {line.week && <GainChip label={{ en: '7 days', zh: '近 7 天' }} gain={line.week} />}
-          </div>
-        )}
+        <PosterValue twdValue={totalTwd} />
+        {line?.week && <WeekCapsule gain={line.week} tone={tone} />}
       </div>
       {drawn && line && (
         <div className="hero-chart">
@@ -238,6 +252,8 @@ function Hero({
             <line className="hero-zero" x1="0" x2={LINE.width} y1={drawn.zero.toFixed(1)} y2={drawn.zero.toFixed(1)} />
             <path className="hero-line" d={drawn.path} />
           </svg>
+          {/* Today: a dot in the colour of the 7-day move; a box of its own, so the stretched line does not squash it. */}
+          <span className="hero-dot" aria-hidden="true" style={{ '--x': `${((drawn.end.x / LINE.width) * 100).toFixed(2)}%`, top: `${((drawn.end.y / LINE.height) * 100).toFixed(2)}%` } as CSSProperties} />
           <NativePosterLine changes={line.points.map((point) => point.change)} />
         </div>
       )}
@@ -255,12 +271,29 @@ function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portf
   const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
   if (items.length === 0) return null;
   const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
+  // Closed by default (Hugo, 2026-11-18): the worst state's badge, how many need him, and which rules; a tap opens the tiles.
+  const firing = items.filter((item) => item.tone === tone && tone !== 'ok');
+  const count = tone === 'alert' ? `${firing.length} 項需處理` : tone === 'watch' ? `${firing.length} 項注意` : '全部正常';
+  const which = firing.map((item) => `${item.code ? `${item.code} ` : ''}${item.title.zh}`).join(' · ');
   return (
     <section className="card form rule-board" id="rule-board">
-      <h2>
-        <Bi en="Rules" zh="規則" />
-      </h2>
-      <AlertTiles items={items} tone={tone} />
+      <details className="rule-fold">
+        <summary>
+          <span className={`alert-icon ${tone}`} aria-hidden="true">
+            {ICON[tone]}
+          </span>
+          <span className="rule-fold-text">
+            <span className="rule-fold-head">
+              <h2>
+                <Bi en="Rules" zh="規則" />
+              </h2>
+              <span className={`rule-fold-count ${tone}`}>{count}</span>
+            </span>
+            {which && <span className="rule-fold-which">{which}</span>}
+          </span>
+        </summary>
+        <AlertTiles items={items} tone={tone} />
+      </details>
     </section>
   );
 }

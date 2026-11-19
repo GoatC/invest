@@ -298,12 +298,16 @@ function BandBars({ drifts, satellite, total }: { drifts: readonly ClassDrift[];
 function AssumptionsCard({ data }: { data: AllocationData }) {
   const saved = data.assumptions;
   const mix = saved ? targetReturn(data.assetClasses, saved.assumptions) : null;
+  // One row, folded (Ink design, 2026-11-18): the name, when it was last reviewed and what the target mix expects; the table opens below.
   return (
-    <section className="card form">
+    <section className="card form assume-card">
       <div className="row spread">
-        <h2>
-          <Bi en="Capital market assumptions" zh="資本市場假設" />
-        </h2>
+        <span className="assume-head">
+          <h2>
+            <Bi en="Capital market assumptions" zh="資本市場假設" />
+          </h2>
+          {saved?.verifiedOn && <span className="muted small">{saved.verifiedOn.slice(5).replace('-', '/')} 檢視</span>}
+        </span>
         <Link href="/allocation/assumptions">
           <Bi en="Edit assumptions" zh="修改假設" />
         </Link>
@@ -320,6 +324,11 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
               zh={`各類別的預期年報酬與年化波動度，供複利計算機（F2）使用，之後也供蒙地卡羅（F5）與效率前緣（F7）使用。${saved.verifiedOn ? `最後檢視日期：${saved.verifiedOn}。` : ''}`}
             />
           </Info>
+          <details className="assume-fold">
+            <summary>
+              <Bi en="Each class's assumption" zh="各類別假設" />
+              {mix !== null && <span className="muted small"> · 目標組合約 {percent(mix)}／年</span>}
+            </summary>
           <div className="table-wrap">
             <table>
               <thead>
@@ -376,6 +385,7 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
               />
             )}
           </p>
+          </details>
         </>
       )}
     </section>

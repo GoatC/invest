@@ -47,8 +47,10 @@ them up without edits; the new variables are additions.
 | `--warn-badge` / `--warn-badge-ink` | `#f2b340` / `#2a1b00` | same | the round ! badge |
 | `--radius-capsule` | `16px` | | 32 px capsule |
 
-When the 紅漲綠跌 setting is switched to 綠漲紅跌, swap `--up*` with `--down*` (and the glow pairs) under a
-`html[data-move="green-up"]` selector rather than in components.
+The 紅漲綠跌 setting already exists (config `sectors`, read into `body:has(#green-up)` / `.green-up` in
+`globals.css`). As built, the red and green sets are named by colour in `:root` (`--move-red`, `--move-green`,
+their `-soft` / `-on-soft` pairs, `--glow-red-*`, `--glow-green-*`), and that existing switch maps them to `--up*`,
+`--down*` and `--glow-up-*` / `--glow-down-*`. Components use only the `--up` / `--down` names.
 
 ## Glow strength: a config row, not code
 
