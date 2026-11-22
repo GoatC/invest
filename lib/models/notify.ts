@@ -6,7 +6,7 @@
  * streak is pushed once however often the job runs. Pure functions; scripts/notify.ts plans and
  * sends them.
  */
-import { money, percent, points, signedPercent, signedTwd, twd } from '../format';
+import { points, signedPercent, signedTwd, twd } from '../format';
 import type { Bilingual } from '../i18n';
 import { suggestionLine } from '../proposal-text';
 import type { DataHealth } from './data-health';

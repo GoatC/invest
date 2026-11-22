@@ -109,7 +109,6 @@ export interface EngineQuote {
  * filled is history only: proposals approved and marked traded before 2026-11-12.
  */
 export type ProposalStatus = 'open' | 'dismissed' | 'filled' | 'expired';
-export const PROPOSAL_STATUSES: readonly ProposalStatus[] = ['open', 'dismissed', 'filled', 'expired'];
 
 /** timed_out is history only: before 2026-11-12 an open proposal closed after proposal_expiry_days. */
 export type ClosedReason = 'timed_out' | 'cleared' | 'superseded';

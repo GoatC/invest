@@ -14,7 +14,7 @@ import type { AlertItem } from '@/lib/alerts';
 import { DataError, loadAllocationData, loadAssumptions, loadCashFlows, loadDividendView, loadFxHistory, loadGlowSettings, loadHoldingCloses, loadProposals, loadRules, orDataError, type AllocationData, type CashFlowRecord, type DividendView, type HoldingsData, type Proposal, type RuleRecord } from '@/lib/data';
 import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, quantity, signedTwd, twd } from '@/lib/format';
-import { ACTION, DIRECTION, FLOW_TYPE, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
+import { ACTION, DIRECTION, LABELS, leverageText, POOL, SOURCE, type Bilingual } from '@/lib/i18n';
 import { LEDGER_FILTERS } from '@/lib/models/cash-flows';
 import { pageGlowOf } from '@/lib/models/glow';
 import { lastMove, sessionMove } from '@/lib/models/holding-view';

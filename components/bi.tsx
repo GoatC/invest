@@ -21,11 +21,6 @@ export function Bi({ en, zh, label = false }: Bilingual & { label?: boolean }) {
   );
 }
 
-/** A label: always both languages (a field, a column, a figure's name). */
-export function Label(text: Bilingual) {
-  return <Bi {...text} label />;
-}
-
 /** A page title: Chinese only (the bilingual rule's one exception, with the navigation). Takes a bilingual label as is. */
 export function Zh({ zh }: Bilingual) {
   return <span lang="zh-Hant">{zh}</span>;

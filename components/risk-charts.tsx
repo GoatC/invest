@@ -131,7 +131,7 @@ export function VarFigure({ horizons, weekVar, valueTwd, line }: { horizons: rea
 const BEYOND: Bilingual = { en: 'Lost more than the VaR', zh: '損失超過風險值' };
 const OTHER: Bilingual = { en: 'Other weeks', zh: '其他週' };
 
-function histogramOption(bins: readonly Bin[], cutoff: number, cutoffLabel: Bilingual, colors: Colors): Option {
+function histogramOption(bins: readonly Bin[], cutoff: number, colors: Colors): Option {
   const isBeyond = (bin: Bin) => bin.to <= -cutoff + 1e-12;
   const bars: BarSeriesOption = {
     type: 'bar',
@@ -195,7 +195,7 @@ function histogramOption(bins: readonly Bin[], cutoff: number, cutoffLabel: Bili
 
 export function ReturnHistogram({ bins, cutoff, cutoffLabel, label }: { bins: readonly Bin[]; cutoff: number; cutoffLabel: Bilingual; label: Bilingual }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => mount(ref.current, (colors) => histogramOption(bins, cutoff, cutoffLabel, colors)), [bins, cutoff, cutoffLabel]);
+  useEffect(() => mount(ref.current, (colors) => histogramOption(bins, cutoff, colors)), [bins, cutoff]);
   return (
     <figure className="chart-figure">
       <Legend

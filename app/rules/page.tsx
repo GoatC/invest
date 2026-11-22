@@ -119,7 +119,6 @@ const ICON: Record<Check['outcome'], [string, string]> = {
 };
 
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
-  const evaluated = check && check.outcome !== 'later';
   const live = proposals.find((proposal) => proposal.status === 'open');
   // The rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19).
   const title: Bilingual = proposalTitle(rule);

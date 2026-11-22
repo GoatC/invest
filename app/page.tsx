@@ -31,7 +31,6 @@ import {
   orDataError,
   type AllocationData,
   type PlanData,
-  type Proposal,
   type RedFlagData,
   type RiskData,
   type RuleRecord,
@@ -56,8 +55,6 @@ import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
 import { Banners } from './banner';
 
-type Params = Record<string, string | string[] | undefined>;
-
 /**
  * The weekly dashboard, the home screen (PRD Section 5): the poster with the portfolio's value and
  * the line of its rise and fall at the top, then the Value at Risk (its distribution and make-up
@@ -65,9 +62,8 @@ type Params = Record<string, string | string[] | undefined>;
  * the rule warnings last, or second while one stands. Each part reads its own data, so one that
  * fails to load leaves the others in place.
  */
-export default async function Dashboard({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function Dashboard() {
   const { supabase } = await requireSession();
-  const params = await searchParams;
   const today = taipeiToday();
   let data: AllocationData;
   try {
@@ -515,13 +511,13 @@ function Windfall({ portfolio, plan, today }: { portfolio: Portfolio; plan: Wind
           />
         </>
       )}
-      {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} waiting={waiting} />}
+      {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} />}
     </section>
   );
 }
 
 /** The tranche plan in one line: how far along, on schedule or accelerated, and the next date. */
-function PlanStatus({ plan, today, waiting }: { plan: WindfallPlanRecord | undefined; today: string; waiting: number }) {
+function PlanStatus({ plan, today }: { plan: WindfallPlanRecord | undefined; today: string }) {
   if (!plan) {
     return (
       <p className="muted small">

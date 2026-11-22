@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { AlertTiles } from '@/components/alert-tiles';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
 import { UnderwaterChart } from '@/components/stress-chart';
 import { requireSession } from '@/lib/auth';
@@ -421,20 +421,5 @@ function Method({ settings }: { settings: StressSettings }) {
       zh: '自訂衝擊是你輸入的一個月報酬，之後各類別依資本市場假設的預期報酬 ÷ 12 成長，直到投資組合回到起始價值。不會儲存任何內容。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

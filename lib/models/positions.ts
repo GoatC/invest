@@ -125,11 +125,6 @@ export function positionKey(pool: Pool, ticker: string, direction: Direction = '
   return direction === 'short' ? `${pool}:${ticker}:short` : `${pool}:${ticker}`;
 }
 
-/** The ticker in a position key, or a holding key such as `regular:VOO:short`. */
-export function tickerOfKey(key: string): string {
-  return key.split(':')[1] ?? '';
-}
-
 interface Book extends Position {
   /** Exposure and own money at entry, fees left out, for the effective leverage. */
   notionalLocal: number;

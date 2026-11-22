@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
 
-import { Bi, Zh } from '@/components/bi';
+import { Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { DeleteForm } from '@/components/delete-form';
-import { History } from '@/components/history';
+import { EditFoot } from '@/components/history';
 import { requireSession } from '@/lib/auth';
 import { DataError, loadAssetClasses, loadAuditHistory, loadGoldPrice, loadManualAsset, loadSecurities, orDataError } from '@/lib/data';
 import { taipeiToday } from '@/lib/dates';
@@ -54,18 +53,7 @@ export default async function EditAssetPage({ params }: { params: Promise<{ id: 
           }}
         />
       </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.delete} />
-        </h2>
-        <DeleteForm id={id} action={deleteAsset} confirm={{ en: 'Delete this asset?', zh: '確定要刪除這項資產嗎？' }} />
-      </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.history} />
-        </h2>
-        <History entries={history} />
-      </section>
+      <EditFoot id={id} action={deleteAsset} confirm={{ en: 'Delete this asset?', zh: '確定要刪除這項資產嗎？' }} history={history} />
     </>
   );
 }

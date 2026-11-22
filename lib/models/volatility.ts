@@ -24,18 +24,6 @@ export type ComponentId = (typeof COMPONENTS)[number];
 export const VOLATILITY_SERIES = ['VIX', 'VIX3M', 'TWVIX', 'SPX', 'TAIEX', 'HY_OAS', 'EPU'] as const;
 export type SeriesId = (typeof VOLATILITY_SERIES)[number];
 
-/** The series each component reads. */
-export const COMPONENT_SERIES: Record<ComponentId, readonly SeriesId[]> = {
-  vix: ['VIX'],
-  vix_term: ['VIX', 'VIX3M'],
-  tw_vix: ['TWVIX'],
-  spx_drawdown: ['SPX'],
-  taiex_drawdown: ['TAIEX'],
-  taiex_fall: ['TAIEX'],
-  hy_spread: ['HY_OAS'],
-  epu: ['EPU'],
-};
-
 /** How a component's figure is shown: an index level, a ratio, a share (a fall), or percent a year (a spread). */
 export type ComponentUnit = 'level' | 'ratio' | 'share' | 'percent';
 export const COMPONENT_UNIT: Record<ComponentId, ComponentUnit> = {

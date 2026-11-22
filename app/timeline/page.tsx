@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
 import { TimelineChart, type TimelinePhase, type TimelinePoint } from '@/components/timeline-chart';
 import { requireSession } from '@/lib/auth';
@@ -315,20 +315,5 @@ function Method() {
       zh: '階段：累積期從計畫起始到結束；大額資金部署從第一批所在月份到最後一批。更遠的目標由你設定；此頁不會提出任何交易建議。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

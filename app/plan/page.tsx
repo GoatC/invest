@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
 import { AgainstPlanChart } from '@/components/plan-charts';
@@ -276,24 +276,12 @@ function Method() {
     },
   ];
   return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
+    <MethodNotes notes={notes}>
       <p className="muted small">
         <Link href="/allocation/assumptions">
           <Bi en="Edit the capital market assumptions" zh="修改資本市場假設" />
         </Link>
       </p>
-    </section>
+    </MethodNotes>
   );
 }

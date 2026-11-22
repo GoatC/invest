@@ -160,11 +160,6 @@ export function directKey(market: string, ticker: string): string {
 // The look-through
 // ---------------------------------------------------------------------------
 
-/** What the look-through needs of a security beyond the holding: its sector and country when held directly. */
-export interface DirectInfo {
-  sector: string | null;
-}
-
 export interface LookThroughInput {
   /** Every holding, both pools, valued as on the holdings page. */
   holdings: readonly Holding[];

@@ -11,7 +11,6 @@
 import type { Fact, Item } from '../../../lib/models/fundamentals.ts';
 import { FeedError } from './types.ts';
 
-export const SOURCE = 'sec';
 /** Every listed company's ticker and CIK, about 700 kB. */
 export const SEC_TICKERS = 'https://www.sec.gov/files/company_tickers.json';
 

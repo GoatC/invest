@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { PageGlow } from '@/components/page-glow';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
@@ -631,20 +631,5 @@ function Method({ input }: { input: PerformanceInput }) {
       zh: '每夜排程也會把每天的市值存為淨值快照，供之後的功能使用。本頁直接由交易計算，修改後立即反映。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

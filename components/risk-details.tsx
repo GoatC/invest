@@ -7,7 +7,7 @@ import { confidenceText, riskHorizons } from '@/lib/risk-text';
 
 import { Bi } from './bi';
 import { Facts } from './facts';
-import { Info } from './info';
+import { Info, MethodDetails } from './info';
 import { ReturnHistogram } from './risk-charts';
 
 /**
@@ -366,18 +366,7 @@ function Method({ report }: { report: RiskReport | undefined }) {
   ];
   return (
     <div className="risk-part">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
+      <MethodDetails notes={notes} />
       <p className="muted small">
         <Link href="/allocation/targets">
           <Bi en="Proxies: benchmark ETFs" zh="代理 ETF：基準 ETF" />

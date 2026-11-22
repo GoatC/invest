@@ -30,5 +30,3 @@ export const signedInUser = cache(async (): Promise<string | undefined> => {
   const { data } = await supabase.auth.getClaims();
   return data?.claims?.sub;
 });
-
-export type Session = Awaited<ReturnType<typeof requireSession>>;

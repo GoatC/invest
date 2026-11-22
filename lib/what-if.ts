@@ -39,8 +39,3 @@ export function queryText(params: Params, key: string): string | undefined {
   const value = first(params[key]);
   return value && value.trim() !== '' ? value.trim() : undefined;
 }
-
-/** +1 for a long, −1 for a short. */
-export function directionSign(direction: Direction): 1 | -1 {
-  return direction === 'short' ? -1 : 1;
-}

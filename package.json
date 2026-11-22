@@ -14,7 +14,7 @@
     "check:sources": "tsx scripts/check_sources.ts",
     "check:supabase": "tsx scripts/check_supabase.ts",
     "test": "tsx --test --test-reporter=spec scripts/lib/*.test.ts scripts/lib/*/*.test.ts tests/db/*.test.ts lib/*.test.ts lib/*/*.test.ts",
-    "typecheck": "tsc -p scripts && tsc -p tests && tsc --noEmit -p .",
+    "typecheck": "tsc -p scripts --noUnusedLocals --noUnusedParameters && tsc -p tests --noUnusedLocals --noUnusedParameters && tsc --noEmit -p . --noUnusedLocals --noUnusedParameters",
     "test:e2e": "bash tests/e2e/run.sh",
     "nightly": "tsx scripts/nightly.ts",
     "notify": "tsx scripts/notify.ts",

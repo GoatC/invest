@@ -21,7 +21,6 @@ export const LOCAL_REMINDER_MAX = 48;
 const MORNING = { minutes: 9 * 60, timeZone: 'Asia/Taipei' };
 
 export type LocalReminderKind = 'weekly' | 'event' | 'dividend';
-export const LOCAL_REMINDER_KINDS: readonly LocalReminderKind[] = ['weekly', 'event', 'dividend'];
 
 export interface LocalReminder {
   /** Unique and stable: the same reminder keeps its id from one opening to the next. */

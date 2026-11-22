@@ -460,9 +460,3 @@ function valueMultiples(input: ValuationInput): Outcome<MultiplesResult, Multipl
 export function valueStock(input: ValuationInput): Valuation {
   return { dcf: valueDcf(input), ddm: valueDdm(input), multiples: valueMultiples(input) };
 }
-
-/** The values of one model, when it gave any. */
-export function valuesOf(valuation: Valuation, model: ModelId): Values | undefined {
-  const outcome = valuation[model];
-  return outcome.ok ? outcome.result.values : undefined;
-}
