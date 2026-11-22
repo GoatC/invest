@@ -6,8 +6,7 @@ import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readRegressionSettings } from '@/lib/models/regression';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseRegressionForm } from '@/lib/validation/research';
+import { parseRegressionForm, type FieldErrors } from '@/lib/validation';
 
 export interface RegressionFormState {
   errors: FieldErrors<string>;

@@ -11,8 +11,7 @@ import { windfallSettingsValue } from '@/lib/data/windfall';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { capePercentile, readPace, schedule, trancheCount } from '@/lib/models/windfall';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm } from '@/lib/validation/planning';
+import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm, type FieldErrors } from '@/lib/validation';
 
 export interface WindfallFormState {
   errors: FieldErrors<string>;

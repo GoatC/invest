@@ -7,8 +7,7 @@ import { Field } from '@/components/field';
 import { useFields } from '@/components/use-fields';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm } from '@/lib/validation/costs';
+import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm, type FieldErrors } from '@/lib/validation';
 
 import { saveBroker, saveFees, saveFund, saveTax, type CostFormState } from './actions';
 

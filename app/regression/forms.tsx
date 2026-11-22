@@ -6,7 +6,7 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { useFields } from '@/components/use-fields';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseRegressionForm, type RegressionField } from '@/lib/validation/research';
+import { parseRegressionForm, type RegressionField } from '@/lib/validation';
 
 import { saveRegressionSettings, type RegressionFormState } from './actions';
 

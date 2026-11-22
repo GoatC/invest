@@ -8,8 +8,7 @@ import { ACTION_MESSAGES, formFields, parseId, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { vapidFromEnv } from '@/lib/push';
 import { newWidgetKey } from '@/lib/widget-api';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseSchedule, parseSubscription, type ScheduleField } from '@/lib/validation/notify';
+import { parseSchedule, parseSubscription, type FieldErrors, type ScheduleField } from '@/lib/validation';
 
 /** Saves this device's push subscription; turning it on again on the same device updates its row. */
 export async function saveSubscription(subscription: unknown): Promise<{ ok: boolean; message: Bilingual }> {

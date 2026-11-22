@@ -8,7 +8,7 @@ import { Field } from '@/components/field';
 import type { AssetClassSettings } from '@/lib/data/allocation';
 import { bi, LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
 import type { Assumptions } from '@/lib/models/cma';
-import { assumptionFields, parseAssumptionForm } from '@/lib/validation/allocation';
+import { assumptionFields, parseAssumptionForm } from '@/lib/validation';
 
 import { saveAssumptions, type SettingsFormState } from './actions';
 

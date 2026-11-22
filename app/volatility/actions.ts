@@ -8,8 +8,7 @@ import { ACTION_MESSAGES, formFields, parseId, saveFailed, type DeleteState } fr
 import type { Bilingual } from '@/lib/i18n';
 import { newsSettingsValue } from '@/lib/models/news';
 import { volatilitySettingsValue } from '@/lib/models/volatility';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseEventForm, parseNewsForm, parseVolatilityForm } from '@/lib/validation/volatility';
+import { parseEventForm, parseNewsForm, parseVolatilityForm, type FieldErrors } from '@/lib/validation';
 
 export interface VolatilityFormState {
   errors: FieldErrors<string>;

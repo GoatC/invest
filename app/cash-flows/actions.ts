@@ -7,8 +7,7 @@ import { cashFlowColumns, loadCashFlow, loadSecurities } from '@/lib/data/holdin
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseCashFlow, type CashFlowField } from '@/lib/validation/holdings';
+import { parseCashFlow, type CashFlowField, type FieldErrors } from '@/lib/validation';
 
 export interface CashFlowFormState {
   errors: FieldErrors<CashFlowField>;

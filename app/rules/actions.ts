@@ -6,8 +6,7 @@ import { DataError, orDataError } from '@/lib/data/core';
 import { loadRules } from '@/lib/data/rules';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseEngineSettings, parseRuleForm, type EngineSettingsField } from '@/lib/validation/rules';
+import { parseEngineSettings, parseRuleForm, type EngineSettingsField, type FieldErrors } from '@/lib/validation';
 
 export interface RuleFormState {
   errors: FieldErrors<string>;

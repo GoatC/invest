@@ -14,7 +14,7 @@ import type { Bilingual } from '@/lib/i18n';
 import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import { latestFx } from '@/lib/models/valuation';
-import { parseNumber } from '@/lib/validation/core';
+import { parseNumber } from '@/lib/validation';
 
 export interface ImportState {
   message: Bilingual | null;

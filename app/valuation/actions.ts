@@ -8,8 +8,7 @@ import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readValuationSettings } from '@/lib/models/intrinsic';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation/valuation';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
 
 export interface ValuationFormState {
   errors: FieldErrors<string>;

@@ -7,8 +7,7 @@ import { loadAssetClasses, loadManualAsset } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseManualAsset, type ManualAssetField } from '@/lib/validation/holdings';
+import { parseManualAsset, type FieldErrors, type ManualAssetField } from '@/lib/validation';
 
 export interface AssetFormState {
   errors: FieldErrors<ManualAssetField>;

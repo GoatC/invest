@@ -18,8 +18,7 @@ import { previewTrade } from '@/lib/models/portfolio';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { breachAlert } from '@/lib/rule-text';
-import { parseNumber } from '@/lib/validation/core';
-import { leverageSteps, parseTrade, type TradeField } from '@/lib/validation/holdings';
+import { leverageSteps, parseNumber, parseTrade, type TradeField } from '@/lib/validation';
 
 import { saveTrade, type TradeFormState } from './actions';
 

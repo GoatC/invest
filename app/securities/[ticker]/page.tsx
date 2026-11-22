@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
-import { EditFoot } from '@/components/history';
+import { EditFoot } from '@/components/edit-foot';
 import { requireSession } from '@/lib/auth';
 import { loadAuditHistory } from '@/lib/data/audit';
 import { DataError, orDataError } from '@/lib/data/core';

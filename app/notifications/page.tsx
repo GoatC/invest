@@ -10,7 +10,7 @@ import { loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, t
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { readQuietHours, readWeeklyReview } from '@/lib/models/notify';
 import { vapidFromEnv } from '@/lib/push';
-import { WEEKDAYS } from '@/lib/validation/notify';
+import { WEEKDAYS } from '@/lib/validation';
 
 import { removeDevice } from './actions';
 import { PushSetup } from './push-setup';

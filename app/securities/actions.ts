@@ -9,8 +9,7 @@ import { ACTION_MESSAGES, afterSecurityAdded, formFields, parseId, saveFailed, t
 import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, buildPortfolio } from '@/lib/models/portfolio';
 import type { Split } from '@/lib/models/splits';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseSecurity, parseSplitForm, type SecurityField, type SplitField } from '@/lib/validation/holdings';
+import { parseSecurity, parseSplitForm, type FieldErrors, type SecurityField, type SplitField } from '@/lib/validation';
 
 export interface SecurityFormState {
   errors: FieldErrors<SecurityField>;

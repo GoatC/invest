@@ -5,8 +5,7 @@ import { requireSession } from '@/lib/auth';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { mcSettingsValue, readMcSettings } from '@/lib/models/monte-carlo';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseMonteCarloForm, type McField } from '@/lib/validation/planning';
+import { parseMonteCarloForm, type FieldErrors, type McField } from '@/lib/validation';
 
 export interface McFormState {
   errors: FieldErrors<McField>;

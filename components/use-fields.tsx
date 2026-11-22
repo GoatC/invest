@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 
-import { bi, type Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
-
-import { Field } from './field';
+import type { Bilingual } from '@/lib/i18n';
+import type { FieldErrors } from '@/lib/validation';
 
 /**
  * A form checked as it is typed with the server action's own parser: a field shows the parser's error once it is
  * edited and the server's answer until then; `reset` (on submit) hands every field back to the server's answer.
- * `change(name, undefined)` removes a field (an unticked box). `input` and `select` draw a labelled field.
+ * `change(name, undefined)` removes a field (an unticked box). components/use-field-inputs.tsx adds the drawers.
  */
 export function useFields<V extends Record<string, string>, P extends { ok: boolean }>(initial: V | (() => V), parse: (values: V) => P, serverErrors: FieldErrors<string>) {
   const [values, setValues] = useState(initial);
@@ -28,21 +26,5 @@ export function useFields<V extends Record<string, string>, P extends { ok: bool
     });
   };
   const reset = () => setEdited(new Set());
-  const input = (name: string, label: Bilingual, hint?: ReactNode) => (
-    <Field key={name} label={label} hint={hint} error={error(name)}>
-      <input name={name} inputMode="decimal" autoComplete="off" value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)} />
-    </Field>
-  );
-  const select = (name: string, label: Bilingual, options: ReadonlyArray<{ value: string; label: Bilingual }>) => (
-    <Field label={label} error={error(name)}>
-      <select name={name} value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {bi(option.label)}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-  return { values, parsed, error, change, reset, input, select };
+  return { values, parsed, error, change, reset };
 }

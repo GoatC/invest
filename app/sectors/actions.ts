@@ -9,8 +9,7 @@ import type { Bilingual } from '@/lib/i18n';
 import { SECTOR } from '@/lib/look-through-text';
 import { GICS_SECTORS } from '@/lib/models/look-through';
 import { sectorSettingsValue } from '@/lib/models/sectors';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseSectorForm } from '@/lib/validation/sectors';
+import { parseSectorForm, type FieldErrors } from '@/lib/validation';
 
 export interface SectorFormState {
   errors: FieldErrors<string>;

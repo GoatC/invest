@@ -8,7 +8,7 @@ import { useFields } from '@/components/use-fields';
 import { ordinal, twd } from '@/lib/format';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
 import { capePercentile, schedule, trancheCount, type MonthValue, type Pace } from '@/lib/models/windfall';
-import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm } from '@/lib/validation/planning';
+import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm } from '@/lib/validation';
 
 import { savePace, saveWindfallSettings, startPlan, type WindfallFormState } from './actions';
 

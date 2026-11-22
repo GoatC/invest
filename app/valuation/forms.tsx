@@ -3,9 +3,9 @@
 import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
-import { useFields } from '@/components/use-fields';
+import { useFieldInputs } from '@/components/use-field-inputs';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation/valuation';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation';
 
 import { saveAssumptions, saveEstimates, saveValuationSettings, type ValuationFormState } from './actions';
 
@@ -23,7 +23,7 @@ const SCENARIOS: ReadonlyArray<{ key: string; label: Bilingual }> = [
 ];
 
 /** The three scenarios of a rate, side by side. */
-function scenarioInputs(input: ReturnType<typeof useFields>['input'], prefix: string, label: Bilingual) {
+function scenarioInputs(input: ReturnType<typeof useFieldInputs>['input'], prefix: string, label: Bilingual) {
   return SCENARIOS.map((scenario) => input(`${prefix}_${scenario.key}`, { en: `${label.en}, ${scenario.label.en}, %`, zh: `${label.zh}（${scenario.label.zh}，%）` }));
 }
 
@@ -47,7 +47,7 @@ function Submit({ pending, message }: { pending: boolean; message: Bilingual | n
 /** A stock's model, scenarios, typed figures, peers and alert multiples; saving also saves its valuation. */
 export function AssumptionsForm({ ticker, stocks, currency, initial, ruleMultiples }: { ticker: string; stocks: readonly string[]; currency: string; initial: Record<string, string>; ruleMultiples: { buy: number | null; trim: number | null } }) {
   const [state, formAction, pending] = useActionState(saveAssumptions, INITIAL);
-  const fields = useFields(initial, (values) => parseAssumptionsForm(values, stocks, ticker), state.errors);
+  const fields = useFieldInputs(initial, (values) => parseAssumptionsForm(values, stocks, ticker), state.errors);
   const { input, select } = fields;
   return (
     <form action={formAction} onSubmit={fields.reset} className="form">
@@ -85,7 +85,7 @@ export function AssumptionsForm({ ticker, stocks, currency, initial, ruleMultipl
 /** config valuation: the defaults a stock starts from. */
 export function ValuationSettingsForm({ markets, initial, today, checkedOn }: { markets: readonly string[]; initial: Record<string, string>; today: string; checkedOn: string | null }) {
   const [state, formAction, pending] = useActionState(saveValuationSettings, INITIAL);
-  const fields = useFields(initial, (values) => parseValuationSettingsForm(values, markets, today), state.errors);
+  const fields = useFieldInputs(initial, (values) => parseValuationSettingsForm(values, markets, today), state.errors);
   const { input, select } = fields;
   return (
     <form action={formAction} onSubmit={fields.reset} className="form">
@@ -112,7 +112,7 @@ export function ValuationSettingsForm({ markets, initial, today, checkedOn }: { 
 /** The analysts' consensus, typed in from a broker's or a news site's page (F12 forward P/E). */
 export function EstimatesForm({ ticker, currency, initial }: { ticker: string; currency: string; initial: Record<string, string> }) {
   const [state, action, pending] = useActionState(saveEstimates, INITIAL);
-  const fields = useFields(initial, parseEstimatesForm, state.errors);
+  const fields = useFieldInputs(initial, parseEstimatesForm, state.errors);
   const { input } = fields;
   return (
     <form action={action} onSubmit={fields.reset} className="form">

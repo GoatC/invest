@@ -8,7 +8,7 @@ import { Field } from '@/components/field';
 import { likelyAssetClass } from '@/lib/defaults';
 import { bi, LABELS, MARKET, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
 import type { AssetClass, Market, ProductType, Security } from '@/lib/models/types';
-import { parseSecurity, PRODUCT_TYPES, type SecurityField } from '@/lib/validation/holdings';
+import { parseSecurity, PRODUCT_TYPES, type SecurityField } from '@/lib/validation';
 
 import { addSecurity, updateSecurity, type SecurityFormState } from './actions';
 

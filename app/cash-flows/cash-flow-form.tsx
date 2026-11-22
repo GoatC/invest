@@ -15,8 +15,7 @@ import { buildPositions } from '@/lib/models/positions';
 import { restateTrades } from '@/lib/models/splits';
 import type { FlowType, FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { parseNumber } from '@/lib/validation/core';
-import { FLOW_TYPES, parseCashFlow, type CashFlowField } from '@/lib/validation/holdings';
+import { FLOW_TYPES, parseCashFlow, parseNumber, type CashFlowField } from '@/lib/validation';
 
 import { saveCashFlow, type CashFlowFormState } from './actions';
 

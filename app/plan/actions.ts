@@ -5,8 +5,7 @@ import { requireSession } from '@/lib/auth';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { planValue } from '@/lib/models/projection';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parsePlanForm, type PlanField } from '@/lib/validation/planning';
+import { parsePlanForm, type FieldErrors, type PlanField } from '@/lib/validation';
 
 export interface PlanFormState {
   errors: FieldErrors<PlanField>;

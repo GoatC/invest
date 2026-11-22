@@ -15,7 +15,7 @@ import { percent, signedPercent, signedTwd, twd } from '@/lib/format';
 import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { buildSeries } from '@/lib/models/performance';
 import { againstPlan, gap, monthEnds, savedPlan, type MonthEnd, type PlanRow, type SavedPlan } from '@/lib/models/projection';
-import type { PlanField } from '@/lib/validation/planning';
+import type { PlanField } from '@/lib/validation';
 
 import { PlanForm, type StartValues } from './plan-form';
 

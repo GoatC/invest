@@ -10,8 +10,7 @@ import { twd } from '@/lib/format';
 import { bi, LABELS, POOL, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
 import type { AssetClass, FxQuote } from '@/lib/models/types';
 import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
-import { parseNumber } from '@/lib/validation/core';
-import { parseManualAsset, type ManualAssetField } from '@/lib/validation/holdings';
+import { parseManualAsset, parseNumber, type ManualAssetField } from '@/lib/validation';
 
 import { saveAsset, type AssetFormState } from './actions';
 

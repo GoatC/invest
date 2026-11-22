@@ -32,7 +32,7 @@ import { regularPool } from '@/lib/models/rules';
 import { restateTrades } from '@/lib/models/splits';
 import { overseasIncome, supplementaryPremiums, usSitusExposure, type OverseasIncome, type Premiums, type SitusExposure, type TaxSecurity } from '@/lib/models/tax';
 import { latestFx } from '@/lib/models/valuation';
-import { LSE_CHOICES, TAX_FIELDS, withholdingField } from '@/lib/validation/costs';
+import { LSE_CHOICES, TAX_FIELDS, withholdingField } from '@/lib/validation';
 
 import { deleteBroker, deleteFund } from './actions';
 import { CostForm, type FieldSpec } from './forms';

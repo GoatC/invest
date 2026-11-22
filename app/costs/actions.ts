@@ -9,8 +9,7 @@ import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { brokerValue, feeSettingsValue, fundCostValue, taxSettingsValue } from '@/lib/models/costs';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm } from '@/lib/validation/costs';
+import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm, type FieldErrors } from '@/lib/validation';
 
 /** What every costs-page form gets back when it does not save. */
 export interface CostFormState {

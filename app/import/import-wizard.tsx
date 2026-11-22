@@ -22,7 +22,7 @@ import { previewImport } from '@/lib/models/portfolio';
 import type { FxQuote, Pool } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
 import { breachAlert } from '@/lib/rule-text';
-import { parseNumber } from '@/lib/validation/core';
+import { parseNumber } from '@/lib/validation';
 
 import { importTrades, type ImportState } from './actions';
 

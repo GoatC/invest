@@ -8,8 +8,7 @@ import { ACTION_MESSAGES, parseId, saveFailed, type DeleteState } from '@/lib/fo
 import { formFields } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { redFlagSettingsValue } from '@/lib/models/red-flags';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseFlagEntryForm, parseFlagSettingsForm } from '@/lib/validation/red-flags';
+import { parseFlagEntryForm, parseFlagSettingsForm, type FieldErrors } from '@/lib/validation';
 
 export interface FlagFormState {
   errors: FieldErrors<string>;

@@ -10,7 +10,7 @@ import { addMonths, isMonth, lastDayOf } from '@/lib/dates';
 import { percent, twd } from '@/lib/format';
 import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
 import { project, type SavedPlan } from '@/lib/models/projection';
-import { parsePlanForm, type PlanField } from '@/lib/validation/planning';
+import { parsePlanForm, type PlanField } from '@/lib/validation';
 
 import { savePlan, type PlanFormState } from './actions';
 

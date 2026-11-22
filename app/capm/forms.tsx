@@ -3,9 +3,9 @@
 import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
-import { useFields } from '@/components/use-fields';
+import { useFieldInputs } from '@/components/use-field-inputs';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseCapmForm } from '@/lib/validation/research';
+import { parseCapmForm } from '@/lib/validation';
 
 import { saveCapmSettings, type CapmFormState } from './actions';
 
@@ -24,7 +24,7 @@ export function CapmSettingsForm({
   checkedOn: string | null;
 }) {
   const [state, formAction, pending] = useActionState(saveCapmSettings, INITIAL);
-  const { select, input, reset } = useFields(initial, (values) => parseCapmForm(values, markets.map((entry) => entry.market), today), state.errors);
+  const { select, input, reset } = useFieldInputs(initial, (values) => parseCapmForm(values, markets.map((entry) => entry.market), today), state.errors);
   return (
     <form action={formAction} onSubmit={reset} className="form">
       <div className="form-grid">

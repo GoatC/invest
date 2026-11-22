@@ -7,8 +7,7 @@ import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readFrontierSettings } from '@/lib/models/frontier';
-import { parseFrontierForm, type FrontierField } from '@/lib/validation/allocation';
-import type { FieldErrors } from '@/lib/validation/core';
+import { parseFrontierForm, type FieldErrors, type FrontierField } from '@/lib/validation';
 
 export interface FrontierFormState {
   errors: FieldErrors<FrontierField>;

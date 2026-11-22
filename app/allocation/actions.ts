@@ -11,8 +11,7 @@ import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { autoCmaValue, readAutoCmaSettings } from '@/lib/models/auto-cma';
 import { assumptionsValue } from '@/lib/models/cma';
-import { parseAssumptionForm, parseAutoCmaForm, parseTargets, type AutoCmaField } from '@/lib/validation/allocation';
-import type { FieldErrors } from '@/lib/validation/core';
+import { parseAssumptionForm, parseAutoCmaForm, parseTargets, type AutoCmaField, type FieldErrors } from '@/lib/validation';
 
 export interface SettingsFormState {
   errors: FieldErrors<string>;

@@ -11,8 +11,7 @@ import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, previewTrade } from '@/lib/models/portfolio';
 import { buildPositions } from '@/lib/models/positions';
 import { restateTrades } from '@/lib/models/splits';
-import type { FieldErrors } from '@/lib/validation/core';
-import { parseTrade, type TradeField } from '@/lib/validation/holdings';
+import { parseTrade, type FieldErrors, type TradeField } from '@/lib/validation';
 
 export interface TradeFormState {
   errors: FieldErrors<TradeField>;

@@ -7,7 +7,7 @@ import { Field } from '@/components/field';
 import { useFields } from '@/components/use-fields';
 import { percent } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseEngineSettings, parseRuleForm, thresholdField, type EngineSettingsField } from '@/lib/validation/rules';
+import { parseEngineSettings, parseRuleForm, thresholdField, type EngineSettingsField } from '@/lib/validation';
 
 import { saveEngineSettings, saveRule, type RuleFormState, type SettingsFormState } from './actions';
 
