@@ -1,0 +1,54 @@
+[PRD](../PRD.md) › Section 7
+
+# 7. Data Model 資料結構
+
+Nineteen Postgres tables cover holdings, market data, rules and model outputs; all money is stored in trade currency with the FX rate of the day. 共 19 張 Postgres 資料表，涵蓋持股、市場資料、規則與模型產出；所有金額以交易幣別儲存，並記錄當日匯率。
+
+| Table 資料表 | Key fields 主要欄位 | Used by 使用者 |
+| --- | --- | --- |
+| asset\_classes 資產類別 | id, name\_en, name\_zh, target\_weight, benchmark\_ticker, is\_satellite | F6, F8, N2 |
+| securities 證券 | ticker, market (US/TW/UK), product\_type, listing\_country, sleeve, currency, domicile, asset\_class\_id | All |
+| transactions 交易 | date, ticker, side, qty, price, fee, tax, fx\_rate, source (manual/CSV), pool (regular/windfall), direction (long/short), leverage (1.0–10.0) | F18, N2 |
+| cash\_flows 現金流 | date, amount\_twd, type (windfall/dividend/withdrawal; contribution only from before 2026-11-12, when buys began to count by themselves), pool (regular/windfall) | F2, F18, N5 |
+| prices 價格 | ticker, date, close, adj\_close | All |
+| fx\_rates 匯率 | date, pair, rate | F18, N2 |
+| nav\_snapshots 淨值快照 | date, total\_twd, weights\_by\_class, var\_95\_1w | F1, F8, F18 |
+| rules 規則 | id, desc\_en, desc\_zh, condition, threshold, action, cooldown\_days, enabled | Rules engine |
+| rule\_changes 規則變更 | rule\_id, date, old\_value, new\_value | Rules engine |
+| proposals 規則警示 | id, rule\_id, created\_at, status (open/dismissed/expired; filled only before 2026-11-12), orders (suggested), state, detail, closed\_reason (step 9; expires\_at, filled\_at and dismiss\_reason kept for the history before 2026-11-12) | Rules engine |
+| windfall\_tranches 分批計畫 | plan\_id, due\_date, amount\_twd, status (scheduled/accelerated/done) | F3 |
+| valuations 估值 | ticker, date, model, iv\_bear, iv\_base, iv\_bull, inputs | F12 |
+| analyst\_estimates 分析師共識預估 (added 2026-11-04) | ticker, as\_of, currency, estimates (years, targetPrice, ratings), source | F12 forward P/E |
+| beta\_results Beta 結果 | ticker, benchmark, model (1F/5F), freq, window, beta, alpha, factor\_loadings, r2, std\_err, run\_date | N1, F11 |
+| red\_flags 紅旗 | ticker, date, indicator, value, level, coverage\_pct | N3 |
+| attribution 歸因 | period, level, segment, allocation, selection, interaction, fx | N2 |
+| config 設定 | tax thresholds, push schedule, quiet hours, satellite cap, single-stock cap, CMA per asset class | F15, Section 4–5 |
+| watchlist 觀察清單 | ticker, added\_on, buy\_threshold, trim\_threshold, active, assumptions (step 4) | F12, N3 |
+| windfall\_plan 大額資金計畫 | total\_twd, received\_on, cape\_percentile, tranche\_count, tiers\_fired, current\_drawdown\_peak | F3 |
+| manual\_assets 非上市資產 | name, asset\_class\_id, unit (grams/TWD), quantity, valuation\_method, last\_value\_twd | N5, N4, N6 |
+
+A 20th table, push\_subscriptions (endpoint, keys, device name), is added in Phase 1 with the Web Push setup, with notifications, the pushes' outbox and log (step 10). 第 20 張資料表 push\_subscriptions（端點、金鑰、裝置名稱）會在第一階段建置 Web Push 時一併加入，另有推播的待送清單與紀錄 notifications（第 10 步）。
+
+Two bookkeeping tables join them in Phase 1: audit\_log (table, row, old and new values, who and when) for N5's edit history (step 2), and job\_runs (job, start, finish, status, per-feed detail) for the nightly job's outcomes and the data-failure alert (step 4). 第一階段另有兩張紀錄用資料表：audit\_log（資料表、資料列、修改前後內容、修改者與時間），供 N5 的修改紀錄使用（第 2 步）；job\_runs（工作、開始與結束時間、狀態、各資料來源明細），記錄每夜排程結果並供資料異常警示使用（第 4 步）。
+
+Phase 2 adds market\_series (series, obs\_month, value, source): the monthly S&P 500 CAPE, price and dividend yield the windfall planner reads, and since step 2 the US 3-month bill rate, written by the nightly job only (step 1); and index\_prices (index\_id, price\_date, close, source): the daily closes of the indices N1 regresses on, S&P 500 and TAIEX, and later N7's sector proxies, also written by the job only (step 2). beta\_results gets each holding's β once a month. Since step 3 market\_series also holds F11's US and Taiwan 10-year yields and Damodaran's implied ERP (us\_treasury\_10y, tw\_govt\_10y, us\_implied\_erp). 第二階段新增 market\_series（資料名稱、月份、數值、來源）：大額資金分批使用的每月 S&P 500 CAPE、價格與股息殖利率，第 2 步起另有美國 3 個月國庫券利率，只有每夜排程能寫入（第 1 步）；以及 index\_prices（指數代號、日期、收盤、來源）：N1 回歸使用的標普 500 與加權報酬指數每日收盤，之後也存放 N7 的類股代理，同樣只有排程能寫入（第 2 步）。beta\_results 每月存入各持股的 β。第 3 步起 market\_series 另存 F11 的美國與台灣 10 年期公債殖利率及 Damodaran 隱含風險溢酬。
+
+Phase 2, step 4 adds fundamentals (ticker, period\_end, figures, currency, filed\_on, source): each single stock's twelve-month flows and quarter-end balances from its filings, written by the nightly job only. 第二階段第 4 步新增 fundamentals：個股每季的近四季流量與季末餘額，只有每夜排程能寫入。
+
+Phase 2, step 5 adds company\_profiles (ticker, industry\_code, industry, sic, auditor, business\_id, checked, source), what the job knows of each single stock besides its filings, and red\_flag\_events (ticker, indicator, event\_date, source, ref, title, url, value), the events the feeds find, both written by the job only; and red\_flag\_entries (ticker, indicator, as\_of, value, note), the owner's own entries, logged. red\_flags gains detail (what each indicator read) and the levels none and na; fundamentals' figures gain grossProfit, cogs, sga, receivables, ppe, totalAssets, totalLiabilities and retainedEarnings. 第二階段第 5 步新增 company\_profiles（公司產業、簽證事務所、統一編號、各資料來源檢查日）與 red\_flag\_events（資料來源找到的事件），只有每夜排程能寫入；以及 red\_flag\_entries（使用者自行登錄，留有紀錄）。red\_flags 新增 detail 欄與 none（無資料）、na（不適用）兩種等級；財報數字新增毛利、營業成本、管銷費用、應收帳款、不動產廠房設備、總資產、總負債與保留盈餘。
+
+Phase 2, step 6 adds fund\_holdings (fund, as\_of, source, constituents, loaded\_at): each fund's newest holdings file, one row per fund with its lines as compact arrays, written by the job only; company\_profiles gains sector (GICS) for the stocks held directly. 第二階段第 6 步新增 fund\_holdings：各基金最新的成分股檔案（每檔一列），只有每夜排程能寫入；company\_profiles 新增 GICS 產業欄位。
+
+Phase 3, step 1 adds simulation\_runs (model, run\_date, summary): the nightly job's monthly Monte Carlo re-run, the inputs and the figures at the marks, written by the job only, read by the dashboard in the week it updates. 第三階段第 1 步新增 simulation\_runs（模型、執行日、摘要）：每夜排程每月一次的蒙地卡羅重跑結果，只有排程能寫入，儀表板在更新當週讀取。 Step 2 adds only config rows: timeline (the later goals) 第 2 步只新增 config：timeline（後續目標）。
+
+After Phase 3, N5 adds splits (ticker, ex\_date, ratio, note): one row per stock split, ratio new shares per old share; trades stay as traded and the models read them in today's units. 第三階段後，N5 加入 splits（代號、生效日、比例、備註）：每次股票分割一列，比例為每 1 股舊股換得的新股數；交易維持成交時的紀錄，模型以今天的股數讀取。
+
+On 2026-11-06, N8 adds volatility\_scores (score\_date, score 1–10, mean, coverage, components): each day's volatility score, written by the volatility job only; and config `volatility`. Its series go to index\_prices as VIX, VIX3M, TWVIX, EPU and HY\_OAS. 2026-11-06 起，N8 新增 volatility\_scores（日期、分數 1–10、加權平均、涵蓋權重、各成分）：每日波動分數，只有波動排程能寫入；另加入 config `volatility`。其資料以 VIX、VIX3M、TWVIX、EPU、HY\_OAS 存入 index\_prices。 Step 2 adds market\_events (kind fomc / cpi / payrolls / cbc / other, event\_date and event\_time in Taipei, name\_en, name\_zh, source fed / fred / typed, note): the job replaces its feeds' rows from today on; the owner reads all and types, edits and deletes typed rows, logged. notifications gains the kind event, and config volatility gains events (lead\_days, remind). Step 3 adds the rules VOLATILITY\_ALERT and VOLATILITY\_HEDGE and the securities 00677U and VIXY (tactical themes); the shadow log reads proposals and prices, with no table of its own. Step 4 adds config `news`, news\_counts (topic, counted\_at, sources: each run's count, kept for baseline\_days) and news\_alerts (topic, detected\_at, sources, baseline, window\_hours, headlines), both written by the news job only, and the notifications kind news. 第 4 步新增 config `news`、news\_counts（每次統計的家數）與 news\_alerts（新聞警報），只有新聞排程能寫入；notifications 新增 news 類別。 第 2 步新增 market\_events（類別、台北日期與時間、名稱、來源、備註）：排程替換其來源今天起的事件；使用者可讀取全部，並新增、修改、刪除自行輸入的事件（留紀錄）。notifications 新增 event 類別，config volatility 新增 events（提前天數、提醒類別）。
+
+On 2026-11-09, F6's auto-scored assumptions add config `cma_auto` (enabled, premium cma / erp, anchors by market, lookback\_years 5, min\_months 36) and cma\_estimates (class\_id, as\_of, expected\_return, volatility, months, detail: each line's ticker, weight, index, β, R², expected return and volatility, the lines left out and the markets' R\_f and premium): one row per satellite class, written by the nightly job and by the owner's own save after a trade in a satellite class or a change of assumptions; worked out from the holdings, so not audited. 2026-11-09 起，F6 自動評分新增 config `cma_auto` 與 cma\_estimates（每個衛星類別一列：預期報酬、波動度、月數與各檔明細），由每夜排程與使用者儲存交易或假設時寫入；依持股計算，不列入修改紀錄。
+
+On 2026-11-12, N5 adds dividend\_events (ticker, ex\_date, pay\_date or null, amount a share, currency, source, skipped\_pools; one row per security and ex-dividend date, upserted by the nightly job, the owner's "skip" kept), banner\_dismissals (key, until: a banner closed with ✕), two columns on securities (dividends\_reinvested, false unless the income is reinvested by itself; dividends\_checked\_on, the day Alpha Vantage last answered), the notification kind dividend, and config `dividends` (lookback\_days 60, match\_days 30, pay\_lag\_days by market, withholding by domicile, push, push\_days 3) and `banners` (enabled, snooze\_days 7, balance\_stale\_days 45, kinds). The cash-flow book adds no table: it is read from transactions and cash\_flows. 2026-11-12 起，N5 加入 dividend\_events（代號、除息日、發放日或空值、每股配息、幣別、來源、已略過的資金池；每檔每個除息日一列，由每夜排程寫入，保留使用者的「略過」）、banner\_dismissals（識別碼、到期日：以 ✕ 關閉的橫幅）、securities 的兩個欄位（dividends\_reinvested：配息是否自動再投入；dividends\_checked\_on：上次向 Alpha Vantage 查詢的日期）、推播類型 dividend，以及 config `dividends` 與 `banners`。現金流帳不新增資料表：由 transactions 與 cash\_flows 讀出。
+
+On 2026-11-18, the home-screen widget adds widget\_snapshot (one row: as\_of, total\_twd, week\_change or null, points, red\_up; written by the nightly job), widget\_key (one row: key\_hash, the SHA-256 of the widget's key, and created\_at), the function widget\_figures(key) (the snapshot and the stale days for the right key, else null; the one thing anon may call) and config `widget` (stale\_days 3). 2026-11-18 起，主畫面小工具加入 widget\_snapshot（一列：收盤日、總市值、近 7 天漲跌、走勢線、紅漲綠跌；每夜排程寫入）、widget\_key（一列：鑰匙的 SHA-256 與建立時間）、函式 widget\_figures(key)（鑰匙正確才回傳數字與過期天數；anon 唯一能呼叫的東西）與 config `widget`。
+
+On 2026-11-05, N5 adds two columns to transactions: direction (long / short, default long) and leverage (numeric(3,1), 1.0 to 10.0, default 1.0), so every trade saved before is a long at 1×; and config `leverage` (max, the highest leverage the form offers; margin\_call\_share, the share of own money left at which the holdings page warns). 2026-11-05 起，N5 在 transactions 加入兩個欄位：direction（long／short，預設 long）與 leverage（numeric(3,1)，1.0 至 10.0，預設 1.0），因此既有交易皆為 1 倍做多；另加入 config `leverage`（max：表單提供的最高槓桿；margin\_call\_share：自有資金剩下多少比例時持倉頁提醒）。
