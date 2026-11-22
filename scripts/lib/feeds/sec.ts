@@ -1,5 +1,5 @@
 /**
- * SEC EDGAR (F12, Phase 2 step 4): a US company's figures from the XBRL facts of its 10-K and 10-Q
+ * SEC EDGAR (F12): a US company's figures from the XBRL facts of its 10-K and 10-Q
  * filings (the company facts API), for the valuation workbench. Free and keyless, but the SEC asks
  * every program to name itself with a contact email in its User-Agent (fair-access policy, at most
  * 10 requests a second) and refuses one without: the nightly job sends SEC_USER_AGENT.

@@ -1,5 +1,5 @@
 /**
- * F10 stress test and scenario replay (PRD Module B, Phase 3 step 3): what a bad stretch from
+ * F10 stress test and scenario replay (PRD Module B): what a bad stretch from
  * history, or one you make up, would have done to what you hold today.
  *
  * Method:

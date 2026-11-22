@@ -11,7 +11,7 @@ const CHOICES: ReadonlyArray<{ value: ThemeChoice; zh: string; en: string }> = [
 ];
 
 /**
- * 外觀 on 帳號 (Hugo, 2026-11-19): 淺色 by default, 深色, or 自動 following the phone. The choice is kept
+ * 外觀 on 帳號: 淺色 by default, 深色, or 自動 following the phone. The choice is kept
  * on this device and shown at once (lib/theme.ts); inside the iOS shell the page tells the shell, which
  * themes its own bars (components/shell-bridge.tsx).
  */

@@ -42,7 +42,7 @@ function savedMessage(params: Params): Bilingual | undefined {
 }
 
 /**
- * The rule warnings (Hugo, 2026-11-12: a proposal is a standing warning that can be dismissed). Each
+ * The rule warnings (a proposal is a standing warning that can be dismissed). Each
  * open one is a tile with a dismiss button, the line of what it suggests, and its figures and
  * suggested orders folded under it; it stays until dismissed or its rule clears. The dismissed and
  * cleared ones fold at the foot.

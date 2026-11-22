@@ -1,5 +1,5 @@
 /**
- * The cash-flow book (asked by Hugo on 2026-11-12): every buy and sell counts by itself, read from
+ * The cash-flow book: every buy and sell counts by itself, read from
  * the trades, so a purchase is recorded once, on the holdings page. cash_flows keeps what no trade
  * tells: the windfall arriving, dividends and withdrawals.
  *

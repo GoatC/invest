@@ -1,5 +1,5 @@
 /**
- * The push job (PRD Sections 4 and 5, Phase 1 step 10). GitHub Actions runs it every hour and
+ * The push job (PRD Sections 4 and 5). GitHub Actions runs it every hour and
  * after the nightly job (.github/workflows/notify.yml, nightly.yml); `npm run notify` runs it by
  * hand. It needs SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SECRET_KEY, plus the VAPID
  * settings (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT); without the VAPID ones it says so

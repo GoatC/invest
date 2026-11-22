@@ -1,5 +1,5 @@
 /**
- * Charts the iOS shell draws itself with Apple's Swift Charts (Hugo, 2026-11-15: native, not a
+ * Charts the iOS shell draws itself with Apple's Swift Charts (native, not a
  * look-alike; the main tabs first). The page keeps building each chart as an ECharts option; inside
  * the shell, a line, bar or point chart on one pair of axes is described here in plain data (its x
  * values, each series' values, colour and mark, the lines it draws across, the read-out of each x)

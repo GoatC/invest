@@ -10,7 +10,7 @@ describe('breachAlert', () => {
   it('puts the R1 acceptance case on a tile: the weight against the cap and the sale back to it', () => {
     const tile = breachAlert({ rule: 'R1', subject: 'AAPL', valueTwd: 11_000, weight: 0.055, limit: 0.05, trimTwd: 1_000 }, CAPS);
     assert.deepEqual(
-      // No rule code on the tile (Hugo, 2026-11-19): its name says which rule.
+      // No rule code on the tile: its name says which rule.
       [tile.code, tile.title.zh, tile.value, tile.gauge, tile.chips?.map((chip) => `${chip.label.zh} ${chip.value}`)],
       [undefined, 'AAPL · 個股上限', '5.5%', { value: 0.055, limit: 0.05 }, ['上限 5%', '賣出 ≈NT$1,000']],
     );

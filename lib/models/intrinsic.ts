@@ -1,5 +1,5 @@
 /**
- * F12 Valuation workbench (PRD Module C, Phase 2 step 4): a single stock's intrinsic value a share,
+ * F12 Valuation workbench (PRD Module C): a single stock's intrinsic value a share,
  * bear / base / bull, by three models, and where today's price stands against it.
  *
  * - DCF (FCFF): FCFF = EBIT (1 − t) + D&A − CapEx − ΔNWC over the last twelve months; it grows at

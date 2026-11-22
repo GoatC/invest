@@ -7,7 +7,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { MAIN, matches, name, type Page } from './nav-pages';
 
 /**
- * The phone's tab bar (Hugo, 2026-11-13): a capsule of glass that floats over the page, after
+ * The phone's tab bar: a capsule of glass that floats over the page, after
  * iOS's Liquid Glass. Apple's own material is open to native apps only, so this one is built from
  * what a web page is given: the page behind it is blurred live by the browser (backdrop-filter),
  * and the selection is a lens moved by springs, not by fixed curves. A finger laid on the bar

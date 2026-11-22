@@ -1,5 +1,5 @@
 /**
- * The red-flag indicator (N3, PRD Module C, Phase 2 step 5): each single stock held or watched gets
+ * The red-flag indicator (N3, PRD Module C): each single stock held or watched gets
  * a red / amber / green light and the list of indicators that fired. Display only: a light never
  * blocks a trade; the two N3 rules turn a worse light into a prompt to review.
  *

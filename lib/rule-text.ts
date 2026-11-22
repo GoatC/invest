@@ -91,7 +91,7 @@ function off(code: string, title: Bilingual, href: string): AlertItem {
  * the poster): R1, R2 and F8's drift, each always there with its status, whether or not it fires.
  * A rule that fires shows as its warning tile (a stock over the cap, each); one that does not shows
  * how near it is: the largest stock against the cap, the satellite sleeve against its trigger, the
- * core class furthest into its band. The words are the app's own (Hugo, 2026-11-15: the design,
+ * core class furthest into its band. The words are the app's own (the design,
  * every word as it is).
  */
 export function ruleBoard(holdings: readonly Holding[], caps: Caps, drifts: readonly ClassDrift[]): AlertItem[] {

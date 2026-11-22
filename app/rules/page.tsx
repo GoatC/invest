@@ -122,7 +122,7 @@ const ICON: Record<Check['outcome'], [string, string]> = {
 
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
   const live = proposals.find((proposal) => proposal.status === 'open');
-  // The rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19).
+  // The rule's name alone; its code (R1, F8…) is never shown.
   const title: Bilingual = proposalTitle(rule);
   return (
     <article id={`rule-${rule.id}`} className="rule-row form">

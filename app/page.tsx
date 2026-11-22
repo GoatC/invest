@@ -178,11 +178,11 @@ function WeekCapsule({ gain, tone }: { gain: Gain; tone: Glow['tone'] }) {
 }
 
 /**
- * The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/02-components.md): the date
+ * The poster at the top (Ink design 2026-11-18, docs/design-handoff/02-components.md): the date
  * and the refresh button, the portfolio's value (both pools), the 7-day move as one capsule, and the line of the
  * portfolio's rise and fall edge to edge along the foot, ending in today's dot. One glow from the top-right corner in
  * the colour of the 7-day move, its strength the size of the move. No closes' date, legend, ⓘ or expand button on it
- * (Hugo, 2026-11-15). The pools and the gain since the start live on Holdings.
+ *. The pools and the gain since the start live on Holdings.
  */
 function Hero({
   today,
@@ -278,7 +278,7 @@ function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portf
   const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
   if (items.length === 0) return null;
   const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
-  // Closed by default (Hugo, 2026-11-18): the worst state's badge, how many need him, and which rules; a tap opens the tiles.
+  // Closed by default: the worst state's badge, how many need him, and which rules; a tap opens the tiles.
   const firing = items.filter((item) => item.tone === tone && tone !== 'ok');
   const count = tone === 'alert' ? `${firing.length} 項需處理` : tone === 'watch' ? `${firing.length} 項注意` : '全部正常';
   const which = firing.map((item) => `${item.code ? `${item.code} ` : ''}${item.title.zh}`).join(' · ');

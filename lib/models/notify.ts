@@ -1,5 +1,5 @@
 /**
- * What to push, and when (PRD Sections 4 and 5, Phase 1 step 10). Every push names a decision,
+ * What to push, and when (PRD Sections 4 and 5). Every push names a decision,
  * never a price move (design principle 2): a proposal a rule drafted, the weekly review's three
  * lines, or the data-failure alert. Pushes wait out the quiet hours (config quiet_hours), and each
  * is planned once: a notification's kind and key are unique, so a proposal, a week or a failure
@@ -162,7 +162,7 @@ export interface ProposalForPush {
   detail: ProposalDetail;
 }
 
-/** A rule's Chinese name, without its code (R1, US_ESTATE_TAX…): codes are never shown (Hugo, 2026-11-19). */
+/** A rule's Chinese name, without its code (R1, US_ESTATE_TAX…): codes are never shown. */
 export function ruleTitle(ruleId: string, title: string): string {
   return title.replace(`${ruleId} · `, '');
 }
@@ -320,7 +320,7 @@ function nextMonth(month: string): string {
 /**
  * What falls in the next seven days, today included: the DCA debit (config dca.day_of_month) and
  * the monthly-contribution proposal the day after it, the weekly review, January's review, and
- * the windfall tranches still scheduled (F3, Phase 2 step 1), and the quarterly reports due of the
+ * the windfall tranches still scheduled (F3), and the quarterly reports due of the
  * single stocks held or watched (F12, step 4): a Taiwan deadline, a US date estimated; and the
  * market events on N8's calendar (step 2), at their Taipei time.
  */

@@ -1,5 +1,5 @@
 /**
- * N2 Brinson attribution (PRD Module D, Phase 3 step 5): why the portfolio's return differed from
+ * N2 Brinson attribution (PRD Module D): why the portfolio's return differed from
  * the SAA benchmark's, as allocation, selection, interaction and currency effects.
  *
  * Brinson–Fachler, per segment i, for one month:

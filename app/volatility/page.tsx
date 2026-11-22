@@ -34,7 +34,7 @@ function taipeiShort(at: string): string {
 }
 
 /**
- * N8 (added 2026-11-06): the volatility score, breaking news, the alert record and the coming
+ * N8: the volatility score, breaking news, the alert record and the coming
  * events. Few words (CLAUDE.md): figures as tiles, explanations behind ⓘ, lists and settings folded.
  */
 export default async function VolatilityPage({ searchParams }: { searchParams: Promise<Params> }) {

@@ -1,5 +1,5 @@
 /**
- * Each holding's cash dividends, for the dividend prompt (asked by Hugo on 2026-11-12; checked
+ * Each holding's cash dividends, for the dividend prompt (checked
  * live the same day): the ex-dividend date, the cash a share and, where the feed tells, the day it
  * is paid.
  *

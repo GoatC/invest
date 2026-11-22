@@ -1,5 +1,5 @@
 /**
- * The 10-year government bond yields F11 (Phase 2, step 3) takes as R_f, and Damodaran's implied
+ * The 10-year government bond yields F11 takes as R_f, and Damodaran's implied
  * equity risk premium, all as monthly market_series in fractions a year:
  * - us_treasury_10y: FRED's DGS10, the month's last daily value (the current month's newest so
  *   far); the US Treasury's own daily par yield curve (its "10 Yr" column) as the fallback.

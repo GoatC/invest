@@ -1,5 +1,5 @@
 /**
- * The figures of the iPhone home-screen widget (asked by Hugo on 2026-11-18; docs/superpowers/specs/
+ * The figures of the iPhone home-screen widget (docs/superpowers/specs/
  * 2026-11-18-ios-widget-design.md): the whole portfolio's value at the last close, both pools, the
  * poster's 7-day change and its line, read at a glance to see that nothing is wrong. The nightly job
  * saves them (widget_snapshot) from the same daily series the dashboard draws, so the widget and the

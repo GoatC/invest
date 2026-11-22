@@ -72,7 +72,7 @@ function dueItem(line: DividendDue): AlertItem {
 }
 
 /**
- * The 現金流 tab (asked by Hugo on 2026-11-12): the dividends to confirm first, then the totals, then
+ * The 現金流 tab: the dividends to confirm first, then the totals, then
  * one book of every buy and sell (read from the trades, nothing to type twice) with the windfall,
  * dividends and withdrawals typed in here.
  */

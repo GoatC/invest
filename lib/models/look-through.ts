@@ -1,5 +1,5 @@
 /**
- * The combined look-through (F14, PRD Module C, Phase 2 step 6): what the whole portfolio holds once
+ * The combined look-through (F14, PRD Module C): what the whole portfolio holds once
  * every fund is opened up. Each holding's TWD value is spread over its fund's constituents, by
  * their weight in the issuer's latest holdings file; a single stock held directly adds its own
  * value. So TSMC held through VT, 00692 and directly is one line, with what each route adds.

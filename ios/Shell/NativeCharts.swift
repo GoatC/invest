@@ -4,7 +4,7 @@ import UIKit
 
 /// A chart the page hands over to be drawn with Swift Charts (lib/native-chart.ts `NativeSpec`): the
 /// page keeps building it, and keeps its place, its legend and its table; the shell draws it in that
-/// place, over the page, with Apple's own charts (Hugo, 2026-11-15: native, not a look-alike).
+/// place, over the page, with Apple's own charts (native, not a look-alike).
 struct NativeChartSpec {
     enum Mark { case line, bar, point }
 

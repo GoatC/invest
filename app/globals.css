@@ -1471,7 +1471,7 @@ tr.selected td {
 
 /* The weekly dashboard (app/page.tsx) */
 
-/* The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/): the page's
+/* The poster at the top (Ink design 2026-11-18, docs/design-handoff/): the page's
    surface with one glow from the top-right corner in the colour of the 7-day move (--glow-k, its
    strength, from lib/models/glow.ts), the value large, the move as one capsule, and the line of the
    portfolio's rise and fall edge to edge along the foot. --hero-bg and --hero-text are set here, for
@@ -1893,7 +1893,7 @@ html:has(#splash:not(.leaving)) .hero *::after {
   display: none;
 }
 
-/* On a phone the poster is the top of the screen (Hugo, 2026-11-13): edge to edge, up under the
+/* On a phone the poster is the top of the screen: edge to edge, up under the
    status bar, with no header over it; the dashboard's sub-tabs ride on it, and the banner comes
    under it (app/page.tsx). Other pages keep their header. */
 @media (max-width: 759px) {
@@ -2785,7 +2785,7 @@ html[data-opened] .splash {
   background: var(--ok-text);
 }
 
-/* The dashboard's rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge, the count,
+/* The dashboard's rules as one row, closed by default: the worst state's badge, the count,
    which rules fire; open, the tiles. */
 .rule-fold > summary {
   display: flex;
@@ -4456,7 +4456,7 @@ html[data-shell] .band-row[data-line] .band-top > span:first-child::before {
   vertical-align: 0.05em;
 }
 
-/* iOS's own type (Hugo, 2026-11-14): inside the shell the text is the system's San Francisco and
+/* iOS's own type: inside the shell the text is the system's San Francisco and
    PingFang at iOS's text styles, and follows the phone's text size (Settings, Display & Brightness,
    Text Size), as a native app's does. The root takes iOS's Body style (17pt at the usual setting),
    so every size given in rem moves with it: a line of text is Body, a small note about Subheadline
@@ -4606,7 +4606,7 @@ html[data-shell] .native-drawn > * {
   visibility: hidden;
 }
 
-/* The opening (Hugo, 2026-11-15): the shell's own launch cover stays over everything, bars and tab
+/* The opening: the shell's own launch cover stays over everything, bars and tab
    bar included, until the page has opened (lib/shell.ts `opened`); the page's opening screen is not
    drawn under it. */
 html[data-shell] .splash {
@@ -4614,7 +4614,7 @@ html[data-shell] .splash {
 }
 
 /* The page starts just under the shell's bar and the row of sub-tabs under its large title, not a
-   card's height below it (Hugo, 2026-11-15). */
+   card's height below it. */
 html[data-shell-top] body.signed-in .page:not(:has(> .hero)) {
   padding-top: 0.15rem;
 }

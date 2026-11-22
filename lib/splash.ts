@@ -20,7 +20,7 @@ export const IPHONE_SCREENS: ReadonlyArray<readonly [width: number, height: numb
   [375, 667, 2],
 ];
 
-/** Opening screen B's ink black (Hugo, 2026-11-19): the same in light and dark (globals.css .splash). */
+/** Opening screen B's ink black: the same in light and dark (globals.css .splash). */
 export const SPLASH_GROUND = { light: '#070b09', dark: '#070b09' } as const;
 
 export type SplashScheme = keyof typeof SPLASH_GROUND;

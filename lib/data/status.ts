@@ -58,7 +58,7 @@ export interface DataStatus {
   prices: LatestQuote[];
   rates: LatestQuote[];
   series: LatestQuote[];
-  /** Each index's newest close (N1, Phase 2 step 2). */
+  /** Each index's newest close (N1). */
   indices: LatestQuote[];
   /** Each single stock's newest quarter end from its filings (F12, step 4); `value` is the quarters loaded, `filed` when known. */
   filings: Array<LatestQuote & { filed: string | null }>;

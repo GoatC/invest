@@ -1,5 +1,5 @@
 /**
- * The valuation workbench's plumbing (F12, Phase 2 step 4): from a stock's saved quarters and
+ * The valuation workbench's plumbing (F12): from a stock's saved quarters and
  * closes to the input its valuation needs, from a valuation to the rows the valuations table keeps,
  * and from those rows to what the rules engine reads. Pure; lib/data/valuation.ts loads and saves.
  */

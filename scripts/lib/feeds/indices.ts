@@ -88,7 +88,7 @@ export function indexAttempts(index: string, finmind: FinMind, get: Get, span: {
 export { INDICES } from '../../../lib/models/regression.ts';
 
 // ---------------------------------------------------------------------------
-// The sector tab's proxies (N7, Phase 2 step 7)
+// The sector tab's proxies (N7)
 // ---------------------------------------------------------------------------
 
 /** A sector proxy as the nightly job loads it: the id it is saved under, its market, FinMind's id and TWSE's name. */

@@ -1,5 +1,5 @@
 /**
- * N1 Regression Lab, Fama–French five-factor mode (PRD Module C, Phase 3 step 6): what drives a
+ * N1 Regression Lab, Fama–French five-factor mode (PRD Module C): what drives a
  * stock's or the whole portfolio's return beyond the market, on Kenneth French's free factors.
  *
  *   R_i,t − R_f,t = α + β_mkt (R_m − R_f) + s SMB + h HML + r RMW + c CMA + ε

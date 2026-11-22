@@ -1,5 +1,5 @@
 /**
- * Builds the stress test's scenarios (F10, Phase 3 step 3) from long-history prices: for each of
+ * Builds the stress test's scenarios (F10) from long-history prices: for each of
  * five series, the return in TWD of each month of a window, from month-end closes. A USD series
  * is converted with the month-end USD/TWD rate, so its return carries the currency's move, as the
  * app's own TWD returns do.

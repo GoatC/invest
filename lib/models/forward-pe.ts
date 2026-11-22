@@ -1,5 +1,5 @@
 /**
- * F12's forward P/E check (added 2026-11-04): today's trailing P/E against the forward P/E on the
+ * F12's forward P/E check: today's trailing P/E against the forward P/E on the
  * analysts' consensus EPS, set beside the company's own five-year P/E and its expected growth, so
  * a buy can be weighed on what the market's analysts expect next. Display only: no rule, no push;
  * F12's buy and trim zones stay the alerts. Thresholds come from config pe_check.

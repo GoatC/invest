@@ -1,5 +1,5 @@
 /**
- * The sector tab (N7, PRD Module C, Phase 2 step 7): which of the 11 GICS sectors are moving, and
+ * The sector tab (N7, PRD Module C): which of the 11 GICS sectors are moving, and
  * how much of the portfolio sits in each. Display only: no rule, no push.
  *
  * - US sectors are priced by the Select Sector SPDR funds (dividend-adjusted closes); Taiwan's by

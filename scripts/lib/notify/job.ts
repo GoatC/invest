@@ -1,5 +1,5 @@
 /**
- * The push job (PRD Section 4 and 5, Phase 1 step 10): plans the pushes due (new proposals, the
+ * The push job (PRD Section 4 and 5): plans the pushes due (new proposals, the
  * weekly review, the data-failure alert) and sends those whose time has come, after the quiet
  * hours. GitHub Actions runs it every hour and right after the nightly job
  * (.github/workflows/notify.yml and nightly.yml). Everything outside this file is injected, so a

@@ -102,7 +102,7 @@ export interface Store {
   saveIndexPrices(rows: readonly IndexClose[], options?: { fillOnly?: boolean }): Promise<void>;
   /** The years of Kenneth French's factors to keep (config factors, N1's five-factor mode); undefined before its migration. */
   factorYears(): Promise<number | undefined>;
-  /** Whether config capm exists (F11, Phase 2 step 3): false before its migration. */
+  /** Whether config capm exists (F11): false before its migration. */
   capmReady(): Promise<boolean>;
   /** The single stocks whose filings to load (F12): held or watched, and their peers; undefined before config valuation exists. */
   filingTickers(): Promise<Array<{ ticker: string; market: string }> | undefined>;

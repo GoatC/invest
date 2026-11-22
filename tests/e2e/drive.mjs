@@ -1199,7 +1199,7 @@ await step('rules: each rule says what it finds now; the monthly contribution wa
   await page.waitForURL('**/rules?saved=R1*');
   check((await page.locator('#rule-R1').innerText()).includes('Not firing'), 'with a 50% cap R1 stops firing');
   const log = (await page.locator('section', { hasText: 'Edit history of the rules' }).textContent()) ?? '';
-  // The log names the rule, not its code (Hugo, 2026-11-19).
+  // The log names the rule, not its code.
   check(/單一個股減碼[\s\S]*max_weight[\s\S]*0\.05[\s\S]*0\.5/.test(log), `the edit is logged, got ${log}`);
   // From a fresh address, so the redirect after saving is a new one to wait for.
   await page.goto(`${BASE}/rules`);
@@ -1227,7 +1227,7 @@ await step('warnings: checking the rules raises R1, F8 and the monthly contribut
   await page.waitForURL(/\?saved=checked/);
   check(/已檢查規則：新增 [3-9] 則，解除 0 則。/.test(await body()), `three or more raised, got ${await body()}`);
   const tiles = (await page.locator('#proposals .alert-tile').allInnerTexts()).map((text) => text.replace(/\s+/g, ' '));
-  // Named, with no rule code on the tile (Hugo, 2026-11-19).
+  // Named, with no rule code on the tile.
   check(tiles.some((tile) => tile.includes('單一個股減碼') && !/\bR1\b/.test(tile)), `R1 raised, got ${tiles}`);
   check(tiles.some((tile) => tile.includes('Drift rebalance')), 'F8 raised');
   check(tiles.some((tile) => tile.includes('Monthly contribution')), 'monthly raised');
@@ -1868,16 +1868,16 @@ await step('dashboard: the poster with the value of both pools, the 7-day move a
   // The 7-day move as one capsule: ▲, ▼ or 持平, its return and its amount net of the money put in; no 累計 chip.
   check(/(?:▲|▼|持平) ?\d+\.\d{2}% [+−]?NT\$[\d,]+ · 近 7 天/.test(band) && !band.includes('累計'), `the 7-day move as one capsule, got ${band}`);
   check(['up', 'down', 'flat'].includes((await poster.getAttribute('data-tone')) ?? ''), 'the poster glows in the colour of the 7-day move');
-  // The poster carries no rule or drift line any more (Hugo, 2026-11-13): the warnings sit right under it, the drift on Allocation.
+  // The poster carries no rule or drift line any more: the warnings sit right under it, the drift on Allocation.
   check(!/規則：|最大偏離|推播設定/.test(band) && (await poster.getByRole('link', { name: /warning/ }).count()) === 0, `no rules or drift line on the poster, got ${band}`);
-  // It offers the refresh and draws the line of both pools' rise and fall; no closes' date, legend, ⓘ or expand button (Hugo, 2026-11-15).
+  // It offers the refresh and draws the line of both pools' rise and fall; no closes' date, legend, ⓘ or expand button.
   check(!/收盤價至|兩個資金池的漲跌幅/.test(band) && (await poster.getByRole('button', { name: /Refresh the latest data/ }).count()) === 1, `the refresh button and no closes' date or legend on the poster, got ${band}`);
   check((await poster.locator('details.info, .hero-expand').count()) === 0, 'no ⓘ or expand button on the poster');
   check(!(await poster.locator('.refresh-data p').isVisible()), 'the refresh note waits until a run is asked for');
   const lineName = await poster.getByRole('img', { name: /Rise and fall of both pools since \d{4}-\d{2}-\d{2}, now [+−]?\d+\.\d{2}%/ }).getAttribute('aria-label');
   check(Boolean(lineName) && (await poster.locator('.hero-dot').count()) === 1, `the line names the return since the start and ends in today's dot, got ${lineName}`);
   check((await poster.locator('path.hero-line').getAttribute('d'))?.startsWith('M0 '), 'the line starts at the left edge');
-  // The rules as one row, closed by default (Hugo, 2026-11-18): the worst state's badge and count; a tap opens the tiles.
+  // The rules as one row, closed by default: the worst state's badge and count; a tap opens the tiles.
   const fold = page.locator('#rule-board details.rule-fold');
   if ((await fold.count()) > 0) {
     const summary = (await fold.locator('summary').innerText()).replace(/\s+/g, ' ');
@@ -2679,7 +2679,7 @@ await step('opening the app: the mark while every tab is fetched, then each tab 
     check((await splash.locator('svg').count()) === 1 && (await splash.innerText()).includes('長期投資'), 'the mark and the name');
     const cover = await splash.boundingBox();
     check(cover && cover.width === 390 && cover.height === 844, `it covers the screen, got ${JSON.stringify(cover)}`);
-    // Opening screen B (Hugo, 2026-11-19): ink black in light and dark alike, and nothing under it scrolls.
+    // Opening screen B: ink black in light and dark alike, and nothing under it scrolls.
     const ground = () => splash.evaluate((node) => getComputedStyle(node).backgroundColor);
     check((await ground()) === 'rgb(7, 11, 9)', `the ink ground, got ${await ground()}`);
     await app.evaluate(() => (document.documentElement.dataset.theme = 'dark'));

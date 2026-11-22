@@ -1,5 +1,5 @@
 /**
- * F5 Monte Carlo simulation (PRD Module A, Phase 3 step 1): the projection engine's stochastic
+ * F5 Monte Carlo simulation (PRD Module A): the projection engine's stochastic
  * mode. F2 earns the expected return every month; here each path draws its own months, and the
  * page reads the spread of where the regular pool (and the windfall, F3) could end up.
  *
