@@ -1,9 +1,10 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { useFields } from '@/components/use-fields';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import type { FieldErrors } from '@/lib/validation/core';
@@ -37,7 +38,7 @@ export interface FormContext {
 
 const ACTIONS: Record<FormKind, (previous: CostFormState, formData: FormData) => Promise<CostFormState>> = { fees: saveFees, tax: saveTax, broker: saveBroker, fund: saveFund };
 
-function parse(kind: FormKind, values: Record<string, string>, context: FormContext): FieldErrors<string> {
+function parse(kind: FormKind, values: Record<string, string>, context: FormContext) {
   const today = taipeiToday();
   const parsed =
     kind === 'fees'
@@ -47,7 +48,7 @@ function parse(kind: FormKind, values: Record<string, string>, context: FormCont
         : kind === 'broker'
           ? parseBrokerForm(values, context.taken ?? [], context.editing ?? null, today)
           : parseFundForm(values, context.taken ?? [], context.editing ?? null, new Set(context.classes ?? []), today);
-  return parsed.ok ? {} : (parsed.errors as FieldErrors<string>);
+  return parsed as { ok: boolean; errors?: FieldErrors<string> };
 }
 
 /**
@@ -55,23 +56,12 @@ function parse(kind: FormKind, values: Record<string, string>, context: FormCont
  * checked as it is typed with the same parser the server action uses; the server decides.
  */
 export function CostForm({ kind, fields, initial, context = {}, hidden = {}, submit }: { kind: FormKind; fields: readonly FieldSpec[]; initial: Record<string, string>; context?: FormContext; hidden?: Record<string, string>; submit?: Bilingual }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(ACTIONS[kind], INITIAL);
-  const errors = parse(kind, values, context);
-
-  function change(name: string, value: string) {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => ({ ...previous, [name]: value }));
-  }
-
-  function error(name: string): Bilingual | null {
-    return edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null);
-  }
+  const { values, error, change, reset } = useFields(initial, (typed) => parse(kind, typed, context), state.errors);
 
   const boxes = fields.filter((field) => field.kind === 'checkbox');
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       {Object.entries(hidden).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}

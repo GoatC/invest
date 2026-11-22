@@ -1,9 +1,10 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { useFields } from '@/components/use-fields';
 import { percent } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { parseEngineSettings, parseRuleForm, thresholdField, type EngineSettingsField } from '@/lib/validation/rules';
@@ -49,33 +50,20 @@ function label(key: string): Bilingual {
 export function RuleForm({ id, enabled, cooldownDays, threshold }: { id: string; enabled: boolean; cooldownDays: number; threshold: Record<string, unknown> }) {
   const numbers = Object.entries(threshold).filter((entry): entry is [string, number] => typeof entry[1] === 'number');
   const switches = Object.entries(threshold).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean');
-  const [values, setValues] = useState<Record<string, string>>(() => ({
-    cooldownDays: String(cooldownDays),
-    ...(enabled ? { enabled: 'on' } : {}),
-    ...Object.fromEntries(numbers.map(([key, value]) => [thresholdField(key), String(value)])),
-    ...Object.fromEntries(switches.filter(([, value]) => value).map(([key]) => [thresholdField(key), 'on'])),
-  }));
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(saveRule, RULE_STATE);
-  const parsed = parseRuleForm(values, threshold);
-
-  function change(name: string, value: string | undefined) {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => {
-      const next = { ...previous };
-      if (value === undefined) delete next[name];
-      else next[name] = value;
-      return next;
-    });
-  }
-
-  function error(name: string): Bilingual | null {
-    if (!edited.has(name)) return state.errors[name] ?? null;
-    return parsed.ok ? null : (parsed.errors[name] ?? null);
-  }
+  const { values, error, change, reset } = useFields<Record<string, string>, ReturnType<typeof parseRuleForm>>(
+    () => ({
+      cooldownDays: String(cooldownDays),
+      ...(enabled ? { enabled: 'on' } : {}),
+      ...Object.fromEntries(numbers.map(([key, value]) => [thresholdField(key), String(value)])),
+      ...Object.fromEntries(switches.filter(([, value]) => value).map(([key]) => [thresholdField(key), 'on'])),
+    }),
+    (typed) => parseRuleForm(typed, threshold),
+    state.errors,
+  );
 
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       <input type="hidden" name="id" value={id} />
       <label className="row">
         <input type="checkbox" name="enabled" checked={values['enabled'] === 'on'} onChange={(e) => change('enabled', e.target.checked ? 'on' : undefined)} />
@@ -133,27 +121,15 @@ const CHECKBOXES: readonly EngineSettingsField[] = ['fractionalUs', 'fractionalU
 
 /** config dca (amount, debit day), proposal_expiry_days, and how orders round shares (config orders). */
 export function SettingsForm({ initial }: { initial: Record<EngineSettingsField, string> }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<EngineSettingsField>>(new Set());
   const [state, formAction, pending] = useActionState(saveEngineSettings, SETTINGS_STATE);
-  const parsed = parseEngineSettings(values);
+  const { values, error, change, reset } = useFields(initial, parseEngineSettings, state.errors);
   const hints: Partial<Record<EngineSettingsField, Bilingual>> = {
     dcaDay: { en: 'Blank: the monthly rule waits.', zh: '留白：每月規則暫停。' },
     shareDecimals: { en: 'Taiwan: whole shares.', zh: '台股以整股計。' },
   };
 
-  function change(field: EngineSettingsField, value: string) {
-    setEdited((previous) => new Set(previous).add(field));
-    setValues((previous) => ({ ...previous, [field]: value }));
-  }
-
-  function error(field: EngineSettingsField): Bilingual | null {
-    if (!edited.has(field)) return state.errors[field] ?? null;
-    return parsed.ok ? null : (parsed.errors[field] ?? null);
-  }
-
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       <div className="form-grid">
         {TEXT_FIELDS.map((field) => (
           <Field key={field} label={SETTING_LABELS[field]} error={error(field)} hint={hints[field] && <Bi {...hints[field]} />}>

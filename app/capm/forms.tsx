@@ -1,11 +1,10 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
-import { Field } from '@/components/field';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import type { FieldErrors } from '@/lib/validation/core';
+import { useFields } from '@/components/use-fields';
+import { LABELS, type Bilingual } from '@/lib/i18n';
 import { parseCapmForm } from '@/lib/validation/research';
 
 import { saveCapmSettings, type CapmFormState } from './actions';
@@ -24,34 +23,10 @@ export function CapmSettingsForm({
   today: string;
   checkedOn: string | null;
 }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(saveCapmSettings, INITIAL);
-  const parsed = parseCapmForm(values, markets.map((entry) => entry.market), today);
-  const errors: FieldErrors<string> = parsed.ok ? {} : parsed.errors;
-  const error = (name: string) => (edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null));
-  const change = (name: string, value: string) => {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => ({ ...previous, [name]: value }));
-  };
-  const select = (name: string, label: Bilingual, options: ReadonlyArray<{ value: string; label: Bilingual }>) => (
-    <Field label={label} error={error(name)}>
-      <select name={name} value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {bi(option.label)}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-  const input = (name: string, label: Bilingual) => (
-    <Field key={name} label={label} error={error(name)}>
-      <input name={name} inputMode="decimal" autoComplete="off" value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)} />
-    </Field>
-  );
+  const { select, input, reset } = useFields(initial, (values) => parseCapmForm(values, markets.map((entry) => entry.market), today), state.errors);
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       <div className="form-grid">
         {select('beta', { en: 'β', zh: 'β' }, [
           { value: 'adjusted', label: { en: "Blume's adjusted", zh: 'Blume 調整後' } },
