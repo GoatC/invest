@@ -95,14 +95,17 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   let proposals: [Proposal[], RuleRecord[]] | DataError;
   // Likewise the dividend prompts: without them the book still shows.
   let dividends: DividendView | undefined | DataError;
+  // The summary's wash (Ink design) needs config glow; without it the page shows no wash.
+  let glowSettings: Awaited<ReturnType<typeof loadGlowSettings>> | DataError;
   const today = taipeiToday();
   try {
-    [data, flows, rates, proposals, dividends] = await Promise.all([
+    [data, flows, rates, proposals, dividends, glowSettings] = await Promise.all([
       loadAllocationData(supabase),
       loadCashFlows(supabase),
       loadFxHistory(supabase),
       orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
       orDataError(loadDividendView(supabase, today)),
+      orDataError(loadGlowSettings(supabase)),
     ]);
   } catch (err) {
     if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
@@ -116,10 +119,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
   // Each listed holding's closes: the overview's cards and sparklines, and the last session that tones the summary's
   // wash (Ink design). A failed read of either only leaves them out.
   const tickers = portfolio.holdings.flatMap((holding) => (holding.ticker === null ? [] : [holding.ticker]));
-  const [closes, glowSettings] = await Promise.all([
-    orDataError(tickers.length > 0 ? loadHoldingCloses(supabase, tickers, addDays(today, -RANGE_DAYS)) : Promise.resolve(new Map<string, Array<{ date: string; close: number }>>())),
-    orDataError(loadGlowSettings(supabase)),
-  ]);
+  const closes = await orDataError(tickers.length > 0 ? loadHoldingCloses(supabase, tickers, addDays(today, -RANGE_DAYS)) : Promise.resolve(new Map<string, Array<{ date: string; close: number }>>()));
   const session =
     closes instanceof DataError ? null : sessionMove(portfolio.holdings.flatMap((holding) => (holding.ticker === null ? [] : [{ valueTwd: holding.valueTwd, move: lastMove(closes.get(holding.ticker) ?? []) }])));
   const summaryGlow = pageGlowOf(session?.change === null || session?.change === undefined ? null : session.change * 100, 'holdings', glowSettings instanceof DataError ? undefined : glowSettings);

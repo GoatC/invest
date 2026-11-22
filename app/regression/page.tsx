@@ -55,10 +55,10 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
   let compare: string[];
   let against: Benchmark;
   try {
-    const setup = await loadRegressionSetup(supabase);
+    const [setup, savedBetas] = await Promise.all([loadRegressionSetup(supabase), loadSavedBetas(supabase)]);
     if (!setup.settings) return <DataProblem table="config" detail="regression is missing or malformed" />;
     settings = setup.settings;
-    saved = await loadSavedBetas(supabase);
+    saved = savedBetas;
     const priced = setup.securities.filter((security) => setup.priced.has(security.ticker));
     const pricedTickers = new Set(priced.map((security) => security.ticker));
     const freq = FREQUENCIES.find((option) => option === one(params, 'f')) ?? settings.defaults.freq;

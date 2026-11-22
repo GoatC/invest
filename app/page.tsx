@@ -53,14 +53,10 @@ import { Banners } from './banner';
 export default async function Dashboard() {
   const { supabase } = await requireSession();
   const today = taipeiToday();
-  let data: AllocationData;
-  try {
-    data = await loadAllocationData(supabase);
-  } catch (err) {
-    if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
-    throw err;
-  }
-  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents, lastStep] = await Promise.all([
+  // Every read starts at once; the red flags reuse the holdings the allocation read.
+  const allocation = loadAllocationData(supabase);
+  const [data, risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents, lastStep] = await Promise.all([
+    orDataError(allocation),
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadPlanData(supabase, today)),
@@ -73,12 +69,13 @@ export default async function Dashboard() {
     ),
     orDataError(loadWindfallPlan(supabase)),
     orDataError(loadWorkbench(supabase, today)),
-    orDataError(loadRedFlagData(supabase, today, undefined, data)),
+    orDataError(allocation.then((holdings) => loadRedFlagData(supabase, today, undefined, holdings))),
     orDataError(loadLastRun(supabase, 'monte_carlo')),
     orDataError(loadLastAttribution(supabase)),
     orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
     orDataError(loadMilestoneStep(supabase)),
   ]);
+  if (data instanceof DataError) return <DataProblem table={data.table} detail={data.detail} />;
   const portfolio = buildPortfolio(data);
   const rules = proposals instanceof DataError ? [] : proposals[1];
   // The whole portfolio day by day (F18): the poster's line, and the regular pool's month ends against the plan.

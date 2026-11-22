@@ -94,16 +94,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const range = pick(one(params, 'range'), RANGES, 'all');
   const view = pick(one(params, 'view'), VIEWS, 'whole');
   const end = taipeiToday();
-  let input: PerformanceInput;
-  try {
-    input = await loadPerformanceInput(supabase, end);
-  } catch (err) {
-    if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
-    throw err;
-  }
+  const [input, sectors, glowRead] = await Promise.all([orDataError(loadPerformanceInput(supabase, end)), orDataError(loadSectorSettings(supabase)), orDataError(loadGlowSettings(supabase))]);
+  if (input instanceof DataError) return <DataProblem table={input.table} detail={input.detail} />;
   const days = buildSeries(input);
   // Price moves follow the colour convention set on the sector page (Taiwan's red up by default).
-  const [sectors, glowRead] = await Promise.all([orDataError(loadSectorSettings(supabase)), orDataError(loadGlowSettings(supabase))]);
   const redUp = sectors instanceof DataError || !sectors || sectors.colour === 'red_up';
   const glow = glowRead instanceof DataError ? undefined : glowRead;
 
