@@ -1,5 +1,5 @@
 /**
- * The combined look-through's feeds (F14, Phase 2 step 6): each fund's holdings from its issuer's
+ * The combined look-through's feeds (F14): each fund's holdings from its issuer's
  * free files, and the sectors of the companies in them, read once a month by the nightly job.
  *
  * - Vanguard (VT, VOO): the portfolio-holding JSON the fund pages use, 500 lines a page, with each

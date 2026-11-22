@@ -2,7 +2,7 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadNewsSettings, loadVolatilitySettings } from '@/lib/data';
+import { loadNewsSettings, loadVolatilitySettings } from '@/lib/data/volatility';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';

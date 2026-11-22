@@ -13,7 +13,7 @@ import { guessMapping, missingColumns, reconcile, type CsvMapping, type SavedMap
 import { flowsToImport, planImport, readStatement, tradesToImport, type ImportRow, type RowStatus } from '@/lib/csv/plan';
 import { decodeCsv, detectDelimiter, guessHeaderRow, parseCsv, type Delimiter, type EncodingChoice } from '@/lib/csv/read';
 import { guessDateFormat, wordList, type DateFormat } from '@/lib/csv/values';
-import type { CashFlowRecord, HoldingsData } from '@/lib/data';
+import type { CashFlowRecord, HoldingsData } from '@/lib/data/holdings';
 import { quantity } from '@/lib/format';
 import { shortfallAlert } from '@/lib/forms';
 import { bi, FLOW_TYPE, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';

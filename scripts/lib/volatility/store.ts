@@ -1,7 +1,7 @@
 /** The volatility job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { runRules } from '../../../lib/data.ts';
+import { runRules } from '../../../lib/data/engine.ts';
 import type { MarketEvent } from '../../../lib/models/events.ts';
 import { readVolatilitySettings, type Close } from '../../../lib/models/volatility.ts';
 import type { IndexClose } from '../feeds/indices.ts';

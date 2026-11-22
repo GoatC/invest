@@ -2,7 +2,9 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadProposal, orDataError, runRules } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { runRules } from '@/lib/data/engine';
+import { loadProposal } from '@/lib/data/rules';
 import { taipeiToday } from '@/lib/dates';
 import { formFields, parseId } from '@/lib/forms';
 

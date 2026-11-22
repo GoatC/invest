@@ -4,11 +4,14 @@ import { AlertTiles } from '@/components/alert-tiles';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { History, HistorySection } from '@/components/history';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { FanChart, SpreadChart, type Basis } from '@/components/monte-carlo-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadAuditHistory, loadLastRun, loadMonteCarloInput, type AuditEntry } from '@/lib/data';
+import { loadAuditHistory, type AuditEntry } from '@/lib/data/audit';
+import { DataError } from '@/lib/data/core';
+import { loadAssetClasses } from '@/lib/data/holdings';
+import { loadLastRun, loadMonteCarloInput } from '@/lib/data/planning';
 import { taipeiToday } from '@/lib/dates';
 import { percent, twd } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
@@ -363,22 +366,7 @@ function Method() {
       zh: '平均路徑是同一個引擎下每個月都取預期報酬的計畫。中位數低於它，因為同幅度的損失比獲利傷害更大（波動拖累）。數字在月份、計畫或假設改變時才會變動，並由每夜排程每月重跑。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }
 
 function WindfallCard({ run, basis, names, capePercentile }: { run: Ok; basis: Basis; names: readonly AssetClass[]; capePercentile: number | null }) {

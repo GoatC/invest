@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
-import { History } from '@/components/history';
+import { EditFoot } from '@/components/edit-foot';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadAuditHistory, loadSecurities, loadSplits, orDataError } from '@/lib/data';
+import { loadAuditHistory } from '@/lib/data/audit';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadAssetClasses, loadSecurities, loadSplits } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { quantity } from '@/lib/format';
 import { LABELS } from '@/lib/i18n';
@@ -83,21 +85,11 @@ export default async function EditSecurityPage({ params, searchParams }: { param
         )}
         <SplitForm ticker={security.ticker} today={taipeiToday()} />
       </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.delete} />
-        </h2>
+      <EditFoot id={security.ticker} action={deleteSecurity} confirm={{ en: `Delete ${security.ticker}?`, zh: `確定要刪除 ${security.ticker} 嗎？` }} history={history}>
         <p className="muted small">
           <Bi en="Only a security nothing uses can be deleted: no trades, prices, splits or watchlist entry." zh="只有沒有被使用的證券可以刪除：沒有交易、價格、分割或觀察清單紀錄。" />
         </p>
-        <DeleteForm id={security.ticker} action={deleteSecurity} confirm={{ en: `Delete ${security.ticker}?`, zh: `確定要刪除 ${security.ticker} 嗎？` }} />
-      </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.history} />
-        </h2>
-        <History entries={history} />
-      </section>
+      </EditFoot>
     </>
   );
 }

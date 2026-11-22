@@ -2,7 +2,8 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, orDataError, sendNotification, type NotificationRecord } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { sendNotification, type NotificationRecord } from '@/lib/data/notify';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { vapidFromEnv } from '@/lib/push';

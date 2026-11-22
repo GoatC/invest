@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { Bi, Zh } from '@/components/bi';
 import { CumulativeChart, QuadrantChart, WaterfallChart, type QuadrantPoint, type WaterfallStep } from '@/components/attribution-charts';
 import { DataProblem } from '@/components/data-problem';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadAttributionData, type AttributionData } from '@/lib/data';
+import { loadAttributionData, type AttributionData } from '@/lib/data/attribution';
+import { DataError } from '@/lib/data/core';
+import { loadAssetClasses } from '@/lib/data/holdings';
 import { addMonths, taipeiToday } from '@/lib/dates';
 import { percent, signedPercent } from '@/lib/format';
 import { EFFECT, LABELS, type Bilingual } from '@/lib/i18n';
@@ -343,20 +345,5 @@ function Method() {
       zh: '第二層以衛星的個股為投資組合、核心全球股票 ETF 的產業權重為基準，各產業以對應的 Select Sector SPDR 基金（價格報酬）衡量，使基準仍來自 SAA 本身。個股以月初的持有狀態持有整個月。產業基金的收盤價約涵蓋一年。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

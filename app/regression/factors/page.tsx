@@ -2,13 +2,14 @@ import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { BetaRanges, type Range } from '@/components/regression-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadFactorData, type FactorData, type FactorRow } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { loadFactorData, type FactorData, type FactorRow } from '@/lib/data/regression';
 import { taipeiToday } from '@/lib/dates';
-import { percent, signedPercent } from '@/lib/format';
+import { signedPercent } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { FACTOR_NAMES, FACTORS, type Region } from '@/lib/models/five-factor';
 
@@ -278,20 +279,5 @@ function Method() {
       zh: '債券、黃金與現金也在投資組合內，因此混合型投資組合與股票因子的擬合度較低：R² 偏低就是答案，不是錯誤。黃金與活存餘額（沒有代號）未納入。因子由每夜排程每月從 Kenneth French 資料庫載入。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

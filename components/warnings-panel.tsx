@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { TaipeiTime } from '@/components/history';
-import { DataError, loadFeeContext, orDataError, type FeeContext, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadFeeContext, type FeeContext } from '@/lib/data/costs';
+import type { Proposal, RuleRecord } from '@/lib/data/rules';
 import type { requireSession } from '@/lib/auth';
 import { money, quantity, twd } from '@/lib/format';
 import type { Bilingual } from '@/lib/i18n';
@@ -40,7 +42,7 @@ function savedMessage(params: Params): Bilingual | undefined {
 }
 
 /**
- * The rule warnings (Hugo, 2026-11-12: a proposal is a standing warning that can be dismissed). Each
+ * The rule warnings (a proposal is a standing warning that can be dismissed). Each
  * open one is a tile with a dismiss button, the line of what it suggests, and its figures and
  * suggested orders folded under it; it stays until dismissed or its rule clears. The dismissed and
  * cleared ones fold at the foot.

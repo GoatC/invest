@@ -31,11 +31,11 @@ const CHECK_FAILED = '23514';
 const KEY_MISSING = '23503';
 
 // PRD Section 7 lists 19 tables; Web Push adds push_subscriptions and its outbox, notifications
-// (step 10), the N5 audit log adds audit_log, the nightly job (Phase 1, step 4) adds job_runs, and
-// the windfall planner (Phase 2, step 1) adds market_series, the Regression Lab (step 2) index_prices,
+// (step 10), the N5 audit log adds audit_log, the nightly job adds job_runs, and
+// the windfall planner adds market_series, the Regression Lab (step 2) index_prices,
 // the valuation workbench (step 4) fundamentals, the red-flag indicator (step 5) company_profiles,
 // red_flag_events and red_flag_entries, and the look-through (step 6) fund_holdings; the Monte Carlo
-// (Phase 3, step 1) adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
+// adds simulation_runs, N5's stock splits splits, and F12's forward P/E check
 // analyst_estimates, and the volatility alert (N8) volatility_scores, market_events, news_counts and news_alerts;
 // F6's auto-scored assumptions add cma_estimates; the dividend prompt and the in-app banner (2026-11-12)
 // add dividend_events and banner_dismissals; the home-screen widget (2026-11-18) widget_snapshot and widget_key;

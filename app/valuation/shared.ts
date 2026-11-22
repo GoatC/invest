@@ -1,5 +1,5 @@
 import type { Fact } from '@/components/facts';
-import type { StockBench, WorkbenchData } from '@/lib/data';
+import type { StockBench, WorkbenchData } from '@/lib/data/valuation';
 import type { Bilingual } from '@/lib/i18n';
 import { SCENARIOS, marginOfSafety, zoneOf, type ModelId, type Scenario } from '@/lib/models/intrinsic';
 import { savedFor } from '@/lib/models/workbench';

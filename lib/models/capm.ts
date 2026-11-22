@@ -1,5 +1,5 @@
 /**
- * F11 CAPM cost of equity (PRD Module C, Phase 2 step 3): the return a single stock's holders
+ * F11 CAPM cost of equity (PRD Module C): the return a single stock's holders
  * should expect for the market risk it carries, the discount rate F12's valuations use.
  *
  *   E(R_i) = R_f + β_i (ERP + CRP)

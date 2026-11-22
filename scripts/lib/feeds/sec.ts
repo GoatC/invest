@@ -1,5 +1,5 @@
 /**
- * SEC EDGAR (F12, Phase 2 step 4): a US company's figures from the XBRL facts of its 10-K and 10-Q
+ * SEC EDGAR (F12): a US company's figures from the XBRL facts of its 10-K and 10-Q
  * filings (the company facts API), for the valuation workbench. Free and keyless, but the SEC asks
  * every program to name itself with a contact email in its User-Agent (fair-access policy, at most
  * 10 requests a second) and refuses one without: the nightly job sends SEC_USER_AGENT.
@@ -11,7 +11,6 @@
 import type { Fact, Item } from '../../../lib/models/fundamentals.ts';
 import { FeedError } from './types.ts';
 
-export const SOURCE = 'sec';
 /** Every listed company's ticker and CIK, about 700 kB. */
 export const SEC_TICKERS = 'https://www.sec.gov/files/company_tickers.json';
 

@@ -1,5 +1,5 @@
 /**
- * The app's appearance (Hugo, 2026-11-19; docs/superpowers/specs/2026-11-19-appearance-and-splash-design.md):
+ * The app's appearance (docs/superpowers/specs/2026-11-19-appearance-and-splash-design.md):
  * 淺色 by default, 深色 or 自動 (the phone's) when chosen on 帳號. The choice is kept on this device, in
  * localStorage, and THEME_SCRIPT, the first thing in <head>, marks <html data-theme> before the first
  * paint, so a dark choice never flashes light. app/globals.css keys Ink's dark tokens off that mark.

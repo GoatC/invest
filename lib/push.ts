@@ -1,5 +1,5 @@
 /**
- * Sending Web Push (Phase 1, step 10): each push goes to every device the owner turned
+ * Sending Web Push: each push goes to every device the owner turned
  * notifications on for (push_subscriptions), encrypted to that device's keys and signed with the
  * app's VAPID key, so the phone's push service knows it is from this app. The keys come from the
  * environment, never git: the nightly and notify jobs read them from GitHub secrets, the app from

@@ -1,5 +1,5 @@
 /**
- * The sector tab (N7, PRD Module C, Phase 2 step 7): which of the 11 GICS sectors are moving, and
+ * The sector tab (N7, PRD Module C): which of the 11 GICS sectors are moving, and
  * how much of the portfolio sits in each. Display only: no rule, no push.
  *
  * - US sectors are priced by the Select Sector SPDR funds (dividend-adjusted closes); Taiwan's by
@@ -11,7 +11,7 @@
  *   newest close), × √52.
  * - Exposure from F14's look-through: each company's TWD value through the funds and directly, by
  *   its sector and its country (US, Taiwan, or elsewhere, which no proxy here prices).
- * Pure functions; lib/data loads the closes and the look-through.
+ * Pure functions; lib/data/sectors.ts loads the closes and the look-through.
  */
 import { addDays, addMonths } from '../dates';
 import { GICS_SECTORS, type Exposure } from './look-through';

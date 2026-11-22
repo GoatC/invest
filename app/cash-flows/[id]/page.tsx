@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 
-import { Bi, Zh } from '@/components/bi';
+import { Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { DeleteForm } from '@/components/delete-form';
-import { History } from '@/components/history';
+import { EditFoot } from '@/components/edit-foot';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAuditHistory, loadCashFlow, loadFxHistory, loadHoldingsData, orDataError } from '@/lib/data';
+import { loadAuditHistory } from '@/lib/data/audit';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadCashFlow, loadFxHistory, loadHoldingsData } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { parseId } from '@/lib/forms';
 import { LABELS } from '@/lib/i18n';
@@ -47,18 +48,7 @@ export default async function EditCashFlowPage({ params }: { params: Promise<{ i
           }}
         />
       </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.delete} />
-        </h2>
-        <DeleteForm id={id} action={deleteCashFlow} confirm={{ en: 'Delete this cash flow?', zh: '確定要刪除這筆現金流嗎？' }} />
-      </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.history} />
-        </h2>
-        <History entries={history} />
-      </section>
+      <EditFoot id={id} action={deleteCashFlow} confirm={{ en: 'Delete this cash flow?', zh: '確定要刪除這筆現金流嗎？' }} history={history} />
     </>
   );
 }

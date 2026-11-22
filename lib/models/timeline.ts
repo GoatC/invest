@@ -1,5 +1,5 @@
 /**
- * F1 30-year life timeline (PRD Module A, Phase 3 step 2): one chart of the whole plan. The weekly
+ * F1 30-year life timeline (PRD Module A): one chart of the whole plan. The weekly
  * dashboard is the home screen; this is the long view behind it, and shows
  * - the phases: accumulation (the plan's own start to end), the windfall's deployment (its
  *   tranches, from the saved F3 plan, else the expected windfall) and the later goals you set;

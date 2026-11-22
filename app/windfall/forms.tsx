@@ -1,13 +1,14 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { useFields } from '@/components/use-fields';
 import { ordinal, twd } from '@/lib/format';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
 import { capePercentile, schedule, trancheCount, type MonthValue, type Pace } from '@/lib/models/windfall';
-import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm, type FieldErrors } from '@/lib/validation';
+import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm } from '@/lib/validation';
 
 import { savePace, saveWindfallSettings, startPlan, type WindfallFormState } from './actions';
 
@@ -35,25 +36,17 @@ function Problem({ message }: { message: Bilingual | null }) {
  * works them out again on saving.
  */
 export function PlanForm({ capes, pace, initial, replacing }: { capes: readonly MonthValue[]; pace: Pace | null; initial: { totalTwd: string; startDate: string }; replacing: boolean }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(startPlan, INITIAL);
-  const parsed = parsePlanStart(values);
-  const errors: FieldErrors<string> = parsed.ok ? {} : parsed.errors;
+  const { values, parsed, error, change, reset } = useFields(initial, parsePlanStart, state.errors);
   const gauge = parsed.ok ? capePercentile(capes, parsed.value.startDate.slice(0, 7)) : null;
   const count = gauge && pace ? trancheCount(gauge.percentile, pace) : null;
   const first = parsed.ok && count ? schedule(parsed.value.totalTwd, parsed.value.startDate, count) : [];
-  const error = (name: 'totalTwd' | 'startDate') => (edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null));
-  const change = (name: 'totalTwd' | 'startDate', value: string) => {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => ({ ...previous, [name]: value }));
-  };
   const confirmText: Bilingual = { en: 'Replace the plan? Its tranches are replaced; warnings already raised stay.', zh: '要取代目前的計畫嗎？分批會重新排定；已發出的警示保留不變。' };
   return (
     <form
       action={formAction}
       onSubmit={(event) => {
-        setEdited(new Set());
+        reset();
         if (replacing && !window.confirm(bi(confirmText))) event.preventDefault();
       }}
       className="form"
@@ -96,18 +89,10 @@ const ACTIONS: Record<Kind, (previous: WindfallFormState, formData: FormData) =>
 
 /** The windfall settings (each class's vehicle, the backtest) or the pace and its tiers, checked as typed with the server's parser. */
 export function WindfallForm({ kind, fields, initial, classes = {} }: { kind: Kind; fields: readonly FieldSpec[]; initial: Record<string, string>; classes?: Record<string, string[]> }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(ACTIONS[kind], INITIAL);
-  const parsed = kind === 'settings' ? parseWindfallSettingsForm(values, new Map(Object.entries(classes))) : parsePaceForm(values);
-  const errors: FieldErrors<string> = parsed.ok ? {} : (parsed.errors as FieldErrors<string>);
-  const error = (name: string) => (edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null));
-  const change = (name: string, value: string) => {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => ({ ...previous, [name]: value }));
-  };
+  const { values, error, change, reset } = useFields(initial, (typed) => (kind === 'settings' ? parseWindfallSettingsForm(typed, new Map(Object.entries(classes))) : parsePaceForm(typed)), state.errors);
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       <div className="form-grid">
         {fields.map((field) => (
           <Field key={field.name} label={field.label} error={error(field.name)} hint={field.hint && <Bi {...field.hint} />}>

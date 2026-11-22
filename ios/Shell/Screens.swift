@@ -1,10 +1,10 @@
 import UIKit
 
 /// The ground of the launch screen and of the web app's opening screen (lib/splash.ts SPLASH_GROUND):
-/// opening screen B's ink black (Hugo, 2026-11-19), in light and dark alike.
+/// opening screen B's ink black, in light and dark alike.
 let launchGround = UIColor(named: "LaunchGround") ?? UIColor(red: 0x07 / 255, green: 0x0B / 255, blue: 0x09 / 255, alpha: 1)
 
-/// Opening screen B (Hugo, 2026-11-19; components/splash.tsx draws the same for the web app), kept over
+/// Opening screen B (components/splash.tsx draws the same for the web app), kept over
 /// the web view until the page has opened: the launch screen's mark on its ink ground, then a
 /// forget-me-not glow from the top right fades in and the mark's rising line is drawn along its track,
 /// once each. With Reduce Motion both are simply there. Nothing under it can be touched or scrolled.

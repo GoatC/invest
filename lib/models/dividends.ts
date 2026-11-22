@@ -1,5 +1,5 @@
 /**
- * Dividend prompts (asked by Hugo on 2026-11-12): the nightly job saves each holding's cash
+ * Dividend prompts: the nightly job saves each holding's cash
  * dividends by ex-dividend date (dividend_events); on the day one is paid the app asks whether to
  * record it as a cash flow, with the amount worked out. A security whose income is reinvested by
  * itself (securities.dividends_reinvested) is never asked about.

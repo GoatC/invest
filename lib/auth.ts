@@ -11,7 +11,7 @@ import { createClient } from './supabase/server';
  * on this same request and passes the user on in a header it sets itself; without that header (a
  * route outside the proxy's matcher) the token is verified here. Row-level security in the database
  * lets only the owner see any row either way. One client per request: the layout, the page and its
- * parts share it, so their reads can be shared too (lib/data.ts).
+ * parts share it, so their reads can be shared too (lib/data/core.ts).
  */
 export const requireSession = cache(async () => {
   const supabase = await createClient();
@@ -30,5 +30,3 @@ export const signedInUser = cache(async (): Promise<string | undefined> => {
   const { data } = await supabase.auth.getClaims();
   return data?.claims?.sub;
 });
-
-export type Session = Awaited<ReturnType<typeof requireSession>>;

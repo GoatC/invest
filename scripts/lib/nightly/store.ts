@@ -1,7 +1,18 @@
 /** The nightly job's database side: reads and upserts through the Data API with the secret key. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { loadDividendPlan, loadEstimatePlan, markDividendsChecked, saveDividendEvents, loadFilingTickers, loadLookThroughPlan, loadSectorSettings, loadPerformanceInput, loadRedFlagCompanies, loadRiskInput, profileColumns, refreshBetas, refreshAttribution, refreshCmaEstimates, refreshMonteCarlo, revalueOnFilings, runRules, scanRedFlags } from '../../../lib/data.ts';
+import { refreshAttribution } from '../../../lib/data/attribution.ts';
+import { refreshCmaEstimates } from '../../../lib/data/auto-cma.ts';
+import { loadDividendPlan, markDividendsChecked, saveDividendEvents } from '../../../lib/data/dividends.ts';
+import { runRules } from '../../../lib/data/engine.ts';
+import { loadLookThroughPlan } from '../../../lib/data/look-through.ts';
+import { loadPerformanceInput } from '../../../lib/data/performance.ts';
+import { refreshMonteCarlo } from '../../../lib/data/planning.ts';
+import { loadRedFlagCompanies, profileColumns, scanRedFlags } from '../../../lib/data/red-flags.ts';
+import { refreshBetas } from '../../../lib/data/regression.ts';
+import { loadRiskInput } from '../../../lib/data/risk.ts';
+import { loadSectorSettings } from '../../../lib/data/sectors.ts';
+import { loadEstimatePlan, loadFilingTickers, revalueOnFilings } from '../../../lib/data/valuation.ts';
 import { readFactorSettings } from '../../../lib/models/five-factor.ts';
 import { readFrontierSettings } from '../../../lib/models/frontier.ts';
 import { readMcSettings } from '../../../lib/models/monte-carlo.ts';

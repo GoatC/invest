@@ -1,5 +1,5 @@
 /**
- * F7 efficient frontier and capital market line (PRD Module B, Phase 3 step 7 of the roadmap,
+ * F7 efficient frontier and capital market line (PRD Module B,
  * step 4 of the build). Reference only: it shows where the mix you set sits among the portfolios
  * the same inputs could build, and never writes back to the F6 targets.
  *

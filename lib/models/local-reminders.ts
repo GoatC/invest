@@ -6,7 +6,7 @@
  * the words the push would have had (lib/models/notify.ts, events.ts, dividends.ts): the weekly
  * review at its time, the others in the morning as the quiet hours end, never inside them. What
  * cannot be known ahead (a rule warning, the volatility alert, news) stays with the web app's pushes.
- * Pure functions; lib/data.ts loadLocalReminders reads what they need, app/shell/reminders serves them.
+ * Pure functions; lib/data/notify.ts loadLocalReminders reads what they need, app/shell/reminders serves them.
  */
 import { addDays } from '../dates';
 import { dividendMessage, dueKey, type DividendDue, type DividendSettings } from './dividends';
@@ -21,7 +21,6 @@ export const LOCAL_REMINDER_MAX = 48;
 const MORNING = { minutes: 9 * 60, timeZone: 'Asia/Taipei' };
 
 export type LocalReminderKind = 'weekly' | 'event' | 'dividend';
-export const LOCAL_REMINDER_KINDS: readonly LocalReminderKind[] = ['weekly', 'event', 'dividend'];
 
 export interface LocalReminder {
   /** Unique and stable: the same reminder keeps its id from one opening to the next. */

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { requireSession } from '@/lib/auth';
-import { loadLocalReminders, orDataError, DataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadLocalReminders } from '@/lib/data/notify';
 import { taipeiToday } from '@/lib/dates';
 
 /**

@@ -4,7 +4,8 @@ import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { LogList } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAuditLog, orDataError } from '@/lib/data';
+import { loadAuditLog } from '@/lib/data/audit';
+import { DataError, orDataError } from '@/lib/data/core';
 import { LABELS } from '@/lib/i18n';
 
 /** Every edit and deletion the database logged, deleted entries included (N5 audit log). */

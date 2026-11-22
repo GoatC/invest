@@ -930,7 +930,7 @@ export function parsePaceForm(raw: RawForm): Parsed<PaceInput, PaceField> {
 }
 
 // ---------------------------------------------------------------------------
-// N1 Regression Lab (Phase 2, step 2)
+// N1 Regression Lab
 // ---------------------------------------------------------------------------
 
 export const REGRESSION_FIELDS = ['freq', 'windowYears', 'currency', 'blumeWeight', 'rfTWD', 'rfUSD'] as const;
@@ -973,7 +973,7 @@ export function parseRegressionForm(raw: RawForm, windows: readonly number[], to
 }
 
 // ---------------------------------------------------------------------------
-// F11 CAPM cost of equity (Phase 2, step 3)
+// F11 CAPM cost of equity
 // ---------------------------------------------------------------------------
 
 export interface CapmSettingsInput {
@@ -1014,7 +1014,7 @@ export function parseCapmForm(raw: RawForm, markets: readonly string[], today: s
 }
 
 // ---------------------------------------------------------------------------
-// F12 valuation workbench (Phase 2, step 4)
+// F12 valuation workbench
 // ---------------------------------------------------------------------------
 
 type ScenarioKey = 'bear' | 'base' | 'bull';
@@ -1149,7 +1149,7 @@ export function parseValuationSettingsForm(raw: RawForm, markets: readonly strin
 }
 
 // ---------------------------------------------------------------------------
-// The red-flag indicator (N3, Phase 2 step 5)
+// The red-flag indicator (N3)
 // ---------------------------------------------------------------------------
 
 export interface FlagEntryInput {
@@ -1257,7 +1257,7 @@ export function parseFlagSettingsForm(raw: RawForm, current: RedFlagSettings, to
 }
 
 // ---------------------------------------------------------------------------
-// The combined look-through (F14, Phase 2 step 6)
+// The combined look-through (F14)
 // ---------------------------------------------------------------------------
 
 export type LookThroughField = 'topCompanies' | 'refreshDays' | 'twSectors' | 'fundCountry';
@@ -1307,7 +1307,7 @@ export function parseLookThroughForm(raw: RawForm, current: LookThroughSettings,
 }
 
 // ---------------------------------------------------------------------------
-// The sector tab (N7, Phase 2 step 7)
+// The sector tab (N7)
 // ---------------------------------------------------------------------------
 
 export type SectorField = 'colour' | 'tw';

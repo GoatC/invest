@@ -9,7 +9,7 @@
  * - Prices in each trade's own currency (the exchange rate is left out), as quoted: the drafted
  *   price is a quoted close, so dividends are left out too. A horizon not reached yet is pending.
  * - The hit rate over a horizon is the share of proposals measured with a return above 0.
- * Pure functions; lib/data loads the proposals and the closes.
+ * Pure functions; lib/data/volatility.ts loads the proposals and the closes.
  */
 import type { DraftOrder, ProposalDetail } from './engine';
 

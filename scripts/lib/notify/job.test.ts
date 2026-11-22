@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { NotificationRecord } from '../../../lib/data.ts';
+import type { NotificationRecord } from '../../../lib/data/notify.ts';
 import type { Message, PlanInput } from '../../../lib/models/notify.ts';
 import type { Vapid } from '../../../lib/push.ts';
 import { notifySummary, runNotify, type NotifyStore } from './job.ts';

@@ -18,3 +18,33 @@ export function Info({ children, label = HOW, id }: { children: ReactNode; label
     </details>
   );
 }
+
+const METHOD: Bilingual = { en: 'How these are worked out', zh: '計算方式' };
+
+/** A page's method notes, folded: one line each (PRD principle 6 keeps them out of sight until asked for). */
+export function MethodDetails({ notes }: { notes: readonly Bilingual[] }) {
+  return (
+    <details>
+      <summary>
+        <Bi {...METHOD} />
+      </summary>
+      <ul>
+        {notes.map((note) => (
+          <li key={note.en}>
+            <Bi {...note} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** The method notes as a page's last card, with whatever follows them (a link to the settings). */
+export function MethodNotes({ notes, children }: { notes: readonly Bilingual[]; children?: ReactNode }) {
+  return (
+    <section className="card">
+      <MethodDetails notes={notes} />
+      {children}
+    </section>
+  );
+}

@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { strToU8, zipSync } from 'fflate';
 import * as XLSX from 'xlsx';
 
-import type { ProfileRecord } from '../../../lib/data.ts';
+import type { ProfileRecord } from '../../../lib/data/red-flags.ts';
 import type { PriceRow } from '../../../lib/models/market.ts';
 import type { PerformanceInput, Snapshot } from '../../../lib/models/performance.ts';
 import { readLookThroughSettings } from '../../../lib/models/look-through.ts';

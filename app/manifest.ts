@@ -5,7 +5,7 @@ import { SPLASH_GROUND } from '@/lib/splash';
 /**
  * The web app manifest, so a phone can add the app to its home screen and open it full screen
  * (PRD Section 6: a PWA). The icons are app/icon.svg drawn at the sizes phones ask for. It opens
- * on the weekly dashboard; public/sw.js, the service worker, shows Web Push (Phase 1, step 10).
+ * on the weekly dashboard; public/sw.js, the service worker, shows Web Push.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {

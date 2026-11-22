@@ -2,10 +2,11 @@ import { notFound } from 'next/navigation';
 
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
-import { DeleteForm } from '@/components/delete-form';
-import { History } from '@/components/history';
+import { EditFoot } from '@/components/edit-foot';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAuditHistory, loadFxHistory, loadHoldingsData, type AuditEntry, type HoldingsData } from '@/lib/data';
+import { loadAuditHistory, type AuditEntry } from '@/lib/data/audit';
+import { DataError } from '@/lib/data/core';
+import { loadFxHistory, loadHoldingsData, type HoldingsData } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { parseId } from '@/lib/forms';
 import { LABELS, SOURCE } from '@/lib/i18n';
@@ -63,18 +64,7 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
           }}
         />
       </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.delete} />
-        </h2>
-        <DeleteForm id={id} action={deleteTrade} confirm={{ en: 'Delete this trade?', zh: '確定要刪除這筆交易嗎？' }} />
-      </section>
-      <section className="card">
-        <h2>
-          <Bi {...LABELS.history} />
-        </h2>
-        <History entries={history} />
-      </section>
+      <EditFoot id={id} action={deleteTrade} confirm={{ en: 'Delete this trade?', zh: '確定要刪除這筆交易嗎？' }} history={history} />
     </>
   );
 }

@@ -11,7 +11,7 @@
  *   panic reads 10, rounded to 0.1. A component with no figure, or one older than
  *   `max_age_days`, is left out and the others re-weighted; below `min_coverage` of the weight
  *   there is no score.
- * Thresholds live in config volatility. Pure functions; lib/data and the volatility job load the
+ * Thresholds live in config volatility. Pure functions; lib/data/volatility.ts and the volatility job load the
  * series from index_prices.
  */
 import { addDays } from '../dates';
@@ -23,18 +23,6 @@ export type ComponentId = (typeof COMPONENTS)[number];
 /** The index_prices ids the score reads; the volatility job loads every one but SPX and TAIEX's history (the nightly job's). */
 export const VOLATILITY_SERIES = ['VIX', 'VIX3M', 'TWVIX', 'SPX', 'TAIEX', 'HY_OAS', 'EPU'] as const;
 export type SeriesId = (typeof VOLATILITY_SERIES)[number];
-
-/** The series each component reads. */
-export const COMPONENT_SERIES: Record<ComponentId, readonly SeriesId[]> = {
-  vix: ['VIX'],
-  vix_term: ['VIX', 'VIX3M'],
-  tw_vix: ['TWVIX'],
-  spx_drawdown: ['SPX'],
-  taiex_drawdown: ['TAIEX'],
-  taiex_fall: ['TAIEX'],
-  hy_spread: ['HY_OAS'],
-  epu: ['EPU'],
-};
 
 /** How a component's figure is shown: an index level, a ratio, a share (a fall), or percent a year (a spread). */
 export type ComponentUnit = 'level' | 'ratio' | 'share' | 'percent';

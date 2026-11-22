@@ -1,5 +1,5 @@
 /**
- * N1 Regression Lab (PRD Module C, Phase 2 step 2): how much a stock or fund moves with the market,
+ * N1 Regression Lab (PRD Module C): how much a stock or fund moves with the market,
  * by an OLS regression of its excess returns on the market's, against the S&P 500 and TAIEX side by
  * side. Single-factor (CAPM β) in Phase 2; the Fama–French five factors come in Phase 3.
  *

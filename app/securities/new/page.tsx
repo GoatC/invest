@@ -1,7 +1,8 @@
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadSecurities, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadAssetClasses, loadSecurities } from '@/lib/data/holdings';
 import { likelyAssetClass } from '@/lib/defaults';
 import { LABELS } from '@/lib/i18n';
 import { lookupTicker } from '@/lib/ticker-lookup';

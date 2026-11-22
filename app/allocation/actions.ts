@@ -2,7 +2,10 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClassSettings, loadSecurities, orDataError, refreshCmaEstimates, rescoreQuietly } from '@/lib/data';
+import { loadAssetClassSettings } from '@/lib/data/allocation';
+import { refreshCmaEstimates, rescoreQuietly } from '@/lib/data/auto-cma';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadSecurities } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';

@@ -1,5 +1,5 @@
 /**
- * The red-flag indicator (N3, PRD Module C, Phase 2 step 5): each single stock held or watched gets
+ * The red-flag indicator (N3, PRD Module C): each single stock held or watched gets
  * a red / amber / green light and the list of indicators that fired. Display only: a light never
  * blocks a trade; the two N3 rules turn a worse light into a prompt to review.
  *
@@ -20,7 +20,7 @@
  * Coverage: no free source gives full ESG scores, so the light shows the share of the indicators
  * that apply which data covers. The light is the worst level among them; with none covered, none,
  * and none too when the exclusion list is all that is green (a list check alone says nothing of the company).
- * Pure functions; lib/data.ts loads the inputs and the nightly job saves each week's scan.
+ * Pure functions; lib/data/red-flags.ts loads the inputs and the nightly job saves each week's scan.
  */
 import { addDays } from '../dates';
 import { yearBefore, type Figures, type Quarter } from './fundamentals';

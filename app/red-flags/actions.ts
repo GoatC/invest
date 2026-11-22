@@ -2,7 +2,7 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadRedFlagData, loadRedFlagSettings, scanRedFlags } from '@/lib/data';
+import { loadRedFlagData, loadRedFlagSettings, scanRedFlags } from '@/lib/data/red-flags';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import { formFields } from '@/lib/forms';

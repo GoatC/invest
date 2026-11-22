@@ -39,7 +39,7 @@ const ICONS = [
 ] as const;
 
 /**
- * The opening screen B's mark (Hugo, 2026-11-19), 120 points wide on a clear ground in a 168-point square:
+ * The opening screen B's mark, 120 points wide on a clear ground in a 168-point square:
  * a white hairline tile and the faint track of the rising line. The launch screen centres it on the ink
  * ground; the shell's cover (ios/Shell/Screens.swift CoverView) then draws the white line along the track.
  */

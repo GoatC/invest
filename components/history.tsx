@@ -1,5 +1,5 @@
 import { describeRow, TABLE_LABELS } from '@/lib/audit';
-import type { AuditEntry, FieldChange, LogEntry } from '@/lib/data';
+import type { AuditEntry, FieldChange, LogEntry } from '@/lib/data/audit';
 import { taipeiDateTime } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 

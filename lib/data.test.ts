@@ -3,7 +3,11 @@ import { describe, it } from 'node:test';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { dcaAmount, diffRows, fxMaxAgeDays, fxMaxGap, leverageSettings, loadWidgetKeyDate, orderSettings, toTransaction } from './data';
+import { diffRows } from './data/audit';
+import { fxMaxAgeDays, fxMaxGap, leverageSettings, toTransaction } from './data/holdings';
+import { loadWidgetKeyDate } from './data/notify';
+import { dcaAmount } from './data/planning';
+import { orderSettings } from './data/rules';
 
 describe('diffRows', () => {
   it('lists only the columns that changed, skipping bookkeeping columns', () => {

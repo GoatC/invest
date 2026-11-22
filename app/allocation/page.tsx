@@ -2,10 +2,11 @@ import Link from 'next/link';
 
 import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAllocationData, type AllocationData } from '@/lib/data';
+import { loadAllocationData, type AllocationData } from '@/lib/data/allocation';
+import { DataError } from '@/lib/data/core';
 import { percent, points, twd } from '@/lib/format';
 import { DRIFT_ICON, DRIFT_STATUS, LABELS, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
 import { allocation, classDrifts, satelliteCheck, sleeveTargets, type ClassDrift, type DriftStatus, type SatelliteCheck } from '@/lib/models/allocation';
@@ -459,20 +460,5 @@ function Method() {
       zh: '每夜排程會把每天的類別權重存在淨值快照中，之後可以追蹤偏離的變化。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

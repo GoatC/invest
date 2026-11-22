@@ -57,7 +57,7 @@ function volatilityLine(detail: ProposalDetail): Bilingual[] {
   ];
 }
 
-/** "Single-stock trim": the rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19). */
+/** "Single-stock trim": the rule's name alone; its code (R1, F8…) is never shown. */
 export function proposalTitle(rule: RuleLike): Bilingual {
   return TITLES[rule.condition] ?? { en: rule.condition, zh: rule.condition };
 }

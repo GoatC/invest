@@ -1,5 +1,5 @@
 /**
- * The red-flag indicator's feeds (N3, Phase 2 step 5): the events and company details the nightly
+ * The red-flag indicator's feeds (N3): the events and company details the nightly
  * job reads for each single stock held or watched. All free; each reply turned into plain rows.
  *
  * - SEC submissions (data.sec.gov, keyless with SEC_USER_AGENT): a US company's SIC industry, and

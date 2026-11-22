@@ -5,7 +5,9 @@ import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { ChangeList, HistorySection, TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadEngineInput, loadRuleChanges, type OrderSettings, type Proposal, type RuleChange, type RuleRecord } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { loadEngineInput } from '@/lib/data/engine';
+import { loadRuleChanges, type OrderSettings, type Proposal, type RuleChange, type RuleRecord } from '@/lib/data/rules';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { CONDITIONS, evaluate, type Check, type EngineInput } from '@/lib/models/engine';
@@ -119,9 +121,8 @@ const ICON: Record<Check['outcome'], [string, string]> = {
 };
 
 function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | undefined; proposals: Proposal[] }) {
-  const evaluated = check && check.outcome !== 'later';
   const live = proposals.find((proposal) => proposal.status === 'open');
-  // The rule's name alone; its code (R1, F8…) is never shown (Hugo, 2026-11-19).
+  // The rule's name alone; its code (R1, F8…) is never shown.
   const title: Bilingual = proposalTitle(rule);
   return (
     <article id={`rule-${rule.id}`} className="rule-row form">

@@ -1,5 +1,5 @@
 /**
- * FinMind's Taiwan financial statements (F12, Phase 2 step 4): the income statement, balance sheet
+ * FinMind's Taiwan financial statements (F12): the income statement, balance sheet
  * and cash-flow statement of a Taiwan company, for the valuation workbench. Items are matched by
  * the statement's own Chinese line name (origin_name), which FinMind keeps as filed, else by its
  * English type. The income statement comes by quarter; the cash-flow statement as filed in Taiwan,

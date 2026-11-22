@@ -1,7 +1,7 @@
-/** The push job's database side: the Data API with the secret key, through lib/data. */
+/** The push job's database side: the Data API with the secret key, through lib/data/notify.ts. */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { dueNotifications, loadNotifyInput, planNotifications, sendNotification } from '../../../lib/data.ts';
+import { dueNotifications, loadNotifyInput, planNotifications, sendNotification } from '../../../lib/data/notify.ts';
 import type { NotifyStore } from './job.ts';
 
 export function supabaseNotifyStore(client: SupabaseClient): NotifyStore {

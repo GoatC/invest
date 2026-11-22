@@ -1,5 +1,5 @@
 /**
- * A company's figures from its filings (F12, Phase 2 step 4), as each quarter end saw them: the
+ * A company's figures from its filings (F12), as each quarter end saw them: the
  * flows over the twelve months to it (TTM) and the balances at it, in the reporting currency.
  *
  * Filings report flows over different spans: a 10-Q gives the quarter and the year to date, a
@@ -14,7 +14,7 @@
 
 /**
  * Flows: summed over the twelve months to a quarter end. grossProfit, cogs and sga (SG&A, else
- * operating expenses) are the red-flag indicator's (N3, Phase 2 step 5).
+ * operating expenses) are the red-flag indicator's (N3).
  */
 export const FLOW_ITEMS = ['revenue', 'ebit', 'pretax', 'tax', 'netIncome', 'da', 'capex', 'ocf', 'dividendsPaid', 'dps', 'interest', 'grossProfit', 'cogs', 'sga'] as const;
 /**

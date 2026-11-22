@@ -5,7 +5,8 @@ import { Bi } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import type { AlertItem } from '@/lib/alerts';
-import type { CashFlowRecord, DividendView, HoldingsData } from '@/lib/data';
+import type { DividendView } from '@/lib/data/dividends';
+import type { CashFlowRecord, HoldingsData } from '@/lib/data/holdings';
 import { percent, quantity, twd } from '@/lib/format';
 import { FLOW_TYPE, LABELS, leverageText, POOL, type Bilingual } from '@/lib/i18n';
 import { filterLedger, ledger, ledgerTotals, LEDGER_FILTERS, type LedgerFilter, type LedgerKind, type LedgerLine } from '@/lib/models/cash-flows';
@@ -71,7 +72,7 @@ function dueItem(line: DividendDue): AlertItem {
 }
 
 /**
- * The 現金流 tab (asked by Hugo on 2026-11-12): the dividends to confirm first, then the totals, then
+ * The 現金流 tab: the dividends to confirm first, then the totals, then
  * one book of every buy and sell (read from the trades, nothing to type twice) with the windfall,
  * dividends and withdrawals typed in here.
  */

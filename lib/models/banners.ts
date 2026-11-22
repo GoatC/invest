@@ -1,5 +1,5 @@
 /**
- * The in-app banner (asked by Hugo on 2026-11-12): one line under the header that says what waits
+ * The in-app banner: one line under the header that says what waits
  * on him and takes him there, so the app leads the next step instead of leaving it to be found.
  * Pure: given what is saved, it decides which banners are needed, in order of urgency.
  *

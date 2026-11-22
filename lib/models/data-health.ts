@@ -17,15 +17,15 @@ export const RISK_ERROR = 'VaR';
 export const WIDGET_ERROR = 'Widget figures';
 /** …and when the rules could not be evaluated after the refresh (step 9). */
 export const RULES_ERROR = 'Rules';
-/** …and when the holdings' monthly β could not be saved (N1, Phase 2 step 2). */
+/** …and when the holdings' monthly β could not be saved (N1). */
 export const BETAS_ERROR = 'Betas';
 export const MONTE_CARLO_ERROR = 'Monte Carlo';
 /** The label of an error in the auto-scored assumptions (F6) refresh. */
 export const CMA_ERROR = 'Auto CMA';
 export const ATTRIBUTION_ERROR = 'Attribution';
-/** …and when the watched stocks could not be valued again after a filing (F12, Phase 2 step 4). */
+/** …and when the watched stocks could not be valued again after a filing (F12). */
 export const VALUATIONS_ERROR = 'Valuations';
-/** …and when the week's red-flag scan could not be saved (N3, Phase 2 step 5). */
+/** …and when the week's red-flag scan could not be saved (N3). */
 export const RED_FLAGS_ERROR = 'Red flags';
 
 export type RunStatus = 'ok' | 'partial' | 'failed';
@@ -41,11 +41,11 @@ export interface RunDetail {
   window: { start: string; end: string } | null;
   prices: Record<string, Loaded>;
   rates: Record<string, Loaded>;
-  /** The monthly market series (F3, Phase 2 step 1); `latest` is a month. Empty before. */
+  /** The monthly market series (F3); `latest` is a month. Empty before. */
   series: Record<string, Loaded>;
-  /** The daily index closes (N1, Phase 2 step 2). Empty before. */
+  /** The daily index closes (N1). Empty before. */
   indices: Record<string, Loaded>;
-  /** The single stocks' quarters from their filings (F12, Phase 2 step 4); `latest` is a quarter end. Empty before. */
+  /** The single stocks' quarters from their filings (F12); `latest` is a quarter end. Empty before. */
   filings: Record<string, Loaded>;
   /** Primary feeds that failed while a fallback covered for them. */
   warnings: string[];

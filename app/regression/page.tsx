@@ -5,7 +5,9 @@ import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { BetaRanges, RollingBeta, ScatterFit, type Line, type Range } from '@/components/regression-charts';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadRegressionData, loadRegressionSetup, loadSavedBetas, type RegressionData, type SecurityRecord } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import type { SecurityRecord } from '@/lib/data/holdings';
+import { loadRegressionData, loadRegressionSetup, loadSavedBetas, type RegressionData } from '@/lib/data/regression';
 import { taipeiToday } from '@/lib/dates';
 import { percent, signedPercent } from '@/lib/format';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
@@ -53,10 +55,10 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
   let compare: string[];
   let against: Benchmark;
   try {
-    const setup = await loadRegressionSetup(supabase);
+    const [setup, savedBetas] = await Promise.all([loadRegressionSetup(supabase), loadSavedBetas(supabase)]);
     if (!setup.settings) return <DataProblem table="config" detail="regression is missing or malformed" />;
     settings = setup.settings;
-    saved = await loadSavedBetas(supabase);
+    saved = savedBetas;
     const priced = setup.securities.filter((security) => setup.priced.has(security.ticker));
     const pricedTickers = new Set(priced.map((security) => security.ticker));
     const freq = FREQUENCIES.find((option) => option === one(params, 'f')) ?? settings.defaults.freq;

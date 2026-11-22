@@ -20,7 +20,7 @@
  * reads that basket as the class's history, so μ and Σ describe the same holdings. A line with
  * fewer than min_months monthly returns, or with no β, is left out and named.
  *
- * Pure functions; lib/data's refreshCmaEstimates saves the result in cma_estimates, written after a
+ * Pure functions; lib/data/auto-cma.ts refreshCmaEstimates saves the result in cma_estimates, written after a
  * trade in a satellite class, a change of assumptions and every night.
  */
 import { erpQuote, riskFreeQuote, type CapmSettings, type MonthValue } from './capm';

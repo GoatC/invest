@@ -8,7 +8,7 @@ import { NAV_PATHS, oneTapAway } from './nav-pages';
 
 /**
  * Fetches every page the navigation can open, whole, as soon as the app has loaded, so a tab opens
- * from the phone's memory without asking the server (Hugo, 2026-11-13: the app should answer a tap
+ * from the phone's memory without asking the server (the app should answer a tap
  * as an installed app does). On the first load of a visit the opening screen
  * (components/splash.tsx) stays until the pages one tap away have arrived (the tab bar's four and
  * the sub-tabs of the tab that opened), or WAIT_MS at most, and shows the count as a bar; the

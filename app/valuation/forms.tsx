@@ -1,11 +1,11 @@
 'use client';
 
-import { useActionState, useState, type ReactNode } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
-import { Field } from '@/components/field';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
+import { useFieldInputs } from '@/components/use-field-inputs';
+import { LABELS, type Bilingual } from '@/lib/i18n';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation';
 
 import { saveAssumptions, saveEstimates, saveValuationSettings, type ValuationFormState } from './actions';
 
@@ -22,44 +22,8 @@ const SCENARIOS: ReadonlyArray<{ key: string; label: Bilingual }> = [
   { key: 'bull', label: { en: 'bull', zh: '樂觀' } },
 ];
 
-/** Values typed and edited, errors as typed from the shared parser, else the server's. */
-function useFields(initial: Record<string, string>, parse: (values: Record<string, string>) => { ok: boolean; errors?: FieldErrors<string> }, state: ValuationFormState) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
-  const parsed = parse(values);
-  const errors: FieldErrors<string> = parsed.ok ? {} : (parsed.errors ?? {});
-  const error = (name: string) => (edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null));
-  const change = (name: string, value: string | undefined) => {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => {
-      const next = { ...previous };
-      if (value === undefined) delete next[name];
-      else next[name] = value;
-      return next;
-    });
-  };
-  const reset = () => setEdited(new Set());
-  const input = (name: string, label: Bilingual, hint?: ReactNode) => (
-    <Field key={name} label={label} hint={hint} error={error(name)}>
-      <input name={name} inputMode="decimal" autoComplete="off" value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)} />
-    </Field>
-  );
-  const select = (name: string, label: Bilingual, options: ReadonlyArray<{ value: string; label: Bilingual }>) => (
-    <Field label={label} error={error(name)}>
-      <select name={name} value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {bi(option.label)}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-  return { values, change, reset, input, select };
-}
-
 /** The three scenarios of a rate, side by side. */
-function scenarioInputs(input: ReturnType<typeof useFields>['input'], prefix: string, label: Bilingual) {
+function scenarioInputs(input: ReturnType<typeof useFieldInputs>['input'], prefix: string, label: Bilingual) {
   return SCENARIOS.map((scenario) => input(`${prefix}_${scenario.key}`, { en: `${label.en}, ${scenario.label.en}, %`, zh: `${label.zh}（${scenario.label.zh}，%）` }));
 }
 
@@ -83,7 +47,7 @@ function Submit({ pending, message }: { pending: boolean; message: Bilingual | n
 /** A stock's model, scenarios, typed figures, peers and alert multiples; saving also saves its valuation. */
 export function AssumptionsForm({ ticker, stocks, currency, initial, ruleMultiples }: { ticker: string; stocks: readonly string[]; currency: string; initial: Record<string, string>; ruleMultiples: { buy: number | null; trim: number | null } }) {
   const [state, formAction, pending] = useActionState(saveAssumptions, INITIAL);
-  const fields = useFields(initial, (values) => parseAssumptionsForm(values, stocks, ticker), state);
+  const fields = useFieldInputs(initial, (values) => parseAssumptionsForm(values, stocks, ticker), state.errors);
   const { input, select } = fields;
   return (
     <form action={formAction} onSubmit={fields.reset} className="form">
@@ -121,7 +85,7 @@ export function AssumptionsForm({ ticker, stocks, currency, initial, ruleMultipl
 /** config valuation: the defaults a stock starts from. */
 export function ValuationSettingsForm({ markets, initial, today, checkedOn }: { markets: readonly string[]; initial: Record<string, string>; today: string; checkedOn: string | null }) {
   const [state, formAction, pending] = useActionState(saveValuationSettings, INITIAL);
-  const fields = useFields(initial, (values) => parseValuationSettingsForm(values, markets, today), state);
+  const fields = useFieldInputs(initial, (values) => parseValuationSettingsForm(values, markets, today), state.errors);
   const { input, select } = fields;
   return (
     <form action={formAction} onSubmit={fields.reset} className="form">
@@ -148,7 +112,7 @@ export function ValuationSettingsForm({ markets, initial, today, checkedOn }: { 
 /** The analysts' consensus, typed in from a broker's or a news site's page (F12 forward P/E). */
 export function EstimatesForm({ ticker, currency, initial }: { ticker: string; currency: string; initial: Record<string, string> }) {
   const [state, action, pending] = useActionState(saveEstimates, INITIAL);
-  const fields = useFields(initial, parseEstimatesForm, state);
+  const fields = useFieldInputs(initial, parseEstimatesForm, state.errors);
   const { input } = fields;
   return (
     <form action={action} onSubmit={fields.reset} className="form">

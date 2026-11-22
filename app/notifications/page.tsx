@@ -5,7 +5,8 @@ import { PushHandoffSetting } from '@/components/push-handoff';
 import { ShellReminders } from '@/components/shell-reminders';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data/notify';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { readQuietHours, readWeeklyReview } from '@/lib/models/notify';
 import { vapidFromEnv } from '@/lib/push';
@@ -32,7 +33,7 @@ function hhmm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-/** Web Push (Phase 1, step 10): which devices get pushes, when they may arrive, and what was sent. */
+/** Web Push: which devices get pushes, when they may arrive, and what was sent. */
 export default async function NotificationsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { supabase } = await requireSession();
   const params = await searchParams;

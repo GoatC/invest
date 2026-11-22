@@ -6,7 +6,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
-import type { HoldingsData } from '@/lib/data';
+import type { HoldingsData } from '@/lib/data/holdings';
 import { isIsoDate } from '@/lib/dates';
 import { twd } from '@/lib/format';
 import { bi, FLOW_TYPE, LABELS, POOL, type Bilingual } from '@/lib/i18n';

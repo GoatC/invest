@@ -1,7 +1,7 @@
 import { Bi } from '@/components/bi';
 import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
-import type { StockBench } from '@/lib/data';
+import type { StockBench } from '@/lib/data/valuation';
 import { money, signedPercent } from '@/lib/format';
 import { feedLabel, type Bilingual } from '@/lib/i18n';
 import { metrics } from '@/lib/models/intrinsic';

@@ -1,13 +1,16 @@
 import Link from 'next/link';
 
 import { Bi, Zh } from '@/components/bi';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { PageGlow } from '@/components/page-glow';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadGlowSettings, loadPerformanceInput, loadSectorSettings, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadPerformanceInput } from '@/lib/data/performance';
+import { loadGlowSettings } from '@/lib/data/poster';
+import { loadSectorSettings } from '@/lib/data/sectors';
 import { pageGlowOf, type GlowSettings } from '@/lib/models/glow';
 import { taipeiToday } from '@/lib/dates';
 import { points, signedPercent, signedTwd, twd } from '@/lib/format';
@@ -91,16 +94,10 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const range = pick(one(params, 'range'), RANGES, 'all');
   const view = pick(one(params, 'view'), VIEWS, 'whole');
   const end = taipeiToday();
-  let input: PerformanceInput;
-  try {
-    input = await loadPerformanceInput(supabase, end);
-  } catch (err) {
-    if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
-    throw err;
-  }
+  const [input, sectors, glowRead] = await Promise.all([orDataError(loadPerformanceInput(supabase, end)), orDataError(loadSectorSettings(supabase)), orDataError(loadGlowSettings(supabase))]);
+  if (input instanceof DataError) return <DataProblem table={input.table} detail={input.detail} />;
   const days = buildSeries(input);
   // Price moves follow the colour convention set on the sector page (Taiwan's red up by default).
-  const [sectors, glowRead] = await Promise.all([orDataError(loadSectorSettings(supabase)), orDataError(loadGlowSettings(supabase))]);
   const redUp = sectors instanceof DataError || !sectors || sectors.colour === 'red_up';
   const glow = glowRead instanceof DataError ? undefined : glowRead;
 
@@ -631,20 +628,5 @@ function Method({ input }: { input: PerformanceInput }) {
       zh: '每夜排程也會把每天的市值存為淨值快照，供之後的功能使用。本頁直接由交易計算，修改後立即反映。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

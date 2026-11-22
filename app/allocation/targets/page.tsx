@@ -3,7 +3,10 @@ import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { HistorySection, LogList } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClassSettings, loadCaps, loadSecurities, loadTableLog, orDataError } from '@/lib/data';
+import { loadAssetClassSettings, loadCaps } from '@/lib/data/allocation';
+import { loadTableLog } from '@/lib/data/audit';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadSecurities } from '@/lib/data/holdings';
 
 import { TargetsForm } from '../targets-form';
 

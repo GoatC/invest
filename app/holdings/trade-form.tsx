@@ -9,7 +9,7 @@ import { Field } from '@/components/field';
 import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
 import { RuleMath } from '@/components/rule-math';
 import type { AlertItem } from '@/lib/alerts';
-import type { HoldingsData } from '@/lib/data';
+import type { HoldingsData } from '@/lib/data/holdings';
 import { isIsoDate } from '@/lib/dates';
 import { shortfallAlert } from '@/lib/forms';
 import { ACTION, bi, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';

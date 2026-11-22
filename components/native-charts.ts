@@ -11,7 +11,7 @@ import type { NativeSpec } from '@/lib/native-chart';
  * the chart's place and its words (legend, table) and draws nothing in it.
  *
  * Only in a shell that listens for charts (`webkit.messageHandlers.chart`), on the main tabs' pages
- * (Hugo, 2026-11-15: the main tabs first).
+ * (the main tabs first).
  */
 
 interface Box {

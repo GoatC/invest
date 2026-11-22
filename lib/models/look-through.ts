@@ -1,5 +1,5 @@
 /**
- * The combined look-through (F14, PRD Module C, Phase 2 step 6): what the whole portfolio holds once
+ * The combined look-through (F14, PRD Module C): what the whole portfolio holds once
  * every fund is opened up. Each holding's TWD value is spread over its fund's constituents, by
  * their weight in the issuer's latest holdings file; a single stock held directly adds its own
  * value. So TSMC held through VT, 00692 and directly is one line, with what each route adds.
@@ -15,7 +15,7 @@
  * - A fund without a holdings file is shown whole ("not looked through"), in its trade currency
  *   and, when config look_through gives one, its country; gold counts as gold, a TWD balance as
  *   TWD cash in Taiwan.
- * Pure functions; the nightly job saves the holdings files and lib/data loads them.
+ * Pure functions; the nightly job saves the holdings files and lib/data/look-through.ts loads them.
  */
 import type { Holding } from './valuation';
 
@@ -159,11 +159,6 @@ export function directKey(market: string, ticker: string): string {
 // ---------------------------------------------------------------------------
 // The look-through
 // ---------------------------------------------------------------------------
-
-/** What the look-through needs of a security beyond the holding: its sector and country when held directly. */
-export interface DirectInfo {
-  sector: string | null;
-}
 
 export interface LookThroughInput {
   /** Every holding, both pools, valued as on the holdings page. */

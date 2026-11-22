@@ -5,10 +5,12 @@ import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { CorrelationHeatmap, FrontierChart, WeightsChart, type Curve, type Spot } from '@/components/frontier-charts';
 import { History, HistorySection } from '@/components/history';
-import { Info } from '@/components/info';
+import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAuditHistory, loadFrontierData, type AuditEntry, type FrontierData } from '@/lib/data';
+import { loadAuditHistory, type AuditEntry } from '@/lib/data/audit';
+import { DataError } from '@/lib/data/core';
+import { loadFrontierData, type FrontierData } from '@/lib/data/frontier';
 import { taipeiToday } from '@/lib/dates';
 import { percent } from '@/lib/format';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
@@ -302,20 +304,5 @@ function Method() {
       zh: '僅供參考：此頁不會改寫你的目標；你若設定某類別報酬較高，最適化就會多配它。用它看你的配置離效率有多遠，而不是當作該持有的配置。',
     },
   ];
-  return (
-    <section className="card">
-      <details>
-        <summary>
-          <Bi en="How these are worked out" zh="計算方式" />
-        </summary>
-        <ul>
-          {notes.map((note) => (
-            <li key={note.en}>
-              <Bi {...note} />
-            </li>
-          ))}
-        </ul>
-      </details>
-    </section>
-  );
+  return <MethodNotes notes={notes} />;
 }

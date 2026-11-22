@@ -1,7 +1,8 @@
 import { Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadGoldPrice, loadSecurities, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadAssetClasses, loadGoldPrice, loadSecurities } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
 

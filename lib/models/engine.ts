@@ -3,9 +3,9 @@
  * nightly refresh, or when the owner asks, it evaluates every enabled rule it knows by the rule's
  * `condition`, drafts a proposal with an order list when one fires, and decides which open
  * proposals to close. It never trades (L2): the owner approves, edits or dismisses each proposal
- * and places the orders by hand. Pure functions; lib/data.ts loads the input and saves the outcome.
+ * and places the orders by hand. Pure functions; lib/data/engine.ts loads the input and saves the outcome.
  *
- * Rules evaluated (Phase 1, step 9), each on the regular-contribution pool, windfall money left out:
+ * Rules evaluated, each on the regular-contribution pool, windfall money left out:
  * - single_stock_weight_above (R1): a stock above max_weight → sell it back to the cap.
  * - satellite_weight_above (R2): the satellite above trigger_weight → sell it back to target_weight,
  *   pro rata across its holdings, counting what R1 sells of them in the same run.
@@ -19,14 +19,14 @@
  * - us_situs_value_above (US_ESTATE_TAX, step 11): US-situs assets (every US-domiciled holding, both
  *   pools, as the estate counts everything) above the exemption → a suggestion to use Irish-domiciled
  *   equivalents, with no orders: a sale abroad is overseas income, so the swap is the owner's call.
- * - tranche_due (WINDFALL_TRANCHE_DUE, Phase 2 step 1): a windfall tranche falls due → the cash
+ * - tranche_due (WINDFALL_TRANCHE_DUE): a windfall tranche falls due → the cash
  *   waiting over the tranches left, split by the core targets (F3: never the satellite).
  * - index_drawdown_tier (WINDFALL_ACCELERATION): ACWI past a tier below its 52-week high → the next
  *   tranche pulled forward, or a share of the cash waiting, once per tier and drawdown.
  *   Windfall orders draw on the windfall pool's TWD balance and buy through config windfall.vehicles,
  *   else the pool's largest holding of the class, else its benchmark; strategic cash's share stays
  *   in the balance, which is strategic cash already.
- * - price_at_or_below_value_multiple (BUY_ZONE, Phase 2 step 4): a watched stock's price at or below
+ * - price_at_or_below_value_multiple (BUY_ZONE): a watched stock's price at or below
  *   its saved base value × the buy multiple → a buy of the month's contribution share
  *   (MONTHLY_CONTRIBUTION's satellite_share_with_buy_alert), split over the stocks in the zone and
  *   each kept within R1's cap and R2's target; the month's contribution then puts the rest into the
@@ -35,7 +35,7 @@
  *   value × the trim multiple → sell sell_share of it, the proceeds into the core.
  * - value_change_exceeds (VALUATION_UPDATED): a filing moved a watched stock's base value by more
  *   than `change` from the value saved before it → a prompt to review, with no orders.
- * - red_flag_worsens (RED_FLAG_WORSENS, Phase 2 step 5): a held stock's red-flag light (N3) is worse
+ * - red_flag_worsens (RED_FLAG_WORSENS): a held stock's red-flag light (N3) is worse
  *   than it was before its current run of weekly scans (green → amber, amber → red) → a prompt to
  *   review, with no orders. A satellite stock turning red is left to the next rule.
  * - satellite_red_flag (RED_FLAG_RED): a satellite stock in the regular pool turns red → a prompt to
@@ -61,7 +61,7 @@
  * as an amount; gold held in grams cannot be ordered and is reported as such.
  *
  * Noise control: a rule fires at most once per cooldown_days unless its state (what it fired on)
- * changes. A proposal is a standing warning (Hugo, 2026-11-12): it stays open until Hugo dismisses
+ * changes. A proposal is a standing warning: it stays open until Hugo dismisses
  * it, its rule no longer fires, or a new state supersedes it; it never times out.
  */
 import { isPlain } from './positions';
@@ -109,7 +109,6 @@ export interface EngineQuote {
  * filled is history only: proposals approved and marked traded before 2026-11-12.
  */
 export type ProposalStatus = 'open' | 'dismissed' | 'filled' | 'expired';
-export const PROPOSAL_STATUSES: readonly ProposalStatus[] = ['open', 'dismissed', 'filled', 'expired'];
 
 /** timed_out is history only: before 2026-11-12 an open proposal closed after proposal_expiry_days. */
 export type ClosedReason = 'timed_out' | 'cleared' | 'superseded';

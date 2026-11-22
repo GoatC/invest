@@ -2,7 +2,12 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClassSettings, loadMarketSeries, loadRules, loadSecurities, orDataError, windfallSettingsValue } from '@/lib/data';
+import { loadAssetClassSettings } from '@/lib/data/allocation';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadSecurities } from '@/lib/data/holdings';
+import { loadMarketSeries } from '@/lib/data/market';
+import { loadRules } from '@/lib/data/rules';
+import { windfallSettingsValue } from '@/lib/data/windfall';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { capePercentile, readPace, schedule, trancheCount } from '@/lib/models/windfall';

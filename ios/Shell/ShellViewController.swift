@@ -38,7 +38,7 @@ final class TabHost: UIViewController {
         let newTitle = top?.title != drawn?.title
         drawn = top
         navigationItem.title = top?.title
-        // One line, centred, on every page (Hugo, 2026-11-16): no large title under the buttons' row.
+        // One line, centred, on every page: no large title under the buttons' row.
         navigationItem.largeTitleDisplayMode = .never
         // The page lists its controls left to right; the bar fills from the right edge in.
         let button = { (action: ShellAction) -> UIBarButtonItem in
@@ -610,7 +610,7 @@ final class ShellViewController: UITabBarController {
             setTabBarHidden(!new.signedIn, animated: true)
         }
         notice.isHidden = true
-        // Nothing shows, nor scrolls, until the app has opened: the cover stays over the bars too (Hugo, 2026-11-15).
+        // Nothing shows, nor scrolls, until the app has opened: the cover stays over the bars too.
         if new.opened != false { cover.lift() }
         sayBottom()
     }

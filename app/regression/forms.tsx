@@ -1,11 +1,12 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
+import { useFields } from '@/components/use-fields';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseRegressionForm, type FieldErrors, type RegressionField } from '@/lib/validation';
+import { parseRegressionForm, type RegressionField } from '@/lib/validation';
 
 import { saveRegressionSettings, type RegressionFormState } from './actions';
 
@@ -19,18 +20,10 @@ export interface SettingsField {
 
 /** The lab's settings, checked as typed with the server's parser. */
 export function RegressionSettingsForm({ fields, initial, windows, today, checkedOn }: { fields: readonly SettingsField[]; initial: Record<string, string>; windows: readonly number[]; today: string; checkedOn: string | null }) {
-  const [values, setValues] = useState(initial);
-  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(saveRegressionSettings, INITIAL);
-  const parsed = parseRegressionForm(values, windows, today);
-  const errors: FieldErrors<string> = parsed.ok ? {} : parsed.errors;
-  const error = (name: string) => (edited.has(name) ? (errors[name] ?? null) : (state.errors[name] ?? null));
-  const change = (name: string, value: string) => {
-    setEdited((previous) => new Set(previous).add(name));
-    setValues((previous) => ({ ...previous, [name]: value }));
-  };
+  const { values, error, change, reset } = useFields(initial, (typed) => parseRegressionForm(typed, windows, today), state.errors);
   return (
-    <form action={formAction} onSubmit={() => setEdited(new Set())} className="form">
+    <form action={formAction} onSubmit={reset} className="form">
       <div className="form-grid">
         {fields.map((field) => (
           <Field key={field.name} label={field.label} error={error(field.name)}>

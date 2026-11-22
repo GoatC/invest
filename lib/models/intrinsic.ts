@@ -1,5 +1,5 @@
 /**
- * F12 Valuation workbench (PRD Module C, Phase 2 step 4): a single stock's intrinsic value a share,
+ * F12 Valuation workbench (PRD Module C): a single stock's intrinsic value a share,
  * bear / base / bull, by three models, and where today's price stands against it.
  *
  * - DCF (FCFF): FCFF = EBIT (1 − t) + D&A − CapEx − ΔNWC over the last twelve months; it grows at
@@ -459,10 +459,4 @@ function valueMultiples(input: ValuationInput): Outcome<MultiplesResult, Multipl
 /** Every model's bear / base / bull value a share, in the reporting currency, or why there is none. */
 export function valueStock(input: ValuationInput): Valuation {
   return { dcf: valueDcf(input), ddm: valueDdm(input), multiples: valueMultiples(input) };
-}
-
-/** The values of one model, when it gave any. */
-export function valuesOf(valuation: Valuation, model: ModelId): Values | undefined {
-  const outcome = valuation[model];
-  return outcome.ok ? outcome.result.values : undefined;
 }

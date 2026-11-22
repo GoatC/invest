@@ -5,7 +5,8 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { VolatilityChart } from '@/components/volatility-chart';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadNewsAlerts, loadNewsSettings, loadShadowLog, loadVolatilityData, NEWS_PAGE_DAYS, orDataError, type VolatilityData } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadNewsAlerts, loadNewsSettings, loadShadowLog, loadVolatilityData, NEWS_PAGE_DAYS, type VolatilityData } from '@/lib/data/volatility';
 import { taipeiToday } from '@/lib/dates';
 import { signedPercent, twd } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
@@ -33,7 +34,7 @@ function taipeiShort(at: string): string {
 }
 
 /**
- * N8 (added 2026-11-06): the volatility score, breaking news, the alert record and the coming
+ * N8: the volatility score, breaking news, the alert record and the coming
  * events. Few words (CLAUDE.md): figures as tiles, explanations behind ⓘ, lists and settings folded.
  */
 export default async function VolatilityPage({ searchParams }: { searchParams: Promise<Params> }) {

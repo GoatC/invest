@@ -2,7 +2,8 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadRules, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadRules } from '@/lib/data/rules';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { parseEngineSettings, parseRuleForm, type EngineSettingsField, type FieldErrors } from '@/lib/validation';

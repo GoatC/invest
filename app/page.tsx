@@ -14,30 +14,17 @@ import { RefreshData } from '@/components/refresh-data';
 import { RiskCard } from '@/components/risk-card';
 import { RiskDetails } from '@/components/risk-details';
 import { requireSession } from '@/lib/auth';
-import {
-  DataError,
-  loadAllocationData,
-  loadLastAttribution,
-  loadMarketEvents,
-  loadMilestoneStep,
-  loadLastRun,
-  loadPlanData,
-  loadProposals,
-  loadRedFlagData,
-  loadRiskData,
-  loadRules,
-  loadWindfallPlan,
-  loadWorkbench,
-  orDataError,
-  type AllocationData,
-  type PlanData,
-  type Proposal,
-  type RedFlagData,
-  type RiskData,
-  type RuleRecord,
-  type WindfallPlanRecord,
-  type WorkbenchData,
-} from '@/lib/data';
+import { loadAllocationData, type AllocationData } from '@/lib/data/allocation';
+import { loadLastAttribution } from '@/lib/data/attribution';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadLastRun, loadPlanData, type PlanData } from '@/lib/data/planning';
+import { loadMilestoneStep } from '@/lib/data/poster';
+import { loadRedFlagData, type RedFlagData } from '@/lib/data/red-flags';
+import { loadRiskData, type RiskData } from '@/lib/data/risk';
+import { loadProposals, loadRules, type RuleRecord } from '@/lib/data/rules';
+import { loadWorkbench, type WorkbenchData } from '@/lib/data/valuation';
+import { loadMarketEvents } from '@/lib/data/volatility';
+import { loadWindfallPlan, type WindfallPlanRecord } from '@/lib/data/windfall';
 import { addDays, taipeiToday } from '@/lib/dates';
 import { money, percent, signedPercent, signedTwd, twd } from '@/lib/format';
 import { LABELS, PLAN_SERIES, type Bilingual } from '@/lib/i18n';
@@ -56,8 +43,6 @@ import { LIGHT_ICON, lightText } from '@/lib/red-flag-text';
 
 import { Banners } from './banner';
 
-type Params = Record<string, string | string[] | undefined>;
-
 /**
  * The weekly dashboard, the home screen (PRD Section 5): the poster with the portfolio's value and
  * the line of its rise and fall at the top, then the Value at Risk (its distribution and make-up
@@ -65,18 +50,13 @@ type Params = Record<string, string | string[] | undefined>;
  * the rule warnings last, or second while one stands. Each part reads its own data, so one that
  * fails to load leaves the others in place.
  */
-export default async function Dashboard({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function Dashboard() {
   const { supabase } = await requireSession();
-  const params = await searchParams;
   const today = taipeiToday();
-  let data: AllocationData;
-  try {
-    data = await loadAllocationData(supabase);
-  } catch (err) {
-    if (err instanceof DataError) return <DataProblem table={err.table} detail={err.detail} />;
-    throw err;
-  }
-  const [risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents, lastStep] = await Promise.all([
+  // Every read starts at once; the red flags reuse the holdings the allocation read.
+  const allocation = loadAllocationData(supabase);
+  const [data, risk, proposals, plan, settings, windfall, workbench, flags, simulation, attribution, marketEvents, lastStep] = await Promise.all([
+    orDataError(allocation),
     orDataError(loadRiskData(supabase, today)),
     orDataError(Promise.all([loadProposals(supabase, today), loadRules(supabase)])),
     orDataError(loadPlanData(supabase, today)),
@@ -89,12 +69,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     ),
     orDataError(loadWindfallPlan(supabase)),
     orDataError(loadWorkbench(supabase, today)),
-    orDataError(loadRedFlagData(supabase, today, undefined, data)),
+    orDataError(allocation.then((holdings) => loadRedFlagData(supabase, today, undefined, holdings))),
     orDataError(loadLastRun(supabase, 'monte_carlo')),
     orDataError(loadLastAttribution(supabase)),
     orDataError(loadMarketEvents(supabase, today, addDays(today, 6))),
     orDataError(loadMilestoneStep(supabase)),
   ]);
+  if (data instanceof DataError) return <DataProblem table={data.table} detail={data.detail} />;
   const portfolio = buildPortfolio(data);
   const rules = proposals instanceof DataError ? [] : proposals[1];
   // The whole portfolio day by day (F18): the poster's line, and the regular pool's month ends against the plan.
@@ -197,11 +178,11 @@ function WeekCapsule({ gain, tone }: { gain: Gain; tone: Glow['tone'] }) {
 }
 
 /**
- * The poster at the top (Hugo, 2026-11-13; Ink design 2026-11-18, docs/design-handoff/02-components.md): the date
+ * The poster at the top (Ink design 2026-11-18, docs/design-handoff/02-components.md): the date
  * and the refresh button, the portfolio's value (both pools), the 7-day move as one capsule, and the line of the
  * portfolio's rise and fall edge to edge along the foot, ending in today's dot. One glow from the top-right corner in
  * the colour of the 7-day move, its strength the size of the move. No closes' date, legend, ⓘ or expand button on it
- * (Hugo, 2026-11-15). The pools and the gain since the start live on Holdings.
+ *. The pools and the gain since the start live on Holdings.
  */
 function Hero({
   today,
@@ -297,7 +278,7 @@ function RuleBoard({ data, portfolio }: { data: AllocationData; portfolio: Portf
   const items = ruleBoard(portfolio.holdings, data.caps, classDrifts(portfolio.classes, data.bands, portfolio.pool.totalTwd));
   if (items.length === 0) return null;
   const tone = items.some((item) => item.tone === 'alert') ? 'alert' : items.some((item) => item.tone === 'watch') ? 'watch' : 'ok';
-  // Closed by default (Hugo, 2026-11-18): the worst state's badge, how many need him, and which rules; a tap opens the tiles.
+  // Closed by default: the worst state's badge, how many need him, and which rules; a tap opens the tiles.
   const firing = items.filter((item) => item.tone === tone && tone !== 'ok');
   const count = tone === 'alert' ? `${firing.length} 項需處理` : tone === 'watch' ? `${firing.length} 項注意` : '全部正常';
   const which = firing.map((item) => `${item.code ? `${item.code} ` : ''}${item.title.zh}`).join(' · ');
@@ -515,13 +496,13 @@ function Windfall({ portfolio, plan, today }: { portfolio: Portfolio; plan: Wind
           />
         </>
       )}
-      {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} waiting={waiting} />}
+      {plan instanceof DataError ? <Unavailable what={{ en: 'the windfall plan', zh: '大額資金計畫' }} error={plan} /> : <PlanStatus plan={plan} today={today} />}
     </section>
   );
 }
 
 /** The tranche plan in one line: how far along, on schedule or accelerated, and the next date. */
-function PlanStatus({ plan, today, waiting }: { plan: WindfallPlanRecord | undefined; today: string; waiting: number }) {
+function PlanStatus({ plan, today }: { plan: WindfallPlanRecord | undefined; today: string }) {
   if (!plan) {
     return (
       <p className="muted small">

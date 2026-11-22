@@ -17,7 +17,7 @@ import { bi, LENS, SLICE, type Bilingual } from '@/lib/i18n';
 import { LENSES, type Lens, type Slice } from '@/lib/models/allocation';
 
 import { Bi } from './bi';
-import { chartText, dataIndex, Legend, mount, NARROW, tooltip, tooltipStyle, type Chart, type Colors, type Option } from './echarts';
+import { chartText, dataIndex, mount, NARROW, tooltip, tooltipStyle, type Chart, type Colors, type Option } from './echarts';
 
 // ---------------------------------------------------------------------------
 // N6: allocation donut, three lenses
