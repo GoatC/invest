@@ -2,13 +2,15 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadHoldingsData, loadSecurities, orDataError, type HoldingsData } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadAssetClasses, loadHoldingsData, loadSecurities, type HoldingsData } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, afterSecurityAdded, formFields, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, buildPortfolio } from '@/lib/models/portfolio';
 import type { Split } from '@/lib/models/splits';
-import { parseSecurity, parseSplitForm, type FieldErrors, type SecurityField, type SplitField } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseSecurity, parseSplitForm, type SecurityField, type SplitField } from '@/lib/validation/holdings';
 
 export interface SecurityFormState {
   errors: FieldErrors<SecurityField>;

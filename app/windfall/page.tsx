@@ -7,14 +7,15 @@ import { Facts, type Fact } from '@/components/facts';
 import { Info } from '@/components/info';
 import { BacktestChart, type BacktestPoint } from '@/components/windfall-charts';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadWindfallData, type WindfallData } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { loadWindfallData, type WindfallData } from '@/lib/data/windfall';
 import { taipeiToday } from '@/lib/dates';
 import { ordinal, percent, signedPercent, twd } from '@/lib/format';
 import { feedLabel, LABELS, TRANCHE_STATUS, type Bilingual } from '@/lib/i18n';
 import { buildPortfolio } from '@/lib/models/portfolio';
 import { backtest, capePercentile, drawdownOf, readAcceleration, readPace, trancheCount, type Acceleration, type Backtest, type MarketMonth, type Pace, type Spread } from '@/lib/models/windfall';
 import { proposalTitle, STATUS } from '@/lib/proposal-text';
-import { PACE_FIELDS, vehicleField, type PaceField } from '@/lib/validation';
+import { PACE_FIELDS, vehicleField, type PaceField } from '@/lib/validation/planning';
 
 import { deletePlan } from './actions';
 import { PlanForm, WindfallForm, type FieldSpec } from './forms';

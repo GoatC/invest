@@ -1,8 +1,8 @@
-import type { HoldingsData } from '@/lib/data';
+import type { HoldingsData } from '@/lib/data/holdings';
 import { rateHistory, suggestedRate } from '@/lib/models/fx';
 import type { FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { parseNumber } from '@/lib/validation';
+import { parseNumber } from '@/lib/validation/core';
 
 import type { TradeValues } from './trade-form';
 

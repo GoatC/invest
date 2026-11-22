@@ -5,15 +5,15 @@
  * (.github/workflows/notify.yml and nightly.yml). Everything outside this file is injected, so a
  * run can be tested without a network or a database.
  */
-import type { NotificationRecord } from '../../../lib/data.ts';
+import type { NotificationRecord } from '../../../lib/data/notify.ts';
 import { plan, type PlanInput } from '../../../lib/models/notify.ts';
 import type { PushResult, Vapid } from '../../../lib/push.ts';
 
 export interface NotifyStore {
-  /** What the plan reads besides the time (loadNotifyInput in lib/data). */
+  /** What the plan reads besides the time (loadNotifyInput in lib/data/notify.ts). */
   input(today: string): Promise<Omit<PlanInput, 'now'>>;
   /** Saves the planned pushes, skipping any already planned; returns how many are new. */
-  plan(messages: Parameters<typeof import('../../../lib/data.ts').planNotifications>[1]): Promise<number>;
+  plan(messages: Parameters<typeof import('../../../lib/data/notify.ts').planNotifications>[1]): Promise<number>;
   due(now: Date): Promise<NotificationRecord[]>;
   /** Sends one push to every device; undefined when another run already had it. */
   send(notification: NotificationRecord, vapid: Vapid): Promise<(PushResult & { skipped?: boolean }) | undefined>;

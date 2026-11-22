@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { refreshPages } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
 import { activeRun, dispatch, githubConfig, listRuns, runState, type RefreshState } from '@/lib/refresh';
-import { loadMilestoneStep } from '@/lib/data';
+import { loadMilestoneStep } from '@/lib/data/poster';
 import { createClient } from '@/lib/supabase/server';
 
 export async function signOut(): Promise<void> {

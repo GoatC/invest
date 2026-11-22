@@ -2,12 +2,13 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadAssetClasses } from '@/lib/data';
+import { loadAssetClasses } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readFrontierSettings } from '@/lib/models/frontier';
-import { parseFrontierForm, type FieldErrors, type FrontierField } from '@/lib/validation';
+import { parseFrontierForm, type FrontierField } from '@/lib/validation/allocation';
+import type { FieldErrors } from '@/lib/validation/core';
 
 export interface FrontierFormState {
   errors: FieldErrors<FrontierField>;

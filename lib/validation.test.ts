@@ -9,49 +9,19 @@ import { readSectorSettings } from './models/sectors';
 import { readVolatilitySettings } from './models/volatility';
 import { readNewsSettings } from './models/news';
 import { ASSET_CLASSES, SECURITIES } from './models/test-helpers';
-import {
-  SPLIT_MESSAGES,
-  parseSplitForm,
-  parseEventForm,
-  parseNewsForm,
-  parseVolatilityForm,
-  MESSAGES,
-  parseAssumptionForm,
-  parseAssumptionsForm,
-  parseBrokerForm,
-  parseCashFlow,
-  parseFeeForm,
-  parseFundForm,
-  parseManualAsset,
-  parseFrontierForm,
-  parseMonteCarloForm,
-  parseNumber,
-  parseTimelineForm,
-  parseEngineSettings,
-  parsePaceForm,
-  parseCapmForm,
-  parseRegressionForm,
-  parsePlanForm,
-  parsePlanStart,
-  parseRuleForm,
-  parseSchedule,
-  parseSubscription,
-  parseSecurity,
-  parseTargets,
-  parseTaxForm,
-  parseTrade,
-  leverageSteps,
-  parseWindfallSettingsForm,
-  vehicleField,
-  withholdingField,
-  parseValuationSettingsForm,
-  listField,
-  parseLookThroughForm,
-  parseSectorForm,
-  parseFlagEntryForm,
-  parseFlagSettingsForm,
-  parseEstimatesForm,
-} from './validation';
+import { parseAssumptionForm, parseFrontierForm, parseTargets } from './validation/allocation';
+import { MESSAGES, parseNumber } from './validation/core';
+import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm, withholdingField } from './validation/costs';
+import { leverageSteps, parseCashFlow, parseManualAsset, parseSecurity, parseSplitForm, parseTrade, SPLIT_MESSAGES } from './validation/holdings';
+import { parseLookThroughForm } from './validation/look-through';
+import { parseSchedule, parseSubscription } from './validation/notify';
+import { parseMonteCarloForm, parsePaceForm, parsePlanForm, parsePlanStart, parseTimelineForm, parseWindfallSettingsForm, vehicleField } from './validation/planning';
+import { listField, parseFlagEntryForm, parseFlagSettingsForm } from './validation/red-flags';
+import { parseCapmForm, parseRegressionForm } from './validation/research';
+import { parseEngineSettings, parseRuleForm } from './validation/rules';
+import { parseSectorForm } from './validation/sectors';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from './validation/valuation';
+import { parseEventForm, parseNewsForm, parseVolatilityForm } from './validation/volatility';
 
 const securities = new Map(SECURITIES.map((s) => [s.ticker, s]));
 const classes = new Map(ASSET_CLASSES.map((c) => [c.id, c]));

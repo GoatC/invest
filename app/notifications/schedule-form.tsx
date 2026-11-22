@@ -5,7 +5,7 @@ import { useActionState, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseSchedule, WEEKDAYS, type ScheduleField } from '@/lib/validation';
+import { parseSchedule, WEEKDAYS, type ScheduleField } from '@/lib/validation/notify';
 
 import { saveSchedule, type ScheduleState } from './actions';
 

@@ -11,7 +11,7 @@
  *   panic reads 10, rounded to 0.1. A component with no figure, or one older than
  *   `max_age_days`, is left out and the others re-weighted; below `min_coverage` of the weight
  *   there is no score.
- * Thresholds live in config volatility. Pure functions; lib/data and the volatility job load the
+ * Thresholds live in config volatility. Pure functions; lib/data/volatility.ts and the volatility job load the
  * series from index_prices.
  */
 import { addDays } from '../dates';

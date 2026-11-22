@@ -2,11 +2,12 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadTimelineSettings } from '@/lib/data';
+import { loadTimelineSettings } from '@/lib/data/planning';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { timelineSettingsValue } from '@/lib/models/timeline';
-import { parseTimelineForm, type FieldErrors, type TimelineField } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseTimelineForm, type TimelineField } from '@/lib/validation/planning';
 
 export interface TimelineFormState {
   errors: FieldErrors<TimelineField>;

@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { Bi } from '@/components/bi';
 import { Info } from '@/components/info';
-import type { HoldingsData } from '@/lib/data';
+import type { HoldingsData } from '@/lib/data/holdings';
 import { LABELS, MARKET, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
 
 const SAVED: Record<string, Bilingual> = {

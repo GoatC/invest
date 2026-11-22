@@ -11,7 +11,7 @@
  *   newest close), × √52.
  * - Exposure from F14's look-through: each company's TWD value through the funds and directly, by
  *   its sector and its country (US, Taiwan, or elsewhere, which no proxy here prices).
- * Pure functions; lib/data loads the closes and the look-through.
+ * Pure functions; lib/data/sectors.ts loads the closes and the look-through.
  */
 import { addDays, addMonths } from '../dates';
 import { GICS_SECTORS, type Exposure } from './look-through';

@@ -2,14 +2,17 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadHoldingsData, orDataError, rescoreQuietly, transactionColumns } from '@/lib/data';
+import { rescoreQuietly } from '@/lib/data/auto-cma';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadHoldingsData, transactionColumns } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, parseId, saveFailed, shortfallMessage, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { addedShortfalls, previewTrade } from '@/lib/models/portfolio';
 import { buildPositions } from '@/lib/models/positions';
 import { restateTrades } from '@/lib/models/splits';
-import { parseTrade, type FieldErrors, type TradeField } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseTrade, type TradeField } from '@/lib/validation/holdings';
 
 export interface TradeFormState {
   errors: FieldErrors<TradeField>;

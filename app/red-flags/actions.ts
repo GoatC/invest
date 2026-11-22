@@ -2,13 +2,14 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadRedFlagData, loadRedFlagSettings, scanRedFlags } from '@/lib/data';
+import { loadRedFlagData, loadRedFlagSettings, scanRedFlags } from '@/lib/data/red-flags';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, parseId, saveFailed, type DeleteState } from '@/lib/forms';
 import { formFields } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { redFlagSettingsValue } from '@/lib/models/red-flags';
-import { parseFlagEntryForm, parseFlagSettingsForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseFlagEntryForm, parseFlagSettingsForm } from '@/lib/validation/red-flags';
 
 export interface FlagFormState {
   errors: FieldErrors<string>;

@@ -15,7 +15,7 @@
  * - A fund without a holdings file is shown whole ("not looked through"), in its trade currency
  *   and, when config look_through gives one, its country; gold counts as gold, a TWD balance as
  *   TWD cash in Taiwan.
- * Pure functions; the nightly job saves the holdings files and lib/data loads them.
+ * Pure functions; the nightly job saves the holdings files and lib/data/look-through.ts loads them.
  */
 import type { Holding } from './valuation';
 

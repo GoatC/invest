@@ -5,14 +5,16 @@ import { requireSession } from '@/lib/auth';
 import { MAX_STATEMENT_BYTES } from '@/lib/csv/limits';
 import { mappingKey, missingColumns, parseMapping } from '@/lib/csv/mapping';
 import { flowsToImport, planImport, readStatement, tradesToImport } from '@/lib/csv/plan';
-import { cashFlowColumns, DataError, loadCashFlows, loadFxHistory, loadHoldingsData, orDataError, rescoreQuietly, transactionColumns } from '@/lib/data';
+import { rescoreQuietly } from '@/lib/data/auto-cma';
+import { DataError, orDataError } from '@/lib/data/core';
+import { cashFlowColumns, loadCashFlows, loadFxHistory, loadHoldingsData, transactionColumns } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { formFields, saveFailed, shortfallMessage } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import { latestFx } from '@/lib/models/valuation';
-import { parseNumber } from '@/lib/validation';
+import { parseNumber } from '@/lib/validation/core';
 
 export interface ImportState {
   message: Bilingual | null;

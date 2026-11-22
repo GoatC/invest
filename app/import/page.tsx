@@ -2,7 +2,8 @@ import { Bi, Zh } from '@/components/bi';
 import { Info } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadCashFlows, loadCsvMappings, loadFxHistory, loadHoldingsData, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadCashFlows, loadCsvMappings, loadFxHistory, loadHoldingsData } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS } from '@/lib/i18n';
 

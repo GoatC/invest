@@ -2,12 +2,14 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadSecurities, loadWorkbench, saveValuation } from '@/lib/data';
+import { loadSecurities } from '@/lib/data/holdings';
+import { loadWorkbench, saveValuation } from '@/lib/data/valuation';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readValuationSettings } from '@/lib/models/intrinsic';
-import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation/valuation';
 
 export interface ValuationFormState {
   errors: FieldErrors<string>;

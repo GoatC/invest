@@ -21,7 +21,7 @@
  * payment date, from FinMind, Nasdaq, the adjusted closes it just loaded and Alpha Vantage.
  * Everything outside this file is injected, so the whole run can be tested without a network or a database.
  */
-import type { ProfileRecord } from '../../../lib/data.ts';
+import type { ProfileRecord } from '../../../lib/data/red-flags.ts';
 import { ATTRIBUTION_ERROR, BETAS_ERROR, CMA_ERROR, MONTE_CARLO_ERROR, RED_FLAGS_ERROR, RISK_ERROR, RULES_ERROR, SNAPSHOT_ERROR, VALUATIONS_ERROR, WIDGET_ERROR } from '../../../lib/models/data-health.ts';
 import { SECTOR_FUNDS, type Constituent, type LookThroughSettings } from '../../../lib/models/look-through.ts';
 import { windowStart as flagWindow, type EventIndicator, type RedFlagSettings } from '../../../lib/models/red-flags.ts';
@@ -108,7 +108,7 @@ export interface Store {
   filingTickers(): Promise<Array<{ ticker: string; market: string }> | undefined>;
   /** Upserts each stock's quarters (fundamentals), one row per stock and quarter end. */
   saveFundamentals(rows: readonly FundamentalRow[]): Promise<void>;
-  /** Values every watched stock with a quarter newer than its last value (revalueOnFilings in lib/data). */
+  /** Values every watched stock with a quarter newer than its last value (revalueOnFilings in lib/data/valuation.ts). */
   revalue(today: string): Promise<{ valued: string[] } | undefined>;
   /** The single stocks the red-flag indicator lights (N3), their profiles and whether each is due a scan; undefined before config red_flags. */
   redFlagCompanies(today: string): Promise<{ settings: RedFlagSettings; companies: Array<{ ticker: string; market: string; due: boolean; profile: ProfileRecord | null }> } | undefined>;
@@ -116,7 +116,7 @@ export interface Store {
   saveProfiles(rows: readonly ProfileRecord[]): Promise<void>;
   /** Adds the events the feeds found (red_flag_events); one already saved is left as it is. */
   saveFlagEvents(rows: readonly FeedEvent[]): Promise<void>;
-  /** Saves today's scan of each company asked for (scanRedFlags in lib/data). */
+  /** Saves today's scan of each company asked for (scanRedFlags in lib/data/red-flags.ts). */
   scanRedFlags(today: string, tickers: readonly string[]): Promise<{ scanned: string[] }>;
   /** The held funds whose holdings file is due, and the held single stocks (F14); undefined before config look_through. */
   lookThroughPlan(today: string): Promise<
@@ -128,17 +128,17 @@ export interface Store {
   saveFundFile(file: FundFileRow): Promise<void>;
   /** Sets the GICS sector of single stocks held (company_profiles.sector). */
   saveSectors(rows: ReadonlyArray<{ ticker: string; market: string; sector: string }>): Promise<void>;
-  /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data). */
+  /** Saves each holding's β at the default settings, once a month: undefined when this month's are saved already (refreshBetas in lib/data/regression.ts). */
   refreshBetas(today: string): Promise<{ saved: number; runDate: string } | undefined>;
-  /** Saves each complete month's Brinson effects (N2) not yet saved; undefined when there is nothing new (refreshAttribution in lib/data). */
+  /** Saves each complete month's Brinson effects (N2) not yet saved; undefined when there is nothing new (refreshAttribution in lib/data/attribution.ts). */
   refreshAttribution(today: string): Promise<{ months: number } | undefined>;
-  /** Scores each satellite class from its holdings (F6 auto) and saves the estimates; undefined before its migration or while off (refreshCmaEstimates in lib/data). */
+  /** Scores each satellite class from its holdings (F6 auto) and saves the estimates; undefined before its migration or while off (refreshCmaEstimates in lib/data/auto-cma.ts). */
   refreshCmaEstimates?(today: string): Promise<{ saved: string[]; unscored: string[] } | undefined>;
-  /** Saves the month's Monte Carlo summary (F5) once: undefined when it is saved already or cannot run yet (refreshMonteCarlo in lib/data). */
+  /** Saves the month's Monte Carlo summary (F5) once: undefined when it is saved already or cannot run yet (refreshMonteCarlo in lib/data/planning.ts). */
   refreshMonteCarlo(today: string): Promise<{ runDate: string } | undefined>;
-  /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data). */
+  /** What F18 needs to value the portfolio on each day up to `end` (loadPerformanceInput in lib/data/performance.ts). */
   performanceInput(end: string): Promise<PerformanceInput>;
-  /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data). */
+  /** What the VaR of each day from `from` to `end` reads besides the holdings (loadRiskInput in lib/data/risk.ts). */
   riskInput(from: string, end: string): Promise<RiskInput>;
   /** Saves one NAV snapshot per day and drops any from before the first (left by trades since deleted). */
   saveSnapshots(rows: readonly Snapshot[]): Promise<void>;
@@ -146,7 +146,7 @@ export interface Store {
   widgetRedUp(): Promise<boolean>;
   /** Saves the home-screen widget's one row (widget_snapshot); null clears it, before two closes hold a value. */
   saveWidgetSnapshot(figures: WidgetFigures | null): Promise<void>;
-  /** Evaluates every rule as of `now` and saves the proposals it drafts and closes (runRules in lib/data). */
+  /** Evaluates every rule as of `now` and saves the proposals it drafts and closes (runRules in lib/data/engine.ts). */
   evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
   recordRun(run: JobRun): Promise<void>;
   /** The US single stocks whose analysts' estimates are due (F12 forward P/E, config pe_check); undefined before its migration. */

@@ -6,11 +6,12 @@ import { useActionState, useMemo, useState } from 'react';
 import { AlertTiles } from '@/components/alert-tiles';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
-import type { AssetClassSettings } from '@/lib/data';
+import type { AssetClassSettings } from '@/lib/data/allocation';
 import { percent } from '@/lib/format';
 import { bi, LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
 import type { Security, Sleeve } from '@/lib/models/types';
-import { parseNumber, parseTargets, targetFields } from '@/lib/validation';
+import { parseTargets, targetFields } from '@/lib/validation/allocation';
+import { parseNumber } from '@/lib/validation/core';
 
 import { saveTargets, type SettingsFormState } from './actions';
 

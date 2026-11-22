@@ -1,7 +1,7 @@
 /**
  * The valuation workbench's plumbing (F12, Phase 2 step 4): from a stock's saved quarters and
  * closes to the input its valuation needs, from a valuation to the rows the valuations table keeps,
- * and from those rows to what the rules engine reads. Pure; lib/data.ts loads and saves.
+ * and from those rows to what the rules engine reads. Pure; lib/data/valuation.ts loads and saves.
  */
 import type { WatchInput } from './engine';
 import { latestQuarter, yearBefore, type Quarter } from './fundamentals';

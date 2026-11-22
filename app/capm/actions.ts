@@ -6,7 +6,8 @@ import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { readCapmSettings } from '@/lib/models/capm';
-import { parseCapmForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseCapmForm } from '@/lib/validation/research';
 
 export interface CapmFormState {
   errors: FieldErrors<string>;

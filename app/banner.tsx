@@ -1,6 +1,7 @@
 import { GuideBanner } from '@/components/guide-banner';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadBanners, orDataError } from '@/lib/data';
+import { loadBanners } from '@/lib/data/banners';
+import { DataError, orDataError } from '@/lib/data/core';
 import { taipeiToday } from '@/lib/dates';
 
 import { dismissBanner, skipDividend } from './dividends/actions';

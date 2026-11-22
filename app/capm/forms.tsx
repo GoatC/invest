@@ -5,7 +5,8 @@ import { useActionState, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseCapmForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseCapmForm } from '@/lib/validation/research';
 
 import { saveCapmSettings, type CapmFormState } from './actions';
 

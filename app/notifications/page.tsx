@@ -5,11 +5,12 @@ import { PushHandoffSetting } from '@/components/push-handoff';
 import { ShellReminders } from '@/components/shell-reminders';
 import { TaipeiTime } from '@/components/history';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { loadDevices, loadNotifications, loadWidgetKeyDate, type DeviceRecord, type NotificationRecord } from '@/lib/data/notify';
 import { LABELS, type Bilingual } from '@/lib/i18n';
 import { readQuietHours, readWeeklyReview } from '@/lib/models/notify';
 import { vapidFromEnv } from '@/lib/push';
-import { WEEKDAYS } from '@/lib/validation';
+import { WEEKDAYS } from '@/lib/validation/notify';
 
 import { removeDevice } from './actions';
 import { PushSetup } from './push-setup';

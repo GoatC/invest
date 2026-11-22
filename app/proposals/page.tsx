@@ -1,7 +1,9 @@
 import { DataProblem } from '@/components/data-problem';
 import { WarningsPanel } from '@/components/warnings-panel';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAllocationData, loadProposals, loadRules } from '@/lib/data';
+import { loadAllocationData } from '@/lib/data/allocation';
+import { DataError } from '@/lib/data/core';
+import { loadProposals, loadRules } from '@/lib/data/rules';
 import { taipeiToday } from '@/lib/dates';
 
 type Params = Record<string, string | string[] | undefined>;

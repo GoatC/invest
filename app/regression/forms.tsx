@@ -5,7 +5,8 @@ import { useActionState, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseRegressionForm, type FieldErrors, type RegressionField } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseRegressionForm, type RegressionField } from '@/lib/validation/research';
 
 import { saveRegressionSettings, type RegressionFormState } from './actions';
 

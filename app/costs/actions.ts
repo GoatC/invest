@@ -2,12 +2,15 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadAssetClasses, loadCostConfig, orDataError, type CostConfig } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadCostConfig, type CostConfig } from '@/lib/data/costs';
+import { loadAssetClasses } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed, type DeleteState } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { brokerValue, feeSettingsValue, fundCostValue, taxSettingsValue } from '@/lib/models/costs';
-import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm } from '@/lib/validation/costs';
 
 /** What every costs-page form gets back when it does not save. */
 export interface CostFormState {

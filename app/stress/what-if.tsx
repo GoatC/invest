@@ -1,5 +1,5 @@
 import { Bi } from '@/components/bi';
-import type { StressData } from '@/lib/data';
+import type { StressData } from '@/lib/data/stress';
 import { percent, twd } from '@/lib/format';
 import { DIRECTION, leverageText, type Bilingual } from '@/lib/i18n';
 import { classReturns, combinedDrawdown, positionPath, type Replay, type Scenario, type StressSettings, type WhatIf } from '@/lib/models/stress';

@@ -2,13 +2,14 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadLookThroughSettings } from '@/lib/data';
+import { loadLookThroughSettings } from '@/lib/data/look-through';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { SECTOR } from '@/lib/look-through-text';
 import { GICS_SECTORS, lookThroughSettingsValue } from '@/lib/models/look-through';
-import { parseLookThroughForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseLookThroughForm } from '@/lib/validation/look-through';
 
 export interface LookThroughFormState {
   errors: FieldErrors<string>;

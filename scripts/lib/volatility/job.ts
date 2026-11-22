@@ -62,7 +62,7 @@ export interface VolatilityStore {
   /** Replaces a feed's events from `from` on with these (market_events): a rescheduled meeting moves. */
   replaceEvents(source: 'fed' | 'fred', from: string, rows: readonly MarketEvent[]): Promise<void>;
   recordRun(run: VolatilityRun): Promise<void>;
-  /** Evaluates every rule as of `now` and saves the proposals (runRules in lib/data), so the alert reads the new score at once. */
+  /** Evaluates every rule as of `now` and saves the proposals (runRules in lib/data/engine.ts), so the alert reads the new score at once. */
   evaluateRules(today: string, now: string): Promise<{ created: number; closed: number }>;
 }
 

@@ -1,6 +1,6 @@
 /**
  * F15 fee and tax drag (PRD Module D): what holding and trading the portfolio costs each year, and
- * what each choice of broker and fund would cost over the plan. Pure functions; lib/data.ts loads
+ * what each choice of broker and fund would cost over the plan. Pure functions; lib/data/costs.ts loads
  * the config rows (fees, brokers, fund_costs, tax) and the costs page shows every figure with its
  * inputs (design principle 4).
  *

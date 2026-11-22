@@ -6,7 +6,7 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { percent } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseEngineSettings, parseRuleForm, thresholdField, type EngineSettingsField } from '@/lib/validation';
+import { parseEngineSettings, parseRuleForm, thresholdField, type EngineSettingsField } from '@/lib/validation/rules';
 
 import { saveEngineSettings, saveRule, type RuleFormState, type SettingsFormState } from './actions';
 

@@ -7,7 +7,8 @@ import { CostBars, type CostBar } from '@/components/cost-charts';
 import { DataProblem } from '@/components/data-problem';
 import { DeleteForm } from '@/components/delete-form';
 import { requireSession } from '@/lib/auth';
-import { chosenBroker, DataError, loadCostsData, type CostsData } from '@/lib/data';
+import { DataError } from '@/lib/data/core';
+import { chosenBroker, loadCostsData, type CostsData } from '@/lib/data/costs';
 import { taipeiToday } from '@/lib/dates';
 import { money, percent, twd } from '@/lib/format';
 import { LABELS, type Bilingual } from '@/lib/i18n';
@@ -31,7 +32,7 @@ import { regularPool } from '@/lib/models/rules';
 import { restateTrades } from '@/lib/models/splits';
 import { overseasIncome, supplementaryPremiums, usSitusExposure, type OverseasIncome, type Premiums, type SitusExposure, type TaxSecurity } from '@/lib/models/tax';
 import { latestFx } from '@/lib/models/valuation';
-import { LSE_CHOICES, TAX_FIELDS, withholdingField } from '@/lib/validation';
+import { LSE_CHOICES, TAX_FIELDS, withholdingField } from '@/lib/validation/costs';
 
 import { deleteBroker, deleteFund } from './actions';
 import { CostForm, type FieldSpec } from './forms';

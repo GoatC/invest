@@ -6,7 +6,8 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { taipeiToday } from '@/lib/dates';
 import { LABELS, type Bilingual } from '@/lib/i18n';
-import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseBrokerForm, parseFeeForm, parseFundForm, parseTaxForm } from '@/lib/validation/costs';
 
 import { saveBroker, saveFees, saveFund, saveTax, type CostFormState } from './actions';
 

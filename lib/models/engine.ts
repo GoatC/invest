@@ -3,7 +3,7 @@
  * nightly refresh, or when the owner asks, it evaluates every enabled rule it knows by the rule's
  * `condition`, drafts a proposal with an order list when one fires, and decides which open
  * proposals to close. It never trades (L2): the owner approves, edits or dismisses each proposal
- * and places the orders by hand. Pure functions; lib/data.ts loads the input and saves the outcome.
+ * and places the orders by hand. Pure functions; lib/data/engine.ts loads the input and saves the outcome.
  *
  * Rules evaluated (Phase 1, step 9), each on the regular-contribution pool, windfall money left out:
  * - single_stock_weight_above (R1): a stock above max_weight → sell it back to the cap.

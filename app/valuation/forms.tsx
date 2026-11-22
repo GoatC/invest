@@ -5,7 +5,8 @@ import { useActionState, useState, type ReactNode } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { bi, LABELS, type Bilingual } from '@/lib/i18n';
-import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseAssumptionsForm, parseEstimatesForm, parseValuationSettingsForm } from '@/lib/validation/valuation';
 
 import { saveAssumptions, saveEstimates, saveValuationSettings, type ValuationFormState } from './actions';
 

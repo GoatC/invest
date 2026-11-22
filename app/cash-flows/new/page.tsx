@@ -1,7 +1,9 @@
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { requireSession } from '@/lib/auth';
-import { DataError, loadDividendEvent, loadDividendView, loadFxHistory, loadHoldingsData, orDataError } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadDividendEvent, loadDividendView } from '@/lib/data/dividends';
+import { loadFxHistory, loadHoldingsData } from '@/lib/data/holdings';
 import { taipeiToday } from '@/lib/dates';
 import { parseId } from '@/lib/forms';
 import { percent, quantity } from '@/lib/format';

@@ -6,7 +6,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
-import type { HoldingsData } from '@/lib/data';
+import type { HoldingsData } from '@/lib/data/holdings';
 import { isIsoDate } from '@/lib/dates';
 import { twd } from '@/lib/format';
 import { bi, FLOW_TYPE, LABELS, POOL, type Bilingual } from '@/lib/i18n';
@@ -15,7 +15,8 @@ import { buildPositions } from '@/lib/models/positions';
 import { restateTrades } from '@/lib/models/splits';
 import type { FlowType, FxQuote } from '@/lib/models/types';
 import { latestFx } from '@/lib/models/valuation';
-import { FLOW_TYPES, parseCashFlow, parseNumber, type CashFlowField } from '@/lib/validation';
+import { parseNumber } from '@/lib/validation/core';
+import { FLOW_TYPES, parseCashFlow, type CashFlowField } from '@/lib/validation/holdings';
 
 import { saveCashFlow, type CashFlowFormState } from './actions';
 

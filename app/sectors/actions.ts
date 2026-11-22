@@ -2,14 +2,15 @@
 
 import { redirect } from '@/lib/action-redirect';
 import { requireSession } from '@/lib/auth';
-import { loadSectorSettings } from '@/lib/data';
+import { loadSectorSettings } from '@/lib/data/sectors';
 import { taipeiToday } from '@/lib/dates';
 import { ACTION_MESSAGES, formFields, saveFailed } from '@/lib/forms';
 import type { Bilingual } from '@/lib/i18n';
 import { SECTOR } from '@/lib/look-through-text';
 import { GICS_SECTORS } from '@/lib/models/look-through';
 import { sectorSettingsValue } from '@/lib/models/sectors';
-import { parseSectorForm, type FieldErrors } from '@/lib/validation';
+import type { FieldErrors } from '@/lib/validation/core';
+import { parseSectorForm } from '@/lib/validation/sectors';
 
 export interface SectorFormState {
   errors: FieldErrors<string>;

@@ -8,7 +8,7 @@
  * - Taiwan's central bank board meetings and anything else (elections), typed in by Hugo.
  * Every event is kept by its Taipei date and time, as Hugo lives by them. Implied volatility tends
  * to rise before an event and fall after it, so a reminder proposes no orders.
- * Pure functions; the volatility job loads the feeds, lib/data and the push job read the rows.
+ * Pure functions; the volatility job loads the feeds, lib/data/volatility.ts and the push job read the rows.
  */
 import { addDays } from '../dates';
 import type { Bilingual } from '../i18n';

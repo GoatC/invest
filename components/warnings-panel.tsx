@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { TaipeiTime } from '@/components/history';
-import { DataError, loadFeeContext, orDataError, type FeeContext, type Proposal, type RuleRecord } from '@/lib/data';
+import { DataError, orDataError } from '@/lib/data/core';
+import { loadFeeContext, type FeeContext } from '@/lib/data/costs';
+import type { Proposal, RuleRecord } from '@/lib/data/rules';
 import type { requireSession } from '@/lib/auth';
 import { money, quantity, twd } from '@/lib/format';
 import type { Bilingual } from '@/lib/i18n';
