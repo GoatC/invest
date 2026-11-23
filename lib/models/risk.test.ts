@@ -26,6 +26,7 @@ import {
   returnWindow,
   riskFigures,
   riskReport,
+  recentLine,
   sparkline,
   varLine,
   weeklyReturns,
@@ -429,6 +430,23 @@ describe('sparkline', () => {
       ],
     );
     assert.deepEqual(sparkline(saved, TODAY, { ...report, weekVar: null }).map((p) => p.date), ['2026-10-15', TODAY]);
+  });
+});
+
+describe('recentLine', () => {
+  it('keeps every saved day of the last 4 weeks, ending with today’s worked-out VaR', () => {
+    // TODAY is Friday 23 October: 4 weeks back is 25 September, which is left out.
+    const saved = ['2026-09-25', '2026-09-28', '2026-10-21', '2026-10-22', TODAY].map((date) => ({ date, valueAtRisk: 10, totalTwd: 1000 }));
+    const report = { weekVar: 12, measured: { valueTwd: 1100, exposures: [], cash: { valueTwd: 0, holdings: [] }, unmeasured: [] } };
+    assert.deepEqual(
+      recentLine(saved, TODAY, report).map((p) => [p.date, p.valueAtRisk]),
+      [
+        ['2026-09-28', 10],
+        ['2026-10-21', 10],
+        ['2026-10-22', 10],
+        [TODAY, 12],
+      ],
+    );
   });
 });
 

@@ -59,12 +59,13 @@ function sparklineOption(points: readonly VarPoint[], scale: number, label: Bili
       },
     },
     xAxis: { type: 'time', show: false },
-    yAxis: { type: 'value', show: false, scale: true },
+    // Hugs the line's own low and high (Hugo, 2026-11-24): a nice round range flattened the week's moves.
+    yAxis: { type: 'value', show: false, min: (v) => v.min - (v.max - v.min || v.max) * 0.08, max: (v) => v.max + (v.max - v.min || v.max) * 0.08 },
     series: [line, today],
   };
 }
 
-function Sparkline({ points, scale, label }: { points: readonly VarPoint[]; scale: number; label: Bilingual }) {
+function Sparkline({ points, scale, label, daily }: { points: readonly VarPoint[]; scale: number; label: Bilingual; daily: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => mount(ref.current, (colors) => sparklineOption(points, scale, label, colors)), [points, scale, label]);
   const first = points[0];
@@ -78,20 +79,20 @@ function Sparkline({ points, scale, label }: { points: readonly VarPoint[]; scal
     );
   }
   const summary: Bilingual = {
-    en: `${label.en} each week since ${first.date}: from ${twd(first.valueAtRisk * scale)} to ${twd(last.valueAtRisk * scale)}, highest ${twd((high?.valueAtRisk ?? 0) * scale)} on ${high?.date}.`,
-    zh: `${first.date} 起每週的${label.zh}：從 ${twd(first.valueAtRisk * scale)} 到 ${twd(last.valueAtRisk * scale)}，最高 ${twd((high?.valueAtRisk ?? 0) * scale)}（${high?.date}）。`,
+    en: `${label.en} each ${daily ? 'day' : 'week'} since ${first.date}: from ${twd(first.valueAtRisk * scale)} to ${twd(last.valueAtRisk * scale)}, highest ${twd((high?.valueAtRisk ?? 0) * scale)} on ${high?.date}.`,
+    zh: `${first.date} 起每${daily ? '日' : '週'}的${label.zh}：從 ${twd(first.valueAtRisk * scale)} 到 ${twd(last.valueAtRisk * scale)}，最高 ${twd((high?.valueAtRisk ?? 0) * scale)}（${high?.date}）。`,
   };
   return (
     <figure className="chart-figure">
       <div ref={ref} className="chart sparkline" role="img" aria-label={bi(summary)} />
       <figcaption className="muted small">
-        <Bi en={`The last 52 weeks, since ${first.date}`} zh={`近 52 週（${first.date} 起）`} />
+        {daily ? <Bi en={`The last 4 weeks, day by day, since ${first.date}`} zh={`近 4 週每日（${first.date} 起）`} /> : <Bi en={`The last 52 weeks, since ${first.date}`} zh={`近 52 週（${first.date} 起）`} />}
       </figcaption>
     </figure>
   );
 }
 
-export function VarFigure({ horizons, weekVar, valueTwd, line }: { horizons: readonly Horizon[]; weekVar: number; valueTwd: number; line: readonly VarPoint[] }) {
+export function VarFigure({ horizons, weekVar, valueTwd, line, recent }: { horizons: readonly Horizon[]; weekVar: number; valueTwd: number; line: readonly VarPoint[]; recent: readonly VarPoint[] }) {
   const [selected, setSelected] = useState(0);
   const horizon = horizons[selected] ?? horizons[0];
   if (!horizon) return null;
@@ -119,7 +120,8 @@ export function VarFigure({ horizons, weekVar, valueTwd, line }: { horizons: rea
       <p>
         <Bi {...horizon.note} />
       </p>
-      <Sparkline points={line} scale={scale} label={horizon.label} />
+      {/* The first horizon (1 week) shows the last 4 weeks day by day; the month keeps the 52-week line. */}
+      <Sparkline points={selected === 0 ? recent : line} daily={selected === 0} scale={scale} label={horizon.label} />
     </div>
   );
 }

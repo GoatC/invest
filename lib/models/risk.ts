@@ -424,10 +424,18 @@ export function varLine(saved: readonly VarPoint[], today: string, live: VarPoin
   return [...points, ...(live ? [live] : [])].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function liveVar(today: string, report: Pick<RiskReport, 'weekVar' | 'measured'> | undefined): VarPoint | undefined {
+  return report && report.weekVar !== null ? { date: today, valueAtRisk: report.weekVar, totalTwd: report.measured.valueTwd } : undefined;
+}
+
 /** The card's 52-week line: the saved 1-week VaR, one point a week, ending with today's worked-out figure. */
 export function sparkline(saved: readonly VarPoint[], today: string, report: Pick<RiskReport, 'weekVar' | 'measured'> | undefined): VarPoint[] {
-  const live = report && report.weekVar !== null ? { date: today, valueAtRisk: report.weekVar, totalTwd: report.measured.valueTwd } : undefined;
-  return lastOfEachWeek(varLine(saved, today, live));
+  return lastOfEachWeek(varLine(saved, today, liveVar(today, report)));
+}
+
+/** The card's line under 1 week (Hugo, 2026-11-24): the last 4 weeks, one point a day, so the latest week's moves show. */
+export function recentLine(saved: readonly VarPoint[], today: string, report: Pick<RiskReport, 'weekVar' | 'measured'> | undefined): VarPoint[] {
+  return varLine(saved, today, liveVar(today, report), 4);
 }
 
 /** A line's last point in each week to Friday, and its very last point: one point a week for the sparkline. */

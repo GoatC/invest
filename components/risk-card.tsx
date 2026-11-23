@@ -31,10 +31,10 @@ function blocker(report: RiskReport): Bilingual | undefined {
 }
 
 /**
- * The N4 card: today's VaR of the whole portfolio with its toggle and 52-week line, or why there
+ * The N4 card: today's VaR of the whole portfolio with its toggle and line (4 weeks daily, or 52 weeks), or why there
  * is none yet; `children` (the folded distribution and make-up) go at its foot.
  */
-export function RiskCard({ report, line, children }: { report: RiskReport | undefined; line: readonly VarPoint[]; children?: ReactNode }) {
+export function RiskCard({ report, line, recent, children }: { report: RiskReport | undefined; line: readonly VarPoint[]; recent: readonly VarPoint[]; children?: ReactNode }) {
   const why = report ? blocker(report) : undefined;
   return (
     <section className="card form" id="value-at-risk">
@@ -53,7 +53,7 @@ export function RiskCard({ report, line, children }: { report: RiskReport | unde
           <Bi {...why} />
         </p>
       ) : (
-        <VarFigure horizons={riskHorizons(report.settings)} weekVar={report.weekVar ?? 0} valueTwd={report.measured.valueTwd} line={line} />
+        <VarFigure horizons={riskHorizons(report.settings)} weekVar={report.weekVar ?? 0} valueTwd={report.measured.valueTwd} line={line} recent={recent} />
       )}
       {report && report.measured.valueTwd > 0 && (
         <Info>

@@ -34,7 +34,7 @@ import { comingWeek, readWeeklyReview } from '@/lib/models/notify';
 import { buildSeries, type DayPoint } from '@/lib/models/performance';
 import { buildPortfolio, type Portfolio } from '@/lib/models/portfolio';
 import { againstPlan, gap, monthEnds, savedPlan } from '@/lib/models/projection';
-import { riskReport, sparkline } from '@/lib/models/risk';
+import { recentLine, riskReport, sparkline } from '@/lib/models/risk';
 import { glowOf, milestoneOf, readGlowSettings, type Glow } from '@/lib/models/glow';
 import { linePath, valueLine, type Gain, type ValueLine } from '@/lib/models/value-line';
 import { marginOfSafety, zoneOf } from '@/lib/models/intrinsic';
@@ -433,7 +433,7 @@ function Risk({ risk, portfolio, today }: { risk: RiskData; portfolio: Portfolio
   const report = riskReport(portfolio.holdings, risk.input, today);
   const line = sparkline(risk.saved, today, report);
   return (
-    <RiskCard report={report} line={line}>
+    <RiskCard report={report} line={line} recent={recentLine(risk.saved, today, report)}>
       <RiskDetails report={report} line={line} />
     </RiskCard>
   );
