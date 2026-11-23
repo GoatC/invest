@@ -89,7 +89,7 @@ export function WhatIfSection({
           <select name="wc" defaultValue={whatIf?.classId ?? data.classNames[0]?.id}>
             {data.classNames.map((entry) => (
               <option key={entry.id} value={entry.id}>
-                {`${entry.nameEn} ${entry.nameZh}`}
+                {entry.nameZh}
               </option>
             ))}
           </select>
@@ -97,8 +97,8 @@ export function WhatIfSection({
         <label className="field">
           <Bi en="Direction" zh="多空方向" />
           <select name="wd" defaultValue={whatIf?.direction ?? 'long'}>
-            <option value="long">{`${DIRECTION.long.en} ${DIRECTION.long.zh}`}</option>
-            <option value="short">{`${DIRECTION.short.en} ${DIRECTION.short.zh}`}</option>
+            <option value="long">{DIRECTION.long.zh}</option>
+            <option value="short">{DIRECTION.short.zh}</option>
           </select>
         </label>
         <label className="field">

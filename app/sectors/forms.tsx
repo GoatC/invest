@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
-import { bi, LABELS } from '@/lib/i18n';
+import { LABELS, zh } from '@/lib/i18n';
 import type { SectorSettings } from '@/lib/models/sectors';
 
 import { saveSectorSettings, type SectorFormState } from './actions';
@@ -25,8 +25,8 @@ export function SectorSettingsForm({ settings }: { settings: SectorSettings }) {
       )}
       <Field label={{ en: 'Colours', zh: '配色' }} error={error('colour')}>
         <select name="colour" defaultValue={settings.colour}>
-          <option value="red_up">{bi({ en: 'Red up, green down (Taiwan)', zh: '紅漲綠跌（台灣慣例）' })}</option>
-          <option value="green_up">{bi({ en: 'Green up, red down (US)', zh: '綠漲紅跌（美國慣例）' })}</option>
+          <option value="red_up">{zh({ en: 'Red up, green down (Taiwan)', zh: '紅漲綠跌（台灣慣例）' })}</option>
+          <option value="green_up">{zh({ en: 'Green up, red down (US)', zh: '綠漲紅跌（美國慣例）' })}</option>
         </select>
       </Field>
       <Field

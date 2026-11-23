@@ -377,7 +377,7 @@ function FundChoices({ choices, plan, saved, orderTwd, held, broker }: { choices
     rows
       .filter((row) => row.overPlan !== null)
       .map((row) => ({
-        label: `${row.fund.ticker} · ${assetClass.nameEn}`,
+        label: `${row.fund.ticker} · ${assetClass.nameZh}`,
         cost: row.overPlan?.cost ?? 0,
         current: held.has(row.fund.ticker),
         note: { en: `${rate(row.drag.total)} a year${row.tradeShare !== null ? `, ${rate(row.tradeShare)} an order` : ''}`, zh: `每年 ${rate(row.drag.total)}${row.tradeShare !== null ? `，每筆 ${rate(row.tradeShare)}` : ''}` },
@@ -582,7 +582,7 @@ function Brokers({ choices, chosen, orderTwd, usdTwd, foreignShare, plan }: { ch
   }
   const bars: CostBar[] = choices
     .filter((choice) => choice.overPlan !== null)
-    .map((choice) => ({ label: choice.broker.nameEn, cost: choice.overPlan?.cost ?? 0, current: choice.broker.id === chosen?.id, note: { en: `${rate(choice.order?.share)} an order`, zh: `每筆 ${rate(choice.order?.share)}` } }));
+    .map((choice) => ({ label: choice.broker.nameZh, cost: choice.overPlan?.cost ?? 0, current: choice.broker.id === chosen?.id, note: { en: `${rate(choice.order?.share)} an order`, zh: `每筆 ${rate(choice.order?.share)}` } }));
   return (
     <>
       <Facts

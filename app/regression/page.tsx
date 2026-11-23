@@ -10,7 +10,7 @@ import type { SecurityRecord } from '@/lib/data/holdings';
 import { loadRegressionData, loadRegressionSetup, loadSavedBetas, type RegressionData } from '@/lib/data/regression';
 import { taipeiToday } from '@/lib/dates';
 import { percent, signedPercent } from '@/lib/format';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { bi, type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { FREQUENCIES, loadFrom, regressTicker, type Benchmark, type Choice, type CurrencyBasis, type Frequency, type Regression, type RegressionOutcome, type RegressionSettings } from '@/lib/models/regression';
 
 import { RegressionSettingsForm, type SettingsField } from './forms';
@@ -323,7 +323,7 @@ function Compare({
             <select name="b" defaultValue={against.id}>
               {settings.benchmarks.map((benchmark) => (
                 <option key={benchmark.id} value={benchmark.id}>
-                  {bi(name(benchmark))}
+                  {zh(name(benchmark))}
                 </option>
               ))}
             </select>

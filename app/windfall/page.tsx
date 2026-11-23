@@ -10,7 +10,7 @@ import { requireSession } from '@/lib/auth';
 import { DataError } from '@/lib/data/core';
 import { loadWindfallData, type WindfallData } from '@/lib/data/windfall';
 import { taipeiToday } from '@/lib/dates';
-import { ordinal, percent, signedPercent, twd } from '@/lib/format';
+import { percent, signedPercent, twd } from '@/lib/format';
 import { feedLabel, LABELS, TRANCHE_STATUS, type Bilingual } from '@/lib/i18n';
 import { buildPortfolio } from '@/lib/models/portfolio';
 import { backtest, capePercentile, drawdownOf, readAcceleration, readPace, trancheCount, type Acceleration, type Backtest, type MarketMonth, type Pace, type Spread } from '@/lib/models/windfall';
@@ -99,7 +99,7 @@ export default async function WindfallPage({ searchParams }: { searchParams: Pro
   if (gauge && pace) {
     facts.push({
       label: { en: `CAPE ${gauge.month}`, zh: `CAPE ${gauge.month}` },
-      value: `${gauge.cape.toFixed(1)} · ${ordinal(gauge.percentile)}`,
+      value: `${gauge.cape.toFixed(1)} · 第 ${Math.round(gauge.percentile)} 百分位`,
       note: { en: `→ ${trancheCount(gauge.percentile, pace)} tranches`, zh: `→ 分 ${trancheCount(gauge.percentile, pace)} 批` },
     });
   }
@@ -353,9 +353,9 @@ function Results({ result, horizon, acceleration, source }: { result: Backtest; 
             </tr>
           </thead>
           <tbody>
-            <SpreadRow label={{ en: 'This rule vs lump sum', zh: '本規則 vs 一次投入' }} spread={result.ruleVsLump} />
-            <SpreadRow label={{ en: 'The pace alone vs lump sum', zh: '只依節奏 vs 一次投入' }} spread={result.paceVsLump} />
-            <SpreadRow label={{ en: 'This rule vs the pace alone', zh: '本規則 vs 只依節奏' }} spread={result.ruleVsPace} />
+            <SpreadRow label={{ en: 'This rule vs lump sum', zh: '本規則相對一次投入' }} spread={result.ruleVsLump} />
+            <SpreadRow label={{ en: 'The pace alone vs lump sum', zh: '只依節奏相對一次投入' }} spread={result.paceVsLump} />
+            <SpreadRow label={{ en: 'This rule vs the pace alone', zh: '本規則相對只依節奏' }} spread={result.ruleVsPace} />
           </tbody>
         </table>
       </div>

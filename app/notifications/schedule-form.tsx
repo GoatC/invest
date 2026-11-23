@@ -60,7 +60,7 @@ export function ScheduleForm({ initial }: { initial: Record<ScheduleField, strin
           <select name="weeklyDay" value={values.weeklyDay} onChange={(e) => change('weeklyDay', e.target.value)}>
             {WEEKDAYS.map((day) => (
               <option key={day} value={day}>
-                {`${DAY[day].en} ${DAY[day].zh}`}
+                {DAY[day].zh}
               </option>
             ))}
           </select>

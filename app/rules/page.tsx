@@ -158,7 +158,7 @@ function RuleRow({ rule, check, proposals }: { rule: RuleRecord; check: Check | 
           <Bi en="Thresholds and cooldown" zh="門檻與冷卻期" />
         </summary>
         <p className="muted small">
-          <Bi en={`Condition ${rule.condition}, action ${rule.action}. Stored threshold: `} zh={`判斷式 ${rule.condition}，動作 ${rule.action}。目前門檻：`} />
+          <Bi en={`Condition ${rule.condition}, action ${rule.action}. Stored threshold: `} zh="目前門檻：" />
           <code>{JSON.stringify(rule.threshold)}</code>
         </p>
         <RuleForm id={rule.id} enabled={rule.enabled} cooldownDays={rule.cooldownDays} threshold={record(rule.threshold)} />

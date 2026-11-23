@@ -16,7 +16,7 @@ import { guessDateFormat, wordList, type DateFormat } from '@/lib/csv/values';
 import type { CashFlowRecord, HoldingsData } from '@/lib/data/holdings';
 import { quantity } from '@/lib/format';
 import { shortfallAlert } from '@/lib/forms';
-import { bi, FLOW_TYPE, LABELS, POOL, SIDE, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, FLOW_TYPE, LABELS, POOL, SIDE, zh } from '@/lib/i18n';
 import { rateHistory } from '@/lib/models/fx';
 import { previewImport } from '@/lib/models/portfolio';
 import type { FxQuote, Pool } from '@/lib/models/types';
@@ -174,7 +174,7 @@ export function ImportWizard({ data, rates, flows, mappings, today }: { data: Ho
                   {entry.broker}
                 </option>
               ))}
-              <option value={OTHER_BROKER}>{bi({ en: 'Another broker…', zh: '其他券商…' })}</option>
+              <option value={OTHER_BROKER}>{zh({ en: 'Another broker…', zh: '其他券商…' })}</option>
             </select>
           </Field>
         )}
@@ -213,8 +213,8 @@ export function ImportWizard({ data, rates, flows, mappings, today }: { data: Ho
             </Field>
             <Field label={{ en: 'Pool for these trades', zh: '這些交易的資金池' }}>
               <select value={pool} onChange={(e) => setPool(e.target.value === 'windfall' ? 'windfall' : 'regular')}>
-                <option value="regular">{bi(POOL.regular)}</option>
-                <option value="windfall">{bi(POOL.windfall)}</option>
+                <option value="regular">{zh(POOL.regular)}</option>
+                <option value="windfall">{zh(POOL.windfall)}</option>
               </select>
             </Field>
           </div>
@@ -296,7 +296,7 @@ function importLabel(trades: number, dividends: number): Bilingual {
 function ColumnSelect({ value, headers, onChange, none }: { value: string | null; headers: readonly string[]; onChange: (value: string | null) => void; none: Bilingual }) {
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
-      <option value="">{bi(none)}</option>
+      <option value="">{zh(none)}</option>
       {headers.map((header) => (
         <option key={header} value={header}>
           {header}
@@ -355,16 +355,16 @@ function ColumnsStep({
       <div className="form-grid">
         <Field label={{ en: 'Encoding', zh: '文字編碼' }} hint={<Bi en="Try Big5 if Chinese looks garbled" zh="中文若顯示亂碼，請改選 Big5" />}>
           <select value={mapping.encoding} onChange={(e) => changeLayout({ encoding: e.target.value as EncodingChoice })}>
-            <option value="auto">{bi({ en: 'Automatic', zh: '自動' })}</option>
+            <option value="auto">{zh({ en: 'Automatic', zh: '自動' })}</option>
             <option value="utf-8">UTF-8</option>
             <option value="big5">Big5</option>
           </select>
         </Field>
         <Field label={{ en: 'Separator', zh: '分隔符號' }}>
           <select value={mapping.delimiter} onChange={(e) => changeLayout({ delimiter: e.target.value as Delimiter })}>
-            <option value=",">{bi({ en: 'Comma ,', zh: '逗號 ,' })}</option>
-            <option value=";">{bi({ en: 'Semicolon ;', zh: '分號 ;' })}</option>
-            <option value={'\t'}>{bi({ en: 'Tab', zh: '定位字元' })}</option>
+            <option value=",">{zh({ en: 'Comma ,', zh: '逗號 ,' })}</option>
+            <option value=";">{zh({ en: 'Semicolon ;', zh: '分號 ;' })}</option>
+            <option value={'\t'}>{zh({ en: 'Tab', zh: '定位字元' })}</option>
           </select>
         </Field>
         <Field label={{ en: 'Header row', zh: '標題列' }} hint={<Bi en="The row holding the column names" zh="欄位名稱所在的列" />}>
@@ -396,7 +396,7 @@ function ColumnsStep({
           <select value={mapping.dateFormat} onChange={(e) => update({ dateFormat: e.target.value as DateFormat })}>
             {(Object.keys(DATE_FORMAT_LABELS) as DateFormat[]).map((format) => (
               <option key={format} value={format}>
-                {bi(DATE_FORMAT_LABELS[format])}
+                {zh(DATE_FORMAT_LABELS[format])}
               </option>
             ))}
           </select>
@@ -409,13 +409,13 @@ function ColumnsStep({
             value={mapping.sideFromSign ? FROM_SIGN : (mapping.side ?? '')}
             onChange={(e) => (e.target.value === FROM_SIGN ? update({ sideFromSign: true, side: null }) : update({ sideFromSign: false, side: e.target.value || null }))}
           >
-            <option value="">{bi(choose)}</option>
+            <option value="">{zh(choose)}</option>
             {headers.map((header) => (
               <option key={header} value={header}>
                 {header}
               </option>
             ))}
-            <option value={FROM_SIGN}>{bi({ en: 'No column: negative quantity = sell', zh: '無此欄：數量為負即賣出' })}</option>
+            <option value={FROM_SIGN}>{zh({ en: 'No column: negative quantity = sell', zh: '無此欄：數量為負即賣出' })}</option>
           </select>
         </Field>
         {!mapping.sideFromSign && (

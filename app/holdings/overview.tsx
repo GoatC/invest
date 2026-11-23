@@ -543,7 +543,7 @@ function TreeMap({ rows, portfolio }: { rows: readonly Row[]; portfolio: Portfol
 function Cell({ signal }: { signal: Signal | undefined }): ReactNode {
   if (!signal) return <span className="sig-none">—</span>;
   const dot = (
-    <i className={`sig-dot big ${signal.kind}`} title={`${signal.label.en} ${signal.label.zh}`}>
+    <i className={`sig-dot big ${signal.kind}`} title={signal.label.zh}>
       {ICON[signal.kind] || '＝'}
     </i>
   );

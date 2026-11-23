@@ -7,7 +7,7 @@ import { Bi } from '@/components/bi';
 import { Info } from '@/components/info';
 import { Field } from '@/components/field';
 import { twd } from '@/lib/format';
-import { bi, LABELS, POOL, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, POOL, PRODUCT, SLEEVE, zh } from '@/lib/i18n';
 import type { AssetClass, FxQuote } from '@/lib/models/types';
 import { GRAMS_PER_TROY_OUNCE } from '@/lib/models/valuation';
 import { parseManualAsset, parseNumber, type ManualAssetField } from '@/lib/validation';
@@ -96,15 +96,15 @@ export function AssetForm({
         </Field>
         <Field label={LABELS.productType} error={error('productType')}>
           <select name="productType" value={values.productType} onChange={(e) => change('productType', e.target.value)}>
-            <option value="gold">{bi({ en: 'Physical gold', zh: '實體黃金' })}</option>
-            <option value="cash_mmf">{bi(PRODUCT.cash_mmf)}</option>
+            <option value="gold">{zh({ en: 'Physical gold', zh: '實體黃金' })}</option>
+            <option value="cash_mmf">{zh(PRODUCT.cash_mmf)}</option>
           </select>
         </Field>
         <Field label={LABELS.assetClass} error={error('assetClassId')}>
           <select name="assetClassId" value={values.assetClassId} onChange={(e) => change('assetClassId', e.target.value)}>
             {assetClasses.map((assetClass) => (
               <option key={assetClass.id} value={assetClass.id}>
-                {`${assetClass.nameEn} ${assetClass.nameZh} · ${bi(SLEEVE[assetClass.sleeve])}`}
+                {`${assetClass.nameZh} · ${zh(SLEEVE[assetClass.sleeve])}`}
               </option>
             ))}
           </select>
@@ -144,8 +144,8 @@ export function AssetForm({
         </Field>
         <Field label={LABELS.pool} error={error('pool')}>
           <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
-            <option value="regular">{bi(POOL.regular)}</option>
-            <option value="windfall">{bi(POOL.windfall)}</option>
+            <option value="regular">{zh(POOL.regular)}</option>
+            <option value="windfall">{zh(POOL.windfall)}</option>
           </select>
         </Field>
       </div>

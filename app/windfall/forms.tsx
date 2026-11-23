@@ -6,7 +6,7 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { useFields } from '@/components/use-fields';
 import { ordinal, twd } from '@/lib/format';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { capePercentile, schedule, trancheCount, type MonthValue, type Pace } from '@/lib/models/windfall';
 import { parsePaceForm, parsePlanStart, parseWindfallSettingsForm } from '@/lib/validation';
 
@@ -47,7 +47,7 @@ export function PlanForm({ capes, pace, initial, replacing }: { capes: readonly 
       action={formAction}
       onSubmit={(event) => {
         reset();
-        if (replacing && !window.confirm(bi(confirmText))) event.preventDefault();
+        if (replacing && !window.confirm(zh(confirmText))) event.preventDefault();
       }}
       className="form"
     >
@@ -100,7 +100,7 @@ export function WindfallForm({ kind, fields, initial, classes = {} }: { kind: Ki
               <select name={field.name} value={values[field.name] ?? ''} onChange={(e) => change(field.name, e.target.value)}>
                 {field.options.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {bi(option.label)}
+                    {zh(option.label)}
                   </option>
                 ))}
               </select>

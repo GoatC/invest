@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
-import { bi, LABELS } from '@/lib/i18n';
+import { LABELS, zh } from '@/lib/i18n';
 import { EVENT_KINDS, KIND_NAMES } from '@/lib/models/events';
 import type { NewsSettings } from '@/lib/models/news';
 import type { VolatilitySettings } from '@/lib/models/volatility';
@@ -94,8 +94,8 @@ export function EventForm() {
       <div className="row">
         <Field label={{ en: 'Kind', zh: '類別' }} error={error('kind')}>
           <select name="kind" defaultValue="other">
-            <option value="other">{bi(KIND_NAMES.other)}</option>
-            <option value="cbc">{bi(KIND_NAMES.cbc)}</option>
+            <option value="other">{zh(KIND_NAMES.other)}</option>
+            <option value="cbc">{zh(KIND_NAMES.cbc)}</option>
           </select>
         </Field>
         <Field label={{ en: 'Date (Taipei)', zh: '日期（台北）' }} error={error('date')}>

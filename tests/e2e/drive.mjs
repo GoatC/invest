@@ -26,6 +26,26 @@ await context.addInitScript(() => {
     // No storage on this page (about:blank): nothing to set.
   }
 });
+// Every page shows Chinese alone (CLAUDE.md, Chinese only); a name keeps its English beside it, out of sight, for a
+// screen reader (components/bi.tsx). The walk-through reads pages as that reader does: on a wide screen a test-only
+// style lays the English back in line, so the checks below find each name's English and Chinese as before and keep
+// checking the figures. The step 'Chinese only' turns it off (localStorage e2e.bilingual = off) and checks what a person
+// sees: no English name at any width. A phone keeps the page's own rule, so the phone checks see the real layout.
+await context.addInitScript(() => {
+  try {
+    if (localStorage.getItem('e2e.bilingual') === 'off') return;
+  } catch {
+    return;
+  }
+  const add = () => {
+    const style = document.createElement('style');
+    style.dataset.e2e = 'bilingual';
+    style.textContent = "@media (min-width: 760px) { .bi > [lang='en'] { position: static !important; width: auto !important; height: auto !important; overflow: visible !important; clip-path: none !important; white-space: normal !important; } }";
+    document.head.append(style);
+  };
+  if (document.head) add();
+  else document.addEventListener('DOMContentLoaded', add, { once: true });
+});
 const page = await context.newPage();
 const problems = [];
 // A resource that failed to load is named, so a stray 404 can be found.
@@ -788,7 +808,7 @@ await step('performance: TWR against the SAA benchmark, XIRR, monthly FX split a
   const tip = page.locator('.chart-tip').first();
   await tip.waitFor();
   const tipText = await tip.innerText();
-  check(tipText.includes('Portfolio (TWR)') && tipText.includes('SAA benchmark'), `tooltip lists both lines, got ${tipText}`);
+  check(tipText.includes('組合（時間加權）') && tipText.includes('SAA 基準'), `tooltip lists both lines, got ${tipText}`);
   await snap('performance-tooltip', page, false);
   for (const summary of await page.getByText('Show as a table').all()) await summary.click();
   const tables = await body();
@@ -1059,7 +1079,7 @@ await step('risk details on the dashboard: the histogram with its cutoff, the we
   // Just above the axis in the middle, where the bins around 0% stand tallest.
   await chart.hover({ position: { x: Math.round(box.width * 0.55), y: Math.round(box.height * 0.85) } });
   await page.locator('.chart-tip').first().waitFor();
-  check(/weeks?/.test(await page.locator('.chart-tip').first().innerText()), 'bar tooltip');
+  check(/週/.test(await page.locator('.chart-tip').first().innerText()), 'bar tooltip');
   for (const summary of await page.getByText('Show as a table').all()) await summary.click();
   await page.getByText('代理 ETF 週報酬的相關係數').click();
   check(/beyond the VaR/.test(await body()), 'the table marks the bins beyond the VaR');
@@ -1121,7 +1141,7 @@ await step('calculator: the target mix and the DCA amount to start from; the PRD
   await chart.hover({ position: { x: Math.round(box.width * 0.97), y: Math.round(box.height * 0.5) } });
   await page.locator('.chart-tip').first().waitFor();
   const tip = await page.locator('.chart-tip').first().innerText();
-  check(tip.includes('year 30') && tip.includes('NT$10,045,150') && tip.includes("Value in today's money"), `year tooltip, got ${tip}`);
+  check(tip.includes('第 30 年') && tip.includes('NT$10,045,150') && tip.includes('換算今天的幣值'), `year tooltip, got ${tip}`);
   await page.getByText('Show as a table').first().click();
   check(/30\s+2056-04\s+NT\$10,045,150\s+NT\$3,600,000/.test(await body()), 'the year table');
   await snap('calculator');
@@ -1150,7 +1170,7 @@ await step('calculator: saving the plan compares the regular pool with it at eac
   check(box !== null, 'chart has a size');
   await chart.hover({ position: { x: Math.round(box.width * 0.6), y: Math.round(box.height * 0.5) } });
   await page.locator('.chart-tip').first().waitFor();
-  check(/Actual[\s\S]*Plan/.test(await page.locator('.chart-tip').first().innerText()), 'month-end tooltip');
+  check(/實際[\s\S]*計畫/.test(await page.locator('.chart-tip').first().innerText()), 'month-end tooltip');
   check((await page.inputValue('input[name=start]')) === '2026-05' && (await page.inputValue('input[name=expectedReturn]')) === '6', 'the form shows the saved plan');
   const history = (await page.locator('section', { hasText: 'Edit history of the plan' }).textContent()) ?? '';
   check(history.includes('Changed') && history.includes('2026-05'), 'the save is logged');
@@ -1389,7 +1409,7 @@ await step("windfall: CAPE's percentile sets the pace, ACWI's fall from its high
   await page.locator('.chart-backtest svg').waitFor();
   const text = await body();
   // Seed: CAPE 24.04 in 2026-09, the 74th percentile of its 1,749 months since 1881: above the 70th, so 24 tranches.
-  check((await fact('CAPE 2026-09')).includes('24.0 · 74th → 24 tranches → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
+  check((await fact('CAPE 2026-09')).includes('24.0 · 第 74 百分位 → 24 tranches → 分 24 批'), `the gauge, got ${await fact('CAPE 2026-09')}`);
   // ACWI's demo closes peak at 137.95 on 2026-09-17 and end at 130.28 on 2026-10-20: 5.6% below, short of the 15% tier.
   check((await fact('ACWI below 52-week high')).includes('−5.6% 高點 137.95 · 2026-09-17 · 下一級距 15%'), `the drawdown gauge, got ${await fact('ACWI below 52-week high')}`);
   check((await fact('Plan')).includes('— start one below') && (await fact('Waiting as cash')).includes('NT$50,000 共 NT$50,000'), 'no plan; the money-market fund added above waits');
@@ -2079,8 +2099,8 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   await page.locator('.chart-heatmap svg').waitFor();
   check((await body()).includes('收盤價至 2026-10-23'), 'the seed\'s newest weekly close');
   const returns = await page.locator('#sector-returns').innerText();
-  check(/Information Technology 資訊科技 US · XLK(\s+[+−]\d+\.\d%){5}/.test(returns) && /Information Technology 資訊科技 TW · ELECTRONIC/.test(returns), `both markets' tech rows, every period, got ${returns}`);
-  const materials = /Materials 原物料 TW · ([A-Z, ]+)/.exec(returns)?.[1].split(', ') ?? [];
+  check(/Information Technology 資訊科技 美 · XLK(\s+[+−]\d+\.\d%){5}/.test(returns) && /Information Technology 資訊科技 台 · ELECTRONIC/.test(returns), `both markets' tech rows, every period, got ${returns}`);
+  const materials = /Materials 原物料 台 · ([A-Z, ]+)/.exec(returns)?.[1].split(', ') ?? [];
   check(['CEMENT', 'PLASTICS', 'CHEMICAL'].every((id) => materials.includes(id)), `a sector of several Taiwan indices, got ${materials}`);
   await snap('sectors-heatmap');
   await page.setViewportSize({ width: 1280, height: 1300 });
@@ -2088,7 +2108,7 @@ await step('sectors: the heatmap of returns by period, one market at a time, the
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('group', { name: /Market/ }).getByRole('link', { name: /Taiwan/ }).click();
   await page.waitForURL('**/sectors?*market=TW*');
-  check(!(await page.locator('#sector-returns').innerText()).includes(' US · '), 'Taiwan alone');
+  check(!(await page.locator('#sector-returns').innerText()).includes(' 美 · '), 'Taiwan alone');
 
   // The treemap: exposure from the look-through, coloured by the chosen period; a sector lists its companies.
   await page.getByRole('group', { name: /Chart/ }).getByRole('link', { name: /Treemap/ }).click();
@@ -2473,6 +2493,41 @@ if (TEXT_REPORT) {
     writeFileSync(TEXT_REPORT, JSON.stringify(report, null, 2));
   });
 }
+
+await step('Chinese only: at every width a name shows in Chinese alone, its English kept for a screen reader; no choice or chart label in both', async () => {
+  // A choice or a chart label written in both languages reads an English word, a space, then Chinese ("Sunday 星期日").
+  // A person's or a model's name before Chinese ("Gordon 股利折現", "Blume 調整後") is a name, not a translation.
+  const NAMES = ['Gordon', 'Blume', 'Damodaran', 'Carino', 'CAPE', 'FinMind', 'SEC', 'TWSE'];
+  const shown = [];
+  await page.evaluate(() => localStorage.setItem('e2e.bilingual', 'off'));
+  try {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const path of ['/', '/holdings', '/performance', '/allocation', '/costs', '/stress', '/frontier', '/attribution', '/sectors', '/notifications', '/plan', '/regression']) {
+        await page.goto(`${BASE}${path}`);
+        await page.waitForLoadState('networkidle');
+        const found = await page.evaluate((names) => {
+          const out = [];
+          for (const el of document.querySelectorAll('.bi > [lang="en"]')) {
+            const box = el.getBoundingClientRect();
+            if (box.width > 1 || box.height > 1) out.push(el.textContent);
+          }
+          const both = /(?:^|\s)([A-Za-z][A-Za-z’'-]{2,})[^一-鿿]* [一-鿿]/;
+          for (const el of document.querySelectorAll('option, .chart svg text, .chart-legend')) {
+            const hit = both.exec(el.textContent ?? '');
+            if (hit && !names.includes(hit[1])) out.push(`${el.tagName.toLowerCase()}: ${el.textContent}`);
+          }
+          return out.slice(0, 4);
+        }, NAMES);
+        if (found.length > 0) shown.push(`${width} ${path}: ${found.join(' | ')}`);
+      }
+    }
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('e2e.bilingual'));
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+  check(shown.length === 0, `English shown: ${shown.join('; ')}`);
+});
 
 await step('phone width: no page scrolls sideways (wide tables scroll inside their box)', async () => {
   await page.setViewportSize({ width: 390, height: 844 });

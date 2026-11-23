@@ -1,6 +1,6 @@
 import { Bi } from '@/components/bi';
 import { percent } from '@/lib/format';
-import { bi, leverageText, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, leverageText, zh } from '@/lib/i18n';
 import { expectedReturn, frontier, grossExposure, levered, sharpe, tangent, volatility, withShorts, type FrontierPoint, type Problem } from '@/lib/models/frontier';
 import { queryLeverage, tenths } from '@/lib/what-if';
 
@@ -171,7 +171,7 @@ export function FrontierWhatIfSection({
                       <Bi {...names(id)} />
                     </td>
                     <td className="num">{percent(shortBest.weights[i], 1)}</td>
-                    <td className="num muted small">{(shortBest.weights[i] ?? 0) < -1e-6 ? bi({ en: 'short', zh: '做空' }) : ''}</td>
+                    <td className="num muted small">{(shortBest.weights[i] ?? 0) < -1e-6 ? zh({ en: 'short', zh: '做空' }) : ''}</td>
                   </tr>
                 ))}
               </tbody>

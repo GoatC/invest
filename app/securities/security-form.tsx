@@ -6,7 +6,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { likelyAssetClass } from '@/lib/defaults';
-import { bi, LABELS, MARKET, PRODUCT, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, MARKET, PRODUCT, SLEEVE, zh } from '@/lib/i18n';
 import type { AssetClass, Market, ProductType, Security } from '@/lib/models/types';
 import { parseSecurity, PRODUCT_TYPES, type SecurityField } from '@/lib/validation';
 
@@ -115,7 +115,7 @@ export function SecurityForm({
           <select name="market" value={values.market} onChange={(e) => change('market', e.target.value)}>
             {(['US', 'TW', 'UK'] as const).map((market) => (
               <option key={market} value={market}>
-                {bi(MARKET[market])}
+                {zh(MARKET[market])}
               </option>
             ))}
           </select>
@@ -124,7 +124,7 @@ export function SecurityForm({
           <select name="productType" value={values.productType} onChange={(e) => change('productType', e.target.value)}>
             {PRODUCT_TYPES.map((type) => (
               <option key={type} value={type}>
-                {bi(PRODUCT[type])}
+                {zh(PRODUCT[type])}
               </option>
             ))}
           </select>
@@ -135,10 +135,10 @@ export function SecurityForm({
           hint={chosenClass ? <Bi en={`Counts toward the ${SLEEVE[chosenClass.sleeve].en.toLowerCase()} sleeve`} zh={`計入${SLEEVE[chosenClass.sleeve].zh}部位`} /> : undefined}
         >
           <select name="assetClassId" value={values.assetClassId} onChange={(e) => change('assetClassId', e.target.value)}>
-            <option value="">{bi({ en: 'Choose…', zh: '請選擇…' })}</option>
+            <option value="">{zh({ en: 'Choose…', zh: '請選擇…' })}</option>
             {assetClasses.map((assetClass) => (
               <option key={assetClass.id} value={assetClass.id}>
-                {`${assetClass.nameEn} ${assetClass.nameZh} · ${bi(SLEEVE[assetClass.sleeve])}`}
+                {`${assetClass.nameZh} · ${zh(SLEEVE[assetClass.sleeve])}`}
               </option>
             ))}
           </select>
