@@ -1,0 +1,48 @@
+/* Throwaway: the CSS behind the before/after screens of https://claude.ai/artifact/SF7WuGoqnhDo1hG4t3wkrY. Not loaded by the app. */
+/* Throwaway prototypes of the de-AI proposals, switched on by tokens in <html data-p="…">. */
+
+/* type: six sizes, iOS-like: 17 body, 15 secondary, 13 footnote, 20 section head, 28/34 figures; tabular numbers. */
+html[data-p~='type'] body { font-size: 17px; line-height: 1.45; letter-spacing: -0.01em; }
+html[data-p~='type'] .small, html[data-p~='type'] .muted.small { font-size: 15px !important; }
+html[data-p~='type'] .card h2, html[data-p~='type'] .card h2 .bi { font-size: 20px !important; font-weight: 650 !important; letter-spacing: -0.015em; }
+html[data-p~='type'] .stat .value, html[data-p~='type'] .var-value { font-size: 26px !important; font-weight: 600 !important; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+html[data-p~='type'] .stat > .muted.small:first-child { font-size: 13px !important; font-weight: 500; letter-spacing: 0; }
+html[data-p~='type'] .hold-card .tk, html[data-p~='type'] .hold-card b { font-variant-numeric: tabular-nums; }
+
+/* flat: two boxes deep at most; the summary block loses its inner rules, inner boxes lose their frames. */
+html[data-p~='flat'] .grid-cards.summary-block { gap: 18px 12px; border: 0; background: transparent; }
+html[data-p~='flat'] .summary-block > .stat { padding: 0; background: transparent; }
+html[data-p~='flat'] .card .card, html[data-p~='flat'] .hold-cards > li, html[data-p~='flat'] .card .facts > *, html[data-p~='flat'] .card .grid-cards:not(.summary-block) > * { border: 0 !important; box-shadow: none !important; background: transparent !important; }
+html[data-p~='flat'] .hold-cards > li + li { border-top: 0.5px solid var(--border) !important; border-radius: 0 !important; }
+html[data-p~='flat'] .card .banner.info { background: transparent; border: 0; padding-inline: 0; color: var(--muted); }
+
+/* glow: no decorative glow, grain or tinted corner; the poster keeps its line on a flat ground. */
+html[data-p~='glow'] .glow.page, html[data-p~='glow'] .hero-glow, html[data-p~='glow'] .hero-grain { display: none !important; }
+html[data-p~='glow'] .hero { background: var(--surface) !important; }
+
+/* filters: the pool and period rows fold into one line of menu buttons. */
+html[data-p~='filters'] .filters .segmented:not(:first-child) { display: none !important; }
+html[data-p~='filters'] .filters { gap: 10px; }
+html[data-p~='filters'] .filters::after { content: '兩個資金池  ⌄      開始至今  ⌄'; white-space: pre; display: flex; align-items: center; min-height: 44px; color: var(--accent); font-weight: 600; font-size: 16px; }
+
+/* actions: the page's row of add-actions goes into the bar's ＋ menu. */
+html[data-p~='actions'] .page-head .row.small, html[data-p~='actions'] .page-head .row.spread > .row { display: none !important; }
+html[data-p~='actions'] .page-head:not(:has(h1:not(:empty))) { display: none !important; }
+html[data-p~='actions'] .fab { display: none !important; }
+
+/* status: a status is a small glyph in its colour, never a filled red disc; one red stays for moves. */
+html[data-p~='status'] .status-icon { background: none !important; box-shadow: none !important; border: 0 !important; width: auto; min-width: 0; height: auto; font-size: 13px; font-weight: 700; }
+html[data-p~='status'] .status-icon.rebalance { color: #b35a00 !important; }
+html[data-p~='status'] .sig { background: transparent !important; border: 1px solid var(--border) !important; color: var(--text) !important; }
+html[data-p~='status'] .sig.act { color: #b35a00 !important; }
+html[data-p~='status'] { --chart-7: #5d7488; }
+
+/* links: no ⓘ rows inside sections (ⓘ sits by the title), an underlined link becomes a row with a chevron. */
+html[data-p~='links'] .card > details.info, html[data-p~='links'] .card details.info { display: none !important; }
+html[data-p~='links'] .card > a:not(.button) { display: flex; align-items: center; justify-content: space-between; min-height: 48px; margin: 4px -16px -4px; padding: 0 16px; border-top: 0.5px solid var(--border); text-decoration: none; color: var(--text); font-weight: 500; }
+html[data-p~='links'] .card > a:not(.button)::after { content: '›'; color: var(--muted); font-size: 22px; }
+
+/* look A, native: iOS grouped grey ground, white sections, no hairline frames. */
+html[data-p~='native'] { --bg: #f2f2f7; --surface: #ffffff; --border: rgba(60, 60, 67, 0.18); --muted: #6c6c72; --text: #111114; }
+html[data-p~='native'] .card { border: 0 !important; border-radius: 22px !important; }
+html[data-p~='native'] body { background: var(--bg); }
