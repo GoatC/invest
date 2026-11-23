@@ -87,7 +87,7 @@ export function FrontierWhatIfSection({
           <select name="fs" defaultValue={whatIf.shortCap.toFixed(1)}>
             {SHORT_STEPS.map((step) => (
               <option key={step} value={step.toFixed(1)}>
-                {step === 0 ? 'None 不做空' : percent(step, 0)}
+                {step === 0 ? '不做空' : percent(step, 0)}
               </option>
             ))}
           </select>

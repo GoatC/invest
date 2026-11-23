@@ -2512,7 +2512,8 @@ await step('Chinese only: at every width a name shows in Chinese alone, its Engl
             const box = el.getBoundingClientRect();
             if (box.width > 1 || box.height > 1) out.push(el.textContent);
           }
-          const both = /(?:^|\s)([A-Za-z][A-Za-z’'-]{2,})[^一-鿿]* [一-鿿]/;
+          // A ticker in capitals before Chinese ("VOO · 美股／全球大盤") is a code, not English: a word needs a small letter.
+          const both = /(?:^|\s)((?=[A-Za-z’'-]*[a-z])[A-Za-z][A-Za-z’'-]{2,})[^一-鿿]* [一-鿿]/;
           // A legend's names are <Bi>, checked above; an option and a chart's own text are plain strings.
           for (const el of document.querySelectorAll('option, .chart svg text')) {
             const hit = both.exec(el.textContent ?? '');
