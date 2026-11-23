@@ -2513,7 +2513,8 @@ await step('Chinese only: at every width a name shows in Chinese alone, its Engl
             if (box.width > 1 || box.height > 1) out.push(el.textContent);
           }
           const both = /(?:^|\s)([A-Za-z][A-Za-z’'-]{2,})[^一-鿿]* [一-鿿]/;
-          for (const el of document.querySelectorAll('option, .chart svg text, .chart-legend')) {
+          // A legend's names are <Bi>, checked above; an option and a chart's own text are plain strings.
+          for (const el of document.querySelectorAll('option, .chart svg text')) {
             const hit = both.exec(el.textContent ?? '');
             if (hit && !names.includes(hit[1])) out.push(`${el.tagName.toLowerCase()}: ${el.textContent}`);
           }
