@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 
 import type { DeleteState } from '@/lib/forms';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 
 import { Bi } from './bi';
 
@@ -17,7 +17,7 @@ export function DeleteForm({ id, action, confirm }: { id: number | string; actio
       action={formAction}
       className="form"
       onSubmit={(event) => {
-        if (!window.confirm(bi(confirm))) event.preventDefault();
+        if (!window.confirm(zh(confirm))) event.preventDefault();
       }}
     >
       <input type="hidden" name="id" value={id} />

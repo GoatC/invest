@@ -6,7 +6,7 @@ import { useActionState, useMemo, useState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import type { AssetClassSettings } from '@/lib/data/allocation';
-import { bi, LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, SLEEVE, zh } from '@/lib/i18n';
 import type { Assumptions } from '@/lib/models/cma';
 import { assumptionFields, parseAssumptionForm } from '@/lib/validation';
 
@@ -82,7 +82,7 @@ export function AssumptionsForm({
               const names = assumptionFields(assetClass.id);
               const row = [names.expectedReturn, names.volatility, names.source];
               const score = sleeve === 'satellite' ? scored[assetClass.id] : undefined;
-              const auto = (value: number) => (score ? bi({ en: `Auto ${typedPercent(value)}`, zh: `自動 ${typedPercent(value)}` }) : undefined);
+              const auto = (value: number) => (score ? zh({ en: `Auto ${typedPercent(value)}`, zh: `自動 ${typedPercent(value)}` }) : undefined);
               return (
                 <div key={assetClass.id} className="form-grid">
                   <Field label={{ en: `${assetClass.nameEn}: expected return % a year`, zh: `${assetClass.nameZh}：預期年報酬 %` }} error={error(names.expectedReturn, row)}>
@@ -106,7 +106,7 @@ export function AssumptionsForm({
                     />
                   </Field>
                   <Field label={{ en: 'Source', zh: '來源' }} error={error(names.source, row)}>
-                    <input name={names.source} placeholder={bi({ en: 'e.g. an outlook, 2026', zh: '例如：展望報告 2026' })} maxLength={200} autoComplete="off" value={values[names.source] ?? ''} onChange={(e) => change(names.source, e.target.value)} />
+                    <input name={names.source} placeholder={zh({ en: 'e.g. an outlook, 2026', zh: '例如：展望報告 2026' })} maxLength={200} autoComplete="off" value={values[names.source] ?? ''} onChange={(e) => change(names.source, e.target.value)} />
                   </Field>
                 </div>
               );

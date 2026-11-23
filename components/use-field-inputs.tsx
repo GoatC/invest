@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 
-import { bi, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, zh } from '@/lib/i18n';
 import type { FieldErrors } from '@/lib/validation';
 
 import { Field } from './field';
@@ -22,7 +22,7 @@ export function useFieldInputs<V extends Record<string, string>, P extends { ok:
       <select name={name} value={values[name] ?? ''} onChange={(e) => change(name, e.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
-            {bi(option.label)}
+            {zh(option.label)}
           </option>
         ))}
       </select>

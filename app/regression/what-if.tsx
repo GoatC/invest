@@ -57,8 +57,8 @@ export function BetaWhatIf({
         <label className="field">
           <Bi en="Direction" zh="多空方向" />
           <select name="rd" defaultValue={direction}>
-            <option value="long">{`${DIRECTION.long.en} ${DIRECTION.long.zh}`}</option>
-            <option value="short">{`${DIRECTION.short.en} ${DIRECTION.short.zh}`}</option>
+            <option value="long">{DIRECTION.long.zh}</option>
+            <option value="short">{DIRECTION.short.zh}</option>
           </select>
         </label>
         <label className="field">

@@ -12,7 +12,7 @@ import type { AlertItem } from '@/lib/alerts';
 import type { HoldingsData } from '@/lib/data/holdings';
 import { isIsoDate } from '@/lib/dates';
 import { shortfallAlert } from '@/lib/forms';
-import { ACTION, bi, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { ACTION, type Bilingual, DIRECTION, LABELS, leverageText, MARKET, POOL, SLEEVE, zh } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { previewTrade } from '@/lib/models/portfolio';
 import type { FxQuote } from '@/lib/models/types';
@@ -142,22 +142,22 @@ export function TradeForm({
   );
   const marketField = (
     <Field label={LABELS.market} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-      <input readOnly tabIndex={-1} value={security ? bi(MARKET[security.market]) : '—'} />
+      <input readOnly tabIndex={-1} value={security ? zh(MARKET[security.market]) : '—'} />
     </Field>
   );
   const directionField = (
     <Field label={LABELS.direction} error={error('direction')}>
       <select name="direction" value={direction} onChange={(e) => change('direction', e.target.value)}>
-        <option value="long">{bi(DIRECTION.long)}</option>
-        <option value="short">{bi(DIRECTION.short)}</option>
+        <option value="long">{zh(DIRECTION.long)}</option>
+        <option value="short">{zh(DIRECTION.short)}</option>
       </select>
     </Field>
   );
   const sideField = (
     <Field label={LABELS.side} error={error('side')}>
       <select name="side" value={values.side} onChange={(e) => change('side', e.target.value)}>
-        <option value="buy">{bi(ACTION[direction].buy)}</option>
-        <option value="sell">{bi(ACTION[direction].sell)}</option>
+        <option value="buy">{zh(ACTION[direction].buy)}</option>
+        <option value="sell">{zh(ACTION[direction].sell)}</option>
       </select>
     </Field>
   );
@@ -215,14 +215,14 @@ export function TradeForm({
   );
   const sleeveField = (
     <Field label={LABELS.sleeve} hint={<Bi en="From the security" zh="依證券自動帶入" />}>
-      <input readOnly tabIndex={-1} value={security ? bi(SLEEVE[security.sleeve]) : '—'} />
+      <input readOnly tabIndex={-1} value={security ? zh(SLEEVE[security.sleeve]) : '—'} />
     </Field>
   );
   const poolField = (
     <Field label={LABELS.pool} error={error('pool')}>
       <select name="pool" value={values.pool} onChange={(e) => change('pool', e.target.value)}>
-        <option value="regular">{bi(POOL.regular)}</option>
-        <option value="windfall">{bi(POOL.windfall)}</option>
+        <option value="regular">{zh(POOL.regular)}</option>
+        <option value="windfall">{zh(POOL.windfall)}</option>
       </select>
     </Field>
   );

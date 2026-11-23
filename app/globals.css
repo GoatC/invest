@@ -2970,25 +2970,25 @@ html[data-opened] .splash {
   text-decoration: underline;
 }
 
+/* Chinese only (CLAUDE.md, Hugo 2026-11-18): a name shows its Chinese at every width; the English is
+   kept out of sight, still in the name a screen reader says (as the navigation's is). */
+.bi {
+  position: relative;
+}
+
+.bi > [lang='en'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* A phone (asked by Hugo on 2026-11-10, PRD Section 5 "On a phone"): names in Chinese alone, tiles
    two to a row, each row of choices on one line that slides sideways, a table of more than three
    columns as a card per row, and nothing to tap smaller than --tap-min. */
 @media (max-width: 759px) {
-  /* A name shows its Chinese; the English is kept out of sight, still in the name a screen
-     reader says (as the navigation's is). */
-  .bi {
-    position: relative;
-  }
-
-  .bi > [lang='en'] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
   .card {
     padding: 0.9rem 1rem;
   }

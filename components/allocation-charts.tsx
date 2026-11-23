@@ -66,7 +66,7 @@ function donutOption(slices: readonly Slice[], colors: Colors, width: number, wi
       formatter: (params) => {
         const slice = slices[params.dataIndex];
         if (!slice) return '';
-        return narrow ? percent(slice.weight, 0) : `${sliceLabel(slice.key).en}\n${sliceLabel(slice.key).zh} ${percent(slice.weight, 0)}`;
+        return narrow ? percent(slice.weight, 0) : `${sliceLabel(slice.key).zh} ${percent(slice.weight, 0)}`;
       },
     },
     labelLine: { length: 8, length2: 8, lineStyle: { color: colors.muted } },

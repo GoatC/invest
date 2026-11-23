@@ -5,7 +5,7 @@ import { useActionState } from 'react';
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import { useFields } from '@/components/use-fields';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { parseRegressionForm, type RegressionField } from '@/lib/validation';
 
 import { saveRegressionSettings, type RegressionFormState } from './actions';
@@ -31,7 +31,7 @@ export function RegressionSettingsForm({ fields, initial, windows, today, checke
               <select name={field.name} value={values[field.name] ?? ''} onChange={(e) => change(field.name, e.target.value)}>
                 {field.options.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {bi(option.label)}
+                    {zh(option.label)}
                   </option>
                 ))}
               </select>

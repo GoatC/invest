@@ -191,7 +191,7 @@ function Detail({ row, years }: { row: FactorRow; years: number }) {
     );
   }
   const fit = row.fit;
-  const ranges: Range[] = fit.loadings.map((one) => ({ ticker: `${FACTOR_NAMES[one.factor].en} ${FACTOR_NAMES[one.factor].zh}`, beta: one.beta, low: one.ci[0], high: one.ci[1] }));
+  const ranges: Range[] = fit.loadings.map((one) => ({ ticker: FACTOR_NAMES[one.factor].zh, beta: one.beta, low: one.ci[0], high: one.ci[1] }));
   const label: Bilingual = {
     en: `${name.en}: loadings on the five factors with their 95% intervals over ${fit.n} months, ${fit.from} to ${fit.to}; the market loading ${loading(fit.loadings[0]?.beta ?? 0)}.`,
     zh: `${name.zh}：五個因子的係數與 95% 信賴區間，${fit.n} 個月（${fit.from} 至 ${fit.to}）；市場係數 ${loading(fit.loadings[0]?.beta ?? 0)}。`,

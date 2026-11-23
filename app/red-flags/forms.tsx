@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react';
 
 import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { GOVERNANCE_TIERS, MANUAL_INDICATORS, type ManualIndicator, type RedFlagSettings } from '@/lib/models/red-flags';
 import { INDICATOR } from '@/lib/red-flag-text';
 
@@ -41,7 +41,7 @@ export function EntryForm({ ticker, market, today }: { ticker: string; market: s
           <select name="indicator" value={indicator} onChange={(event) => setIndicator(event.target.value as ManualIndicator)}>
             {choices.map((one) => (
               <option key={one} value={one}>
-                {bi(INDICATOR[one])}
+                {zh(INDICATOR[one])}
               </option>
             ))}
           </select>
@@ -54,7 +54,7 @@ export function EntryForm({ ticker, market, today }: { ticker: string; market: s
             <select name="value" defaultValue="5">
               {GOVERNANCE_TIERS.map((edge, index) => (
                 <option key={edge} value={edge}>
-                  {bi(tierName(edge, index))}
+                  {zh(tierName(edge, index))}
                 </option>
               ))}
             </select>

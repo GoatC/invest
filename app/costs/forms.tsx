@@ -73,7 +73,7 @@ export function CostForm({ kind, fields, initial, context = {}, hidden = {}, sub
                 <select name={field.name} value={values[field.name] ?? ''} onChange={(e) => change(field.name, e.target.value)}>
                   {(field.options ?? []).map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label.en === option.label.zh ? option.label.en : `${option.label.en} ${option.label.zh}`}
+                      {option.label.zh}
                     </option>
                   ))}
                 </select>

@@ -11,7 +11,7 @@ import type { ComposeOption, ECharts } from 'echarts/core';
 
 import { swiftCharts } from '@/lib/chart-shell';
 import { nativeShape, readouts, type NativeShape, type NativeSpec } from '@/lib/native-chart';
-import { bi, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, zh } from '@/lib/i18n';
 
 import { Bi } from './bi';
 import { nativeCharts, showNative } from './native-charts';
@@ -63,15 +63,12 @@ function inShell(): boolean {
 /** How long a chart takes to draw or to move to new data: short, so motion only marks a change. */
 const MOTION_MS = 300;
 
-/** Whether the chart drawn last is phone-sized; every chart on a page shares the screen, so one flag serves them all. */
-let narrowNow = false;
-
 /**
- * A text inside a chart (a series or axis name, a tooltip line): by the Chinese-first rule, and in
- * Chinese alone on a phone, as names are everywhere else there (PRD principle 7).
+ * A text inside a chart (a series or axis name, a tooltip line): in Chinese alone at every width, as
+ * every page's text is (CLAUDE.md, Chinese only); the chart's aria-label keeps the English.
  */
-export function chartText(text: Bilingual, label = false): string {
-  return narrowNow && text.en !== text.zh ? text.zh : bi(text, label);
+export function chartText(text: Bilingual): string {
+  return zh(text);
 }
 
 type Core = typeof import('./echarts-core');
@@ -135,7 +132,6 @@ export function mount(element: HTMLDivElement | null, build: (colors: Colors, wi
     const native = !ready && nativeCharts();
     let unNative: (() => void) | undefined;
     const draw = () => {
-      narrowNow = element.clientWidth < NARROW;
       const colors = readColors(element);
       const option: Option = { animation: !motion.matches, animationDuration: MOTION_MS, animationDurationUpdate: MOTION_MS, animationEasing: 'cubicOut', ...build(colors, element.clientWidth) };
       chart.setOption(inShell() ? swiftCharts(option, { ink: colors.ink, muted: colors.muted, grid: colors.grid }) : option, true);

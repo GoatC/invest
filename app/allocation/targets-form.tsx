@@ -8,7 +8,7 @@ import { Bi } from '@/components/bi';
 import { Field } from '@/components/field';
 import type { AssetClassSettings } from '@/lib/data/allocation';
 import { percent } from '@/lib/format';
-import { bi, LABELS, SLEEVE, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, SLEEVE, zh } from '@/lib/i18n';
 import type { Security, Sleeve } from '@/lib/models/types';
 import { parseNumber, parseTargets, targetFields } from '@/lib/validation';
 
@@ -80,7 +80,7 @@ export function TargetsForm({ classes, securities, r2Target }: { classes: AssetC
                     error={error(names.benchmark)}
                   >
                     <select name={names.benchmark} value={values[names.benchmark] ?? ''} onChange={(e) => change(names.benchmark, e.target.value)}>
-                      <option value="">{bi({ en: 'None', zh: '無' })}</option>
+                      <option value="">{zh({ en: 'None', zh: '無' })}</option>
                       {securities.map((security) => (
                         <option key={security.ticker} value={security.ticker}>
                           {`${security.ticker} · ${security.name}`}

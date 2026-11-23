@@ -13,7 +13,7 @@ import { DataError } from '@/lib/data/core';
 import { loadFrontierData, type FrontierData } from '@/lib/data/frontier';
 import { taipeiToday } from '@/lib/dates';
 import { percent } from '@/lib/format';
-import { bi, LABELS, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { build, expectedReturn, frontier, marketLine, sharpe, tangent, volatility, weightsFor, type Built, type FrontierPoint, type FrontierSettings } from '@/lib/models/frontier';
 
 import { FrontierForm } from './forms';
@@ -131,7 +131,7 @@ function Report({ built, settings, data, whatIf }: { built: Built; settings: Fro
     ...(target ? [{ key: 'target', name: { en: 'Target mix', zh: '目標配置' }, point: target, sharpe: sharpe(target.ret, target.vol, settings.riskFree) }] : []),
   ];
   const spot = (name: string, point: { vol: number; ret: number }): Spot => ({ name, vol: point.vol, ret: point.ret });
-  const classSpots: Spot[] = ids.map((id, i) => spot(bi(names(id)), { vol: Math.sqrt((problem.sigma[i] as readonly number[])[i] as number), ret: problem.mu[i] as number }));
+  const classSpots: Spot[] = ids.map((id, i) => spot(zh(names(id)), { vol: Math.sqrt((problem.sigma[i] as readonly number[])[i] as number), ret: problem.mu[i] as number }));
   const maxVol = Math.max(...curve.map((point) => point.vol), ...classSpots.map((entry) => entry.vol), current?.vol ?? 0, target?.vol ?? 0) * 1.08;
   const lineEnd = best ? marketLine(best, settings.riskFree, maxVol) : null;
   const cml: Curve[] = best && lineEnd !== null ? [{ vol: 0, ret: settings.riskFree }, { vol: maxVol, ret: lineEnd }] : [];
@@ -146,7 +146,7 @@ function Report({ built, settings, data, whatIf }: { built: Built; settings: Fro
     note: { en: `Sharpe · return ${percent(row.point.ret, 1)}, volatility ${percent(row.point.vol, 1)}`, zh: `夏普比率・報酬 ${percent(row.point.ret, 1)}，波動度 ${percent(row.point.vol, 1)}` } as Bilingual,
   }));
   const weightRows = curve.map((point) => ({ vol: point.vol, weights: point.weights }));
-  const classNames = ids.map((id) => bi(names(id)));
+  const classNames = ids.map((id) => zh(names(id)));
   return (
     <>
       <section className="card form">
@@ -191,7 +191,7 @@ function Report({ built, settings, data, whatIf }: { built: Built; settings: Fro
             }))}
           />
         )}
-        <FrontierChart curve={curvePoints} line={cml} classes={classSpots} current={current ? spot(bi({ en: 'Current', zh: '目前' }), current) : null} target={target ? spot(bi({ en: 'Target', zh: '目標' }), target) : null} best={best ? spot(bi({ en: 'Tangent', zh: '切線' }), best) : null} riskFree={settings.riskFree} label={chartLabel} />
+        <FrontierChart curve={curvePoints} line={cml} classes={classSpots} current={current ? spot(zh({ en: 'Current', zh: '目前' }), current) : null} target={target ? spot(zh({ en: 'Target', zh: '目標' }), target) : null} best={best ? spot(zh({ en: 'Tangent', zh: '切線' }), best) : null} riskFree={settings.riskFree} label={chartLabel} />
         <div className="table-wrap">
           <table className="compact">
             <thead>

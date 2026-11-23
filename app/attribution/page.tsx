@@ -165,7 +165,7 @@ function Report({ months, label, level }: { months: MonthInput[]; label: (id: st
   const quadrant: QuadrantPoint[] = ids.map((id) => {
     const compounded = months.reduce((acc, month) => acc * (1 + (month.segments.find((segment) => segment.id === id)?.rbTwd ?? 0)), 1) - 1;
     return {
-      name: `${label(id).en} ${label(id).zh}`,
+      name: label(id).zh,
       active: results.reduce((sum, result) => sum + (result.segments.find((segment) => segment.id === id)?.active ?? 0), 0) / results.length,
       relative: compounded - linked.rb,
       effect: bySegment.find((row) => row.id === id)?.sum ?? 0,

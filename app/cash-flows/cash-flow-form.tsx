@@ -9,7 +9,7 @@ import { FxRateHint, FxTypoWarning } from '@/components/fx-rate';
 import type { HoldingsData } from '@/lib/data/holdings';
 import { isIsoDate } from '@/lib/dates';
 import { twd } from '@/lib/format';
-import { bi, FLOW_TYPE, LABELS, POOL, type Bilingual } from '@/lib/i18n';
+import { type Bilingual, FLOW_TYPE, LABELS, POOL, zh } from '@/lib/i18n';
 import { rateHistory, rateOn, suggestedRate } from '@/lib/models/fx';
 import { buildPositions } from '@/lib/models/positions';
 import { restateTrades } from '@/lib/models/splits';
@@ -106,7 +106,7 @@ export function CashFlowForm({ data, rates, today, id, initial }: { data: Holdin
           <select name="type" value={values.type} onChange={(e) => change('type', e.target.value)}>
             {offered.map((option) => (
               <option key={option} value={option}>
-                {bi(FLOW_TYPE[option])}
+                {zh(FLOW_TYPE[option])}
               </option>
             ))}
           </select>
@@ -151,8 +151,8 @@ export function CashFlowForm({ data, rates, today, id, initial }: { data: Holdin
           hint={type === 'windfall' ? <Bi en="The windfall always goes to the windfall pool" zh="大額資金一律計入大額資金池" /> : undefined}
         >
           <select name="pool" value={type === 'windfall' ? 'windfall' : values.pool} disabled={type === 'windfall'} onChange={(e) => change('pool', e.target.value)}>
-            <option value="regular">{bi(POOL.regular)}</option>
-            <option value="windfall">{bi(POOL.windfall)}</option>
+            <option value="regular">{zh(POOL.regular)}</option>
+            <option value="windfall">{zh(POOL.windfall)}</option>
           </select>
         </Field>
         <Field label={LABELS.note} error={error('note')}>

@@ -52,7 +52,7 @@ function pick<T extends string>(raw: string | string[] | undefined, options: rea
 
 function rowLabel(row: SectorRow): string {
   const sector = sectorText(row.sector);
-  return `${sector.en} ${sector.zh} · ${row.market === 'US' ? 'US 美' : 'TW 台'}`;
+  return `${sector.zh} · ${row.market === 'US' ? '美' : '台'}`;
 }
 
 /** Links that keep the other choices: the page's tabs, period, market and pool. */
@@ -162,7 +162,7 @@ function Heatmap({ view, market, convention }: { view: SectorView; market: Marke
             {rows.map((row) => (
               <tr key={`${row.sector}-${row.market}`}>
                 <td>
-                  <Bi {...sectorText(row.sector)} /> <span className="muted small">{row.market === 'US' ? 'US' : 'TW'} · {row.proxies.map((id) => id.replace(/^TW_/, '')).join(', ')}</span>
+                  <Bi {...sectorText(row.sector)} /> <span className="muted small">{row.market === 'US' ? '美' : '台'} · {row.proxies.map((id) => id.replace(/^TW_/, '')).join(', ')}</span>
                 </td>
                 {PERIODS.map((period) => (
                   <td key={period} className="num">
@@ -180,7 +180,7 @@ function Heatmap({ view, market, convention }: { view: SectorView; market: Marke
 
 function Treemap({ view, period, convention, data, sector, href }: { view: SectorView; period: Period; convention: 'red_up' | 'green_up'; data: SectorData; sector?: string; href: (sector: string) => string }) {
   const tiles = view.tiles.filter((tile) => tile.exposureTwd > 0);
-  const boxes: SectorBox[] = tiles.map((tile) => ({ name: sectorText(tile.sector).en, exposureTwd: tile.exposureTwd, share: tile.share, value: tile.returns[period] }));
+  const boxes: SectorBox[] = tiles.map((tile) => ({ name: sectorText(tile.sector).zh, exposureTwd: tile.exposureTwd, share: tile.share, value: tile.returns[period] }));
   const companies = sector ? (data.exposures ?? []).filter((exposure) => exposure.assetType === 'equity' && !exposure.whole && (exposure.sector ?? 'unclassified') === sector).sort((a, b) => b.valueTwd - a.valueTwd) : [];
   return (
     <>
@@ -262,7 +262,7 @@ function Treemap({ view, period, convention, data, sector, href }: { view: Secto
 
 function Bubbles({ view, market }: { view: SectorView; market: MarketFilter }) {
   const rows = view.rows.filter((row) => (market === 'all' || row.market === market) && row.returns['1Y'] !== null && row.volatility !== null);
-  const bubbles: Bubble[] = rows.map((row) => ({ label: `${sectorText(row.sector).en} ${row.market}`, market: row.market, ret: row.returns['1Y'] as number, volatility: row.volatility as number, exposureTwd: row.exposureTwd }));
+  const bubbles: Bubble[] = rows.map((row) => ({ label: `${sectorText(row.sector).zh} ${row.market === 'US' ? '美' : '台'}`, market: row.market, ret: row.returns['1Y'] as number, volatility: row.volatility as number, exposureTwd: row.exposureTwd }));
   return (
     <>
       <SectorBubbles bubbles={bubbles} portfolio={view.portfolio} label={{ en: 'Each sector’s 1-year return against its volatility, sized by exposure', zh: '各產業一年報酬對波動度，大小為曝險' }} />
@@ -288,7 +288,7 @@ function Bubbles({ view, market }: { view: SectorView; market: MarketFilter }) {
             {rows.map((row) => (
               <tr key={`${row.sector}-${row.market}`}>
                 <td>
-                  <Bi {...sectorText(row.sector)} /> <span className="muted small">{row.market}</span>
+                  <Bi {...sectorText(row.sector)} /> <span className="muted small">{row.market === 'US' ? '美' : '台'}</span>
                 </td>
                 <td className="num">{signedPercent(row.returns['1Y'])}</td>
                 <td className="num">{percent(row.volatility)}</td>

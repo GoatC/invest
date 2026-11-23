@@ -1,9 +1,9 @@
 /**
- * UI text in English and Traditional Chinese. Every string is still written in both languages, but
- * since 2026-11-09 (CLAUDE.md, the Chinese-first rule) a page shows both only for a name: a field,
- * a column, a figure's label, a button or a link, e.g. "Regular pool 一般投入資金池". A sentence, a
- * note or a line that carries figures shows in Chinese alone; repeating it in English only doubled
- * the text. `textMode` decides, so every page follows the same rule.
+ * UI text in English and Traditional Chinese. Every string is still written in both languages, but a page shows only
+ * the Chinese, at every width (CLAUDE.md, Chinese only, Hugo 2026-11-18, replacing the Chinese-first rule of
+ * 2026-11-09). A name (a field, a column, a figure's label, a button or a link) keeps its English out of sight beside
+ * it for a screen reader (components/bi.tsx); a sentence, a note or a line that carries figures is Chinese alone.
+ * `textMode` decides which a text is; `zh` gives a text shown on screen as one string, `bi` one for an aria-label.
  */
 export interface Bilingual {
   en: string;
@@ -37,7 +37,15 @@ export function textMode(text: Bilingual, label = false): TextMode {
   return words > NAME_WORDS ? 'zh' : 'both';
 }
 
-/** A text as one string, by the rule above: "Regular pool 一般投入資金池", or the Chinese alone. */
+/**
+ * A text shown on screen as one string (an option, a field's value, a placeholder, a confirm dialog, a chart's label):
+ * Chinese alone, at every width (CLAUDE.md, Chinese only, 2026-11-18). The English stays in aria-labels, through bi.
+ */
+export function zh(text: Bilingual): string {
+  return text.zh;
+}
+
+/** A text as one string for an aria-label, by the rule above: "Regular pool 一般投入資金池", or the Chinese alone. */
 export function bi(text: Bilingual, label = false): string {
   const mode = textMode(text, label);
   if (mode === 'same') return text.en;
