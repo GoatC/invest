@@ -170,103 +170,14 @@ final class NoticeView: UIView {
     }
 }
 
-/// What waits on Hugo, in the tab bar's accessory (proposal G04): the first in-app banner, how many
-/// more wait behind it, and a tap to where it is done; held down, 稍後再說. With nothing waiting, on
-/// the day before this build runs out, the reminder to install it again (no tap: it is done on the Mac).
-final class NextView: UIView, UIContextMenuInteractionDelegate {
-    struct Content: Equatable {
-        let text: String
-        let more: Int
-        let symbol: String
-        let tint: UIColor
-        let tappable: Bool
-        let later: Bool
-        /// Something to act on (a rule warning): the capsule takes a touch of amber (Ink design, 2026-11-18).
-        var warning: Bool = false
-    }
-
-    var onTap: (() -> Void)?
-    var onLater: (() -> Void)?
-    private(set) var content: Content?
-    private let icon = UIImageView()
-    private let label = UILabel()
-    private let count = UILabel()
-    private let chevron = UIImageView(image: UIImage(systemName: "chevron.forward"))
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .body)
-        label.font = .preferredFont(forTextStyle: .subheadline)
-        label.adjustsFontForContentSizeCategory = true
-        label.lineBreakMode = .byTruncatingTail
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        count.font = .preferredFont(forTextStyle: .subheadline)
-        count.adjustsFontForContentSizeCategory = true
-        count.textColor = .secondaryLabel
-        chevron.tintColor = .tertiaryLabel
-        chevron.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .footnote, scale: .small)
-        // The text takes the room; the marks keep their own size.
-        for mark in [icon, chevron] as [UIView] {
-            mark.contentMode = .scaleAspectFit
-            mark.setContentHuggingPriority(.required, for: .horizontal)
-            mark.setContentCompressionResistancePriority(.required, for: .horizontal)
-        }
-        count.setContentHuggingPriority(.required, for: .horizontal)
-        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let stack = UIStackView(arrangedSubviews: [icon, label, count, chevron])
-        stack.spacing = 8
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
-        addInteraction(UIContextMenuInteraction(delegate: self))
-        isAccessibilityElement = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    func show(_ new: Content) {
-        guard new != content else { return }
-        content = new
-        icon.image = UIImage(systemName: new.symbol)
-        icon.tintColor = new.tint
-        label.text = new.text
-        count.text = "＋\(new.more)"
-        count.isHidden = new.more == 0
-        chevron.isHidden = !new.tappable
-        // The accessory's glass is the system's; a faint amber wash under the content marks a warning to act on.
-        backgroundColor = new.warning ? UIColor.systemOrange.withAlphaComponent(0.14) : .clear
-        accessibilityLabel = new.more > 0 ? "\(new.text)，還有 \(new.more) 則" : new.text
-        accessibilityTraits = new.tappable ? .button : .staticText
-        accessibilityCustomActions = new.later ? [UIAccessibilityCustomAction(name: "稍後再說 Later") { [weak self] _ in
-            self?.onLater?()
-            return true
-        }] : nil
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // The wash follows the accessory's capsule.
-        layer.cornerRadius = bounds.height / 2
-        layer.cornerCurve = .continuous
-    }
-
-    @objc private func tapped() {
-        if content?.tappable == true { onTap?() }
-    }
-
-    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
-        guard content?.later == true else { return nil }
-        return UIContextMenuConfiguration(actionProvider: { [weak self] _ in
-            UIMenu(children: [UIAction(title: "稍後再說", image: UIImage(systemName: "clock")) { _ in self?.onLater?() }])
-        })
-    }
+/// What waits on Hugo, on the bar's bell (Hugo's choice G01, 2026-11-24, in place of the glass
+/// capsule above the tab bar): how many, the first in-app banner with a tap to where it is done, and
+/// 稍後再說. With nothing waiting, on the day before this build runs out, the reminder to install it again.
+struct Bell: Equatable {
+    let count: Int
+    let text: String
+    let act: Bool
+    let later: Bool
+    /// False for the reinstall reminder: it is done on the Mac.
+    let tappable: Bool
 }

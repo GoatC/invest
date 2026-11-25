@@ -2851,7 +2851,7 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     await select('/holdings', '/holdings', '持倉');
     await says(['/holdings', '/holdings']);
     // The "+" floats over the native bar, not under it.
-    const fab = await app.locator('.fab').boundingBox();
+    const fab = await app.locator('.add-menu > summary').boundingBox();
     check(fab && fab.y + fab.height <= 844 - 83, `the + clears the native bar, got ${JSON.stringify(fab)}`);
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
     // A sub-tab is the page's own: the native tab stays, the path follows.

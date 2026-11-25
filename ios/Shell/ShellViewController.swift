@@ -14,6 +14,10 @@ final class TabHost: UIViewController {
     var onInsets: (() -> Void)?
     /// The top last drawn, so the bar is built again only when it changes.
     private var drawn: ShellTop?
+    private var drawnBell: Bell?
+    /// The bell's first item tapped: open where it is done; 稍後再說: put it off.
+    var onNext: (() -> Void)?
+    var onLater: (() -> Void)?
     /// White text over the poster's colour (and the launch colour before the page has spoken); the system's own otherwise.
     private var lightStatusBar = true
     /// The page's row of sub-tabs (proposal G03), kept while the row stays the same so a choice slides its lens.
@@ -33,10 +37,11 @@ final class TabHost: UIViewController {
     /// Draws `top` in the navigation bar; `run` answers a button (the page's control, or a sheet), `back`
     /// goes back a page. True when the title changed: a new page.
     @discardableResult
-    func draw(_ top: ShellTop?, run: @escaping (ShellAction) -> Void, back: @escaping () -> Void) -> Bool {
-        guard top != drawn else { return false }
+    func draw(_ top: ShellTop?, bell: Bell?, run: @escaping (ShellAction) -> Void, back: @escaping () -> Void) -> Bool {
+        guard top != drawn || bell != drawnBell else { return false }
         let newTitle = top?.title != drawn?.title
         drawn = top
+        drawnBell = bell
         navigationItem.title = top?.title
         // One line, centred, on every page: no large title under the buttons' row.
         navigationItem.largeTitleDisplayMode = .never
@@ -50,7 +55,21 @@ final class TabHost: UIViewController {
             return item
         }
         let actions = top?.actions ?? []
-        navigationItem.rightBarButtonItems = actions.filter { !$0.leading }.reversed().map(button)
+        // What waits on Hugo rides on the page's own bell (the dashboard's), or on a bell of its own.
+        let ringing = { (bell: Bell, settings: ShellAction?) -> UIBarButtonItem in
+            var items: [UIMenuElement] = [UIAction(title: bell.text, image: UIImage(systemName: bell.act ? "exclamationmark.circle" : "info.circle"), attributes: bell.tappable ? [] : [.disabled]) { [weak self] _ in self?.onNext?() }]
+            if bell.later { items.append(UIAction(title: "稍後再說", image: UIImage(systemName: "clock")) { [weak self] _ in self?.onLater?() }) }
+            if let settings = settings { items.append(UIAction(title: String(settings.label.split(separator: " ").first ?? ""), image: UIImage(systemName: "gearshape")) { _ in run(settings) }) }
+            let item = UIBarButtonItem(image: UIImage(systemName: "bell"), menu: UIMenu(children: items))
+            item.badge = .count(bell.count)
+            item.accessibilityLabel = "提醒 \(bell.count) 則 Reminders"
+            return item
+        }
+        var right = actions.filter { !$0.leading }.reversed().map { action in
+            bell != nil && action.key == "notifications" ? ringing(bell!, action) : button(action)
+        }
+        if let bell = bell, !actions.contains(where: { $0.key == "notifications" }) { right.append(ringing(bell, nil)) }
+        navigationItem.rightBarButtonItems = right
         if top?.back == true {
             let item = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), primaryAction: UIAction { _ in back() })
             item.accessibilityLabel = "返回 Back"
@@ -145,17 +164,10 @@ final class ShellViewController: UITabBarController {
     private var saidBottom: CGFloat = -1
     /// The room the navigation bar takes with its large title, last told to the page (--shell-top); -1 when not yet told.
     private var saidTop: CGFloat = -1
-    /// Where the thing waiting above the tab bar is done (a path of the site); nil while nothing waits there to be tapped.
+    /// Where the thing waiting on the bell is done (a path of the site); nil while nothing waits there to be tapped.
     private var nextPath: String?
-    private lazy var nextView: NextView = {
-        let next = NextView()
-        next.onTap = { [weak self] in
-            guard let self = self, let path = self.nextPath else { return }
-            self.open(path: path)
-        }
-        next.onLater = { [weak self] in self?.web.evaluateJavaScript("window.longview&&window.longview.later()", completionHandler: nil) }
-        return next
-    }()
+    /// What the bar's bell shows (proposal G01); nil while nothing waits.
+    private var bell: Bell?
     /// A new page whose large title waits for the page to be back at its top (the page scrolls there just after it says it is new).
     private var titleWaits = false
     /// While the page is pulled a point to bring the large title out (expandIfDrawnIn).
@@ -311,6 +323,11 @@ final class ShellViewController: UITabBarController {
                     self?.sayBottom()
                     self?.sayTop()
                 }
+                host.onNext = { [weak self] in
+                    guard let self = self, let path = self.nextPath else { return }
+                    self.open(path: path)
+                }
+                host.onLater = { [weak self] in self?.web.evaluateJavaScript("window.longview&&window.longview.later()", completionHandler: nil) }
                 return host
             }
             setViewControllers(hosts.map { PlaceNavigation(host: $0) }, animated: false)
@@ -396,7 +413,7 @@ final class ShellViewController: UITabBarController {
     /// A new page at its top shows its large title again, though the page before had drawn it in.
     private func drawTop(_ top: ShellTop?) {
         guard let host = selectedHost else { return }
-        let newPage = host.draw(top, run: { [weak self] action in
+        let newPage = host.draw(top, bell: bell, run: { [weak self] action in
             if let text = action.info {
                 self?.presentInfo(text)
             } else if let path = action.sheet {
@@ -416,32 +433,23 @@ final class ShellViewController: UITabBarController {
         DispatchQueue.main.async { [weak self] in self?.sayTop() }
     }
 
-    /// What waits on Hugo, in the tab bar's accessory (proposal G04); with nothing waiting, the day
-    /// before this build runs out, the reminder to install it again; else no accessory at all.
+    /// What waits on Hugo, on the bar's bell (proposal G01, in place of G04's accessory); with nothing
+    /// waiting, the day before this build runs out, the reminder to install it again; else no badge.
     private func showNext(_ next: ShellNext?, signedIn: Bool) {
-        var content: NextView.Content?
+        bell = nil
+        nextPath = next?.href
         if let next = next {
-            nextPath = next.href
-            content = NextView.Content(text: next.text, more: next.more, symbol: next.act ? "exclamationmark.circle.fill" : "info.circle.fill", tint: next.act ? .systemOrange : .tintColor, tappable: true, later: next.later, warning: next.act)
-        } else {
-            nextPath = nil
-            if signedIn, let expiry = Reminders.expiry, expiry > Date(), expiry.timeIntervalSinceNow < 24 * 60 * 60 {
-                let format = DateFormatter()
-                format.locale = Locale(identifier: "zh_Hant_TW")
-                format.dateFormat = "M 月 d 日 HH:mm"
-                content = NextView.Content(text: "這版 App 將於 \(format.string(from: expiry)) 到期，記得重裝", more: 0, symbol: "clock.badge.exclamationmark", tint: .systemOrange, tappable: false, later: false)
-            }
+            bell = Bell(count: 1 + next.more, text: next.text, act: next.act, later: next.later, tappable: true)
+        } else if signedIn, let expiry = Reminders.expiry, expiry > Date(), expiry.timeIntervalSinceNow < 24 * 60 * 60 {
+            let format = DateFormatter()
+            format.locale = Locale(identifier: "zh_Hant_TW")
+            format.dateFormat = "M 月 d 日 HH:mm"
+            bell = Bell(count: 1, text: "這版 App 將於 \(format.string(from: expiry)) 到期，記得重裝", act: true, later: false, tappable: false)
         }
-        guard let content = content else {
-            if bottomAccessory != nil { bottomAccessory = nil }
-            return
-        }
-        nextView.show(content)
-        if bottomAccessory == nil { bottomAccessory = UITabAccessory(contentView: nextView) }
         // One light tap the first time a warning to act on appears (Ink design, docs/design-handoff/03-ios-shell.md);
         // never again for the same warning, across launches too, so it never nags while it stands.
-        if content.warning, UserDefaults.standard.string(forKey: Self.buzzedKey) != content.text {
-            UserDefaults.standard.set(content.text, forKey: Self.buzzedKey)
+        if let bell = bell, bell.act, bell.tappable, UserDefaults.standard.string(forKey: Self.buzzedKey) != bell.text {
+            UserDefaults.standard.set(bell.text, forKey: Self.buzzedKey)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
@@ -607,8 +615,8 @@ final class ShellViewController: UITabBarController {
         theme(new.theme)
         settleGround()
         show(tabs: new.tabs, choose: new.tab)
-        drawTop(new.top)
         showNext(new.signedIn ? new.next : nil, signedIn: new.signedIn)
+        drawTop(new.top)
         if isTabBarHidden == new.signedIn {
             saidBottom = -1
             setTabBarHidden(!new.signedIn, animated: true)
