@@ -739,17 +739,17 @@ body::before {
   min-width: 0;
 }
 
-/* A card that opens with its title puts its ⓘ beside it, not on a row of its own (Hugo's choice D04,
-   2026-11-24); the text opens below the title as before. */
-.card:has(> h2:first-child ~ details.info) {
+/* A card that opens with its title puts its plain ⓘ 說明 beside it, not on a row of its own (Hugo's
+   choice D04, 2026-11-24); the text opens below the title as before. An ⓘ with a name of its own keeps its row. */
+.card:has(> h2:first-child ~ details.info.how) {
   position: relative;
 }
 
-.card:has(> h2:first-child ~ details.info) > h2:first-child {
+.card:has(> h2:first-child ~ details.info.how) > h2:first-child {
   padding-right: 2.5rem;
 }
 
-.card > h2:first-child ~ details.info > summary {
+.card > h2:first-child ~ details.info.how > summary {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
@@ -762,11 +762,11 @@ body::before {
   list-style: none;
 }
 
-.card > h2:first-child ~ details.info > summary::-webkit-details-marker {
+.card > h2:first-child ~ details.info.how > summary::-webkit-details-marker {
   display: none;
 }
 
-.card > h2:first-child ~ details.info > summary .bi {
+.card > h2:first-child ~ details.info.how > summary .bi {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -830,9 +830,8 @@ body::before {
   gap: 1.1rem 0.75rem;
 }
 
-/* One line at any size of portfolio: the figure shrinks with its tile rather than wrapping (Hugo, 2026-11-24). */
+/* A figure shrinks with its tile, so seven digits still fit on one line (Hugo, 2026-11-24); a long name still wraps. */
 .stat .value {
-  white-space: nowrap;
   font-size: min(1.35rem, 100cqi / 8.5);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -2312,7 +2311,7 @@ details.info > .info-body {
 .fact-value {
   font-size: min(1.15rem, 100cqi / 8.5);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .fact-note {

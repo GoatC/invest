@@ -307,7 +307,8 @@ await step('holdings at a glance: a card per holding with its moves and signals,
     const tabs = page.getByRole('tablist', { name: /Holdings/ });
     check((await tabs.getByRole('tab', { selected: true }).innerText()) === '總覽', 'the overview first');
     check(!(await page.locator('#add-trade').isVisible()) && !(await page.locator('#trades').isVisible()) && (await glance.isVisible()), 'only the overview shows');
-    await page.getByRole('link', { name: /Add trade/ }).last().click();
+    await page.locator('.add-menu > summary').click();
+    await page.locator('.add-menu').getByRole('link', { name: /Add trade/ }).click();
     await page.locator('#add-trade').waitFor();
     check((await tabs.getByRole('tab', { selected: true }).innerText()) === '交易' && !(await glance.isVisible()), 'the + opens the trade form on its tab');
     await tabs.getByRole('tab', { name: /Cash flows/ }).click();
@@ -2292,7 +2293,7 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.setViewportSize({ width: 1280, height: 900 });
   // Nominal values are larger than today's money (inflation over the plan's years).
   const real = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(text) ?? [])[1]?.replace(/,/g, ''));
-  await page.getByRole('group', { name: /Values/ }).getByRole('link', { name: /Nominal/ }).click();
+  await pick(/Values/, /Nominal/);
   await page.waitForURL('**/monte-carlo?basis=nominal');
   const nominal = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(await body()) ?? [])[1]?.replace(/,/g, ''));
   check(real > 0 && nominal > real, `nominal ${nominal} above today's money ${real}`);
