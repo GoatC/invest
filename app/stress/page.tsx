@@ -6,6 +6,7 @@ import { DataProblem } from '@/components/data-problem';
 import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
 import { UnderwaterChart } from '@/components/stress-chart';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { DataError } from '@/lib/data/core';
 import { loadStressData, type StressData } from '@/lib/data/stress';
@@ -104,10 +105,7 @@ export default async function StressPage({ searchParams }: { searchParams: Promi
       <section className="card form">
         {heading}
         <div className="filters">
-          <div className="segmented" role="group" aria-label="Scenario 情境">
-            <span className="label">
-              <Bi en="Scenario" zh="情境" />
-            </span>
+          <ChoiceMenu label={{ en: 'Scenario', zh: '情境' }}>
             {settings.scenarios.map((scenario) => (
               <Link key={scenario.id} href={`/stress?s=${scenario.id}`} aria-current={!selected || scenario.id !== selected.scenario.id ? undefined : 'true'}>
                 <Bi en={scenario.nameEn} zh={scenario.nameZh} />
@@ -116,7 +114,7 @@ export default async function StressPage({ searchParams }: { searchParams: Promi
             <Link href={`/stress?s=${CUSTOM}`} aria-current={selected ? undefined : 'true'}>
               <Bi en="Your own" zh="自訂" />
             </Link>
-          </div>
+          </ChoiceMenu>
         </div>
         <Summary rows={replays} custom={custom} total={total} />
       </section>

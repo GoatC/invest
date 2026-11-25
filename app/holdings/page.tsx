@@ -9,6 +9,7 @@ import { PageGlow } from '@/components/page-glow';
 import { PhoneTabs } from '@/components/phone-tabs';
 import { RuleMath } from '@/components/rule-math';
 import { Stat } from '@/components/stat';
+import { AddMenu } from '@/components/add-menu';
 import { requireSession } from '@/lib/auth';
 import type { AlertItem } from '@/lib/alerts';
 import { loadAllocationData, loadAssumptions, type AllocationData } from '@/lib/data/allocation';
@@ -181,17 +182,7 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
       <section className="card page-head">
         <div className="row spread">
           <h1>持倉</h1>
-          <div className="row small">
-            <Link href="/import">
-              <Bi {...LABELS.importCsv} />
-            </Link>
-            <Link href="/assets/new">
-              <Bi {...LABELS.addAsset} />
-            </Link>
-            <Link href="/cash-flows/new">
-              <Bi {...LABELS.addCashFlow} />
-            </Link>
-          </div>
+          <AddMenu />
         </div>
       </section>
       <PhoneTabs
@@ -245,9 +236,6 @@ export default async function HoldingsPage({ searchParams }: { searchParams: Pro
           { tab: 'overview', content: !empty && <Footnotes /> },
         ]}
       />
-      <a href="#add-trade" className="fab" lang="zh-Hant" aria-label="新增交易 Add trade" data-shell-action="add" data-shell-symbol="plus" data-shell-sheet="/holdings?sheet=trade">
-        ＋
-      </a>
     </>
   );
 }

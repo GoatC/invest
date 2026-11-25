@@ -739,6 +739,57 @@ body::before {
   min-width: 0;
 }
 
+/* A card that opens with its title puts its ⓘ beside it, not on a row of its own (Hugo's choice D04,
+   2026-11-24); the text opens below the title as before. */
+.card:has(> h2:first-child ~ details.info) {
+  position: relative;
+}
+
+.card:has(> h2:first-child ~ details.info) > h2:first-child {
+  padding-right: 2.5rem;
+}
+
+.card > h2:first-child ~ details.info > summary {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  color: var(--muted);
+  font-size: 1.1rem;
+  list-style: none;
+}
+
+.card > h2:first-child ~ details.info > summary::-webkit-details-marker {
+  display: none;
+}
+
+.card > h2:first-child ~ details.info > summary .bi {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A link beside a card's title reads as iOS's "see more ›", not an underlined word (D04). */
+.card > .row.spread > h2 + a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.card > .row.spread > h2 + a::after {
+  content: '›';
+  margin-left: 0.3rem;
+  font-size: 1.2em;
+}
+
 .narrow {
   max-width: 460px;
 }
@@ -766,6 +817,7 @@ body::before {
 }
 
 .stat {
+  container-type: inline-size;
   display: grid;
   /* Its lines from the top: a tile beside a taller one keeps its figure level with that one's,
      rather than spreading its lines down the extra height. */
@@ -775,20 +827,13 @@ body::before {
 
 /* Holdings' summary (app/holdings/page.tsx): one block ruled by hairlines, not separate tiles (Ink design). */
 .grid-cards.summary-block {
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--border);
+  gap: 1.1rem 0.75rem;
 }
 
-.summary-block > .stat {
-  padding: 0.7rem 0.9rem;
-  background: var(--surface);
-}
-
+/* One line at any size of portfolio: the figure shrinks with its tile rather than wrapping (Hugo, 2026-11-24). */
 .stat .value {
-  font-size: 1.35rem;
+  white-space: nowrap;
+  font-size: min(1.35rem, 100cqi / 8.5);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -1054,6 +1099,13 @@ button:disabled {
   color: var(--info-text);
 }
 
+/* Inside a card, a note is a quiet line, not a tinted box in the box (D01). */
+.card .banner.info {
+  padding-inline: 0;
+  background: none;
+  color: var(--muted);
+}
+
 .banner ul {
   margin: 0.3rem 0 0;
   padding-left: 1.2rem;
@@ -1157,6 +1209,74 @@ details ul {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+/* A row of choices folded into one menu button (components/choice-menu.tsx; Hugo's choice D03, 2026-11-24). */
+.filters:has(.choice-menu) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.25rem;
+}
+
+.filters:has(.choice-menu) > .segmented {
+  flex-basis: 100%;
+}
+
+.choice-menu {
+  position: relative;
+}
+
+.choice-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--tap-min);
+  list-style: none;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.choice-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.choice-label {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.choice-list {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  display: grid;
+  min-width: 11rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(10, 20, 15, 0.16);
+}
+
+.choice-list a {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 0.8rem;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.choice-list a[aria-current='true'] {
+  background: var(--accent-soft);
+  font-weight: 600;
 }
 
 /* Charts (components/performance-charts.tsx) */
@@ -1551,6 +1671,7 @@ tr.selected td {
 
 .hero-body {
   position: relative;
+  container-type: inline-size;
   display: grid;
   justify-items: start;
   gap: 0.2rem;
@@ -1587,7 +1708,7 @@ tr.selected td {
 /* The value: the whole dollars large and heavy, the currency sign small and the cents faded, all one run. */
 .hero-value {
   margin-top: 0.35rem;
-  font-size: 2.875rem;
+  font-size: min(2.875rem, 100cqi / 7.8);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -2175,13 +2296,12 @@ details.info > .info-body {
   grid-column: 1 / -1;
 }
 
+/* No frame of its own: a fact sits in its card, two boxes deep at most (Hugo's choice D01, 2026-11-24). */
 .fact {
+  container-type: inline-size;
   display: grid;
   gap: 0.15rem;
   align-content: start;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.5rem 0.7rem;
 }
 
 .fact-label {
@@ -2190,22 +2310,14 @@ details.info > .info-body {
 }
 
 .fact-value {
-  font-size: 1.15rem;
+  font-size: min(1.15rem, 100cqi / 8.5);
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .fact-note {
   color: var(--muted);
   font-size: 0.8rem;
-}
-
-.fact.alert {
-  border-color: var(--danger-text);
-}
-
-.fact.watch {
-  border-color: var(--warn-text);
 }
 
 /* A folded edit history: the heading is the toggle. */
@@ -3174,16 +3286,16 @@ body:has(#green-up),
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
-  gap: 0.75rem;
+  column-gap: 1.5rem;
 }
 
+/* A row ruled off its neighbour, not a box in the card (D01). */
 .hold-card {
   display: grid;
   gap: 0.5rem;
   align-content: start;
-  padding: 0.75rem 0.85rem;
-  background: var(--bg);
-  border-radius: 14px;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border);
   min-width: 0;
 }
 
@@ -3501,8 +3613,53 @@ body:has(#green-up),
 
 /* A long page as sub-tabs on a phone (components/phone-tabs.tsx); a wide screen shows every part. */
 .phone-tabs,
-.fab {
+/* Holdings' one "+" (components/add-menu.tsx; Hugo's choice D02, 2026-11-24): a round button beside the
+   title on a wide screen, floating over the tab bar's right end on a phone; its list opens beside it. */
+.add-menu {
+  position: relative;
+}
+
+.add-menu > summary {
+  display: grid;
+  place-items: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 1.5rem;
+  line-height: 1;
+  list-style: none;
+  cursor: pointer;
+}
+
+.add-menu > summary::-webkit-details-marker {
   display: none;
+}
+
+.add-menu-list {
+  position: absolute;
+  z-index: 31;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 13rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(10, 20, 15, 0.16);
+}
+
+.add-menu-list a {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 0.8rem;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .tab-part {
@@ -3553,31 +3710,31 @@ body:has(#green-up),
   }
 
   /* Room under the last line of a page with a "+", so the button never covers a figure for good. */
-  .page:has(.fab) {
+  .page:has(.add-menu) {
     padding-bottom: 5.5rem;
   }
 
-  /* The "+" that opens the new-trade form, over the tab bar's right end. */
-  .fab {
+  .add-menu {
     position: fixed;
     right: 16px;
     bottom: calc(var(--tabbar-space) + 14px);
     z-index: 30;
-    display: grid;
-    place-items: center;
+  }
+
+  .add-menu > summary {
     width: 52px;
     height: 52px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: var(--accent-text);
     font-size: 1.6rem;
-    line-height: 1;
-    text-decoration: none;
     box-shadow: 0 4px 14px rgba(31, 42, 58, 0.28);
   }
 
+  .add-menu-list {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
   .hold-card {
-    padding: 0.65rem 0.75rem;
+    padding: 0.65rem 0;
   }
 
   .glance .segmented a {
@@ -4537,33 +4694,6 @@ html[data-shell-info] main .card:has(> h1):not(:has(> :not(h1, details.info, [da
    G02 and G05; components/shell-bridge.tsx `pageInfo`), so it is not drawn in the page. */
 html[data-shell-info] main .card:has(> h1) > details.info {
   display: none;
-}
-
-/* What the page offers to do beside its title (Holdings: import, add an asset, add a cash flow), as
-   iOS's tinted capsule buttons on one line that slides sideways, not links in a card of their own. */
-html[data-shell-top] .page-head {
-  padding: 0;
-  background: none;
-  box-shadow: none;
-  border: 0;
-}
-
-html[data-shell-top] .page-head .row.small {
-  flex-wrap: nowrap;
-  gap: 0.5rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-html[data-shell-top] .page-head .row.small > a {
-  flex: none;
-  padding: 0 0.85rem;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.88rem;
-  font-weight: 600;
-  text-decoration: none;
 }
 
 /* A list of warnings inside a card lines up with the card's own text, not indented a second time. */

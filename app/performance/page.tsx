@@ -6,6 +6,7 @@ import { PageGlow } from '@/components/page-glow';
 import { DataProblem } from '@/components/data-problem';
 import { CumulativeChart, MonthlyChart } from '@/components/performance-charts';
 import { Stat } from '@/components/stat';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { DataError, orDataError } from '@/lib/data/core';
 import { loadPerformanceInput } from '@/lib/data/performance';
@@ -139,26 +140,20 @@ function Header({ scope, range, view }: { scope: Scope; range: Period; view: Vie
             </Link>
           ))}
         </div>
-        <div className="segmented" role="group" aria-label="Pool 資金池">
-          <span className="label">
-            <Bi {...LABELS.pool} />
-          </span>
+        <ChoiceMenu label={LABELS.pool}>
           {SCOPES.map((option) => (
             <Link prefetch key={option} href={href({ scope: option })} aria-current={option === scope ? 'true' : undefined}>
               <Bi {...SCOPE[option]} />
             </Link>
           ))}
-        </div>
-        <div className="segmented" role="group" aria-label="Period 期間">
-          <span className="label">
-            <Bi en="Period" zh="期間" />
-          </span>
+        </ChoiceMenu>
+        <ChoiceMenu label={{ en: 'Period', zh: '期間' }}>
           {RANGES.map((option) => (
             <Link prefetch key={option} href={href({ range: option })} aria-current={option === range ? 'true' : undefined}>
               <Bi {...PERIOD[option]} />
             </Link>
           ))}
-        </div>
+        </ChoiceMenu>
       </div>
     </section>
   );

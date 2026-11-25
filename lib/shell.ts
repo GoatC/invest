@@ -49,6 +49,8 @@ export interface ShellAction {
   info?: string;
   /** 'leading': at the bar's left edge instead of its right (`data-shell-placement`; the dashboard's 帳號, Ink design). */
   placement?: 'leading';
+  /** The button opens a menu of these instead (`data-shell-item` inside the control; Holdings' ＋, Hugo's choice D02). */
+  menu?: ShellAction[];
 }
 
 /**

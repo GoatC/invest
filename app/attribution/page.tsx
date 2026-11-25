@@ -5,6 +5,7 @@ import { CumulativeChart, QuadrantChart, WaterfallChart, type QuadrantPoint, typ
 import { DataProblem } from '@/components/data-problem';
 import { Info, MethodNotes } from '@/components/info';
 import { Stat } from '@/components/stat';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { loadAttributionData, type AttributionData } from '@/lib/data/attribution';
 import { DataError } from '@/lib/data/core';
@@ -81,27 +82,21 @@ export default async function AttributionPage({ searchParams }: { searchParams: 
           />
         </Info>
         <div className="filters">
-          <div className="segmented" role="group" aria-label="Level 層級">
-            <span className="label">
-              <Bi en="Level" zh="層級" />
-            </span>
+          <ChoiceMenu label={{ en: 'Level', zh: '層級' }}>
             <Link prefetch href={`/attribution?range=${range}`} aria-current={level === 1 ? 'true' : undefined}>
               <Bi en="1 · Asset classes" zh="1・資產類別" />
             </Link>
             <Link prefetch href={`/attribution?range=${range}&level=2`} aria-current={level === 2 ? 'true' : undefined}>
               <Bi en="2 · Satellite by sector" zh="2・衛星依產業" />
             </Link>
-          </div>
-          <div className="segmented" role="group" aria-label="Period 期間">
-            <span className="label">
-              <Bi en="Period" zh="期間" />
-            </span>
+          </ChoiceMenu>
+          <ChoiceMenu label={{ en: 'Period', zh: '期間' }}>
             {RANGES.map((option) => (
               <Link prefetch key={option} href={`/attribution?range=${option}${level === 2 ? '&level=2' : ''}`} aria-current={option === range ? 'true' : undefined}>
                 <Bi {...RANGE[option]} />
               </Link>
             ))}
-          </div>
+          </ChoiceMenu>
         </div>
         {all.length === 0 && (
           <p className="muted">

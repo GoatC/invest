@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { BetaRanges, RollingBeta, ScatterFit, type Line, type Range } from '@/components/regression-charts';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { DataError } from '@/lib/data/core';
 import type { SecurityRecord } from '@/lib/data/holdings';
 import { loadRegressionData, loadRegressionSetup, loadSavedBetas, type RegressionData } from '@/lib/data/regression';
 import { taipeiToday } from '@/lib/dates';
 import { percent, signedPercent } from '@/lib/format';
-import { bi, type Bilingual, LABELS, zh } from '@/lib/i18n';
+import { type Bilingual, LABELS, zh } from '@/lib/i18n';
 import { FREQUENCIES, loadFrom, regressTicker, type Benchmark, type Choice, type CurrencyBasis, type Frequency, type Regression, type RegressionOutcome, type RegressionSettings } from '@/lib/models/regression';
 
 import { RegressionSettingsForm, type SettingsField } from './forms';
@@ -193,16 +194,13 @@ export default async function RegressionPage({ searchParams }: { searchParams: P
 
 function Segmented({ label, options, current }: { label: Bilingual; options: ReadonlyArray<{ key: string; label: Bilingual; href: string }>; current: string }) {
   return (
-    <div className="segmented" role="group" aria-label={bi(label)}>
-      <span className="label">
-        <Bi {...label} />
-      </span>
+    <ChoiceMenu label={label}>
       {options.map((option) => (
         <Link key={option.key} href={option.href} aria-current={option.key === current ? 'true' : undefined}>
           <Bi {...option.label} />
         </Link>
       ))}
-    </div>
+    </ChoiceMenu>
   );
 }
 

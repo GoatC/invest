@@ -42,7 +42,10 @@ final class TabHost: UIViewController {
         navigationItem.largeTitleDisplayMode = .never
         // The page lists its controls left to right; the bar fills from the right edge in.
         let button = { (action: ShellAction) -> UIBarButtonItem in
-            let item = UIBarButtonItem(image: UIImage(systemName: action.symbol), primaryAction: UIAction { _ in run(action) })
+            let image = UIImage(systemName: action.symbol)
+            let item = action.menu.isEmpty
+                ? UIBarButtonItem(image: image, primaryAction: UIAction { _ in run(action) })
+                : UIBarButtonItem(image: image, menu: UIMenu(children: action.menu.map { entry in UIAction(title: entry.label, image: UIImage(systemName: entry.symbol)) { _ in run(entry) } }))
             item.accessibilityLabel = action.label
             return item
         }

@@ -4,6 +4,7 @@ import { Bi, Zh } from '@/components/bi';
 import { DataProblem } from '@/components/data-problem';
 import { Info } from '@/components/info';
 import { SectorBubbles, SectorHeatmap, SectorTreemap, type Bubble, type HeatRow, type SectorBox } from '@/components/sector-charts';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { DataError } from '@/lib/data/core';
 import { loadSectorData, type SectorData } from '@/lib/data/sectors';
@@ -58,16 +59,13 @@ function rowLabel(row: SectorRow): string {
 /** Links that keep the other choices: the page's tabs, period, market and pool. */
 function Segmented<T extends string>({ label, value, options, labels, href }: { label: Bilingual; value: T; options: readonly T[]; labels: Record<T, Bilingual>; href: (value: T) => string }) {
   return (
-    <div className="segmented" role="group" aria-label={`${label.en} ${label.zh}`}>
-      <span className="label">
-        <Bi {...label} />
-      </span>
+    <ChoiceMenu label={label}>
       {options.map((option) => (
         <Link prefetch key={option} href={href(option)} aria-current={option === value ? 'true' : undefined}>
           <Bi {...labels[option]} />
         </Link>
       ))}
-    </div>
+    </ChoiceMenu>
   );
 }
 
