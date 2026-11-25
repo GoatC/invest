@@ -343,9 +343,7 @@ final class NativeCharts {
             if let kept = shown[id] {
                 kept.rootView = NativeChartView(spec: spec)
             } else {
-                let host = UIHostingController(rootView: NativeChartView(spec: spec))
-                host.view.backgroundColor = .clear
-                host.sizingOptions = []
+                let host = Self.host(spec)
                 shown[id] = host
                 scroll?.addSubview(host.view)
             }
@@ -357,6 +355,17 @@ final class NativeCharts {
         default:
             break
         }
+    }
+
+    private static func host(_ spec: NativeChartSpec) -> UIHostingController<NativeChartView> {
+        let host = UIHostingController(rootView: NativeChartView(spec: spec))
+        host.view.backgroundColor = .clear
+        host.sizingOptions = []
+        // A chart is a box in the page, not a screen: placed where the bars are (the VaR line, under the tab
+        // bar on opening), it took their safe area as an inset and drew squashed into the top of its box,
+        // and kept that once scrolled into view (Hugo, 2026-11-24; ios/tests/look.sh 01b against 01c).
+        host.safeAreaRegions = []
+        return host
     }
 
     /// A new page loaded whole: none of the old page's charts stays.

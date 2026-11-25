@@ -70,7 +70,11 @@ function lentActions(): ShellAction[] {
     seen.add(key);
     const sheet = control.dataset.shellSheet;
     const leading = control.dataset.shellPlacement === 'leading';
-    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}), ...(leading ? { placement: 'leading' as const } : {}) });
+    const menu = [...control.querySelectorAll<HTMLElement>('[data-shell-item]')].map((item) => {
+      const itemSheet = item.dataset.shellSheet;
+      return { key: item.dataset.shellItem ?? '', symbol: item.dataset.shellSymbol ?? 'circle', label: item.textContent?.trim() ?? '', ...(itemSheet ? { sheet: itemSheet } : {}) };
+    });
+    actions.push({ key, symbol: control.dataset.shellSymbol ?? 'circle', label: control.getAttribute('aria-label') ?? control.textContent?.trim() ?? key, ...(sheet ? { sheet } : {}), ...(leading ? { placement: 'leading' as const } : {}), ...(menu.length > 0 ? { menu } : {}) });
   }
   // The page's own ⓘ (in its title's card) goes to the bar as a glass ⓘ, which opens its text in a sheet (proposals G02, G05).
   const info = pageInfo();
@@ -248,7 +252,7 @@ export function ShellBridge({ path, sheet, onMore, closeSheet }: { path: string;
         window.dispatchEvent(new CustomEvent(REMINDERS_STATUS, { detail: status }));
       },
       action(key) {
-        document.querySelector<HTMLElement>(`main [data-shell-action="${CSS.escape(key)}"]`)?.click();
+        document.querySelector<HTMLElement>(`main [data-shell-action="${CSS.escape(key)}"], main [data-shell-item="${CSS.escape(key)}"]`)?.click();
       },
       later() {
         document.querySelector<HTMLElement>('.guide-banner .guide-close')?.click();

@@ -96,7 +96,12 @@ function check(condition, message) {
   if (!condition) throw new Error(message);
 }
 const body = (target = page) => target.locator('body').innerText();
-/** A summary tile (components/facts.tsx) as one line: its icon, label, figure and note. */
+
+// A row of choices folded into a menu (components/choice-menu.tsx): open it, then pick.
+const pick = async (menu, choice) => {
+  await page.locator('.choice-menu', { has: page.getByRole('group', { name: menu, includeHidden: true }) }).locator('summary').click();
+  await page.getByRole('group', { name: menu }).getByRole('link', { name: choice }).click();
+};/** A summary tile (components/facts.tsx) as one line: its icon, label, figure and note. */
 const fact = async (label) => (await page.locator('.fact', { hasText: label }).first().innerText()).replace(/\s+/g, ' ');
 /** A warning tile (components/alert-tiles.tsx) as one line: its code, name, figure and chips. */
 const alertTile = async (label) => (await page.locator('.alert-tile', { hasText: label }).first().innerText()).replace(/\s+/g, ' ');
@@ -302,7 +307,8 @@ await step('holdings at a glance: a card per holding with its moves and signals,
     const tabs = page.getByRole('tablist', { name: /Holdings/ });
     check((await tabs.getByRole('tab', { selected: true }).innerText()) === '總覽', 'the overview first');
     check(!(await page.locator('#add-trade').isVisible()) && !(await page.locator('#trades').isVisible()) && (await glance.isVisible()), 'only the overview shows');
-    await page.getByRole('link', { name: /Add trade/ }).last().click();
+    await page.locator('.add-menu > summary').click();
+    await page.locator('.add-menu').getByRole('link', { name: /Add trade/ }).click();
     await page.locator('#add-trade').waitFor();
     check((await tabs.getByRole('tab', { selected: true }).innerText()) === '交易' && !(await glance.isVisible()), 'the + opens the trade form on its tab');
     await tabs.getByRole('tab', { name: /Cash flows/ }).click();
@@ -842,7 +848,7 @@ await step('performance: the windfall pool alone, year to date, and dark mode', 
   check((await body()).includes('大額資金池的持有今天才加入'), 'windfall pool new today');
   await page.goto(`${BASE}/performance?range=ytd&scope=regular`);
   await page.locator('.chart svg').nth(1).waitFor();
-  check((await page.locator('.segmented a[aria-current=true]').allInnerTexts()).join(' ').includes('Year to date'), 'year to date selected');
+  check((await page.locator('.choice-menu summary').allInnerTexts()).join(' ').includes('今年以來'), 'year to date selected, named on its menu');
   await chooseTheme('dark');
   await page.goto(`${BASE}/performance`);
   await page.locator('.chart svg').nth(1).waitFor();
@@ -1541,7 +1547,7 @@ await step('regression: VT against the S&P 500 and TAIEX side by side, β with i
   await page.setViewportSize({ width: 1280, height: 900 });
 
   // In TWD the dollar's moves come in; monthly returns give 24 periods.
-  await page.locator('.segmented', { hasText: 'Currency' }).getByRole('link', { name: /^TWD/ }).click();
+  await pick(/Currency/, /^TWD/);
   await page.waitForURL(/c=TWD/);
   await page.locator('#vs-SPX .chart-scatter svg').waitFor();
   check((await figures('#vs-SPX'))[0] === '0.90 ± 0.05', `in TWD, got ${(await figures('#vs-SPX'))[0]}`);
@@ -2287,7 +2293,7 @@ await step('monte carlo: the fan around the saved plan, the median and the range
   await page.setViewportSize({ width: 1280, height: 900 });
   // Nominal values are larger than today's money (inflation over the plan's years).
   const real = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(text) ?? [])[1]?.replace(/,/g, ''));
-  await page.getByRole('group', { name: /Values/ }).getByRole('link', { name: /Nominal/ }).click();
+  await pick(/Values/, /Nominal/);
   await page.waitForURL('**/monte-carlo?basis=nominal');
   const nominal = Number((/Median in year \d+[^N]*NT\$([\d,]+)/.exec(await body()) ?? [])[1]?.replace(/,/g, ''));
   check(real > 0 && nominal > real, `nominal ${nominal} above today's money ${real}`);
@@ -2369,12 +2375,12 @@ await step('stress test: three historical scenarios on today\'s holdings with th
   await page.setViewportSize({ width: 1280, height: 1500 });
   await docShot('stress', page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole('group', { name: /Scenario/ }).getByRole('link', { name: /2022 rate shock/ }).click();
+  await pick(/Scenario/, /2022 rate shock/);
   await page.waitForURL('**/stress?s=rates_2022');
   await page.locator('#stress-detail .chart-figure svg').waitFor();
   check((await page.locator('#stress-detail').innerText()).includes('F3 tier'), 'the tiers table');
   // A shock of your own: all stocks fall 30%, then the expected returns bring the portfolio back.
-  await page.getByRole('group', { name: /Scenario/ }).getByRole('link', { name: /Your own/ }).click();
+  await pick(/Scenario/, /Your own/);
   await page.waitForURL('**/stress?s=custom');
   await page.locator('#custom input[name=shock_us_global_equity]').fill('-60');
   await page.locator('#custom button[type=submit]').click();
@@ -2433,9 +2439,9 @@ await step('attribution: the portfolio against the SAA benchmark by asset class,
   await page.setViewportSize({ width: 1280, height: 1800 });
   await docShot('attribution', page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole('group', { name: /Period/ }).getByRole('link', { name: /Last 3 months/ }).click();
+  await pick(/Period/, /Last 3 months/);
   await page.waitForURL('**/attribution?range=3m');
-  await page.getByRole('group', { name: /Level/ }).getByRole('link', { name: /Satellite by sector/ }).click();
+  await pick(/Level/, /Satellite by sector/);
   await page.waitForURL('**/attribution?range=3m&level=2');
   check((await body()).includes('衛星') || (await body()).includes('第二層需要') || (await body()).includes('尚未持有衛星個股'), 'level 2 answers, with sectors or with what it needs');
   check((await body()).includes('績效歸因') && (await body()).includes('層級'), 'Chinese labels');
@@ -2846,7 +2852,7 @@ await step('inside the iOS shell: no web tab bar, the native one told where the 
     await select('/holdings', '/holdings', '持倉');
     await says(['/holdings', '/holdings']);
     // The "+" floats over the native bar, not under it.
-    const fab = await app.locator('.fab').boundingBox();
+    const fab = await app.locator('.add-menu > summary').boundingBox();
     check(fab && fab.y + fab.height <= 844 - 83, `the + clears the native bar, got ${JSON.stringify(fab)}`);
     await app.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-shell-holdings.png` });
     // A sub-tab is the page's own: the native tab stays, the path follows.

@@ -45,6 +45,19 @@ struct ShellAction: Equatable {
     let info: String?
     /// At the bar's left edge instead of its right (the dashboard's 帳號, Ink design 2026-11-18).
     let leading: Bool
+    /// The button opens a menu of these instead (Holdings' ＋, Hugo's choice D02, 2026-11-24).
+    let menu: [ShellAction]
+
+    init?(_ action: [String: Any]) {
+        guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
+        self.key = key
+        self.symbol = symbol
+        label = action["label"] as? String ?? key
+        sheet = action["sheet"] as? String
+        info = action["info"] as? String
+        leading = (action["placement"] as? String) == "leading"
+        menu = (action["menu"] as? [[String: Any]] ?? []).compactMap(ShellAction.init)
+    }
 }
 
 /// The top of the page, which the navigation bar draws (lib/shell.ts `ShellTop`; proposal G02).
@@ -63,10 +76,7 @@ struct ShellTop: Equatable {
         title = (fields["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         lightStatusBar = (fields["statusBar"] as? String) == "light"
         back = fields["back"] as? Bool ?? false
-        actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap { action in
-            guard let key = action["key"] as? String, let symbol = action["symbol"] as? String else { return nil }
-            return ShellAction(key: key, symbol: symbol, label: action["label"] as? String ?? key, sheet: action["sheet"] as? String, info: action["info"] as? String, leading: (action["placement"] as? String) == "leading")
-        }
+        actions = (fields["actions"] as? [[String: Any]] ?? []).compactMap(ShellAction.init)
         let row = fields["segments"] as? [String: Any]
         segments = row?["labels"] as? [String] ?? []
         segment = row?["current"] as? Int ?? 0

@@ -5,6 +5,7 @@ import { DataProblem } from '@/components/data-problem';
 import { Info, MethodNotes } from '@/components/info';
 import { BetaRanges, type Range } from '@/components/regression-charts';
 import { Stat } from '@/components/stat';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { DataError } from '@/lib/data/core';
 import { loadFactorData, type FactorData, type FactorRow } from '@/lib/data/regression';
@@ -83,16 +84,13 @@ export default async function FactorPage({ searchParams }: { searchParams: Promi
         )}
         {settings && (
           <div className="filters">
-            <div className="segmented" role="group" aria-label="Window 期間">
-              <span className="label">
-                <Bi en="Window" zh="期間" />
-              </span>
+            <ChoiceMenu label={{ en: 'Window', zh: '期間' }}>
               {settings.windows.map((option) => (
                 <Link key={option} href={href({ y: option })} aria-current={option === years ? 'true' : undefined}>
                   <Bi en={`${option} years`} zh={`${option} 年`} />
                 </Link>
               ))}
-            </div>
+            </ChoiceMenu>
           </div>
         )}
         {settings && Object.keys(data.loaded).length === 0 && (

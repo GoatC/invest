@@ -4,6 +4,7 @@ import { AllocationDonut } from '@/components/allocation-charts';
 import { Bi, Zh } from '@/components/bi';
 import { Info, MethodNotes } from '@/components/info';
 import { DataProblem } from '@/components/data-problem';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { loadAllocationData, type AllocationData } from '@/lib/data/allocation';
 import { DataError } from '@/lib/data/core';
@@ -395,16 +396,13 @@ function AssumptionsCard({ data }: { data: AllocationData }) {
 
 function ScopeFilter({ scope }: { scope: Scope }) {
   return (
-    <div className="segmented" role="group" aria-label="Pool 資金池">
-      <span className="label">
-        <Bi en="Donut for" zh="圓餅圖資金池" />
-      </span>
+    <ChoiceMenu label={{ en: 'Donut for', zh: '圓餅圖資金池' }}>
       {SCOPES.map((option) => (
         <Link prefetch key={option} href={option === 'regular' ? '/allocation' : `/allocation?scope=${option}`} aria-current={option === scope ? 'true' : undefined} scroll={false}>
           <Bi {...SCOPE[option]} />
         </Link>
       ))}
-    </div>
+    </ChoiceMenu>
   );
 }
 

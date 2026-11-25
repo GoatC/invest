@@ -7,6 +7,7 @@ import { History, HistorySection } from '@/components/history';
 import { Info, MethodNotes } from '@/components/info';
 import { FanChart, SpreadChart, type Basis } from '@/components/monte-carlo-charts';
 import { Stat } from '@/components/stat';
+import { ChoiceMenu } from '@/components/choice-menu';
 import { requireSession } from '@/lib/auth';
 import { loadAuditHistory, type AuditEntry } from '@/lib/data/audit';
 import { DataError } from '@/lib/data/core';
@@ -90,16 +91,13 @@ function Toggle({ basis }: { basis: Basis }) {
   ];
   return (
     <div className="filters">
-      <div className="segmented" role="group" aria-label="Values 數值">
-        <span className="label">
-          <Bi en="Values" zh="數值" />
-        </span>
+      <ChoiceMenu label={{ en: 'Values', zh: '數值' }}>
         {options.map((option) => (
           <Link key={option.value} href={option.href} aria-current={option.value === basis ? 'true' : undefined}>
             <Bi {...option.label} />
           </Link>
         ))}
-      </div>
+      </ChoiceMenu>
     </div>
   );
 }
