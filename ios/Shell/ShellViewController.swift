@@ -220,7 +220,11 @@ final class ShellViewController: UITabBarController {
     }()
 
     /// The charts the page handed over, drawn natively in its scrolling content.
-    private lazy var charts = NativeCharts(scroll: web.scrollView)
+    private lazy var charts: NativeCharts = {
+        let charts = NativeCharts(scroll: web.scrollView)
+        charts.onReport = { [weak self] json in self?.web.evaluateJavaScript("window.__shellReport=\(json)", completionHandler: nil) }
+        return charts
+    }()
 
     /// White text over the launch colour, until a place's page says otherwise (PlaceNavigation).
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }

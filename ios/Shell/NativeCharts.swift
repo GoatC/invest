@@ -329,6 +329,8 @@ struct NativeChartView: View {
 final class NativeCharts {
     private weak var scroll: UIScrollView?
     private var shown: [String: UIHostingController<NativeChartView>] = [:]
+    /// Hands the page what `report` found, as JSON (ShellViewController sets it).
+    var onReport: ((String) -> Void)?
 
     init(scroll: UIScrollView) {
         self.scroll = scroll
@@ -352,6 +354,21 @@ final class NativeCharts {
             place(id, fields["box"])
         case "remove":
             shown.removeValue(forKey: id)?.view.removeFromSuperview()
+        case "report":
+            // What each chart is drawn as, for reading in Safari's Web Inspector (`window.__shellReport`) while the
+            // VaR line's squashed first drawing on Hugo's phone is found (2026-11-25). shortcut: diagnostic only, remove once fixed.
+            let charts = shown.map { id, host -> [String: Any] in
+                let view = host.view!
+                let spec = host.rootView.spec
+                let values = spec.series.first?.values.compactMap { $0 } ?? []
+                return ["id": id, "frame": [view.frame.minX, view.frame.minY, view.frame.width, view.frame.height], "bounds": [view.bounds.width, view.bounds.height],
+                        "hidden": view.isHidden, "inWindow": view.window != nil, "safe": [view.safeAreaInsets.top, view.safeAreaInsets.bottom],
+                        "yMin": spec.yMin.map { $0 as Any } ?? "nil", "yMax": spec.yMax.map { $0 as Any } ?? "nil", "spark": spec.spark, "n": values.count, "low": values.min() ?? 0, "high": values.max() ?? 0]
+            }
+            let offset = scroll.map { [$0.contentOffset.y, $0.bounds.height, $0.contentSize.height] } ?? []
+            if let data = try? JSONSerialization.data(withJSONObject: ["charts": charts, "scroll": offset]), let json = String(data: data, encoding: .utf8) {
+                onReport?(json)
+            }
         default:
             break
         }

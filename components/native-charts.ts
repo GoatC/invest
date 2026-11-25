@@ -25,8 +25,6 @@ interface Live {
   element: HTMLElement;
   spec: NativeSpec;
   box: Box | null;
-  /** Handed over before the app had opened, and not yet made anew since. */
-  early: boolean;
 }
 
 type Handler = { postMessage: (message: unknown) => void };
@@ -45,6 +43,20 @@ export function nativeCharts(): boolean {
 }
 
 const live = new Map<string, Live>();
+
+/**
+ * The last messages handed to the shell, summed up, for reading in Safari's Web Inspector
+ * (`window.__charts`): kept while the VaR line's squashed first drawing on Hugo's phone is found
+ * (2026-11-25). shortcut: diagnostic only, remove once that is fixed.
+ */
+const sent: unknown[] = [];
+function say(shell: Handler, message: { op: string; id: string; box?: Box | null; spec?: NativeSpec }): void {
+  shell.postMessage(message);
+  const values = message.spec?.series[0]?.values ?? [];
+  sent.push({ t: Math.round(performance.now()), op: message.op, id: message.id, box: message.box, spark: message.spec?.spark, y: message.spec?.y && [message.spec.y.min, message.spec.y.max], n: values.length, first: values[0], last: values[values.length - 1], opened: document.documentElement.hasAttribute('data-opened'), scrollY: Math.round(window.scrollY), viewport: [window.innerWidth, window.innerHeight] });
+  if (sent.length > 60) sent.shift();
+  (window as unknown as { __charts: unknown[] }).__charts = sent;
+}
 let counter = 0;
 let covered = false;
 let frame = 0;
@@ -63,12 +75,6 @@ function boxOf(element: HTMLElement): Box | null {
 
 const same = (a: Box | null, b: Box | null) => (a === null || b === null ? a === b : a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 
-/** Whether the box is on screen now. */
-const inView = (box: Box | null) => box !== null && box.y < window.scrollY + window.innerHeight && box.y + box.h > window.scrollY;
-
-/** Whether the app has opened: the opening screen lifted (components/preload.tsx), or none shown. */
-const opened = () => document.documentElement.hasAttribute('data-opened') || document.getElementById('splash') === null;
-
 /** Tells the shell of every chart whose place changed since it was last told. */
 function place(): void {
   frame = 0;
@@ -76,19 +82,9 @@ function place(): void {
   if (!shell) return;
   for (const [id, chart] of live) {
     const box = boxOf(chart.element);
-    // A chart handed over while the app was still opening came out squashed on Hugo's phone (the VaR line)
-    // until 1個月 and back handed it over again (2026-11-25); one handed over after opening draws right.
-    // So it is made anew once, as that tap does, when it is first on screen after opening.
-    if (chart.early && opened() && inView(box)) {
-      chart.early = false;
-      chart.box = box;
-      shell.postMessage({ op: 'remove', id });
-      shell.postMessage({ op: 'set', id, box, spec: chart.spec });
-      continue;
-    }
     if (same(box, chart.box)) continue;
     chart.box = box;
-    shell.postMessage({ op: 'move', id, box });
+    say(shell, { op: 'move', id, box });
   }
 }
 
@@ -129,8 +125,8 @@ export function showNative(element: HTMLElement, spec: NativeSpec): () => void {
   element.dataset.nativeChart = key;
   watch();
   const box = boxOf(element);
-  live.set(key, { element, spec, box, early: live.get(key)?.early ?? !opened() });
-  shell.postMessage({ op: 'set', id: key, box, spec });
+  live.set(key, { element, spec, box });
+  say(shell, { op: 'set', id: key, box, spec });
   if (!sizes.has(key)) {
     const resize = new ResizeObserver(soon);
     resize.observe(element);
@@ -142,7 +138,7 @@ export function showNative(element: HTMLElement, spec: NativeSpec): () => void {
     sizes.delete(key);
     live.delete(key);
     delete element.dataset.nativeChart;
-    shell.postMessage({ op: 'remove', id: key });
+    say(shell, { op: 'remove', id: key });
   };
 }
 
