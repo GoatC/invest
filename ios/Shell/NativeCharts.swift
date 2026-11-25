@@ -343,9 +343,7 @@ final class NativeCharts {
             if let kept = shown[id] {
                 kept.rootView = NativeChartView(spec: spec)
             } else {
-                let host = UIHostingController(rootView: NativeChartView(spec: spec))
-                host.view.backgroundColor = .clear
-                host.sizingOptions = []
+                let host = Self.host(spec)
                 shown[id] = host
                 scroll?.addSubview(host.view)
             }
@@ -356,6 +354,27 @@ final class NativeCharts {
             shown.removeValue(forKey: id)?.view.removeFromSuperview()
         default:
             break
+        }
+    }
+
+    private static func host(_ spec: NativeChartSpec) -> UIHostingController<NativeChartView> {
+        let host = UIHostingController(rootView: NativeChartView(spec: spec))
+        host.view.backgroundColor = .clear
+        host.sizingOptions = []
+        return host
+    }
+
+    /// The web view has just been put on screen (ShellViewController.attach). A chart handed over before
+    /// that was laid out off screen, and SwiftUI kept that layout: the VaR line squashed into the top of
+    /// its box until 1個月 and back made it anew (Hugo, 2026-11-24; ios/tests/look.sh 01b). Made anew here.
+    func refresh() {
+        for (id, old) in shown {
+            let host = Self.host(old.rootView.spec)
+            host.view.frame = old.view.frame
+            host.view.isHidden = old.view.isHidden
+            scroll?.insertSubview(host.view, aboveSubview: old.view)
+            old.view.removeFromSuperview()
+            shown[id] = host
         }
     }
 
