@@ -361,21 +361,11 @@ final class NativeCharts {
         let host = UIHostingController(rootView: NativeChartView(spec: spec))
         host.view.backgroundColor = .clear
         host.sizingOptions = []
+        // A chart is a box in the page, not a screen: placed where the bars are (the VaR line, under the tab
+        // bar on opening), it took their safe area as an inset and drew squashed into the top of its box,
+        // and kept that once scrolled into view (Hugo, 2026-11-24; ios/tests/look.sh 01b against 01c).
+        host.safeAreaRegions = []
         return host
-    }
-
-    /// The web view has just been put on screen (ShellViewController.attach). A chart handed over before
-    /// that was laid out off screen, and SwiftUI kept that layout: the VaR line squashed into the top of
-    /// its box until 1個月 and back made it anew (Hugo, 2026-11-24; ios/tests/look.sh 01b). Made anew here.
-    func refresh() {
-        for (id, old) in shown {
-            let host = Self.host(old.rootView.spec)
-            host.view.frame = old.view.frame
-            host.view.isHidden = old.view.isHidden
-            scroll?.insertSubview(host.view, aboveSubview: old.view)
-            old.view.removeFromSuperview()
-            shown[id] = host
-        }
     }
 
     /// A new page loaded whole: none of the old page's charts stays.

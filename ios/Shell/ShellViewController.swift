@@ -352,7 +352,6 @@ final class ShellViewController: UITabBarController {
             web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             host.view.addSubview(web)
             host.setContentScrollView(nil)
-            charts.refresh()
         }
         host.setContentScrollView(web.scrollView)
     }
