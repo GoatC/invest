@@ -25,6 +25,8 @@ interface Live {
   element: HTMLElement;
   spec: NativeSpec;
   box: Box | null;
+  /** Handed over before the app had opened, and not yet made anew since. */
+  early: boolean;
 }
 
 type Handler = { postMessage: (message: unknown) => void };
@@ -61,6 +63,12 @@ function boxOf(element: HTMLElement): Box | null {
 
 const same = (a: Box | null, b: Box | null) => (a === null || b === null ? a === b : a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 
+/** Whether the box is on screen now. */
+const inView = (box: Box | null) => box !== null && box.y < window.scrollY + window.innerHeight && box.y + box.h > window.scrollY;
+
+/** Whether the app has opened: the opening screen lifted (components/preload.tsx), or none shown. */
+const opened = () => document.documentElement.hasAttribute('data-opened') || document.getElementById('splash') === null;
+
 /** Tells the shell of every chart whose place changed since it was last told. */
 function place(): void {
   frame = 0;
@@ -68,6 +76,16 @@ function place(): void {
   if (!shell) return;
   for (const [id, chart] of live) {
     const box = boxOf(chart.element);
+    // A chart handed over while the app was still opening came out squashed on Hugo's phone (the VaR line)
+    // until 1個月 and back handed it over again (2026-11-25); one handed over after opening draws right.
+    // So it is made anew once, as that tap does, when it is first on screen after opening.
+    if (chart.early && opened() && inView(box)) {
+      chart.early = false;
+      chart.box = box;
+      shell.postMessage({ op: 'remove', id });
+      shell.postMessage({ op: 'set', id, box, spec: chart.spec });
+      continue;
+    }
     if (same(box, chart.box)) continue;
     chart.box = box;
     shell.postMessage({ op: 'move', id, box });
@@ -111,7 +129,7 @@ export function showNative(element: HTMLElement, spec: NativeSpec): () => void {
   element.dataset.nativeChart = key;
   watch();
   const box = boxOf(element);
-  live.set(key, { element, spec, box });
+  live.set(key, { element, spec, box, early: live.get(key)?.early ?? !opened() });
   shell.postMessage({ op: 'set', id: key, box, spec });
   if (!sizes.has(key)) {
     const resize = new ResizeObserver(soon);
